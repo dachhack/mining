@@ -3,8 +3,8 @@
 // with the real engine, and note when the player first sees mineral traces
 // and when they first see ore.
 //
-// Everything is read the way a player would get it: traces from
-// `visibleMineralTraces`, ore from revealed cells only.
+// Everything is read the way a player would get it: traces from the
+// `mineralTracesSeen` events, ore from the `blockRevealed` events.
 
 import { BLOCKS, CONTRACT_IDS, DEFAULT_LOADOUT_ID, STRUCTURES, TELLS, WORLD } from '../../src/data';
 import type { Vec3 } from '../../src/data';
@@ -22,7 +22,7 @@ import {
   structureAt,
   visibleMineralTraces,
 } from '../../src/engine';
-import type { Action, GameState } from '../../src/engine';
+import type { Action, GameEvent, GameState } from '../../src/engine';
 import { samePosition } from '../../src/engine/state';
 
 export interface ShaftSurvey {
@@ -34,19 +34,24 @@ export interface ShaftSurvey {
   oreFirstSeenAt: number | null;
 }
 
-/** Is any revealed cell an ore block that gives traces? */
-function oreIsRevealed(state: GameState): boolean {
-  const oreCodes = new Set<number>();
+/** The codes of the ore blocks that give traces. */
+function oreCodes(): Set<number> {
+  const codes = new Set<number>();
   const table: Record<string, { code: number } | undefined> = BLOCKS;
   for (const blockId of TELLS.mineralTraces.sourceBlocks) {
     const def = table[blockId];
     if (def !== undefined) {
-      oreCodes.add(def.code);
+      codes.add(def.code);
     }
   }
+  return codes;
+}
+
+/** Is any revealed cell an ore block that gives traces? Looks at the whole cube. */
+function oreIsRevealed(state: GameState, ores: Set<number>): boolean {
   for (let index = 0; index < state.blocks.length; index += 1) {
     const pos = cellPosition(state.size, index);
-    if (isRevealed(state, pos) && oreCodes.has(blockAt(state, pos))) {
+    if (isRevealed(state, pos) && ores.has(blockAt(state, pos))) {
       return true;
     }
   }
@@ -71,12 +76,25 @@ export function surveyShaft(seed: number, targetLayer: number): ShaftSurvey {
   let tracesFirstSeenAt: number | null = null;
   let oreFirstSeenAt: number | null = null;
 
-  function look(): void {
-    if (tracesFirstSeenAt === null && visibleMineralTraces(state).length > 0) {
-      tracesFirstSeenAt = state.avatar.pos.z;
-    }
-    if (oreFirstSeenAt === null && oreIsRevealed(state)) {
-      oreFirstSeenAt = state.avatar.pos.z;
+  const ores = oreCodes();
+
+  // The start is looked at whole, once: `createRun` gives no events.
+  if (visibleMineralTraces(state).length > 0) {
+    tracesFirstSeenAt = state.avatar.pos.z;
+  }
+  if (oreIsRevealed(state, ores)) {
+    oreFirstSeenAt = state.avatar.pos.z;
+  }
+
+  /** After a step: its events say what was newly revealed and newly seen. */
+  function look(events: GameEvent[]): void {
+    for (const event of events) {
+      if (event.type === 'mineralTracesSeen' && tracesFirstSeenAt === null) {
+        tracesFirstSeenAt = state.avatar.pos.z;
+      }
+      if (event.type === 'blockRevealed' && ores.has(event.block) && oreFirstSeenAt === null) {
+        oreFirstSeenAt = state.avatar.pos.z;
+      }
     }
   }
 
@@ -102,7 +120,6 @@ export function surveyShaft(seed: number, targetLayer: number): ShaftSurvey {
     return legal.find((action) => action.type === 'move' && isBelow(action.to));
   }
 
-  look();
   // Two ends of shift in a row mean the miner is stuck (out of ladders, say).
   let shiftsEndedInARow = 0;
   // A guard against a loop that never ends, should the rules change.
@@ -111,14 +128,10 @@ export function surveyShaft(seed: number, targetLayer: number): ShaftSurvey {
       break;
     }
     const action = nextAction();
-    if (action === undefined) {
-      state = endShift(state).state;
-      shiftsEndedInARow += 1;
-    } else {
-      state = applyAction(state, action).state;
-      shiftsEndedInARow = 0;
-    }
-    look();
+    const result = action === undefined ? endShift(state) : applyAction(state, action);
+    shiftsEndedInARow = action === undefined ? shiftsEndedInARow + 1 : 0;
+    state = result.state;
+    look(result.events);
   }
   return { reachedLayer: state.avatar.pos.z, tracesFirstSeenAt, oreFirstSeenAt };
 }
