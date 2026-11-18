@@ -70,13 +70,6 @@ function invariantProblems(state: GameState): string[] {
   if (!isWholeNumber(state.lampOil) || state.lampOil < 0) {
     problems.push(`lamp oil is ${state.lampOil}`);
   }
-  if (
-    !isWholeNumber(state.bankedAp) ||
-    state.bankedAp < 0 ||
-    state.bankedAp >= SHIFT.bankedApPerRefund
-  ) {
-    problems.push(`banked AP is ${state.bankedAp}, outside 0..${SHIFT.bankedApPerRefund - 1}`);
-  }
   if (!isWholeNumber(state.shift) || state.shift < SHIFT.firstShiftNumber) {
     problems.push(`shift is ${state.shift}`);
   }
@@ -185,7 +178,7 @@ describe('property tests: random legal play', () => {
   const RANDOM_DECISIONS = 150;
 
   // `wander` never leaves, so these runs go deep and long: most end out of
-  // fuel between 180 and 320 decisions in.
+  // fuel between 170 and 240 decisions in.
   it.each(WANDER_SEEDS)(
     `wander policy, seed %i: the state stays valid for ${WANDER_DECISIONS} decisions`,
     (seed) => {
@@ -334,7 +327,10 @@ function playAndCheckUnseenCells(
 const UNSEEN_CELLS_TIMEOUT_MS = 30000;
 
 describe('property tests: unrevealed cells do not change the action list (issues #15, #33)', () => {
-  it.each([11, 12, 13])(
+  // The seeds are ones whose wander run lasts long enough to make the number
+  // of checks asked for below. Without a fuel refill (issue #32) a wander run
+  // ends out of fuel after about 130 to 250 decisions.
+  it.each([11, 16, 20])(
     'with the lamp lit at the start, seed %i',
     (seed) => {
       const { checks } = playAndCheckUnseenCells(seed, null, 300, 4);
@@ -343,7 +339,7 @@ describe('property tests: unrevealed cells do not change the action list (issues
     UNSEEN_CELLS_TIMEOUT_MS,
   );
 
-  it.each([21, 22, 23])(
+  it.each([27, 34, 39])(
     'with the lamp out from the start, seed %i',
     (seed) => {
       const { checks, checksWithLampOut } = playAndCheckUnseenCells(seed, 0, 300, 2);

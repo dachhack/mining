@@ -1,15 +1,15 @@
-// Scenario tests for the end of a shift: AP reset, banked AP, fuel upkeep,
-// lamp oil, running out of fuel, and the end-shift preview
-// (design doc 4; 0005 items 15, 20, 21; owner question 29).
+// Scenario tests for the end of a shift: AP reset, unspent AP being lost,
+// fuel upkeep, lamp oil, running out of fuel, and the end-shift preview
+// (design doc 4; 0005 item 15; issue #32 "no fuel refill"; owner question 29).
 //
 // Every test uses a tiny hand-built cube with the avatar on the surface. The
 // expected numbers are worked out from `SHIFT` where the rule is "whatever the
 // data says", and written as plain numbers where the issue states a concrete
-// case (2 + 1 banked AP gives 1 fuel, and so on); a guard test at the top
+// case (5 unspent AP, fuel falls by exactly 1, and so on); a guard test at the top
 // checks that the data still has the values those concrete cases assume.
 
 import { describe, expect, it } from 'vitest';
-import { SHIFT } from '../../src/data';
+import { DEFAULT_LOADOUT_ID, LOADOUTS, SHIFT } from '../../src/data';
 import { applyAction, endShift, hashState, legalActions, previewCubePhase } from '../../src/engine';
 import type { GameEvent, GameState } from '../../src/engine';
 import { CUBE_PHASE_STEPS } from '../../src/engine/shift';
@@ -27,13 +27,11 @@ function eventsOfType(events: GameEvent[], type: GameEvent['type']): GameEvent[]
 }
 
 describe('the data these scenarios assume', () => {
-  it('is 5 AP per shift, 3 banked AP per 1 fuel, 1 fuel per shift, 1 oil every 4 shifts', () => {
+  it('is 5 AP per shift, 1 fuel per shift, 1 oil every 4 shifts, and nothing about banking', () => {
     expect(SHIFT).toEqual({
       firstShiftNumber: 1,
       apPerShift: 5,
       fuelPerShift: 1,
-      bankedApPerRefund: 3,
-      fuelPerRefund: 1,
       lampOilBurnEveryShifts: 4,
       lampOilPerBurn: 1,
     });
@@ -55,13 +53,11 @@ describe('endShift', () => {
   });
 
   it('emits the events of an ordinary upkeep in order', () => {
-    // 4 unspent AP: 1 refund step, 1 left in the counter. Shift 4, so oil burns.
+    // 4 unspent AP, which are simply lost: no event for them. Shift 4, so oil burns.
     const state = surfaceState({ ap: 4, fuel: 7, lampOil: 5, shift: 4 });
     const { events } = endShift(state);
     expect(events).toEqual([
-      { type: 'fuelChanged', delta: 1, fuel: 8, reason: 'bankedApRefund' },
-      { type: 'apBanked', amount: 4, bankedAp: 1 },
-      { type: 'fuelChanged', delta: -1, fuel: 7, reason: 'upkeep' },
+      { type: 'fuelChanged', delta: -1, fuel: 6, reason: 'upkeep' },
       { type: 'lampOilChanged', delta: -1, lampOil: 4, reason: 'upkeep' },
       { type: 'shiftEnded', shift: 4, nextShift: 5 },
     ]);
@@ -104,54 +100,27 @@ describe('endShift', () => {
   });
 });
 
-describe('banked AP', () => {
-  it('2 unspent AP, then 1 unspent the next shift: 1 fuel refunded, counter back to 0', () => {
-    const start = surfaceState({ ap: 2, fuel: 10 });
-
-    const first = endShift(start);
-    expect(first.state.bankedAp).toBe(2);
-    // No refund yet: only the shift's fuel went.
-    expect(first.state.fuel).toBe(9);
-    expect(eventsOfType(first.events, 'apBanked')).toEqual([
-      { type: 'apBanked', amount: 2, bankedAp: 2 },
-    ]);
-
-    // Next shift: leave exactly 1 AP unspent.
-    const second = endShift({ ...first.state, ap: 1 });
-    expect(second.state.bankedAp).toBe(0);
-    // +1 refund, -1 upkeep.
-    expect(second.state.fuel).toBe(9);
-    expect(second.events).toContainEqual({
-      type: 'fuelChanged',
-      delta: 1,
-      fuel: 10,
-      reason: 'bankedApRefund',
-    });
-    expect(eventsOfType(second.events, 'apBanked')).toEqual([
-      { type: 'apBanked', amount: 1, bankedAp: 0 },
-    ]);
-  });
-
-  it('5 unspent AP: 1 fuel refunded and 2 left in the counter', () => {
+describe('unspent AP (issue #32: no fuel refill)', () => {
+  it('5 unspent AP give no fuel: fuel falls by exactly the per-shift cost', () => {
     const { state: after, events } = endShift(surfaceState({ ap: 5, fuel: 10 }));
-    expect(after.bankedAp).toBe(2);
-    expect(after.fuel).toBe(10); // +1 refund, -1 upkeep
-    expect(events).toContainEqual({
-      type: 'fuelChanged',
-      delta: 1,
-      fuel: 11,
-      reason: 'bankedApRefund',
-    });
+    expect(after.fuel).toBe(9);
+    expect(after.fuel).toBe(10 - SHIFT.fuelPerShift);
+    // The only change to fuel is the shift's own cost.
+    expect(eventsOfType(events, 'fuelChanged')).toEqual([
+      { type: 'fuelChanged', delta: -1, fuel: 9, reason: 'upkeep' },
+    ]);
   });
 
-  it('pays two refunds at once when the counter passes 6', () => {
-    const { state: after, events } = endShift(surfaceState({ ap: 5, bankedAp: 2, fuel: 10 }));
-    expect(after.bankedAp).toBe(1);
-    expect(after.fuel).toBe(11); // +2 refund, -1 upkeep
-    expect(eventsOfType(events, 'fuelChanged')).toEqual([
-      { type: 'fuelChanged', delta: 2, fuel: 12, reason: 'bankedApRefund' },
-      { type: 'fuelChanged', delta: -1, fuel: 11, reason: 'upkeep' },
-    ]);
+  it('gives no fuel however the unspent AP add up over several shifts', () => {
+    // 2 unspent, then 1 unspent, then 5 unspent: 8 AP in all. Under the old
+    // rule that paid 2 fuel; now fuel just falls by 1 per shift.
+    let state = surfaceState({ ap: 2, fuel: 10 });
+    const fuelAfterShift: number[] = [];
+    for (const unspent of [2, 1, 5]) {
+      state = endShift({ ...state, ap: unspent }).state;
+      fuelAfterShift.push(state.fuel);
+    }
+    expect(fuelAfterShift).toEqual([9, 8, 7]);
   });
 
   it('does not carry unspent AP into the next shift as AP', () => {
@@ -159,12 +128,12 @@ describe('banked AP', () => {
     expect(after.ap).toBe(SHIFT.apPerShift);
   });
 
-  it('reports 0 AP banked when every AP was spent', () => {
-    const { state: after, events } = endShift(surfaceState({ ap: 0, bankedAp: 2 }));
-    expect(after.bankedAp).toBe(2);
-    expect(eventsOfType(events, 'apBanked')).toEqual([
-      { type: 'apBanked', amount: 0, bankedAp: 2 },
-    ]);
+  it('keeps no banked-AP counter in the state, and emits no banking event', () => {
+    const { state: after, events } = endShift(surfaceState({ ap: 3, fuel: 10 }));
+    expect(Object.keys(after)).not.toContain('bankedAp');
+    // `as string` because 'apBanked' is no longer one of the event types, so
+    // TypeScript would otherwise reject the comparison outright.
+    expect(events.map((event) => event.type as string)).not.toContain('apBanked');
   });
 });
 
@@ -172,49 +141,67 @@ describe('fuel upkeep', () => {
   it('fuel falls by 1 per shift', () => {
     let state = surfaceState({ ap: 0, fuel: 10 });
     for (const expected of [9, 8, 7]) {
-      // AP set back to 0 each shift so that nothing is banked.
       state = endShift({ ...state, ap: 0 }).state;
       expect(state.fuel).toBe(expected);
     }
   });
 
-  it('fuel 0 at upkeep with no refund due ends the run, cause "out of fuel"', () => {
+  it('idling from the starting kit ends the run out of fuel at the expected shift', () => {
+    // The standard kit's fuel, never touching an AP. Each upkeep takes
+    // `fuelPerShift`; the upkeep that finds the gauge at 0 ends the run. With
+    // 24 fuel that is the upkeep ending shift 25, well inside 30 idle shifts.
+    const startFuel = LOADOUTS[DEFAULT_LOADOUT_ID].fuel;
+    expect(startFuel).toBe(24);
+    let state = surfaceState({ fuel: startFuel });
+    let shiftsEnded = 0;
+    while (state.status.kind === 'active' && shiftsEnded < 30) {
+      // Idle: all 5 AP unspent.
+      expect(state.ap).toBe(SHIFT.apPerShift);
+      state = endShift(state).state;
+      shiftsEnded += 1;
+    }
+    expect(state.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'outOfFuel' });
+    expect(shiftsEnded).toBe(25);
+    expect(shiftsEnded).toBe(startFuel / SHIFT.fuelPerShift + 1);
+    // The run ended during shift 25: its upkeep did not start shift 26.
+    expect(state.shift).toBe(25);
+    expect(state.fuel).toBe(0);
+  });
+
+  it('fuel 0 at upkeep ends the run, cause "out of fuel"', () => {
     const state = surfaceState({ ap: 2, fuel: 0, shift: 2 });
     const { state: after, events } = endShift(state);
     expect(after.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'outOfFuel' });
-    expect(events).toEqual([
-      { type: 'apBanked', amount: 2, bankedAp: 2 },
-      { type: 'runEnded', outcome: 'death', cause: 'outOfFuel' },
-    ]);
+    expect(events).toEqual([{ type: 'runEnded', outcome: 'death', cause: 'outOfFuel' }]);
     // Upkeep stopped there: no next shift.
     expect(after.shift).toBe(2);
     expect(after.fuel).toBe(0);
   });
 
-  it('fuel 0 at upkeep with a refund due survives', () => {
-    const { state: after } = endShift(surfaceState({ ap: 3, fuel: 0 }));
-    expect(after.status).toEqual({ kind: 'active' });
-    // The refunded fuel was then consumed by the shift.
-    expect(after.fuel).toBe(0);
-    expect(after.shift).toBe(2);
+  it('fuel 0 at upkeep ends the run however much AP is unspent', () => {
+    // Under the old rule 3 or more unspent AP bought a fuel and saved the run.
+    for (const unspent of [0, 3, 5]) {
+      const { state: after } = endShift(surfaceState({ ap: unspent, fuel: 0 }));
+      expect(after.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'outOfFuel' });
+    }
   });
 
   it('finishing a shift on exactly 0 fuel, then crafting fuel next shift, survives', () => {
-    // 1 fuel, nothing banked: upkeep takes the last fuel but the run goes on.
+    // 1 fuel: upkeep takes the last of it but the run goes on.
     const start = surfaceState({ ap: 0, fuel: 1, inventory: { coal: 1 } });
     const first = endShift(start);
     expect(first.state.fuel).toBe(0);
     expect(first.state.status).toEqual({ kind: 'active' });
 
-    // Next shift: craft fuel (1 AP), spend the rest so nothing is refunded.
+    // Next shift: craft fuel (1 AP), leave the other 4 AP unspent.
     const crafted = act(first.state, { type: 'craft', recipe: 'fuel' });
     expect(crafted.state.fuel).toBe(3);
-    const second = endShift({ ...crafted.state, ap: 0 });
+    const second = endShift(crafted.state);
     expect(second.state.status).toEqual({ kind: 'active' });
     expect(second.state.fuel).toBe(2);
 
-    // Without the craft, the same upkeep ends the run.
-    const without = endShift({ ...first.state, ap: 0 });
+    // Without the craft, the same upkeep ends the run, 5 unspent AP or not.
+    const without = endShift(first.state);
     expect(without.state.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'outOfFuel' });
   });
 });
@@ -266,13 +253,11 @@ describe('previewCubePhase', () => {
   // Each case is a state; the test checks the forecast against what endShift
   // then actually does to it.
   const cases: { name: string; options: Omit<BuildStateOptions, 'layers'> }[] = [
-    { name: 'nothing banked', options: { ap: 0, fuel: 10 } },
-    { name: '2 unspent AP, no refund', options: { ap: 2, fuel: 10 } },
-    { name: '1 unspent AP on top of 2 banked', options: { ap: 1, bankedAp: 2, fuel: 9 } },
+    { name: 'every AP spent', options: { ap: 0, fuel: 10 } },
+    { name: '2 unspent AP', options: { ap: 2, fuel: 10 } },
     { name: '5 unspent AP', options: { ap: 5, fuel: 10 } },
-    { name: 'two refunds', options: { ap: 5, bankedAp: 2, fuel: 10 } },
     { name: 'out of fuel', options: { ap: 2, fuel: 0 } },
-    { name: 'fuel 0 saved by a refund', options: { ap: 3, fuel: 0 } },
+    { name: 'out of fuel with 5 unspent AP', options: { ap: 5, fuel: 0 } },
     { name: 'last fuel consumed', options: { ap: 0, fuel: 1 } },
     { name: 'oil burns (shift 4)', options: { ap: 0, lampOil: 6, shift: 4 } },
     { name: 'oil burns (shift 8)', options: { ap: 0, lampOil: 1, shift: 8 } },
@@ -292,26 +277,28 @@ describe('previewCubePhase', () => {
       const { state: after, events } = endShift(state);
       const upkeep = forecast.upkeep;
 
-      expect(upkeep.apBanked).toBe(state.ap);
-      expect(upkeep.bankedApAfter).toBe(after.bankedAp);
+      // The forecast has exactly these fields: nothing about banked AP.
+      expect(Object.keys(upkeep).sort()).toEqual([
+        'fuelAfter',
+        'fuelConsumed',
+        'lampOilAfter',
+        'lampOilBurned',
+        'runEnds',
+      ]);
       expect(upkeep.fuelAfter).toBe(after.fuel);
       expect(upkeep.lampOilAfter).toBe(after.lampOil);
       expect(upkeep.lampOilBurned).toBe(state.lampOil - after.lampOil);
-      // Fuel: start + refunded - consumed = end.
-      expect(state.fuel + upkeep.fuelRefunded - upkeep.fuelConsumed).toBe(after.fuel);
+      expect(upkeep.fuelConsumed).toBe(state.fuel - after.fuel);
 
-      // The forecast's parts match the events one for one.
-      let refunded = 0;
+      // The forecast's fuel matches the events: every change to fuel at
+      // upkeep is the shift's own cost.
       let consumed = 0;
       for (const event of events) {
-        if (event.type === 'fuelChanged' && event.reason === 'bankedApRefund') {
-          refunded += event.delta;
-        }
-        if (event.type === 'fuelChanged' && event.reason === 'upkeep') {
+        if (event.type === 'fuelChanged') {
+          expect(event.reason).toBe('upkeep');
           consumed -= event.delta;
         }
       }
-      expect(upkeep.fuelRefunded).toBe(refunded);
       expect(upkeep.fuelConsumed).toBe(consumed);
 
       if (after.status.kind === 'ended') {
@@ -324,7 +311,7 @@ describe('previewCubePhase', () => {
 
   it('says "run ends: out of fuel" exactly when that is what will happen', () => {
     expect(previewCubePhase(surfaceState({ ap: 2, fuel: 0 })).upkeep.runEnds).toBe('outOfFuel');
-    expect(previewCubePhase(surfaceState({ ap: 3, fuel: 0 })).upkeep.runEnds).toBeNull();
+    expect(previewCubePhase(surfaceState({ ap: 5, fuel: 0 })).upkeep.runEnds).toBe('outOfFuel');
     expect(previewCubePhase(surfaceState({ ap: 0, fuel: 1 })).upkeep.runEnds).toBeNull();
   });
 });

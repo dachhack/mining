@@ -277,6 +277,14 @@ function replayReport(path: string): CliResult {
       lines.push('This matches the outcome recorded in the log.');
     } else {
       lines.push(`MISMATCH: the log recorded final state hash ${log.outcome.stateHash}.`);
+      if (log.engineVersion !== ENGINE_VERSION) {
+        // The usual cause, so say it plainly rather than leave it to the
+        // version numbers in the first line.
+        lines.push(
+          `This is expected: the log was played on engine ${log.engineVersion} and this is engine ` +
+            `${ENGINE_VERSION}. A play log replays to its recorded hash only on the engine version it names.`,
+        );
+      }
       exitCode = 1;
     }
   }

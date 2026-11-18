@@ -37,7 +37,6 @@ export interface SerialisedState {
   ap: number;
   fuel: number;
   lampOil: number;
-  bankedAp: number;
   shift: number;
   inventory: Record<string, number>;
   looseItems: LooseItems[];
@@ -112,7 +111,6 @@ export function serialise(state: GameState): SerialisedState {
     ap: state.ap,
     fuel: state.fuel,
     lampOil: state.lampOil,
-    bankedAp: state.bankedAp,
     shift: state.shift,
     inventory,
     looseItems,
@@ -165,7 +163,6 @@ export function deserialise(saved: SerialisedState): GameState {
     ap: saved.ap,
     fuel: saved.fuel,
     lampOil: saved.lampOil,
-    bankedAp: saved.bankedAp,
     shift: saved.shift,
     inventory: { ...saved.inventory },
     looseItems: canonicalLooseItems(saved.looseItems),

@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { BLOCKS, STRUCTURES } from '../../src/data';
 import type { Vec3 } from '../../src/data';
 import {
+  ENGINE_VERSION,
   applyAction,
   cellIndex,
   cellPosition,
@@ -374,7 +375,7 @@ describe('one-shot mode and the play log', () => {
     expect(log.seed).toBe(7);
     expect(log.contractId).toBe('none');
     expect(log.loadoutId).toBe('standard');
-    expect(log.engineVersion).toBe('0.1.0');
+    expect(log.engineVersion).toBe(ENGINE_VERSION);
     expect(log.actions).toHaveLength(7);
     expect(log.outcome).toBeNull();
     // The log holds actions, not menu numbers.
@@ -500,6 +501,35 @@ describe('one-shot mode and the play log', () => {
     expect(readFileSync(logPath, 'utf8')).toBe(JSON.stringify(log));
   });
 
+  it('--replay says plainly when a mismatch comes with a log from another engine version', () => {
+    runCli(['--seed', '7', '--log', logPath, '--do', '1']);
+    const leave = numberOf((entry) => entry.type === 'leave');
+    runCli(['--log', logPath, '--do', leave]);
+    const log = loadLog(logPath);
+    if (log.outcome === null) {
+      throw new Error('Test setup: the run should have ended');
+    }
+
+    // The same engine version with a wrong hash: a mismatch, and no excuse.
+    const wrongHash = { ...log, outcome: { ...log.outcome, stateHash: '0000000000000000' } };
+    writeFileSync(logPath, JSON.stringify(wrongHash));
+    const sameEngine = runCli(['--replay', logPath]);
+    expect(sameEngine.exitCode).toBe(1);
+    expect(sameEngine.output).toContain('MISMATCH');
+    expect(sameEngine.output).not.toContain('This is expected');
+
+    // A log that names another engine version: still a mismatch (exit code
+    // 1), with the reason spelled out.
+    writeFileSync(logPath, JSON.stringify({ ...wrongHash, engineVersion: '0.1.0' }));
+    const otherEngine = runCli(['--replay', logPath]);
+    expect(otherEngine.exitCode).toBe(1);
+    expect(otherEngine.output).toContain('MISMATCH');
+    expect(otherEngine.output).toContain(
+      `This is expected: the log was played on engine 0.1.0 and this is engine ${ENGINE_VERSION}. ` +
+        'A play log replays to its recorded hash only on the engine version it names.',
+    );
+  });
+
   it('creates the folder of the log if it does not exist yet', () => {
     const nested = join(folder, 'm1-r1', 'deep', 'run.json');
     const started = runCli(['--seed', '7', '--log', nested]);
@@ -554,5 +584,55 @@ describe('--help', () => {
     expect(result.output).toContain('Ladder (x3): from 1 Timber');
     expect(result.output).not.toContain('undefined');
     expect(result.output).not.toContain('NaN');
+  });
+
+  it('says unspent AP is lost, and nothing about banking (issue #32)', () => {
+    const help = helpText();
+    expect(help).toContain('Unspent AP is lost when the shift ends');
+    expect(help.toLowerCase()).not.toContain('bank');
+    expect(help.toLowerCase()).not.toContain('refund');
+  });
+});
+
+describe('unspent AP in the view (issue #32: no fuel refill)', () => {
+  const layers = [['###'], ['###']];
+  const avatar = { x: 1, y: 0, z: -1 };
+
+  it('has no banked-AP gauge', () => {
+    const text = viewText(buildState({ layers, avatar, revealAll: true }));
+    expect(text).toContain('Fuel 10');
+    expect(text.toLowerCase()).not.toContain('bank');
+  });
+
+  it('the end-of-shift line says unspent AP will be lost and what fuel will be', () => {
+    const state = buildState({ layers, avatar, ap: 5, fuel: 10, lampOil: 6, revealAll: true });
+    expect(viewText(state)).toContain(
+      'If you end the shift now: 5 unspent AP will be lost, fuel 10 -> 9 (-1 shift), lamp oil 6 -> 6.',
+    );
+    // And that is what then happens.
+    expect(endShift(state).state.fuel).toBe(9);
+  });
+
+  it('the end-of-shift line does not mention AP when none is unspent', () => {
+    const state = buildState({ layers, avatar, ap: 0, fuel: 10, lampOil: 6, revealAll: true });
+    expect(viewText(state)).toContain(
+      'If you end the shift now: fuel 10 -> 9 (-1 shift), lamp oil 6 -> 6.',
+    );
+  });
+
+  it('warns that the run ends on 0 fuel even with every AP unspent', () => {
+    const state = buildState({ layers, avatar, ap: 5, fuel: 0, revealAll: true });
+    expect(viewText(state)).toContain(
+      'THE RUN ENDS: you ran out of fuel and died. No fuel is left, and unspent AP does not become fuel.',
+    );
+  });
+
+  it('ending a shift reports only the fuel the shift used', () => {
+    const state = buildState({ layers, avatar, ap: 5, fuel: 10, revealAll: true });
+    const { state: after, events } = endShift(state);
+    expect(describeEvents(after, events)).toEqual([
+      'Fuel -1 (the shift), now 9.',
+      'Shift 1 ended; shift 2 begins.',
+    ]);
   });
 });

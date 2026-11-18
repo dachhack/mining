@@ -1,13 +1,12 @@
 import type { ActionCostData, ShiftData } from './types';
 
-// Design doc 4; decision note 0005 items 15, 20 and 21.
+// Design doc 4; decision note 0005 item 15. Unspent AP is lost at the end of
+// a shift (issue #32), so there are no banked-AP numbers here.
 // Camp fuel upkeep arrives with camps in M2.
 export const SHIFT: ShiftData = {
   firstShiftNumber: 1,
   apPerShift: 5,
   fuelPerShift: 1,
-  bankedApPerRefund: 3,
-  fuelPerRefund: 1,
   lampOilBurnEveryShifts: 4,
   lampOilPerBurn: 1,
 };

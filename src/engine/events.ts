@@ -24,7 +24,7 @@ export type RunEndCause = 'left' | 'fell' | 'outOfFuel';
 export type DamageCause = 'fall';
 
 /** Why a gauge (fuel or lamp oil) changed. */
-export type GaugeChangeReason = 'upkeep' | 'bankedApRefund' | 'crafted';
+export type GaugeChangeReason = 'upkeep' | 'crafted';
 
 export type GameEvent =
   /** The avatar moved under its own power from one cell to another. */
@@ -55,12 +55,6 @@ export type GameEvent =
   | { type: 'structurePlaced'; pos: Vec3; structure: number }
   /** The recipe was crafted once. Its inputs left the inventory. */
   | { type: 'crafted'; recipe: string }
-  /**
-   * At upkeep, `amount` unspent AP went into the banked counter (0005 item
-   * 20). `bankedAp` is the counter after any refund it paid for; the refund
-   * itself is a `fuelChanged` with reason `bankedApRefund`.
-   */
-  | { type: 'apBanked'; amount: number; bankedAp: number }
   /** Shift number `shift` ended and `nextShift` began. */
   | { type: 'shiftEnded'; shift: number; nextShift: number }
   /** Fuel changed by `delta` (negative when used) and is now `fuel`. */

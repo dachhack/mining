@@ -55,11 +55,11 @@ THE GAME
   Shifts and action points (AP)
   - Time passes in shifts. Each shift you get ${SHIFT.apPerShift} AP. Each action costs the AP shown beside it;
     an action you cannot afford this shift is not on the list. End the shift to get fresh AP.
-  - Unspent AP is not carried over as AP. It is banked: every ${SHIFT.bankedApPerRefund} banked AP turn into ${SHIFT.fuelPerRefund} fuel.
+  - Unspent AP is lost when the shift ends. It is not carried over and does not turn into fuel.
 
   Fuel and lamp oil
-  - When a shift ends: banked AP is turned into fuel first. Then, if you have no fuel, the run
-    ends. Otherwise the shift uses up ${SHIFT.fuelPerShift} fuel. The "If you end the shift now" line says exactly
+  - When a shift ends: if you have no fuel, the run ends. Otherwise the shift uses up ${SHIFT.fuelPerShift} fuel.
+    Nothing refills fuel except crafting it. The "If you end the shift now" line says exactly
     what will happen, including when it would end the run.
   - The lamp uses oil slowly, a little every few shifts. With no oil the lamp goes out and you
     work by touch: see "In the dark" below. Crafting lamp oil lights it again at once.
