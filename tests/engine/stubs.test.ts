@@ -18,8 +18,13 @@ import {
 import type { Action } from '../../src/engine';
 
 describe('rule-module stubs', () => {
-  it('offer no actions, so a new run has an empty action list', () => {
-    expect(legalActions(createRun(1, 'none', 'standard'))).toEqual([]);
+  it('offer no actions', () => {
+    // Moving and placing a ladder are no longer stubs (M1 task 3), so they
+    // are left out of the check.
+    const stubActions = legalActions(createRun(1, 'none', 'standard')).filter(
+      (action) => action.type !== 'move' && action.type !== 'placeLadder',
+    );
+    expect(stubActions).toEqual([]);
   });
 
   it('let a shift end without throwing', () => {

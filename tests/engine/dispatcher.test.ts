@@ -1,9 +1,9 @@
 // Tests of what index.ts does for every action, whatever the rule: copy the
 // state, check the action is legal, spend its AP, and collect the events.
 //
-// The real rule modules are still stubs, so no action is legal yet. To test
-// the dispatcher anyway, this file swaps four of them (leave, shift, gravity,
-// reveal) for small fakes:
+// Some rule modules are still stubs, which offer no actions. To test the
+// dispatcher on its own, this file swaps the others (leave, shift, gravity,
+// reveal, and the movement and ladder actions) for small fakes:
 //
 // - `vi.mock(path, factory)` tells Vitest that, in this test file only,
 //   anything importing the module at `path` gets what `factory` returns
@@ -63,6 +63,24 @@ vi.mock('../../src/engine/actions/leave', () => ({
     state.inventory['stone'] = 9;
     state.looseItems.push({ pos: { x: 0, y: 0, z: 0 }, item: 'coal', count: 1 });
     events.push({ type: 'fuelChanged', delta: -3, fuel: state.fuel, reason: 'upkeep' });
+  },
+}));
+
+// Movement and ladder placing are real rules now (M1 task 3). They are
+// swapped for fakes that offer nothing, as the stubs did, so that this file
+// keeps testing the dispatcher alone. Their own tests are in movement.test.ts,
+// ladders.test.ts and gravity.test.ts.
+vi.mock('../../src/engine/actions/move', () => ({
+  legalMoveActions: (): Action[] => [],
+  applyMove: (): void => {
+    calls.push('applyMove');
+  },
+}));
+
+vi.mock('../../src/engine/actions/placeLadder', () => ({
+  legalPlaceLadderActions: (): Action[] => [],
+  applyPlaceLadder: (): void => {
+    calls.push('applyPlaceLadder');
   },
 }));
 
