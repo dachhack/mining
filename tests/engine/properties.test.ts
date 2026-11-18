@@ -38,6 +38,7 @@ import type { GameState } from '../../src/engine';
 import type { Vec3 } from '../../src/data';
 import { cloneState, setBlock } from '../../src/engine/state';
 import { decisionKey, makePolicy } from '../../tools/policies';
+import { playRun } from '../../tools/simRun';
 
 const CONTRACT = CONTRACT_IDS[0] as string;
 
@@ -141,10 +142,9 @@ function invariantProblems(state: GameState): string[] {
 
 /**
  * Play up to `maxDecisions` decisions of one run with a random policy,
- * checking after each. Returns how the run ended: its cause, or 'active' if
- * it was still going.
+ * checking after each.
  */
-function playAndCheck(seed: number, policyName: string, maxDecisions: number): string {
+function playAndCheck(seed: number, policyName: string, maxDecisions: number): void {
   const policy = makePolicy(policyName, seed);
   let state = createRun(seed, CONTRACT, DEFAULT_LOADOUT_ID);
   expect(invariantProblems(state), `seed ${seed}, new run`).toEqual([]);
@@ -175,47 +175,55 @@ function playAndCheck(seed: number, policyName: string, maxDecisions: number): s
     }
   }
   expect(snapshot(state) === before, `seed ${seed}: the last state was changed`).toBe(true);
-  return state.status.kind === 'ended' ? state.status.cause : 'active';
 }
 
 describe('property tests: random legal play', () => {
-  /** How each run below ended, for the last test. */
-  const endings = new Set<string>();
-  let runsPlayed = 0;
-  // The seeds of the runs below. The last test counts on every one of them
-  // having run, and takes that number from these two lists.
+  // The seeds and lengths of the runs below.
   const WANDER_SEEDS = [1, 2, 3, 4, 5, 6];
+  const WANDER_DECISIONS = 350;
   const RANDOM_SEEDS = [101, 102, 103, 104, 105, 106, 107, 108];
+  const RANDOM_DECISIONS = 150;
 
   // `wander` never leaves, so these runs go deep and long: most end out of
   // fuel between 180 and 320 decisions in.
   it.each(WANDER_SEEDS)(
-    'wander policy, seed %i: the state stays valid for 350 decisions',
+    `wander policy, seed %i: the state stays valid for ${WANDER_DECISIONS} decisions`,
     (seed) => {
-      endings.add(playAndCheck(seed, 'wander', 350));
-      runsPlayed += 1;
+      playAndCheck(seed, 'wander', WANDER_DECISIONS);
     },
   );
 
   // `random` may also leave, which covers the run ending by choice.
   it.each(RANDOM_SEEDS)(
-    'random policy, seed %i: the state stays valid for 150 decisions',
+    `random policy, seed %i: the state stays valid for ${RANDOM_DECISIONS} decisions`,
     (seed) => {
-      endings.add(playAndCheck(seed, 'random', 150));
-      runsPlayed += 1;
+      playAndCheck(seed, 'random', RANDOM_DECISIONS);
     },
   );
 
-  it('the runs above ended in more than one way', (context) => {
+  it('those runs end in more than one way', () => {
     // A check on the tests themselves: if every run ended the same way, part
-    // of the engine would not be exercised. It needs every run above (tests
-    // in a file run in order). The number expected comes from the seed lists,
-    // so in a full run of this file it is always met and this test runs; only
-    // a filter such as `vitest -t`, which leaves runs out, makes it report
-    // itself as skipped. (A run that fails is not counted either, but then
-    // that run's own failure is already red.)
-    if (runsPlayed < WANDER_SEEDS.length + RANDOM_SEEDS.length) {
-      context.skip();
+    // of the engine would not be exercised. It plays the same runs again
+    // (same seeds, policies and lengths, so the same decisions) without the
+    // per-step checks, which is quick. So it depends on no other test having
+    // run, and is never skipped.
+    const endings = new Set<string>();
+    const plays: [number[], string, number][] = [
+      [WANDER_SEEDS, 'wander', WANDER_DECISIONS],
+      [RANDOM_SEEDS, 'random', RANDOM_DECISIONS],
+    ];
+    for (const [seeds, policyName, maxDecisions] of plays) {
+      for (const seed of seeds) {
+        const { finalState } = playRun({
+          seed,
+          contractId: CONTRACT,
+          loadoutId: DEFAULT_LOADOUT_ID,
+          policy: makePolicy(policyName, seed),
+          maxShifts: Infinity,
+          maxDecisions,
+        });
+        endings.add(finalState.status.kind === 'ended' ? finalState.status.cause : 'active');
+      }
     }
     expect([...endings]).toEqual(expect.arrayContaining(['left', 'outOfFuel', 'active']));
   });
