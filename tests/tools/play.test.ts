@@ -25,12 +25,12 @@ import {
   visibleMineralTraces,
 } from '../../src/engine';
 import type { GameState } from '../../src/engine';
-import { loadLog, runCli } from '../../tools/play/cli';
+import { loadLog, resolveChoice, runCli } from '../../tools/play/cli';
 import { describeEvents } from '../../tools/play/describe';
 import { helpText } from '../../tools/play/help';
 import { replayLog } from '../../tools/play/log';
 import type { LogEntry } from '../../tools/play/log';
-import { buildView, renderView } from '../../tools/play/view';
+import { ACTIONS_HEADING, buildView, renderView } from '../../tools/play/view';
 import { act, buildState } from '../engine/helpers';
 
 /** The text one step prints for `state`. */
@@ -238,25 +238,40 @@ describe('the view hides what the avatar cannot know', () => {
     }
     expect(charAt(hidden)).toBe('?');
 
-    // Off the map, the only lines that changed are mine lines, and only by
-    // the words ", mineral traces"; and the legend gained the "%" entry.
-    const beforeLines = before.split('\n');
-    const afterLines = after.split('\n');
+    // Above the action list, the only line off the map that changed is the
+    // legend, which gained the "%" entry.
+    const beforeLines = before.slice(0, before.indexOf(ACTIONS_HEADING)).split('\n');
+    const afterLines = after.slice(0, after.indexOf(ACTIONS_HEADING)).split('\n');
     expect(afterLines).toHaveLength(beforeLines.length);
-    let mineLinesChanged = 0;
     afterLines.forEach((line, lineNumber) => {
       const old = beforeLines[lineNumber] ?? '';
       if (line === old || /^y +\d+ /.test(line)) {
         return; // unchanged, or a map row (checked cell by cell above)
       }
-      if (line.startsWith('Legend:')) {
-        const entries = line.split(' | ').filter((entry) => !entry.startsWith('% '));
-        expect(entries.join(' | ')).toBe(old);
-        return;
+      expect(line.startsWith('Legend:')).toBe(true);
+      const entries = line.split(' | ').filter((entry) => !entry.startsWith('% '));
+      expect(entries.join(' | ')).toBe(old);
+    });
+
+    // In the action list, the choices are the same ones with the same names
+    // and numbers; the only words that changed are ", mineral traces" on
+    // mine choices. (The printed list is compared choice by choice, not line
+    // by line: mine choices that read alike share a line, and the traced
+    // blocks no longer read like the plain ones.)
+    const options = { radius: 4, layers: 1, deepestZ: state.avatar.pos.z };
+    const plainChoices = buildView(shaftState(), options).choices;
+    const tracedChoices = buildView(state, options).choices;
+    expect(tracedChoices).toHaveLength(plainChoices.length);
+    let mineLinesChanged = 0;
+    tracedChoices.forEach((choice, index) => {
+      const plain = plainChoices[index];
+      expect(choice.name).toBe(plain?.name);
+      expect(choice.number).toBe(plain?.number);
+      if (choice.text !== plain?.text) {
+        expect(choice.entry.type).toBe('mine');
+        expect(choice.text.replace(', mineral traces', '')).toBe(plain?.text);
+        mineLinesChanged += 1;
       }
-      expect(line).toContain('Mine ');
-      expect(line.replace(', mineral traces', '')).toBe(old);
-      mineLinesChanged += 1;
     });
     expect(mineLinesChanged).toBeGreaterThan(0);
     expect(after).toContain('% rock with mineral traces');
@@ -307,7 +322,12 @@ describe('the view hides what the avatar cannot know', () => {
     // (1, 2, 3), west and one layer down: 1 step from the ore and revealed
     // (the pick reaches it), but no face of it touches a lit cell.
     expect(isRevealed(state, { x: 1, y: 2, z: 3 })).toBe(true);
-    expect(text).toContain('Mine west, one layer down: Stone, gives 1 Stone');
+    // That block shares a line of the list with the other plain stone, so
+    // its own words are read from the view's data.
+    const view = buildView(state, { radius: 4, layers: 1, deepestZ: 2 });
+    const westDown = view.choices.find((choice) => choice.name === 'mine-w-down');
+    expect(westDown?.text).toBe('Mine west, one layer down: Stone, gives 1 Stone');
+    expect(text).toMatch(/Mine Stone, gives 1 Stone: .*\d+\. mine-w-down/);
   });
 
   it('keeps traces on the map when the light has gone, and says when they are first seen', () => {
@@ -486,12 +506,27 @@ describe('the action list', () => {
 
       // And every one of them is printed, with its number and AP cost.
       const text = renderView(view);
-      const printed = text.slice(text.indexOf('Actions [AP cost]:')).split('\n').slice(1);
-      expect(printed).toHaveLength(legal.length + 1);
-      view.choices.forEach((choice, index) => {
+      const printed = text.slice(text.indexOf(ACTIONS_HEADING)).split('\n').slice(1);
+      for (const choice of view.choices) {
         const cost = choice.ap === null ? '-' : String(choice.ap);
-        expect(printed[index]?.trim()).toBe(`${choice.number}. [${cost}] ${choice.text}`);
-      });
+        // "7. mine-e" followed by a space or the end of the line, so that
+        // "7. mine-e" is not found inside "17. mine-e-down".
+        const label = new RegExp(`(^| )${choice.number}\\. ${choice.name}( |$)`);
+        const lines = printed.filter((line) => label.test(line));
+        expect(lines).toHaveLength(1);
+        expect(lines[0]).toContain(`[${cost}] `);
+        if (lines[0]?.endsWith(`[${cost}] ${choice.text}`) !== true) {
+          // Not on a line of its own, so it is on a shared line: the shared
+          // words must be this choice's own words, less the direction.
+          expect(choice.group).not.toBeNull();
+          expect(lines[0]).toContain(`[${cost}] Mine ${choice.group ?? ''}:`);
+          expect(choice.text.endsWith(`: ${choice.group ?? ''}`)).toBe(true);
+        }
+      }
+      // And nothing else is printed as a choice: the "N. name" labels under
+      // the heading are as many as the choices.
+      const labels = printed.join('\n').match(/(^| )\d+\. [a-z]+(-[a-z]+)*(?= |$)/gm) ?? [];
+      expect(labels).toHaveLength(view.choices.length);
     }
   });
 
@@ -712,7 +747,7 @@ describe('one-shot mode and the play log', () => {
       expect(result.exitCode).toBe(1);
       expect(result.output).toContain(`Refused choice 1 of 1 ("${bad}")`);
       // The current view is still printed, so the player can choose again.
-      expect(result.output).toContain('Actions [AP cost]:');
+      expect(result.output).toContain(ACTIONS_HEADING);
       expect(readFileSync(logPath, 'utf8')).toBe(bytes);
     }
   });
@@ -839,7 +874,7 @@ describe('one-shot mode and the play log', () => {
     const nested = join(folder, 'm1-r1', 'deep', 'run.json');
     const started = runCli(['--seed', '7', '--log', nested]);
     expect(started.exitCode).toBe(0);
-    expect(started.output).toContain('Actions [AP cost]:');
+    expect(started.output).toContain(ACTIONS_HEADING);
     expect(loadLog(nested).seed).toBe(7);
   });
 
@@ -890,6 +925,12 @@ describe('--help', () => {
     expect(result.output).toContain('Ladder (x3): from 1 Timber');
     expect(result.output).not.toContain('undefined');
     expect(result.output).not.toContain('NaN');
+    // Issue #30: the names of choices, and the two things the view now says.
+    expect(result.output).toContain('CHOICES: NAMES AND NUMBERS');
+    expect(result.output).toContain('mine-down');
+    expect(result.output).toContain('--do mine-e,e,end');
+    expect(result.output).toContain('Not on the list:');
+    expect(result.output).toContain('While you\n  stand on the surface the map is the whole cube');
   });
 
   it('says unspent AP is lost, and nothing about banking (issue #32)', () => {
@@ -940,5 +981,595 @@ describe('unspent AP in the view (issue #32: no fuel refill)', () => {
       'Fuel -1 (the shift), now 9.',
       'Shift 1 ended; shift 2 begins.',
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issues #30 and #20: stable names for choices, a shorter list, the whole top
+// layer on the surface, label padding, and why a move is not offered.
+// ---------------------------------------------------------------------------
+
+const DEFAULT_VIEW = { radius: null, layers: 1 };
+
+/** The text one step prints for `state` when no --radius is given. */
+function defaultViewText(state: GameState): string {
+  return renderView(buildView(state, { ...DEFAULT_VIEW, deepestZ: state.avatar.pos.z }));
+}
+
+/**
+ * States met along a real run of seed 7, in which the choice is made by a
+ * fixed rule (no randomness): every fifth step ends the shift, the others
+ * take the legal action at a place in the list that moves on with each step.
+ * The run goes on into the dark (the lamp oil runs out after a few shifts).
+ */
+function statesAlongARun(steps: number): GameState[] {
+  const states: GameState[] = [];
+  let state = createRun(7, 'none', 'standard');
+  for (let i = 0; i < steps && state.status.kind !== 'ended'; i += 1) {
+    states.push(state);
+    // Not "leave" (it ends the run) and not mining underfoot (it costs
+    // health and would end the run early).
+    const here = state.avatar.pos;
+    const safe = legalActions(state).filter(
+      (action) =>
+        action.type !== 'leave' &&
+        !(action.type === 'mine' && action.target.x === here.x && action.target.y === here.y),
+    );
+    const action = safe[(i * 7) % Math.max(safe.length, 1)];
+    state =
+      i % 5 === 4 || action === undefined
+        ? endShift(state).state
+        : applyAction(state, action).state;
+  }
+  return states;
+}
+
+/**
+ * A real run of seed 7 that is in the dark, one layer down, with the wall to
+ * the east just dug out: the cell east is known to be open, its floor is not.
+ */
+function darkDugState(): GameState {
+  let state = createRun(7, 'none', 'standard');
+  const take = (name: string): void => {
+    const entry = resolveChoice(state, name);
+    if (entry === null) {
+      throw new Error(`expected "${name}" to be on the list`);
+    }
+    state = entry.type === 'endShift' ? endShift(state).state : applyAction(state, entry).state;
+  };
+  take('mine-down');
+  while (state.lampOil > 0) {
+    take('end');
+  }
+  take('mine-down');
+  take('mine-e');
+  return state;
+}
+
+describe('names for choices (issue #30)', () => {
+  it('every choice has one name, and the name and the number both lead to it', () => {
+    const states = statesAlongARun(150);
+    expect(states.length).toBeGreaterThan(100);
+    expect(states.some((state) => state.lampOil === 0)).toBe(true);
+    for (const state of states) {
+      // `buildView` throws if two choices share a name.
+      const view = buildView(state, { ...DEFAULT_VIEW, deepestZ: 0 });
+      for (const choice of view.choices) {
+        expect(choice.name).toMatch(/^[a-z]+(-[a-z]+)*$/);
+        expect(resolveChoice(state, choice.name)).toEqual(choice.entry);
+        expect(resolveChoice(state, String(choice.number))).toEqual(choice.entry);
+      }
+    }
+  });
+
+  it('a name means the same thing at every step, or is not on the list', () => {
+    const sideways = [
+      { name: 'n', dx: 0, dy: -1 },
+      { name: 'e', dx: 1, dy: 0 },
+      { name: 's', dx: 0, dy: 1 },
+      { name: 'w', dx: -1, dy: 0 },
+    ];
+    let checked = 0;
+    for (const state of statesAlongARun(150)) {
+      const here = state.avatar.pos;
+      for (const { name, dx, dy } of sideways) {
+        const entry = resolveChoice(state, name);
+        if (entry !== null) {
+          // A move one cell that way (it may be a step up or end in a drop).
+          expect(entry).toMatchObject({ type: 'move', to: { x: here.x + dx, y: here.y + dy } });
+          checked += 1;
+        }
+      }
+      const mineDown = resolveChoice(state, 'mine-down');
+      if (mineDown !== null) {
+        expect(mineDown).toMatchObject({
+          type: 'mine',
+          target: { x: here.x, y: here.y, z: here.z + 1 },
+        });
+        checked += 1;
+      }
+    }
+    expect(checked).toBeGreaterThan(100);
+  });
+
+  it('names the other kinds of choice from the action alone', () => {
+    const state = buildState({
+      layers: [
+        ['#.#', '#.#', '###'],
+        ['###', '###', '###'],
+      ],
+      avatar: { x: 1, y: 1, z: 0 },
+      revealAll: true,
+      inventory: { ladder: 2, torch: 1, stone: 3, timber: 1, coal: 1 },
+      looseItems: [
+        { pos: { x: 1, y: 1, z: 0 }, item: 'coal', count: 1 },
+        { pos: { x: 1, y: 0, z: 0 }, item: 'rawIronOre', count: 1 },
+      ],
+    });
+    const names = buildView(state, { ...DEFAULT_VIEW, deepestZ: 0 }).choices.map(
+      (choice) => choice.name,
+    );
+    for (const name of [
+      'n',
+      'mine-e',
+      'mine-sw',
+      'mine-down',
+      'mine-ne-down',
+      'ladder-here',
+      'ladder-n',
+      'torch-here',
+      'craft-ladder',
+      'take-here-coal',
+      'take-n-raw-iron-ore',
+      'drop-stone',
+      'drop-all-stone',
+      'drop-torch',
+      'end',
+    ]) {
+      expect(names).toContain(name);
+    }
+    // One torch is carried, so there is no "drop all" for it on the list.
+    // Typed all the same, it means the one choice that drops them all.
+    expect(names).not.toContain('drop-all-torch');
+    expect(resolveChoice(state, 'drop-all-torch')).toEqual(resolveChoice(state, 'drop-torch'));
+    expect(resolveChoice(state, 'drop-all-torch')).toMatchObject({ type: 'drop', item: 'torch' });
+    // With three stone carried the two names stay two different choices,
+    // and "drop all" of something not carried is not a choice.
+    expect(resolveChoice(state, 'drop-all-stone')).toMatchObject({ item: 'stone', count: 3 });
+    expect(resolveChoice(state, 'drop-stone')).toMatchObject({ item: 'stone', count: 1 });
+    expect(resolveChoice(state, 'drop-all-relic')).toBeNull();
+  });
+
+  describe('with --do', () => {
+    let folder = '';
+    let logPath = '';
+    beforeEach(() => {
+      folder = mkdtempSync(join(tmpdir(), 'play-test-'));
+      logPath = join(folder, 'run.json');
+    });
+    afterEach(() => {
+      rmSync(folder, { recursive: true, force: true });
+    });
+
+    it('takes a chain of names, and the log holds the actions they stand for', () => {
+      const result = runCli(['--seed', '7', '--log', logPath, '--do', 's,E,mine-down,end']);
+      expect(result.exitCode).toBe(0);
+      expect(result.output).toContain('> Move south.');
+      expect(result.output).toContain('> Move east.');
+      const log = loadLog(logPath);
+      expect(log.actions.map((entry) => entry.type)).toEqual(['move', 'move', 'mine', 'endShift']);
+      expect(log.actions[1]).toMatchObject({ to: { x: 17, y: 17, z: -1 } });
+      expect(log.actions[2]).toMatchObject({ target: { x: 17, y: 17, z: 0 } });
+      // The log is the same kind of log as before: it replays.
+      expect(runCli(['--replay', logPath]).exitCode).toBe(0);
+    });
+
+    it('refuses a name that is not on the list now, and never reads it as another action', () => {
+      // In the pit dug at the start there is rock or a step up each way, and
+      // no ladder: "down" (climb down) is not a choice, though number 4 is.
+      runCli(['--seed', '7', '--log', logPath, '--do', 'mine-down']);
+      const bytes = readFileSync(logPath, 'utf8');
+      const result = runCli(['--log', logPath, '--do', 'down,n']);
+      expect(result.exitCode).toBe(1);
+      expect(result.output).toContain('Refused choice 1 of 2 ("down")');
+      expect(result.output).toContain('a name from the list');
+      expect(readFileSync(logPath, 'utf8')).toBe(bytes);
+    });
+  });
+});
+
+describe('a shorter action list (issue #30)', () => {
+  it('prints mine choices that differ only in direction on one line', () => {
+    const state = createRun(7, 'none', 'standard');
+    const view = buildView(state, { ...DEFAULT_VIEW, deepestZ: -1 });
+    const text = renderView(view);
+    expect(text).toContain(
+      '[1] Mine Dirt, gives nothing: 6. mine-n-down  8. mine-s-down  9. mine-w-down  10. mine-ne-down  12. mine-sw-down',
+    );
+    expect(text).toContain(
+      '[2] Mine Stone, gives 1 Stone: 7. mine-e-down  11. mine-se-down  13. mine-nw-down',
+    );
+    // The block underfoot keeps a line of its own: it says what the fall costs.
+    expect(text).toMatch(/ 5\. mine-down +\[1\] Mine below you: Dirt \(you are standing on it/);
+
+    const printed = text.slice(text.indexOf(ACTIONS_HEADING)).split('\n').slice(1);
+    expect(view.choices).toHaveLength(20);
+    expect(printed).toHaveLength(14);
+  });
+
+  it('still lists every legal action, with its number and name, exactly once', () => {
+    for (const state of statesAlongARun(60)) {
+      const view = buildView(state, { ...DEFAULT_VIEW, deepestZ: 0 });
+      expect(view.choices.map((choice) => choice.entry)).toEqual([
+        ...legalActions(state),
+        { type: 'endShift' },
+      ]);
+      const text = renderView(view);
+      const list = text.slice(text.indexOf(ACTIONS_HEADING));
+      for (const choice of view.choices) {
+        const label = new RegExp(`(^| )${choice.number}\\. ${choice.name}( |$)`, 'gm');
+        expect(list.match(label)).toHaveLength(1);
+      }
+    }
+  });
+
+  it('keeps blocks apart that differ in cost, yield, traces or weight', () => {
+    // Stone and coal seam around the avatar, with a full pack: stone is too
+    // heavy to take, coal is not.
+    const state = buildState({
+      layers: [['#.c', '#.c']],
+      avatar: { x: 1, y: 0, z: 0 },
+      revealAll: true,
+      inventory: { stone: 9, coal: 1 },
+    });
+    const text = defaultViewText(state);
+    expect(text).toMatch(
+      /Mine Stone, gives 1 Stone \(too heavy to carry.*\): \d+\. mine-w {2}\d+\. mine-sw/,
+    );
+    expect(text).toMatch(/Mine Coal seam, gives 1 Coal: \d+\. mine-e {2}\d+\. mine-se/);
+  });
+});
+
+describe('the map on the surface (issue #30)', () => {
+  it('draws the whole top layer when no --radius is given', () => {
+    const state = createRun(7, 'none', 'standard');
+    const view = buildView(state, { ...DEFAULT_VIEW, deepestZ: -1 });
+    // The whole cube and one cell round it, which shows as the edge.
+    expect(view.window).toEqual({ x0: -1, x1: state.size.x, y0: -1, y1: state.size.y });
+    expect(view.radiusForAllSeen).toBeNull();
+    const top = view.layers.find((layer) => layer.z === 0);
+    expect(top?.rows).toHaveLength(state.size.y + 2);
+    // Every cell of the top layer is drawn as what it is (all are revealed).
+    for (let y = 0; y < state.size.y; y += 1) {
+      const row = top?.rows[y + 1] ?? '';
+      expect(row).toHaveLength(state.size.x + 2);
+      expect(row.charAt(0)).toBe('X');
+      expect(row).not.toContain('?');
+    }
+    const text = renderView(view);
+    expect(text).toContain('everything you have seen of these layers is on the map');
+    expect(text).toContain(`y ${state.size.y - 1} `);
+  });
+
+  it('keeps to --radius when one is given, and says how to see the rest', () => {
+    const state = createRun(7, 'none', 'standard');
+    const view = buildView(state, { radius: 4, layers: 1, deepestZ: -1 });
+    expect(view.window).toEqual({ x0: 12, x1: 20, y0: 12, y1: 20 });
+    // The avatar is at (16, 16); the far corner of the top layer is 16 away.
+    expect(view.radiusForAllSeen).toBe(16);
+    expect(renderView(view)).toContain(
+      'you have seen more of these layers than is drawn: --radius 16 shows it all',
+    );
+  });
+
+  it('underground the default map is the small one, and says when more is known', () => {
+    let state = createRun(7, 'none', 'standard');
+    state = act(state, { type: 'mine', target: { x: 16, y: 16, z: 0 } }).state;
+    expect(state.avatar.pos.z).toBe(0);
+    const view = buildView(state, { ...DEFAULT_VIEW, deepestZ: 0 });
+    expect(view.window).toEqual({ x0: 12, x1: 20, y0: 12, y1: 20 });
+    expect(renderView(view)).toContain('--radius 16 shows it all');
+
+    // A pocket the player has seen all of: nothing more to show.
+    const pocket = buildState({
+      layers: [['###', '#.#', '###']],
+      avatar: { x: 1, y: 1, z: 0 },
+      revealAll: true,
+    });
+    expect(defaultViewText(pocket)).toContain('everything you have seen of these layers');
+  });
+
+  it('the hint counts seen cells only: unseen cells never change it', () => {
+    const state = dugInState();
+    const before = buildView(state, { ...DEFAULT_VIEW, deepestZ: 0 }).radiusForAllSeen;
+    for (let index = 0; index < state.blocks.length; index += 1) {
+      if (!isRevealed(state, cellPosition(state.size, index))) {
+        state.blocks[index] = BLOCKS.air.code;
+      }
+    }
+    expect(buildView(state, { ...DEFAULT_VIEW, deepestZ: 0 }).radiusForAllSeen).toBe(before);
+  });
+});
+
+describe('layer labels on a narrow map (issue #20)', () => {
+  it('keeps each label over its own layer when the map is narrower than the label', () => {
+    // A pocket two layers down, 3 cells wide: the labels are 7 characters.
+    const solid = ['###', '###', '###'];
+    const state = buildState({
+      layers: [solid, solid, ['###', '#.#', '###'], solid, solid],
+      avatar: { x: 1, y: 1, z: 2 },
+      revealAll: true,
+    });
+    const text = renderView(buildView(state, { radius: 1, layers: 1, deepestZ: 2 }));
+    const lines = text.split('\n');
+    const labels = lines.find((line) => line.includes('layer 1')) ?? '';
+    const start = lines.indexOf(labels);
+    expect(lines.slice(start, start + 5)).toEqual([
+      '     layer 1  layer 2  layer 3',
+      '     (above)  (yours)  (below)',
+      'y  0 ###      ###      ###',
+      'y  1 ###      #@#      ###',
+      'y  2 ###      ###      ###',
+    ]);
+  });
+
+  it('leaves a map wider than its labels as it was', () => {
+    const text = renderView(
+      buildView(createRun(7, 'none', 'standard'), { radius: 4, layers: 1, deepestZ: -1 }),
+    );
+    expect(text).toContain(
+      '     surface    layer 0\n     (yours)    (below)\ny 12 .........  d#dttddd#',
+    );
+  });
+});
+
+describe('why a move is not on the list (issue #30)', () => {
+  /** The "Not on the list" lines of the view. */
+  function notOffered(state: GameState): string[] {
+    return buildView(state, { ...DEFAULT_VIEW, deepestZ: 0 }).notOffered;
+  }
+  /** A ledge on layer 0 with a pit east of it, `depth` cells deep below layer 0. */
+  function besidePit(depth: number): GameState {
+    const layers: string[][] = [['#..']];
+    for (let z = 1; z <= 5; z += 1) {
+      layers.push([z <= depth ? '##.' : '###']);
+    }
+    return buildState({ layers, avatar: { x: 1, y: 0, z: 0 }, revealAll: true });
+  }
+
+  it('says when the drop is too long, and nothing when the move is offered', () => {
+    const longest = AVATAR.maxChosenDropBlocks;
+    const shallow = besidePit(longest);
+    expect(resolveChoice(shallow, 'e')).toMatchObject({ type: 'move', drop: longest });
+    expect(notOffered(shallow)).toEqual([]);
+
+    const deep = besidePit(longest + 1);
+    expect(resolveChoice(deep, 'e')).toBeNull();
+    expect(notOffered(deep)).toEqual([
+      `No move east: the drop there is more than ${longest} blocks. A ladder in that cell would hold you.`,
+    ]);
+    expect(defaultViewText(deep)).toContain('Not on the list: No move east: the drop there');
+
+    // And the advice is true: with a ladder in that cell the move is offered.
+    deep.structures[cellIndex(deep.size, { x: 2, y: 0, z: 0 })] = STRUCTURES.ladder.code;
+    expect(resolveChoice(deep, 'e')).toMatchObject({ type: 'move', drop: 0 });
+    expect(notOffered(deep)).toEqual([]);
+  });
+
+  it('on the surface, gives the reason without the ladder advice (nothing can be placed there)', () => {
+    // The miner stands on the surface beside a hole. The cell east of it is
+    // a surface cell, where no ladder can be placed.
+    const longest = AVATAR.maxChosenDropBlocks;
+    const hole = (depth: number): GameState => {
+      const layers: string[][] = [];
+      for (let z = 0; z < 6; z += 1) {
+        layers.push([z < depth ? '##.' : '###']);
+      }
+      return buildState({ layers, avatar: { x: 1, y: 0, z: -1 }, revealAll: true });
+    };
+
+    const deep = hole(longest + 1);
+    expect(resolveChoice(deep, 'e')).toBeNull();
+    expect(resolveChoice(deep, 'ladder-e')).toBeNull();
+    expect(notOffered(deep)).toEqual([
+      `No move east: the drop there is more than ${longest} blocks.`,
+    ]);
+
+    // The same with the bottom of the hole unseen.
+    const unseen = hole(longest);
+    for (let z = 1; z < 6; z += 1) {
+      unseen.revealed[cellIndex(unseen.size, { x: 2, y: 0, z })] = 0;
+    }
+    expect(resolveChoice(unseen, 'e')).toBeNull();
+    expect(notOffered(unseen)).toEqual([
+      'No move east: there is a drop of at least 1 block(s) and you have not seen its bottom.',
+    ]);
+    expect(defaultViewText(deep)).not.toContain('would hold you');
+    expect(defaultViewText(unseen)).not.toContain('would hold you');
+  });
+
+  it('says nothing about a plain wall, or when there is no AP to move at all', () => {
+    const solid = ['###', '###', '###'];
+    const layers = [solid, ['###', '#.#', '###'], solid];
+    const walled = buildState({ layers, avatar: { x: 1, y: 1, z: 1 }, revealAll: true });
+    expect(notOffered(walled)).toEqual([]);
+    expect(defaultViewText(walled)).not.toContain('Not on the list');
+
+    const tired = besidePit(AVATAR.maxChosenDropBlocks + 1);
+    tired.ap = 0;
+    expect(notOffered(tired)).toEqual([]);
+  });
+
+  it('in the dark, says the floor of a cell just dug open has not been seen', () => {
+    const state = darkDugState();
+    const here = state.avatar.pos;
+    const east = { x: here.x + 1, y: here.y, z: here.z };
+    const underEast = { x: east.x, y: east.y, z: east.z + 1 };
+    expect(state.lampOil).toBe(0);
+    expect(isRevealed(state, east)).toBe(true);
+    expect(isRevealed(state, underEast)).toBe(false);
+    expect(resolveChoice(state, 'e')).toBeNull();
+    expect(notOffered(state)).toContain(
+      'No move east: you have not seen what is under that cell. A ladder in that cell would hold you.',
+    );
+
+    // The line is the same whatever the unseen floor is: rock, open, or
+    // open with a ladder in it.
+    const before = defaultViewText(state);
+    const index = cellIndex(state.size, underEast);
+    for (const block of [BLOCKS.stone.code, BLOCKS.air.code]) {
+      state.blocks[index] = block;
+      expect(defaultViewText(state)).toBe(before);
+    }
+    state.structures[index] = STRUCTURES.ladder.code;
+    expect(defaultViewText(state)).toBe(before);
+  });
+
+  it('says when a drop was seen part of the way and its bottom was not', () => {
+    const state = besidePit(4);
+    // The player has seen one open cell under the cell east, and no further.
+    for (let z = 2; z <= 5; z += 1) {
+      state.revealed[cellIndex(state.size, { x: 2, y: 0, z })] = 0;
+    }
+    expect(notOffered(state)).toEqual([
+      'No move east: there is a drop of at least 1 block(s) and you have not seen its bottom. ' +
+        'A ladder in that cell would hold you.',
+    ]);
+    const before = defaultViewText(state);
+    state.blocks[cellIndex(state.size, { x: 2, y: 0, z: 2 })] = BLOCKS.stone.code;
+    expect(defaultViewText(state)).toBe(before);
+  });
+
+  it('in the dark, says when the top of the rock beside you has not been seen', () => {
+    // A pit two deep; the avatar at its bottom in the dark. Overhead is open
+    // (touched); the cells on top of the walls beside it are not known.
+    const state = buildState({
+      layers: [['###'], ['#.#'], ['#.#'], ['###']],
+      avatar: { x: 1, y: 0, z: 2 },
+      lampOil: 0,
+      ap: 0,
+    });
+    // Ending a shift runs the engine's reveal: in the dark, the six cells touched.
+    const dark = endShift(state).state;
+    expect(isRevealed(dark, { x: 2, y: 0, z: 1 })).toBe(false);
+    // One line for both directions.
+    expect(notOffered(dark)).toEqual([
+      'No step up east, west: you have not seen what is on top of the rock there.',
+    ]);
+    const before = defaultViewText(dark);
+    dark.blocks[cellIndex(dark.size, { x: 2, y: 0, z: 1 })] = BLOCKS.air.code;
+    expect(defaultViewText(dark)).toBe(before);
+  });
+
+  it('explains a climb that is not offered from a ladder', () => {
+    // A shaft with a ladder in the avatar's cell only: none above, and
+    // below the ladder's foot a drop of 3.
+    const state = buildState({
+      layers: [['#.#'], ['#.#'], ['#.#'], ['#.#'], ['#.#'], ['###']],
+      avatar: { x: 1, y: 0, z: 1 },
+      ladders: [{ x: 1, y: 0, z: 1 }],
+      revealAll: true,
+    });
+    expect(resolveChoice(state, 'up')).toBeNull();
+    expect(resolveChoice(state, 'down')).toBeNull();
+    expect(notOffered(state)).toEqual([
+      'No climb up: the cell above you has no ladder.',
+      `No climb down: off the foot of your ladder the drop is more than ${AVATAR.maxChosenDropBlocks} blocks. ` +
+        'A ladder in the cell below would hold you.',
+    ]);
+
+    // With the drop unseen, it says that instead, whatever is there.
+    for (let z = 3; z <= 5; z += 1) {
+      state.revealed[cellIndex(state.size, { x: 1, y: 0, z })] = 0;
+    }
+    expect(notOffered(state)[1]).toBe(
+      'No climb down: you have not seen how far the drop under the cell below goes. ' +
+        'A ladder in the cell below would hold you.',
+    );
+    const before = defaultViewText(state);
+    state.blocks[cellIndex(state.size, { x: 1, y: 0, z: 3 })] = BLOCKS.stone.code;
+    expect(defaultViewText(state)).toBe(before);
+  });
+
+  it('never explains a move that is on the list', () => {
+    const words = ['north', 'east', 'south', 'west'];
+    const names = ['n', 'e', 's', 'w'];
+    let notes = 0;
+    for (const state of statesAlongARun(150)) {
+      for (const note of notOffered(state)) {
+        notes += 1;
+        // The directions a note is about stand before its colon.
+        const about = note.slice(0, note.indexOf(':'));
+        words.forEach((word, index) => {
+          if (about.includes(word)) {
+            expect(resolveChoice(state, names[index] ?? '')).toBeNull();
+          }
+        });
+      }
+    }
+    expect(notes).toBeGreaterThan(0);
+  });
+});
+
+describe('unseen cells never change the view (issues #30 and #33)', () => {
+  /**
+   * Change every cell the player has not seen: its block (rock to open or
+   * open to rock, as `toOpen` says), and optionally a ladder and loose items
+   * in it. Ore is left as it is, and nothing is turned into ore: whether ore
+   * is near a seen block is what mineral traces are meant to show.
+   * Returns how many cells were changed.
+   */
+  function changeUnseen(state: GameState, toOpen: boolean, clutter: boolean): number {
+    const oreCodes = TELLS.mineralTraces.sourceBlocks.map(
+      (blockId) => BLOCKS[blockId as keyof typeof BLOCKS].code,
+    );
+    let changed = 0;
+    const loose = [];
+    for (let index = 0; index < state.blocks.length; index += 1) {
+      const pos = cellPosition(state.size, index);
+      if (isRevealed(state, pos) || oreCodes.includes(state.blocks[index] as number)) {
+        continue;
+      }
+      state.blocks[index] = toOpen ? BLOCKS.air.code : BLOCKS.stone.code;
+      if (clutter && toOpen) {
+        state.structures[index] = STRUCTURES.ladder.code;
+        loose.push({ pos, item: 'coal', count: 2 });
+      }
+      changed += 1;
+    }
+    if (clutter) {
+      state.looseItems = [...state.looseItems, ...loose];
+    }
+    return changed;
+  }
+
+  it('the whole text is the same with every unseen cell open, solid, or laddered', () => {
+    const states = [
+      createRun(7, 'none', 'standard'),
+      dugInState(),
+      darkDugState(),
+      // Every tenth state of a run, lit and dark, in tunnels and on ladders.
+      ...statesAlongARun(150).filter((_state, index) => index % 10 === 0),
+    ];
+    for (const state of states) {
+      const texts = [defaultViewText(state), viewText(state)];
+      for (const [toOpen, clutter] of [
+        [true, false],
+        [false, false],
+        [true, true],
+      ] as const) {
+        // `structuredClone` copies the state, arrays and all, so each change
+        // starts from the state as it was.
+        const copy = structuredClone(state);
+        expect(changeUnseen(copy, toOpen, clutter)).toBeGreaterThan(1000);
+        expect(defaultViewText(copy)).toBe(texts[0]);
+        expect(viewText(copy)).toBe(texts[1]);
+      }
+    }
+  });
+
+  it('the dark view under test does have a move left out and explained', () => {
+    // So the test above is known to cover the "Not on the list" line.
+    expect(defaultViewText(darkDugState())).toContain('Not on the list: No move east');
   });
 });

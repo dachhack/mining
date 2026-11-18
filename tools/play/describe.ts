@@ -130,6 +130,21 @@ export function runEndText(cause: string): string {
   return RUN_END_TEXT[cause] ?? cause;
 }
 
+/**
+ * What mining the revealed block at `target` gives: "Stone, mineral traces,
+ * gives 1 Stone". `underfoot` is put after the block's name; it is the note
+ * about the fall for the block the avatar stands on, and '' otherwise.
+ */
+function mineOutcomeText(state: GameState, target: Vec3, underfoot: string): string {
+  const block = blockDefAt(state, target);
+  // A yield that does not fit the carry limit is left in the hole.
+  const fits = block.yields.every((stack) => canCarry(state, stack.item, stack.count));
+  const tooHeavy = fits ? '' : ' (too heavy to carry: it will be left lying there)';
+  // Shown only for a block the player has seen traces on; the engine decides.
+  const traces = showsMineralTraces(state, target) ? ', mineral traces' : '';
+  return `${block.name}${traces}${underfoot}, gives ${stackListText(block.yields)}${tooHeavy}`;
+}
+
 function describeAction(state: GameState, action: Action): string {
   const here = state.avatar.pos;
   switch (action.type) {
@@ -148,20 +163,11 @@ function describeAction(state: GameState, action: Action): string {
       return `Move ${side}${drop}`;
     }
     case 'mine': {
-      const block = blockDefAt(state, action.target);
-      // A yield that does not fit the carry limit is left in the hole.
-      const fits = block.yields.every((stack) => canCarry(state, stack.item, stack.count));
-      const tooHeavy = fits ? '' : ' (too heavy to carry: it will be left lying there)';
       const underfoot =
         action.target.x === here.x && action.target.y === here.y
           ? ` (you are standing on it: ${knownFallText(state)})`
           : '';
-      // Shown only for a block the player has seen traces on; the engine decides.
-      const traces = showsMineralTraces(state, action.target) ? ', mineral traces' : '';
-      return (
-        `Mine ${whereFrom(here, action.target)}: ${block.name}${traces}${underfoot}` +
-        `, gives ${stackListText(block.yields)}${tooHeavy}`
-      );
+      return `Mine ${whereFrom(here, action.target)}: ${mineOutcomeText(state, action.target, underfoot)}`;
     }
     case 'placeLadder':
       return `Place a ladder in ${placeWhere(here, action.target)}`;
@@ -191,6 +197,99 @@ function describeAction(state: GameState, action: Action): string {
 function placeWhere(here: Vec3, target: Vec3): string {
   const where = whereFrom(here, target);
   return where === 'your cell' ? where : `the cell ${where}`;
+}
+
+/** "n", "ne", "sw", ... for a sideways offset; '' for none. The short form of `compass`. */
+function compassShort(dx: number, dy: number): string {
+  return (dy < 0 ? 'n' : dy > 0 ? 's' : '') + (dx > 0 ? 'e' : dx < 0 ? 'w' : '');
+}
+
+/**
+ * The short form of `whereFrom`, for the names of choices: "here", "up",
+ * "down", "n", "ne", "n-down" (north, one layer down), "n-up".
+ */
+function whereShort(from: Vec3, to: Vec3): string {
+  const side = compassShort(to.x - from.x, to.y - from.y);
+  const dz = to.z - from.z;
+  const level = dz === 0 ? '' : dz < 0 ? 'up' : 'down';
+  if (side === '') {
+    return level === '' ? 'here' : level;
+  }
+  return level === '' ? side : `${side}-${level}`;
+}
+
+/** "lampOil" -> "lamp-oil": an id from src/data in the lower case a choice is typed in. */
+function idInLowerCase(id: string): string {
+  return id.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+}
+
+/**
+ * The name of a choice: what the player may type instead of its number.
+ *
+ * A number says where a choice stands in the list, and the list changes
+ * after every action. A name says what the choice does, seen from where the
+ * avatar stands ("e" is always "go east", "mine-down" is always "mine the
+ * block underfoot"), so it means the same thing at every step and is safe in
+ * a chain (issue #30). It is made from the action alone, never from the cube.
+ *
+ * The names:
+ * - moves: n, e, s, w (a walk or a step up: a direction offers one or the
+ *   other, never both), up and down (on a ladder);
+ * - mine-n, mine-ne, ... on your layer; mine-down for the block underfoot;
+ *   mine-n-down, mine-ne-down, ... for the layer below;
+ * - ladder-here, ladder-n, ladder-up, ladder-down; torch- the same;
+ * - craft-ladder, craft-lamp-oil, ...: "craft-" and the recipe;
+ * - take-here-stone, take-n-coal, ...: "take-", where from, and the item;
+ * - drop-stone (one) and drop-all-stone (the whole stack);
+ * - leave, and end for "end the shift".
+ */
+export function choiceName(state: GameState, entry: LogEntry): string {
+  const here = state.avatar.pos;
+  switch (entry.type) {
+    case 'endShift':
+      return 'end';
+    case 'move': {
+      const side = compassShort(entry.to.x - here.x, entry.to.y - here.y);
+      if (side !== '') {
+        return side;
+      }
+      return entry.to.z < here.z ? 'up' : 'down';
+    }
+    case 'mine':
+      return `mine-${whereShort(here, entry.target)}`;
+    case 'placeLadder':
+      return `ladder-${whereShort(here, entry.target)}`;
+    case 'placeTorch':
+      return `torch-${whereShort(here, entry.target)}`;
+    case 'craft':
+      return `craft-${idInLowerCase(entry.recipe)}`;
+    case 'pickUp':
+      return `take-${whereShort(here, entry.from)}-${idInLowerCase(entry.item)}`;
+    case 'drop':
+      return entry.count === 1
+        ? `drop-${idInLowerCase(entry.item)}`
+        : `drop-all-${idInLowerCase(entry.item)}`;
+    case 'leave':
+      return 'leave';
+  }
+}
+
+/**
+ * For a mine action, what it does apart from where the block is: "Stone,
+ * gives 1 Stone". Mine actions with the same words here and the same AP cost
+ * differ only in direction, and the list prints them as one line (issue #30).
+ * `null` for the block underfoot, whose line says what the fall will cost
+ * and so always stands alone, and for every other kind of choice.
+ */
+export function mineGroupText(state: GameState, entry: LogEntry): string | null {
+  if (entry.type !== 'mine') {
+    return null;
+  }
+  const here = state.avatar.pos;
+  if (entry.target.x === here.x && entry.target.y === here.y) {
+    return null;
+  }
+  return mineOutcomeText(state, entry.target, '');
 }
 
 /** The text of one line of the action list. */
