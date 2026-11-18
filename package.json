@@ -16,6 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "sim": "tsx tools/sim.ts",
+    "golden": "tsx tools/golden.ts",
     "ascii": "tsx tools/ascii.ts",
     "play": "tsx tools/play.ts",
     "e2e": "playwright test"

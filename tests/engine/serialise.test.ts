@@ -60,6 +60,22 @@ describe('serialise and deserialise', () => {
     ]);
   });
 
+  it('deserialise merges two piles of the same item in the same cell', () => {
+    // A save written by hand, or by an older build, may list a cell's pile in
+    // parts. The loaded state must hold one pile, as the engine keeps them.
+    const saved = serialise(busyState());
+    saved.looseItems = [
+      { pos: { x: 1, y: 1, z: 0 }, item: 'stone', count: 2 },
+      { pos: { x: 0, y: 0, z: 0 }, item: 'coal', count: 1 },
+      { pos: { x: 1, y: 1, z: 0 }, item: 'stone', count: 3 },
+    ];
+    const loaded = deserialise(JSON.parse(JSON.stringify(saved)));
+    expect(loaded.looseItems).toEqual([
+      { pos: { x: 0, y: 0, z: 0 }, item: 'coal', count: 1 },
+      { pos: { x: 1, y: 1, z: 0 }, item: 'stone', count: 5 },
+    ]);
+  });
+
   it('round-trips a full-size new run to the same hash', () => {
     const state = createRun(123, 'none', 'standard');
     expect(hashState(throughJson(state))).toBe(hashState(state));

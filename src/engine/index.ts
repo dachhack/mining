@@ -226,4 +226,8 @@ export {
   structureAt,
 } from './state';
 export type { Avatar, GameState, LooseItems, RunStatus } from './state';
+// The seeded generator, for tools and tests that need random numbers of their
+// own (a simulator policy, say). They make their own state with `createRng`;
+// `state.rng` belongs to the rules.
+export { createRng, nextInt } from './rng';
 export type { RngState } from './rng';
