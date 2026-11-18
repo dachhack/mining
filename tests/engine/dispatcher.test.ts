@@ -173,8 +173,6 @@ describe('applyAction', () => {
 
   it('rejects an action that costs more AP than the avatar has', () => {
     const state = startState(FAKE_LEAVE_COST - 1);
-    // Only the leave actions are compared: the real rule modules may offer
-    // others in this state (dropping the timber costs 0 AP).
     expect(findActions(state, { type: 'leave' })).toEqual([]);
     expect(() => applyAction(state, LEAVE)).toThrow('Not a legal action');
 
