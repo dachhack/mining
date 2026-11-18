@@ -30,7 +30,11 @@ describe('mining the floor above a void', () => {
     expect(distance).toBeGreaterThanOrEqual(3);
     expect(distance).toBeGreaterThan(AVATAR.freeFallBlocks);
     expect(distance).toBeLessThan(AVATAR.fatalFallBlocks);
-    const damage = (distance - AVATAR.freeFallBlocks) * AVATAR.fallDamagePerBlock;
+    // An uncontrolled fall: the first blocks cost health too (note 0010).
+    const damage =
+      AVATAR.freeFallBlocks * AVATAR.uncontrolledFallDamagePerBlock +
+      (distance - AVATAR.freeFallBlocks) * AVATAR.fallDamagePerBlock;
+    expect(damage).toBeLessThan(AVATAR.startHealth);
 
     const state = buildState({ layers, avatar: start });
     updateReveal(state, []);
@@ -49,7 +53,7 @@ describe('mining the floor above a void', () => {
     expect(events.slice(0, 4)).toEqual([
       { type: 'blockMined', pos: floor, block: BLOCKS.stone.code },
       { type: 'itemGained', item: 'stone', count: 1 },
-      { type: 'fell', from: start, to: landing, distance },
+      { type: 'fell', from: start, to: landing, distance, kind: 'uncontrolled' },
       { type: 'damageTaken', amount: damage, cause: 'fall', health: AVATAR.startHealth - damage },
     ]);
     const rest = events.slice(4);

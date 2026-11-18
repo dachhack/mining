@@ -57,7 +57,7 @@ export interface RunMetrics {
   /** How many of the mined blocks were ore that gives mineral traces (iron, copper, crystal). */
   oreBlocksMined: number;
   /**
-   * Did the player see mineral traces (decision note 0010) on any block before
+   * Did the player see mineral traces (decision note 0011) on any block before
    * the first such ore block was mined? In a run that mined none, whether
    * traces were seen at all.
    */

@@ -1,4 +1,4 @@
-// Mineral traces (decision note 0010): rock near ore shows a tell. The
+// Mineral traces (decision note 0011): rock near ore shows a tell. The
 // player first sees it on a revealed block in light, and it then stays on
 // the map.
 
@@ -406,7 +406,7 @@ describe('mineral traces', () => {
 });
 
 describe('mineral traces in generated cubes', () => {
-  // The full figures over 1,000 seeds are in decision note 0010. This keeps
+  // The full figures over 1,000 seeds are in decision note 0011. This keeps
   // the two facts they rest on from regressing, on fewer seeds.
   it('a start-cell shaft to layer 12 sees traces at least as often, and as early, as ore', () => {
     let sawTraces = 0;

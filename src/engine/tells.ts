@@ -2,7 +2,7 @@
 //
 // Design doc 6 gives every hazard a tell on the blocks around it ("damp stone
 // within 1 of a water pocket"). Those arrive with the hazards in M2 and belong
-// in this file. The first tell is for ore (decision note 0010):
+// in this file. The first tell is for ore (decision note 0011):
 //
 //   MINERAL TRACES. Plain rock that lies within `TELLS.mineralTraces.distance`
 //   steps of an ore block carries mineral traces. The player first sees them

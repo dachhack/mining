@@ -3,7 +3,7 @@ import type { TellsData } from './types';
 // Tells: what a block shows about something hidden near it. Design doc 6 gives
 // each hazard one ("damp stone within 1 of a water pocket"); the hazards and
 // their tells arrive in M2. Mineral traces are the first, and follow the same
-// model for ore (owner's answer to question 41; decision note 0010).
+// model for ore (owner's answer to question 41; decision note 0011).
 //
 // All of it is [Default]: tune it here.
 export const TELLS: TellsData = {

@@ -18,7 +18,7 @@ import { legalMineActions, applyMine } from './actions/mine';
 import { legalMoveActions, applyMove } from './actions/move';
 import { legalPlaceLadderActions, applyPlaceLadder } from './actions/placeLadder';
 import { legalPlaceTorchActions, applyPlaceTorch } from './actions/placeTorch';
-import type { GameEvent } from './events';
+import type { FallKind, GameEvent } from './events';
 import { generateCube } from './generation/cube';
 import { settle } from './gravity';
 import { updateReveal } from './reveal';
@@ -157,7 +157,12 @@ export function applyAction(state: GameState, action: Action): StepResult {
 
   // After any action: things fall, then light shows what is newly visible,
   // and any mineral traces on the blocks it falls on.
-  settle(next, events);
+  // A fall straight after a move is one the player chose from the move list
+  // (a drop of 1 or 2 blocks, shown there). A fall after anything else, in
+  // practice after mining the block underfoot, is uncontrolled and costs
+  // health from the first block (design doc 5.2, decision note 0010).
+  const fallKind: FallKind = action.type === 'move' ? 'chosenDrop' : 'uncontrolled';
+  settle(next, events, fallKind);
   updateReveal(next, events);
   updateMineralTraces(next, events);
   return { state: next, events };
@@ -176,7 +181,8 @@ export function endShift(state: GameState): StepResult {
   const events: GameEvent[] = [];
 
   runCubePhase(next, events);
-  settle(next, events);
+  // Nothing the cube phase does to the avatar's footing is the player's move.
+  settle(next, events, 'uncontrolled');
   if (isRunActive(next)) {
     runUpkeep(next, events);
   }
@@ -212,7 +218,15 @@ export type {
   PlaceLadderAction,
   PlaceTorchAction,
 } from './actionTypes';
-export type { DamageCause, GameEvent, GaugeChangeReason, RunEndCause, RunOutcome } from './events';
+export type {
+  DamageCause,
+  FallKind,
+  GameEvent,
+  GaugeChangeReason,
+  RunEndCause,
+  RunOutcome,
+} from './events';
+export { fallDamage, isFatalFall } from './gravity';
 export { hashState } from './hash';
 export { canCarry, carriedWeight, carryCapacity } from './inventory';
 export { deserialise, serialise } from './serialise';

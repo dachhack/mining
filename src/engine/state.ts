@@ -63,7 +63,7 @@ export interface GameState {
   structures: Uint8Array;
   /**
    * 1 if the player has seen mineral traces on the cell's block, otherwise 0
-   * (decision note 0010). Set by `updateMineralTraces` in tells.ts and never
+   * (decision note 0011). Set by `updateMineralTraces` in tells.ts and never
    * cleared, so what was seen stays on the map like `revealed`. Read it
    * through `showsMineralTraces`, which also checks the rock is still there.
    */

@@ -1,4 +1,4 @@
-# 0010 — Mineral traces: rock near ore shows a tell
+# 0011 — Mineral traces: rock near ore shows a tell
 
 Date: 2026-11-18. Status: the direction is the owner's ("ore hints are good", answer to question 41); the form below is the coordinator's assumed default from issue #35, for the owner to confirm. Every number and block list is a [Default] in `src/data/tells.ts`.
 
@@ -23,7 +23,7 @@ Playtest round m1-r1 (finding 2, issue #22) found that whether a run finds ore d
 
 ## Figures
 
-A one-cell shaft dug with the engine from the start cell until the miner stands in layer 12, seeds 1 to 1,000 (`tests/engine/shaftSurvey.ts`):
+A one-cell shaft dug with the engine from the start cell until the miner stands in layer 12, seeds 1 to 1,000 (`tests/engine/shaftSurvey.ts`). The miner puts a ladder in each cell before mining the block underfoot and climbs down, because an unheld fall now costs health (0010).
 
 | What the shaft showed                      | Seeds        |
 | ------------------------------------------ | ------------ |
@@ -31,10 +31,9 @@ A one-cell shaft dug with the engine from the start cell until the miner stands 
 | Mineral traces                             | 849 of 1,000 |
 | Traces, and no ore                         | 273          |
 | Ore, and no traces                         | 0            |
-| Both, traces at least one layer before ore | 429 of 576   |
-| Both, first seen from the same layer       | 147 of 576   |
+| Both, traces at least one layer before ore | 576 of 576   |
 
-Traces are first seen from layer 8.4 on average; where both show, traces come 1.1 layers earlier on average. No traces show above layer 5, because no ore lies above layer 8.
+Traces are first seen from layer 7.4 on average; where both show, traces come 2.0 layers earlier on average. No traces show above layer 5, because no ore lies above layer 8.
 
 ## Consequences
 
@@ -43,4 +42,4 @@ Traces are first seen from layer 8.4 on average; where both show, traces come 1.
 - The `%` hides which rock a traced block is on the map. The mine list names it for blocks in reach.
 - Traces seen near ore that has since been mined stay on the map, so an old `%` can point at ore that is gone.
 - A save from state version 2 does not load.
-- `updateMineralTraces` runs after every step. 1,000 `random` sim runs take 13.2 seconds with it and 11.8 without, and 1,000 `wander` runs 35.7 against 31.3, on a cloud container.
+- `updateMineralTraces` runs after every step. 1,000 `random` sim runs take 13.2 seconds with it and 11.8 without, and 1,000 `wander` runs 35.7 against 31.3, on a cloud container (before 0010's rule was merged in).
