@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { BLOCKS, NO_STRUCTURE, STRUCTURES } from '../../src/data';
+import { AVATAR, BLOCKS, ITEMS, NO_STRUCTURE, STRUCTURES } from '../../src/data';
+import { canCarry, carriedWeight, carryCapacity } from '../../src/engine/inventory';
 import {
   addItem,
+  addLooseItems,
   blockAt,
   blockDefAt,
   cellCount,
@@ -11,11 +13,14 @@ import {
   countItem,
   endRun,
   inGrid,
+  inventoryEntries,
   isOpen,
   isRevealed,
   isSolid,
   isSurface,
+  looseItemsAt,
   removeItem,
+  removeLooseItems,
   setBlock,
   setRevealed,
   setStructure,
@@ -190,6 +195,122 @@ describe('inventory bookkeeping', () => {
     expect(() => removeItem(state, 'timber', 1)).toThrow('carries 0');
     expect(() => addItem(state, 'coal', -1)).toThrow();
     expect(countItem(state, 'coal')).toBe(1);
+  });
+});
+
+describe('inventoryEntries', () => {
+  it('lists what is carried sorted by item id, whatever order it was added in', () => {
+    const state = smallState();
+    addItem(state, 'timber', 2);
+    addItem(state, 'coal', 1);
+    addItem(state, 'stone', 0);
+    addItem(state, 'ladder', 6);
+    removeItem(state, 'coal', 1);
+    expect(Object.keys(state.inventory)).toEqual(['timber', 'coal', 'stone', 'ladder']);
+    expect(inventoryEntries(state)).toEqual([
+      { item: 'ladder', count: 6 },
+      { item: 'timber', count: 2 },
+    ]);
+  });
+});
+
+describe('carry weight', () => {
+  it('adds up count times weight from the data', () => {
+    const state = smallState();
+    expect(carriedWeight(state)).toBe(0);
+    addItem(state, 'stone', 3);
+    addItem(state, 'coal', 2);
+    addItem(state, 'ladder', 6);
+    const expected = 3 * ITEMS.stone.weight + 2 * ITEMS.coal.weight + 6 * ITEMS.ladder.weight;
+    expect(carriedWeight(state)).toBe(expected);
+    // With 0005's weights (stone 2, coal 1, ladder 0) that is 8.
+    expect(expected).toBe(8);
+  });
+
+  it('allows carrying exactly the capacity and nothing beyond it', () => {
+    const state = smallState();
+    const capacity = carryCapacity();
+    expect(capacity).toBe(AVATAR.carryCapacity);
+    // Fill up with coal to one short of the limit.
+    const coalWeight = ITEMS.coal.weight;
+    addItem(state, 'coal', Math.floor((capacity - coalWeight) / coalWeight));
+    expect(carriedWeight(state)).toBe(capacity - coalWeight);
+
+    expect(canCarry(state, 'coal', 1)).toBe(true); // exactly full
+    expect(canCarry(state, 'coal', 2)).toBe(false);
+    expect(canCarry(state, 'stone', 1)).toBe(ITEMS.stone.weight <= coalWeight);
+    expect(canCarry(state, 'ladder', 99)).toBe(true); // ladders weigh nothing
+    expect(canCarry(state, 'coal', 0)).toBe(true);
+  });
+
+  it('throws on an item that does not exist', () => {
+    const state = smallState();
+    state.inventory['jetpack'] = 1;
+    expect(() => carriedWeight(state)).toThrow('Unknown item id');
+    expect(() => canCarry(smallState(), 'jetpack', 1)).toThrow('Unknown item id');
+  });
+});
+
+describe('loose items', () => {
+  const A = { x: 1, y: 1, z: 0 };
+  const B = { x: 0, y: 0, z: -1 }; // on the surface
+
+  it('keeps one pile per cell and item, sorted by z, y, x, then item', () => {
+    const state = smallState();
+    addLooseItems(state, A, 'stone', 1);
+    addLooseItems(state, A, 'coal', 2);
+    addLooseItems(state, B, 'timber', 1);
+    addLooseItems(state, A, 'stone', 3);
+    expect(state.looseItems).toEqual([
+      { pos: B, item: 'timber', count: 1 },
+      { pos: A, item: 'coal', count: 2 },
+      { pos: A, item: 'stone', count: 4 },
+    ]);
+    expect(looseItemsAt(state, A)).toEqual([
+      { item: 'coal', count: 2 },
+      { item: 'stone', count: 4 },
+    ]);
+    expect(looseItemsAt(state, { x: 2, y: 2, z: 0 })).toEqual([]);
+  });
+
+  it('gives the same list whatever order the piles were added in', () => {
+    const one = smallState();
+    addLooseItems(one, A, 'coal', 1);
+    addLooseItems(one, A, 'coal', 2);
+    addLooseItems(one, B, 'stone', 1);
+    const other = smallState();
+    addLooseItems(other, B, 'stone', 1);
+    addLooseItems(other, A, 'coal', 3);
+    expect(one.looseItems).toEqual(other.looseItems);
+    expect(hashState(one)).toBe(hashState(other));
+  });
+
+  it('removes from a pile, and drops the pile when it is empty', () => {
+    const state = smallState();
+    addLooseItems(state, A, 'coal', 3);
+    removeLooseItems(state, A, 'coal', 2);
+    expect(looseItemsAt(state, A)).toEqual([{ item: 'coal', count: 1 }]);
+    removeLooseItems(state, A, 'coal', 1);
+    expect(state.looseItems).toEqual([]);
+  });
+
+  it('refuses to remove more than the cell holds, or to add outside the cube', () => {
+    const state = smallState();
+    addLooseItems(state, A, 'coal', 1);
+    expect(() => removeLooseItems(state, A, 'coal', 2)).toThrow('it holds 1');
+    expect(() => removeLooseItems(state, A, 'stone', 1)).toThrow('it holds 0');
+    expect(() => removeLooseItems(state, B, 'coal', 1)).toThrow('it holds 0');
+    expect(() => addLooseItems(state, { x: -1, y: 0, z: 0 }, 'coal', 1)).toThrow('outside');
+    expect(() => addLooseItems(state, A, 'coal', -1)).toThrow();
+    expect(looseItemsAt(state, A)).toEqual([{ item: 'coal', count: 1 }]);
+  });
+
+  it('does not keep a reference to the position it is given', () => {
+    const state = smallState();
+    const pos = { ...A };
+    addLooseItems(state, pos, 'coal', 1);
+    pos.x = 3;
+    expect(looseItemsAt(state, A)).toEqual([{ item: 'coal', count: 1 }]);
   });
 });
 

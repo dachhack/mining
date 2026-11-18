@@ -23,8 +23,8 @@ import { generateCube } from './generation/cube';
 import { settle } from './gravity';
 import { updateReveal } from './reveal';
 import { isValidSeed } from './rng';
-import { forecastCubePhase, runCubePhase, runUpkeep } from './shift';
-import type { HazardForecast } from './shift';
+import { forecastShift, runCubePhase, runUpkeep } from './shift';
+import type { ShiftForecast } from './shift';
 import { addItem, blankState, cloneState, isRunActive } from './state';
 import type { GameState } from './state';
 
@@ -178,14 +178,16 @@ export function endShift(state: GameState): StepResult {
 }
 
 /**
- * What the coming cube phase will do to the hazards the player knows about,
- * for the end-shift preview. Does not change `state`. Empty until M2.
+ * What ending the shift now would do, for the end-shift preview: the cube
+ * phase's effect on the hazards the player knows about (none until M2) and
+ * upkeep's effect on fuel, lamp oil and banked AP. Does not change `state`.
+ * Throws if the run has already ended, as `endShift` does.
  */
-export function previewCubePhase(state: GameState): HazardForecast[] {
+export function previewCubePhase(state: GameState): ShiftForecast {
   if (!isRunActive(state)) {
-    return [];
+    throw new Error('The run has ended; there is no shift to preview');
   }
-  return forecastCubePhase(state);
+  return forecastShift(state);
 }
 
 // Types and helpers that callers outside the engine need.
@@ -203,9 +205,10 @@ export type {
 } from './actionTypes';
 export type { DamageCause, GameEvent, GaugeChangeReason, RunEndCause, RunOutcome } from './events';
 export { hashState } from './hash';
+export { canCarry, carriedWeight, carryCapacity } from './inventory';
 export { deserialise, serialise } from './serialise';
 export type { SerialisedState } from './serialise';
-export type { HazardForecast } from './shift';
+export type { HazardForecast, ShiftForecast, UpkeepForecast } from './shift';
 export {
   blockAt,
   blockDefAt,
@@ -213,11 +216,13 @@ export {
   cellPosition,
   countItem,
   inGrid,
+  inventoryEntries,
   isOpen,
   isRevealed,
   isRunActive,
   isSolid,
   isSurface,
+  looseItemsAt,
   structureAt,
 } from './state';
 export type { Avatar, GameState, LooseItems, RunStatus } from './state';

@@ -37,8 +37,14 @@ export type GameEvent =
   | { type: 'blockMined'; pos: Vec3; block: number }
   /** The block at `pos` became known to the player. `block` is its code. */
   | { type: 'blockRevealed'; pos: Vec3; block: number }
-  /** Items went into the inventory (a mining yield, a pick-up, a crafted item). */
+  /**
+   * Items appeared in the inventory from nowhere on the board: a mining yield
+   * (it follows the `blockMined` of the same action) or a crafted item (it
+   * follows `crafted`). A pick-up is `itemPickedUp` instead.
+   */
   | { type: 'itemGained'; item: string; count: number }
+  /** The avatar picked up loose items from the cell `from` into the inventory. */
+  | { type: 'itemPickedUp'; from: Vec3; item: string; count: number }
   /** A mining yield did not fit the carry limit and was left loose at `pos` (0005 item 16). */
   | { type: 'itemLeft'; pos: Vec3; item: string; count: number }
   /** The player dropped items from the inventory into the cell `pos`. */
@@ -49,6 +55,12 @@ export type GameEvent =
   | { type: 'structurePlaced'; pos: Vec3; structure: number }
   /** The recipe was crafted once. Its inputs left the inventory. */
   | { type: 'crafted'; recipe: string }
+  /**
+   * At upkeep, `amount` unspent AP went into the banked counter (0005 item
+   * 20). `bankedAp` is the counter after any refund it paid for; the refund
+   * itself is a `fuelChanged` with reason `bankedApRefund`.
+   */
+  | { type: 'apBanked'; amount: number; bankedAp: number }
   /** Shift number `shift` ended and `nextShift` began. */
   | { type: 'shiftEnded'; shift: number; nextShift: number }
   /** Fuel changed by `delta` (negative when used) and is now `fuel`. */

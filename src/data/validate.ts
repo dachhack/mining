@@ -27,7 +27,7 @@ export function validateData(data: GameData): string[] {
     }
   }
   function requireKnownItem(itemId: string, where: string): void {
-    if (!(itemId in data.items)) {
+    if (!Object.hasOwn(data.items, itemId)) {
       problems.push(`${where} names an unknown item "${itemId}"`);
     }
   }
@@ -233,7 +233,7 @@ export function validateData(data: GameData): string[] {
     checkStacks(loadout.items, `${where}: items`);
     let weight = 0;
     for (const stack of loadout.items) {
-      const item = data.items[stack.item];
+      const item = Object.hasOwn(data.items, stack.item) ? data.items[stack.item] : undefined;
       if (item !== undefined) {
         weight += item.weight * stack.count;
       }
@@ -244,7 +244,7 @@ export function validateData(data: GameData): string[] {
       );
     }
   }
-  if (!(data.defaultLoadoutId in data.loadouts)) {
+  if (!Object.hasOwn(data.loadouts, data.defaultLoadoutId)) {
     problems.push(`defaultLoadoutId names an unknown loadout "${data.defaultLoadoutId}"`);
   }
   if (data.contractIds.length === 0) {

@@ -18,6 +18,9 @@ import type { GameState } from './state';
  * - A block is revealed when one of its faces touches a lit open cell
  *   (0005 item 14). The cells within the avatar's reach are always revealed
  *   (0005 item 10).
+ * - Only cells inside the grid have a revealed flag. Reach cells and lit
+ *   neighbours are often outside it (on the surface, at a wall, at the
+ *   bottom): skip those, because `setRevealed` throws outside the grid.
  * - Once revealed, a cell stays revealed. Which cells are lit is not stored.
  *
  * Stub behaviour: does nothing.

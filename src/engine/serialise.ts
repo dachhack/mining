@@ -3,10 +3,17 @@
 // `JSON.stringify(serialise(state))` is the save format, and it is also what
 // `hashState` hashes. So `serialise` must give the same output for two states
 // that mean the same thing: inventory entries are sorted and zero counts are
-// dropped, and loose items are sorted.
+// dropped, and loose items are merged (one entry per cell and item) and sorted.
 
 import type { CubeSize, Vec3 } from '../data';
-import { STATE_VERSION, cellCount } from './state';
+import {
+  STATE_VERSION,
+  canonicalLooseItems,
+  cellCount,
+  compareStrings,
+  inGrid,
+  isSurface,
+} from './state';
 import type { GameState, LooseItems, RunStatus } from './state';
 
 /**
@@ -72,19 +79,6 @@ function runLengthDecode(encoded: number[], expectedLength: number, name: string
   return cells;
 }
 
-/** Order strings the same way everywhere (plain code-unit order, no locale). */
-function compareStrings(a: string, b: string): number {
-  if (a < b) return -1;
-  if (a > b) return 1;
-  return 0;
-}
-
-function compareLooseItems(a: LooseItems, b: LooseItems): number {
-  return (
-    a.pos.z - b.pos.z || a.pos.y - b.pos.y || a.pos.x - b.pos.x || compareStrings(a.item, b.item)
-  );
-}
-
 /** A JSON-safe copy of `state`. Does not change `state`. */
 export function serialise(state: GameState): SerialisedState {
   const inventory: Record<string, number> = {};
@@ -95,10 +89,9 @@ export function serialise(state: GameState): SerialisedState {
     }
   }
 
-  const looseItems = state.looseItems
-    .filter((loose) => loose.count !== 0)
-    .map((loose) => ({ pos: { ...loose.pos }, item: loose.item, count: loose.count }))
-    .sort(compareLooseItems);
+  // Already canonical if the state was only changed through the helpers in
+  // state.ts; done again here so that the hash never depends on it.
+  const looseItems = canonicalLooseItems(state.looseItems);
 
   return {
     version: state.version,
@@ -132,8 +125,10 @@ export function serialise(state: GameState): SerialisedState {
 
 /**
  * Rebuild a GameState from the output of `serialise` (for example after
- * `JSON.parse`). Throws if the value is from another state version or its
- * cube arrays do not match its size.
+ * `JSON.parse`). Throws if the value is from another state version, its cube
+ * arrays do not match its size, the avatar is outside the cube and its
+ * surface, or the run status is not one this build knows. It does not check
+ * every field: a save edited by hand can still be wrong in other ways.
  */
 export function deserialise(saved: SerialisedState): GameState {
   if (saved.version !== STATE_VERSION) {
@@ -143,6 +138,17 @@ export function deserialise(saved: SerialisedState): GameState {
   }
   const size: CubeSize = { x: saved.size.x, y: saved.size.y, z: saved.size.z };
   const cells = cellCount(size);
+  const avatarPos = { x: saved.avatar.pos.x, y: saved.avatar.pos.y, z: saved.avatar.pos.z };
+  if (!inGrid(size, avatarPos) && !isSurface(size, avatarPos)) {
+    throw new Error(
+      `Saved state is damaged: the avatar is at (${avatarPos.x}, ${avatarPos.y}, ${avatarPos.z}), outside the cube`,
+    );
+  }
+  // `as string` because a damaged save may hold a kind the type does not allow.
+  const statusKind = saved.status.kind as string;
+  if (statusKind !== 'active' && statusKind !== 'ended') {
+    throw new Error(`Saved state is damaged: unknown run status "${statusKind}"`);
+  }
   return {
     version: saved.version,
     seed: saved.seed,
@@ -155,21 +161,14 @@ export function deserialise(saved: SerialisedState): GameState {
     fluid: runLengthDecode(saved.fluid, cells, 'fluid'),
     gas: runLengthDecode(saved.gas, cells, 'gas'),
     structures: runLengthDecode(saved.structures, cells, 'structures'),
-    avatar: {
-      pos: { x: saved.avatar.pos.x, y: saved.avatar.pos.y, z: saved.avatar.pos.z },
-      health: saved.avatar.health,
-    },
+    avatar: { pos: avatarPos, health: saved.avatar.health },
     ap: saved.ap,
     fuel: saved.fuel,
     lampOil: saved.lampOil,
     bankedAp: saved.bankedAp,
     shift: saved.shift,
     inventory: { ...saved.inventory },
-    looseItems: saved.looseItems.map((loose) => ({
-      pos: { x: loose.pos.x, y: loose.pos.y, z: loose.pos.z },
-      item: loose.item,
-      count: loose.count,
-    })),
+    looseItems: canonicalLooseItems(saved.looseItems),
     status:
       saved.status.kind === 'active'
         ? { kind: 'active' }

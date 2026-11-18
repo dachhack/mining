@@ -12,6 +12,7 @@ import {
   endShift,
   hashState,
   legalActions,
+  previewCubePhase,
   sameAction,
 } from '../../src/engine';
 import type { Action } from '../../src/engine';
@@ -28,6 +29,15 @@ describe('rule-module stubs', () => {
     expect(events).toEqual([]);
     expect(hashState(state)).toBe(before);
     expect(after).not.toBe(state);
+  });
+
+  it('forecast an end of shift that changes nothing', () => {
+    const state = createRun(1, 'none', 'standard');
+    const forecast = previewCubePhase(state);
+    expect(forecast.hazards).toEqual([]);
+    expect(forecast.upkeep.fuelAfter).toBe(state.fuel);
+    expect(forecast.upkeep.lampOilAfter).toBe(state.lampOil);
+    expect(forecast.upkeep.runEnds).toBeNull();
   });
 });
 

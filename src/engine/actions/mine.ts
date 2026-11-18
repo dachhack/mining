@@ -11,13 +11,18 @@ import type { GameState } from '../state';
  * - One action for each mineable block within reach (0005 items 10 to 12),
  *   with `ap` set to the block's mine cost from `BLOCKS`.
  * - Applying it opens the cell (`blockMined`) and gives the yield: into the
- *   inventory if it fits (`itemGained`), otherwise loose in the mined cell
- *   (`itemLeft`; 0005 item 16).
+ *   inventory if it fits (`canCarry`, then `addItem` and `itemGained`),
+ *   otherwise loose in the mined cell (`addLooseItems` and `itemLeft`;
+ *   0005 item 16).
  * - Does not change `state`.
  * - Lists actions as if the avatar had unlimited AP, each with its true `ap`
  *   cost; the dispatcher in index.ts removes the ones that cost more than the
  *   AP left.
- * - The order of the list must depend only on `state`.
+ * - The order of the list must be the same for any two states with the same
+ *   hash, including a state and its saved-and-loaded copy. Walk cells in a
+ *   fixed order, the inventory with `inventoryEntries(state)` and loose
+ *   items with `state.looseItems` or `looseItemsAt`; never loop over
+ *   `state.inventory` itself, whose key order a save does not keep.
  *
  * Stub behaviour: returns an empty list.
  */

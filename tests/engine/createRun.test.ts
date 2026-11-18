@@ -94,6 +94,8 @@ describe('createRun', () => {
     expect(() => createRun(2 ** 32, 'none', 'standard')).toThrow('Seed');
     expect(() => createRun(1, 'deep-relic', 'standard')).toThrow('Unknown contract id');
     expect(() => createRun(1, 'none', 'surveyor')).toThrow('Unknown loadout id');
+    // A name every JavaScript object inherits must not pass for a loadout.
+    expect(() => createRun(1, 'none', 'toString')).toThrow('Unknown loadout id');
     expect(CONTRACT_IDS).toContain('none');
   });
 

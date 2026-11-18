@@ -3,7 +3,7 @@ import { createRun, deserialise, hashState, serialise } from '../../src/engine';
 import type { GameState } from '../../src/engine';
 import { hashString } from '../../src/engine/hash';
 import { nextUint32 } from '../../src/engine/rng';
-import { cloneState } from '../../src/engine/state';
+import { addItem, addLooseItems, cloneState, inventoryEntries } from '../../src/engine/state';
 import { buildState } from './helpers';
 
 /** A small state with something in every part of it. */
@@ -53,7 +53,11 @@ describe('serialise and deserialise', () => {
       inventory: {},
       looseItems: [],
     });
-    expect(loaded.looseItems).toHaveLength(2);
+    // Loose items come back in canonical order: by z, then y, then x.
+    expect(loaded.looseItems).toEqual([
+      { pos: { x: 0, y: 0, z: -1 }, item: 'coal', count: 1 },
+      { pos: { x: 1, y: 1, z: 0 }, item: 'stone', count: 2 },
+    ]);
   });
 
   it('round-trips a full-size new run to the same hash', () => {
@@ -89,6 +93,12 @@ describe('serialise and deserialise', () => {
     expect(() => deserialise({ ...saved, blocks: [2, 17] })).toThrow('"blocks"');
     expect(() => deserialise({ ...saved, gas: [0, 19] })).toThrow('"gas"');
     expect(() => deserialise({ ...saved, size: { x: 3, y: 3, z: 3 } })).toThrow('damaged');
+    expect(() =>
+      deserialise({ ...saved, avatar: { pos: { x: 9, y: 0, z: 0 }, health: 5 } }),
+    ).toThrow('the avatar is at (9, 0, 0)');
+    // A status this build does not know. The cast gets it past the type checker.
+    const badStatus = { kind: 'paused' } as unknown as typeof saved.status;
+    expect(() => deserialise({ ...saved, status: badStatus })).toThrow('unknown run status');
   });
 });
 
@@ -147,6 +157,38 @@ describe('hashState', () => {
     const shuffled = cloneState(base);
     shuffled.looseItems.reverse();
     expect(hashState(shuffled)).toBe(hashState(base));
+  });
+
+  it('treats piles of one item in one cell as their total, however they were added', () => {
+    const cell = { x: 1, y: 1, z: 0 };
+    const withPiles = (counts: number[]): GameState => {
+      const state = busyState();
+      // Written straight into the list, behind the helpers' back.
+      state.looseItems = counts.map((count) => ({ pos: { ...cell }, item: 'coal', count }));
+      return state;
+    };
+    const three = hashState(withPiles([3]));
+    expect(hashState(withPiles([1, 2]))).toBe(three);
+    expect(hashState(withPiles([2, 1]))).toBe(three);
+    expect(hashState(withPiles([1, 1, 1, 0]))).toBe(three);
+    expect(hashState(withPiles([4]))).not.toBe(three);
+  });
+
+  it('gives a state and its saved-and-loaded copy the same order to walk', () => {
+    // Built so that the live order is not the sorted order.
+    const state = buildState({ layers: [['....'], ['####']], avatar: { x: 0, y: 0, z: 0 } });
+    addItem(state, 'timber', 1);
+    addItem(state, 'coal', 2);
+    addItem(state, 'ladder', 3);
+    addLooseItems(state, { x: 3, y: 0, z: 0 }, 'stone', 1);
+    addLooseItems(state, { x: 1, y: 0, z: 0 }, 'stone', 1);
+    addLooseItems(state, { x: 1, y: 0, z: 0 }, 'coal', 1);
+    expect(Object.keys(state.inventory)).toEqual(['timber', 'coal', 'ladder']);
+
+    const loaded = throughJson(state);
+    expect(hashState(loaded)).toBe(hashState(state));
+    expect(inventoryEntries(loaded)).toEqual(inventoryEntries(state));
+    expect(loaded.looseItems).toEqual(state.looseItems);
   });
 
   it('tells a cube from the same blocks in another shape', () => {

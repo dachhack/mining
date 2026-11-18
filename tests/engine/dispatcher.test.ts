@@ -2,7 +2,8 @@
 // state, check the action is legal, spend its AP, and collect the events.
 //
 // The real rule modules are still stubs, so no action is legal yet. To test
-// the dispatcher anyway, this file swaps two of them for small fakes:
+// the dispatcher anyway, this file swaps four of them (leave, shift, gravity,
+// reveal) for small fakes:
 //
 // - `vi.mock(path, factory)` tells Vitest that, in this test file only,
 //   anything importing the module at `path` gets what `factory` returns
@@ -10,18 +11,43 @@
 // - The fake "leave" action costs 2 AP and deliberately scribbles on every
 //   part of the state it is given. If the dispatcher handed it the caller's
 //   state rather than a copy, the tests below would see the damage.
+// - Every fake appends its name to `calls`, so the tests can check the order
+//   the dispatcher calls them in.
 //
 // The tests of the real rules, in later tasks, use no mocks.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { applyAction, endShift, hashState, legalActions, previewCubePhase } from '../../src/engine';
-import type { Action, GameEvent, GameState } from '../../src/engine';
+import {
+  applyAction,
+  createRun,
+  endShift,
+  hashState,
+  legalActions,
+  previewCubePhase,
+} from '../../src/engine';
+import type { Action, GameEvent, GameState, ShiftForecast } from '../../src/engine';
 import { act, buildState, findActions } from './helpers';
 
 const FAKE_LEAVE_COST = 2;
 
 // The fakes record the order they were called in here.
 const calls: string[] = [];
+// Set by a test to make the fake cube phase end the run.
+let cubePhaseEndsRun = false;
+
+const FAKE_FORECAST: ShiftForecast = {
+  hazards: [{ kind: 'test', cells: [], inShifts: 1 }],
+  upkeep: {
+    apBanked: 1,
+    bankedApAfter: 1,
+    fuelRefunded: 0,
+    fuelConsumed: 1,
+    fuelAfter: 9,
+    lampOilBurned: 0,
+    lampOilAfter: 10,
+    runEnds: null,
+  },
+};
 
 vi.mock('../../src/engine/actions/leave', () => ({
   legalLeaveActions: (): Action[] => [{ type: 'leave', ap: FAKE_LEAVE_COST }],
@@ -40,10 +66,26 @@ vi.mock('../../src/engine/actions/leave', () => ({
   },
 }));
 
+vi.mock('../../src/engine/gravity', () => ({
+  settle: (): void => {
+    calls.push('settle');
+  },
+}));
+
+vi.mock('../../src/engine/reveal', () => ({
+  updateReveal: (): void => {
+    calls.push('updateReveal');
+  },
+}));
+
 vi.mock('../../src/engine/shift', () => ({
-  runCubePhase: (state: GameState): void => {
+  runCubePhase: (state: GameState, events: GameEvent[]): void => {
     calls.push('runCubePhase');
     state.blocks.fill(0);
+    if (cubePhaseEndsRun) {
+      state.status = { kind: 'ended', outcome: 'death', cause: 'fell' };
+      events.push({ type: 'runEnded', outcome: 'death', cause: 'fell' });
+    }
   },
   runUpkeep: (state: GameState, events: GameEvent[]): void => {
     calls.push('runUpkeep');
@@ -52,7 +94,7 @@ vi.mock('../../src/engine/shift', () => ({
     state.inventory['stone'] = 9;
     events.push({ type: 'shiftEnded', shift: state.shift - 1, nextShift: state.shift });
   },
-  forecastCubePhase: () => [{ kind: 'test', cells: [], inShifts: 1 }],
+  forecastShift: (): ShiftForecast => FAKE_FORECAST,
 }));
 
 function startState(ap: number): GameState {
@@ -71,6 +113,7 @@ const LEAVE: Action = { type: 'leave', ap: FAKE_LEAVE_COST };
 
 beforeEach(() => {
   calls.length = 0; // empty the list
+  cubePhaseEndsRun = false;
 });
 
 describe('applyAction', () => {
@@ -81,7 +124,6 @@ describe('applyAction', () => {
 
     const result = applyAction(state, LEAVE);
 
-    expect(calls).toEqual(['applyLeave']);
     expect(hashState(state)).toBe(before);
     expect(state.blocks).toEqual(beforeBlocks);
     expect(state.avatar.pos).toEqual({ x: 0, y: 0, z: -1 });
@@ -95,6 +137,11 @@ describe('applyAction', () => {
     expect(result.state.fuel).toBe(7);
     expect(result.state.avatar.pos.x).toBe(1);
     expect(hashState(result.state)).not.toBe(before);
+  });
+
+  it('applies the action, then gravity, then reveal, in that order (0006)', () => {
+    applyAction(startState(5), LEAVE);
+    expect(calls).toEqual(['applyLeave', 'settle', 'updateReveal']);
   });
 
   it('spends the AP of the action and returns the events', () => {
@@ -154,13 +201,29 @@ describe('legalActions', () => {
 });
 
 describe('endShift', () => {
-  it('runs the cube phase, then upkeep, on a copy of the state', () => {
+  it('runs the cube phase, gravity, upkeep, then reveal, in that order (0006)', () => {
+    endShift(startState(5));
+    expect(calls).toEqual(['runCubePhase', 'settle', 'runUpkeep', 'updateReveal']);
+  });
+
+  it('skips upkeep when the cube phase ends the run', () => {
+    cubePhaseEndsRun = true;
+    const state = startState(5);
+    const { state: after, events } = endShift(state);
+    expect(calls).toEqual(['runCubePhase', 'settle', 'updateReveal']);
+    expect(after.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'fell' });
+    // No fuel taken and no new shift: the fake upkeep never ran.
+    expect(after.fuel).toBe(state.fuel);
+    expect(after.shift).toBe(state.shift);
+    expect(events).toEqual([{ type: 'runEnded', outcome: 'death', cause: 'fell' }]);
+  });
+
+  it('works on a copy of the state', () => {
     const state = startState(5);
     const before = hashState(state);
 
     const { state: after, events } = endShift(state);
 
-    expect(calls).toEqual(['runCubePhase', 'runUpkeep']);
     expect(hashState(state)).toBe(before);
     expect(state.fuel).toBe(10);
     expect(state.inventory).toEqual({ timber: 1 });
@@ -180,14 +243,24 @@ describe('endShift', () => {
 });
 
 describe('previewCubePhase', () => {
-  it('returns the forecast without changing the state, and nothing once the run has ended', () => {
+  it('returns the forecast without changing the state', () => {
     const state = startState(5);
     const before = hashState(state);
-    expect(previewCubePhase(state)).toEqual([{ kind: 'test', cells: [], inShifts: 1 }]);
+    expect(previewCubePhase(state)).toEqual(FAKE_FORECAST);
     expect(hashState(state)).toBe(before);
+  });
 
+  it('refuses once the run has ended, as endShift does', () => {
+    const state = startState(5);
     state.status = { kind: 'ended', outcome: 'death', cause: 'fell' };
-    expect(previewCubePhase(state)).toEqual([]);
+    expect(() => previewCubePhase(state)).toThrow('The run has ended');
+  });
+});
+
+describe('createRun', () => {
+  it('reveals what can be seen from the start', () => {
+    createRun(1, 'none', 'standard');
+    expect(calls).toEqual(['updateReveal']);
   });
 });
 

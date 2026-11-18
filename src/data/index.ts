@@ -65,7 +65,9 @@ export function itemDef(itemId: string): ItemDef {
   // `Record<string, ItemDef>` tells TypeScript the table may be indexed by any
   // string; with our compiler settings the result is then `ItemDef | undefined`.
   const table: Record<string, ItemDef> = ITEMS;
-  const def = table[itemId];
+  // `Object.hasOwn` is Python's `key in dict`. A bare `table[itemId]` would
+  // also find names every object inherits, such as "toString".
+  const def = Object.hasOwn(table, itemId) ? table[itemId] : undefined;
   if (def === undefined) {
     throw new Error(`Unknown item id: ${itemId}`);
   }
@@ -75,7 +77,7 @@ export function itemDef(itemId: string): ItemDef {
 /** The loadout with this id, or `undefined` if there is none. */
 export function findLoadout(loadoutId: string): LoadoutDef | undefined {
   const table: Record<string, LoadoutDef> = LOADOUTS;
-  return table[loadoutId];
+  return Object.hasOwn(table, loadoutId) ? table[loadoutId] : undefined;
 }
 
 /** The field recipe with this id, or `undefined` if there is none. */

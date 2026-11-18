@@ -16,7 +16,11 @@ import type { GameState } from '../state';
  * - Lists actions as if the avatar had unlimited AP, each with its true `ap`
  *   cost; the dispatcher in index.ts removes the ones that cost more than the
  *   AP left.
- * - The order of the list must depend only on `state`.
+ * - The order of the list must be the same for any two states with the same
+ *   hash, including a state and its saved-and-loaded copy. Walk cells in a
+ *   fixed order, the inventory with `inventoryEntries(state)` and loose
+ *   items with `state.looseItems` or `looseItemsAt`; never loop over
+ *   `state.inventory` itself, whose key order a save does not keep.
  *
  * Stub behaviour: returns an empty list.
  */

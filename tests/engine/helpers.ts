@@ -24,7 +24,7 @@ import {
 import type { BlockId, StructureId, Vec3 } from '../../src/data';
 import { applyAction, legalActions } from '../../src/engine';
 import type { Action, GameState, LooseItems, RunStatus, StepResult } from '../../src/engine';
-import { blankState, cellIndex, setStructure } from '../../src/engine/state';
+import { blankState, canonicalLooseItems, cellIndex, setStructure } from '../../src/engine/state';
 
 /** The character that stands for each block in a layer string. */
 export const BLOCK_CHARS: Record<string, BlockId> = {
@@ -124,11 +124,8 @@ export function buildState(options: BuildStateOptions): GameState {
   state.bankedAp = options.bankedAp ?? 0;
   state.shift = options.shift ?? SHIFT.firstShiftNumber;
   state.inventory = { ...(options.inventory ?? {}) };
-  state.looseItems = (options.looseItems ?? []).map((loose) => ({
-    pos: { ...loose.pos },
-    item: loose.item,
-    count: loose.count,
-  }));
+  // Merged and sorted, as the engine keeps the list.
+  state.looseItems = canonicalLooseItems(options.looseItems ?? []);
   if (options.status !== undefined) {
     state.status = { ...options.status };
   }

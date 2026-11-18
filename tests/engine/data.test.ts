@@ -41,6 +41,22 @@ describe('validateData', () => {
     expect(problems[0]).toContain('unobtainium');
   });
 
+  it('does not take a name every object inherits for an item', () => {
+    const problems = problemsAfter((data) => {
+      data.recipes.push({
+        id: 'sneaky',
+        name: 'Sneaky',
+        inputs: [{ item: 'toString', count: 1 }],
+        output: { kind: 'item', item: 'constructor', count: 1 },
+      });
+      data.defaultLoadoutId = 'valueOf';
+    });
+    expect(problems).toHaveLength(3);
+    expect(problems.some((p) => p.includes('unknown item "toString"'))).toBe(true);
+    expect(problems.some((p) => p.includes('unknown item "constructor"'))).toBe(true);
+    expect(problems.some((p) => p.includes('unknown loadout "valueOf"'))).toBe(true);
+  });
+
   it('reports a recipe output that names an unknown item or gauge', () => {
     const problems = problemsAfter((data) => {
       data.recipes.push({
@@ -210,5 +226,8 @@ describe('data lookups', () => {
   it('finds an item by its id and throws on an unknown id', () => {
     expect(itemDef('timber').name).toBe('Timber');
     expect(() => itemDef('jetpack')).toThrow('Unknown item id');
+    // Names every JavaScript object inherits are not items.
+    expect(() => itemDef('constructor')).toThrow('Unknown item id');
+    expect(() => itemDef('toString')).toThrow('Unknown item id');
   });
 });

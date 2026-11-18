@@ -15,7 +15,9 @@ import type { GameState } from './state';
  *   `damageTaken`. A fatal fall, or health reaching 0, ends the run with
  *   `endRun(state, 'death', 'fell', events)`.
  * - Loose items: each falls straight down until it rests on a solid block
- *   (0005 item 17). Emits `itemFell`.
+ *   (0005 item 17). Emits `itemFell`. Move a pile with `removeLooseItems`
+ *   and `addLooseItems`, so that it joins a pile of the same item already
+ *   lying where it lands.
  * - Calling it on a state where nothing can fall changes nothing and emits
  *   nothing.
  * - No block falls in M1 (0005 item 9).

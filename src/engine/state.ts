@@ -9,7 +9,7 @@
 // themselves.
 
 import { BLOCKS, NO_STRUCTURE, WORLD, blockDefByCode } from '../data';
-import type { BlockDef, CubeSize, Vec3 } from '../data';
+import type { BlockDef, CubeSize, ItemStack, Vec3 } from '../data';
 import type { GameEvent, RunEndCause, RunOutcome } from './events';
 import { createRng } from './rng';
 import type { RngState } from './rng';
@@ -76,9 +76,20 @@ export interface GameState {
    * What the avatar carries: item id -> count. An item that is not carried
    * may be missing or may be present with a count of 0; both mean the same.
    * `Record<string, number>` is TypeScript for "a dict from str to number".
+   *
+   * The order of the keys is the order items were first added, and it is NOT
+   * kept by a save and load. So rule code must never loop over this dict
+   * directly (`Object.keys`, `for ... in`): use `inventoryEntries(state)`,
+   * which always gives the same order.
    */
   inventory: Record<string, number>;
-  /** Items lying in cells. The order of this list has no meaning. */
+  /**
+   * Items lying in cells. Always in canonical form: at most one entry for
+   * each cell and item, no entry with a count of 0, and sorted by z, then y,
+   * then x, then item id. Change it only through `addLooseItems` and
+   * `removeLooseItems`, which keep it that way; then looping over it gives
+   * the same order before and after a save and load.
+   */
   looseItems: LooseItems[];
 
   status: RunStatus;
@@ -238,6 +249,105 @@ export function removeItem(state: GameState, item: string, count: number): void 
     throw new Error(`Cannot remove ${count} of "${item}": the avatar carries ${have}`);
   }
   state.inventory[item] = have - count;
+}
+
+/** Order strings the same way everywhere (plain code-unit order, no locale). */
+export function compareStrings(a: string, b: string): number {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
+/**
+ * What the avatar carries, as a list sorted by item id, without the items it
+ * has none of. This is the one way rule code should walk the inventory: the
+ * order is the same for any two states with the same hash, which the key
+ * order of `state.inventory` is not.
+ */
+export function inventoryEntries(state: GameState): ItemStack[] {
+  const entries: ItemStack[] = [];
+  for (const item of Object.keys(state.inventory).sort(compareStrings)) {
+    const count = countItem(state, item);
+    if (count !== 0) {
+      entries.push({ item, count });
+    }
+  }
+  return entries;
+}
+
+// ---------------------------------------------------------------------------
+// Loose items. `state.looseItems` is kept in canonical form (see GameState);
+// these are the only functions that should change it.
+// ---------------------------------------------------------------------------
+
+/** Sort order of loose items: by z, then y, then x, then item id. */
+export function compareLooseItems(a: LooseItems, b: LooseItems): number {
+  return (
+    a.pos.z - b.pos.z || a.pos.y - b.pos.y || a.pos.x - b.pos.x || compareStrings(a.item, b.item)
+  );
+}
+
+/**
+ * A canonical copy of a list of loose items: entries for the same cell and
+ * item are merged into one, empty entries are dropped, and the result is
+ * sorted. `serialise`, `deserialise` and the test helper use it; rule code
+ * should not need to.
+ */
+export function canonicalLooseItems(list: LooseItems[]): LooseItems[] {
+  const sorted = list
+    .filter((loose) => loose.count !== 0)
+    .map((loose) => ({ pos: { ...loose.pos }, item: loose.item, count: loose.count }))
+    .sort(compareLooseItems);
+  const merged: LooseItems[] = [];
+  for (const loose of sorted) {
+    const last = merged[merged.length - 1];
+    if (last !== undefined && compareLooseItems(last, loose) === 0) {
+      last.count += loose.count;
+    } else {
+      merged.push(loose);
+    }
+  }
+  return merged;
+}
+
+/** The loose items lying in the cell `pos`, sorted by item id. Copies, safe to keep. */
+export function looseItemsAt(state: GameState, pos: Vec3): ItemStack[] {
+  return state.looseItems
+    .filter((loose) => samePosition(loose.pos, pos))
+    .map((loose) => ({ item: loose.item, count: loose.count }));
+}
+
+/**
+ * Put `count` loose `item` in the cell `pos`, adding to a pile of the same
+ * item that is already there. `pos` must be in the grid or on the surface.
+ */
+export function addLooseItems(state: GameState, pos: Vec3, item: string, count: number): void {
+  if (!Number.isInteger(count) || count < 0) {
+    throw new Error(`Cannot leave ${count} of "${item}" in a cell`);
+  }
+  if (!inGrid(state.size, pos) && !isSurface(state.size, pos)) {
+    throw new Error(`(${pos.x}, ${pos.y}, ${pos.z}) is outside the cube and its surface`);
+  }
+  state.looseItems.push({ pos: { x: pos.x, y: pos.y, z: pos.z }, item, count });
+  state.looseItems = canonicalLooseItems(state.looseItems);
+}
+
+/**
+ * Take `count` loose `item` out of the cell `pos`. Throws if the cell does
+ * not hold that many. A pile that reaches 0 is removed from the list.
+ */
+export function removeLooseItems(state: GameState, pos: Vec3, item: string, count: number): void {
+  const pile = state.looseItems.find(
+    (loose) => loose.item === item && samePosition(loose.pos, pos),
+  );
+  const have = pile === undefined ? 0 : pile.count;
+  if (pile === undefined || !Number.isInteger(count) || count < 0 || count > have) {
+    throw new Error(
+      `Cannot take ${count} of "${item}" from (${pos.x}, ${pos.y}, ${pos.z}): it holds ${have}`,
+    );
+  }
+  pile.count -= count;
+  state.looseItems = canonicalLooseItems(state.looseItems);
 }
 
 // ---------------------------------------------------------------------------
