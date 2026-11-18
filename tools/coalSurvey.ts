@@ -29,7 +29,7 @@ import {
   isRunActive,
 } from '../src/engine';
 import type { GameEvent, GameState } from '../src/engine';
-import { makeCoalPolicy } from './policies';
+import { FUEL_RECIPE_ID, makeCoalPolicy } from './policies';
 
 /** The fuel a player should still have in hand at the worst moment of the trip (issue #51). */
 export const DEFAULT_MARGIN_SHIFTS = 3;
@@ -353,7 +353,7 @@ export function playCoalTrip(start: GameState, maxShifts: number): CoalTrip {
         if (shiftFirstCoalMined === null) {
           shiftFirstCoalMined = shift;
         }
-      } else if (event.type === 'crafted') {
+      } else if (event.type === 'crafted' && event.recipe === FUEL_RECIPE_ID) {
         hasCraftedFuel = true;
       } else if (event.type === 'damageTaken') {
         damageTaken += event.amount;
@@ -500,7 +500,7 @@ function tableRow(cells: string[], widths: number[]): string {
 export function formatCoalSurvey(report: CoalSurveyReport): string {
   const s = report.survey;
   const a = report.aggregate;
-  const fuelRecipe = FIELD_RECIPES.find((recipe) => recipe.id === 'fuel');
+  const fuelRecipe = FIELD_RECIPES.find((recipe) => recipe.id === FUEL_RECIPE_ID);
   const fuelPerCoal =
     fuelRecipe !== undefined && fuelRecipe.output.kind === 'gauge' ? fuelRecipe.output.amount : 0;
   const start = WORLD.startPosition;

@@ -235,7 +235,7 @@ export function makeStaircasePolicy(targetLayer: number): Policy {
 // ---------------------------------------------------------------------------
 
 /** The id of the field recipe that turns coal into fuel (src/data/recipes.ts). */
-const FUEL_RECIPE_ID = 'fuel';
+export const FUEL_RECIPE_ID = 'fuel';
 
 /** The eight cells around a cell on the same level, as (x, y) steps, in a fixed order. */
 const AROUND: Vec3[] = [
@@ -252,6 +252,25 @@ const AROUND: Vec3[] = [
 /** The top-layer block under the surface cell `surfaceCell`. */
 function floorUnder(surfaceCell: Vec3): Vec3 {
   return { x: surfaceCell.x, y: surfaceCell.y, z: 0 };
+}
+
+/**
+ * True if the player has seen the top-layer cell under `surfaceCell` and it
+ * still holds a block: a floor to walk on. False for a hole.
+ *
+ * The top layer is in daylight, so `updateReveal` reveals all of it in every
+ * state and the `isRevealed` test never fails today. It is written out so
+ * that "the policy uses only what a player sees" does not rest on that fact.
+ */
+function hasKnownFloor(state: GameState, surfaceCell: Vec3): boolean {
+  const floor = floorUnder(surfaceCell);
+  return isRevealed(state, floor) && isSolid(state, floor);
+}
+
+/** True if the player has seen the top-layer cell under `surfaceCell` and it is a hole. */
+function isKnownHole(state: GameState, surfaceCell: Vec3): boolean {
+  const floor = floorUnder(surfaceCell);
+  return isRevealed(state, floor) && !isSolid(state, floor);
 }
 
 /** True if the cell holds a coal seam the player has seen. */
@@ -320,7 +339,7 @@ function routeOverSurface(
         const to = { x: from.x + step.x, y: from.y + step.y, z: from.z };
         const key = `${to.x},${to.y}`;
         const inFootprint = to.x >= 0 && to.x < state.size.x && to.y >= 0 && to.y < state.size.y;
-        if (!inFootprint || seen.has(key) || !isSolid(state, floorUnder(to))) {
+        if (!inFootprint || seen.has(key) || !hasKnownFloor(state, to)) {
           continue;
         }
         seen.add(key);
@@ -389,7 +408,9 @@ export function makeCoalPolicy(): Policy {
     const hole = floorUnder(surfaceCell);
     const bottom = { x: hole.x, y: hole.y, z: hole.z + 1 };
     return (
-      !holesTried.has(`${hole.x},${hole.y}`) && !isSolid(state, hole) && isKnownCoal(state, bottom)
+      !holesTried.has(`${hole.x},${hole.y}`) &&
+      isKnownHole(state, surfaceCell) &&
+      isKnownCoal(state, bottom)
     );
   }
 
