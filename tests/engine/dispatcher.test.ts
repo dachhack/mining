@@ -1,9 +1,9 @@
 // Tests of what index.ts does for every action, whatever the rule: copy the
 // state, check the action is legal, spend its AP, and collect the events.
 //
-// Some rule modules are still stubs, which offer no actions. To test the
-// dispatcher on its own, this file swaps the others (leave, shift, gravity,
-// reveal, and the movement and ladder actions) for small fakes:
+// The real rule modules are still stubs, so no action is legal yet. To test
+// the dispatcher anyway, this file swaps four of them (leave, shift, gravity,
+// reveal) for small fakes:
 //
 // - `vi.mock(path, factory)` tells Vitest that, in this test file only,
 //   anything importing the module at `path` gets what `factory` returns
@@ -63,24 +63,6 @@ vi.mock('../../src/engine/actions/leave', () => ({
     state.inventory['stone'] = 9;
     state.looseItems.push({ pos: { x: 0, y: 0, z: 0 }, item: 'coal', count: 1 });
     events.push({ type: 'fuelChanged', delta: -3, fuel: state.fuel, reason: 'upkeep' });
-  },
-}));
-
-// Movement and ladder placing are real rules now (M1 task 3). They are
-// swapped for fakes that offer nothing, as the stubs did, so that this file
-// keeps testing the dispatcher alone. Their own tests are in movement.test.ts,
-// ladders.test.ts and gravity.test.ts.
-vi.mock('../../src/engine/actions/move', () => ({
-  legalMoveActions: (): Action[] => [],
-  applyMove: (): void => {
-    calls.push('applyMove');
-  },
-}));
-
-vi.mock('../../src/engine/actions/placeLadder', () => ({
-  legalPlaceLadderActions: (): Action[] => [],
-  applyPlaceLadder: (): void => {
-    calls.push('applyPlaceLadder');
   },
 }));
 
@@ -191,12 +173,12 @@ describe('applyAction', () => {
 
   it('rejects an action that costs more AP than the avatar has', () => {
     const state = startState(FAKE_LEAVE_COST - 1);
-    expect(legalActions(state)).toEqual([]);
+    expect(findActions(state, { type: 'leave' })).toEqual([]);
     expect(() => applyAction(state, LEAVE)).toThrow('Not a legal action');
 
     // With exactly enough AP it is legal.
     const enough = startState(FAKE_LEAVE_COST);
-    expect(legalActions(enough)).toEqual([LEAVE]);
+    expect(findActions(enough, { type: 'leave' })).toEqual([LEAVE]);
     expect(applyAction(enough, LEAVE).state.ap).toBe(0);
   });
 
@@ -213,7 +195,7 @@ describe('legalActions', () => {
   it('returns the actions of the rule modules without changing the state', () => {
     const state = startState(5);
     const before = hashState(state);
-    expect(legalActions(state)).toEqual([LEAVE]);
+    expect(findActions(state, { type: 'leave' })).toEqual([LEAVE]);
     expect(hashState(state)).toBe(before);
   });
 });
@@ -286,7 +268,7 @@ describe('the act and findActions test helpers', () => {
   it('find a legal action from a partial description and apply it', () => {
     const state = startState(5);
     expect(findActions(state, { type: 'leave' })).toEqual([LEAVE]);
-    expect(findActions(state, { type: 'move' })).toEqual([]);
+    expect(findActions(state, { type: 'move', to: { x: 9, y: 9, z: 9 } })).toEqual([]);
     expect(act(state, { type: 'leave' }).state.ap).toBe(5 - FAKE_LEAVE_COST);
     expect(() => act(state, { type: 'mine' })).toThrow('found 0');
   });

@@ -4,7 +4,7 @@ import { ACTION_COSTS, AVATAR } from '../../data';
 import type { Vec3 } from '../../data';
 import type { MoveAction } from '../actionTypes';
 import type { GameEvent } from '../events';
-import { avatarFallDistance, cellBelow, hasLadder } from '../gravity';
+import { avatarFallDistance, cellBelow, hasLadder } from '../footing';
 import { isOpen } from '../state';
 import type { GameState } from '../state';
 
