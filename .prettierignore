@@ -1,0 +1,7 @@
+dist/
+coverage/
+test-results/
+playwright-report/
+package-lock.json
+docs/game-design-doc.md
+docs/repo-plan.md
