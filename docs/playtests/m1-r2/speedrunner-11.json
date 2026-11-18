@@ -1,465 +1,465 @@
 {
- "format": 1,
- "engineVersion": "0.2.0",
- "seed": 11,
- "contractId": "none",
- "loadoutId": "standard",
- "actions": [
-  {
-   "type": "mine",
-   "target": {
-    "x": 17,
-    "y": 16,
-    "z": 0
-   },
-   "ap": 1
-  },
-  {
-   "type": "move",
-   "to": {
-    "x": 17,
-    "y": 16,
-    "z": -1
-   },
-   "drop": 1,
-   "ap": 1
-  },
-  {
-   "type": "mine",
-   "target": {
-    "x": 17,
-    "y": 16,
-    "z": 1
-   },
-   "ap": 1
-  },
-  {
-   "type": "mine",
-   "target": {
-    "x": 17,
-    "y": 16,
-    "z": 2
-   },
-   "ap": 1
-  },
-  {
-   "type": "mine",
-   "target": {
-    "x": 17,
-    "y": 16,
-    "z": 3
-   },
-   "ap": 1
-  },
-  {
-   "type": "endShift"
-  },
-  {
-   "type": "mine",
-   "target": {
-    "x": 17,
-    "y": 16,
-    "z": 4
-   },
-   "ap": 2
-  },
-  {
-   "type": "drop",
-   "item": "stone",
-   "count": 1,
-   "ap": 0
-  },
-  {
-   "type": "mine",
-   "target": {
-    "x": 17,
-    "y": 15,
-    "z": 4
-   },
-   "ap": 1
-  },
-  {
-   "type": "mine",
-   "target": {
-    "x": 17,
-    "y": 15,
-    "z": 5
-   },
-   "ap": 1
-  },
-  {
-   "type": "move",
-   "to": {
-    "x": 17,
-    "y": 15,
-    "z": 4
-   },
-   "drop": 1,
-   "ap": 1
-  },
-  {
-   "type": "endShift"
-  },
-  {
-   "type": "mine",
-   "target": {
-    "x": 17,
-    "y": 15,
-    "z": 6
-   },
-   "ap": 2
-  },
-  {
-   "type": "drop",
-   "item": "stone",
-   "count": 1,
-   "ap": 0
-  },
-  {
-   "type": "placeLadder",
-   "target": {
-    "x": 17,
-    "y": 15,
-    "z": 6
-   },
-   "ap": 1
-  },
-  {
-   "type": "mine",
-   "target": {
-    "x": 17,
-    "y": 15,
-    "z": 7
-   },
-   "ap": 2
-  },
-  {
-   "type": "drop",
-   "item": "stone",
-   "count": 1,
-   "ap": 0
-  },
-  {
-   "type": "endShift"
-  },
-  {
-   "type": "move",
-   "to": {
-    "x": 17,
-    "y": 15,
-    "z": 7
-   },
-   "drop": 0,
-   "ap": 1
-  },
-  {
-   "type": "mine",
-   "target": {
-    "x": 17,
-    "y": 15,
-    "z": 8
-   },
-   "ap": 2
-  },
-  {
-   "type": "drop",
-   "item": "stone",
-   "count": 1,
-   "ap": 0
-  },
-  {
-   "type": "mine",
-   "target": {
-    "x": 16,
-    "y": 15,
-    "z": 8
-   },
-   "ap": 2
-  },
-  {
-   "type": "drop",
-   "item": "stone",
-   "count": 1,
-   "ap": 0
-  },
-  {
-   "type": "endShift"
-  },
-  {
-   "type": "move",
-   "to": {
-    "x": 16,
-    "y": 15,
-    "z": 8
-   },
-   "drop": 0,
-   "ap": 1
-  },
-  {
-   "type": "mine",
-   "target": {
-    "x": 16,
-    "y": 14,
-    "z": 8
-   },
-   "ap": 2
-  },
-  {
-   "type": "drop",
-   "item": "stone",
-   "count": 1,
-   "ap": 0
-  },
-  {
-   "type": "move",
-   "to": {
-    "x": 16,
-    "y": 14,
-    "z": 8
-   },
-   "drop": 0,
-   "ap": 1
-  },
-  {
-   "type": "craft",
-   "recipe": "ladder",
-   "ap": 1
-  },
-  {
-   "type": "endShift"
-  },
-  {
-   "type": "mine",
-   "target": {
-    "x": 16,
-    "y": 13,
-    "z": 8
-   },
-   "ap": 2
-  },
-  {
-   "type": "mine",
-   "target": {
-    "x": 15,
-    "y": 13,
-    "z": 8
-   },
-   "ap": 2
-  },
-  {
-   "type": "move",
-   "to": {
-    "x": 16,
-    "y": 15,
-    "z": 8
-   },
-   "drop": 0,
-   "ap": 1
-  },
-  {
-   "type": "endShift"
-  },
-  {
-   "type": "move",
-   "to": {
-    "x": 17,
-    "y": 15,
-    "z": 8
-   },
-   "drop": 0,
-   "ap": 1
-  },
-  {
-   "type": "placeLadder",
-   "target": {
-    "x": 17,
-    "y": 15,
-    "z": 8
-   },
-   "ap": 1
-  },
-  {
-   "type": "placeLadder",
-   "target": {
-    "x": 17,
-    "y": 15,
-    "z": 7
-   },
-   "ap": 1
-  },
-  {
-   "type": "move",
-   "to": {
-    "x": 17,
-    "y": 15,
-    "z": 7
-   },
-   "drop": 0,
-   "ap": 1
-  },
-  {
-   "type": "move",
-   "to": {
-    "x": 17,
-    "y": 15,
-    "z": 6
-   },
-   "drop": 0,
-   "ap": 1
-  },
-  {
-   "type": "endShift"
-  },
-  {
-   "type": "placeLadder",
-   "target": {
-    "x": 17,
-    "y": 15,
-    "z": 5
-   },
-   "ap": 1
-  },
-  {
-   "type": "move",
-   "to": {
-    "x": 17,
-    "y": 15,
-    "z": 5
-   },
-   "drop": 0,
-   "ap": 1
-  },
-  {
-   "type": "move",
-   "to": {
-    "x": 17,
-    "y": 16,
-    "z": 4
-   },
-   "drop": 0,
-   "ap": 1
-  },
-  {
-   "type": "placeLadder",
-   "target": {
-    "x": 17,
-    "y": 16,
-    "z": 4
-   },
-   "ap": 1
-  },
-  {
-   "type": "placeLadder",
-   "target": {
-    "x": 17,
-    "y": 16,
-    "z": 3
-   },
-   "ap": 1
-  },
-  {
-   "type": "endShift"
-  },
-  {
-   "type": "move",
-   "to": {
-    "x": 17,
-    "y": 16,
-    "z": 3
-   },
-   "drop": 0,
-   "ap": 1
-  },
-  {
-   "type": "placeLadder",
-   "target": {
-    "x": 17,
-    "y": 16,
-    "z": 2
-   },
-   "ap": 1
-  },
-  {
-   "type": "move",
-   "to": {
-    "x": 17,
-    "y": 16,
-    "z": 2
-   },
-   "drop": 0,
-   "ap": 1
-  },
-  {
-   "type": "placeLadder",
-   "target": {
-    "x": 17,
-    "y": 16,
-    "z": 1
-   },
-   "ap": 1
-  },
-  {
-   "type": "move",
-   "to": {
-    "x": 17,
-    "y": 16,
-    "z": 1
-   },
-   "drop": 0,
-   "ap": 1
-  },
-  {
-   "type": "endShift"
-  },
-  {
-   "type": "placeLadder",
-   "target": {
-    "x": 17,
-    "y": 16,
-    "z": 0
-   },
-   "ap": 1
-  },
-  {
-   "type": "move",
-   "to": {
-    "x": 17,
-    "y": 16,
-    "z": 0
-   },
-   "drop": 0,
-   "ap": 1
-  },
-  {
-   "type": "move",
-   "to": {
-    "x": 16,
-    "y": 16,
-    "z": -1
-   },
-   "drop": 0,
-   "ap": 1
-  },
-  {
-   "type": "leave",
-   "ap": 0
-  }
- ],
- "outcome": {
-  "outcome": "salvage",
-  "cause": "left",
-  "shiftsPlayed": 10,
-  "deepestLayer": 8,
-  "inventory": [
-   {
-    "item": "rawCopperOre",
-    "count": 2
-   },
-   {
-    "item": "timber",
-    "count": 1
-   }
+  "format": 1,
+  "engineVersion": "0.2.0",
+  "seed": 11,
+  "contractId": "none",
+  "loadoutId": "standard",
+  "actions": [
+    {
+      "type": "mine",
+      "target": {
+        "x": 17,
+        "y": 16,
+        "z": 0
+      },
+      "ap": 1
+    },
+    {
+      "type": "move",
+      "to": {
+        "x": 17,
+        "y": 16,
+        "z": -1
+      },
+      "drop": 1,
+      "ap": 1
+    },
+    {
+      "type": "mine",
+      "target": {
+        "x": 17,
+        "y": 16,
+        "z": 1
+      },
+      "ap": 1
+    },
+    {
+      "type": "mine",
+      "target": {
+        "x": 17,
+        "y": 16,
+        "z": 2
+      },
+      "ap": 1
+    },
+    {
+      "type": "mine",
+      "target": {
+        "x": 17,
+        "y": 16,
+        "z": 3
+      },
+      "ap": 1
+    },
+    {
+      "type": "endShift"
+    },
+    {
+      "type": "mine",
+      "target": {
+        "x": 17,
+        "y": 16,
+        "z": 4
+      },
+      "ap": 2
+    },
+    {
+      "type": "drop",
+      "item": "stone",
+      "count": 1,
+      "ap": 0
+    },
+    {
+      "type": "mine",
+      "target": {
+        "x": 17,
+        "y": 15,
+        "z": 4
+      },
+      "ap": 1
+    },
+    {
+      "type": "mine",
+      "target": {
+        "x": 17,
+        "y": 15,
+        "z": 5
+      },
+      "ap": 1
+    },
+    {
+      "type": "move",
+      "to": {
+        "x": 17,
+        "y": 15,
+        "z": 4
+      },
+      "drop": 1,
+      "ap": 1
+    },
+    {
+      "type": "endShift"
+    },
+    {
+      "type": "mine",
+      "target": {
+        "x": 17,
+        "y": 15,
+        "z": 6
+      },
+      "ap": 2
+    },
+    {
+      "type": "drop",
+      "item": "stone",
+      "count": 1,
+      "ap": 0
+    },
+    {
+      "type": "placeLadder",
+      "target": {
+        "x": 17,
+        "y": 15,
+        "z": 6
+      },
+      "ap": 1
+    },
+    {
+      "type": "mine",
+      "target": {
+        "x": 17,
+        "y": 15,
+        "z": 7
+      },
+      "ap": 2
+    },
+    {
+      "type": "drop",
+      "item": "stone",
+      "count": 1,
+      "ap": 0
+    },
+    {
+      "type": "endShift"
+    },
+    {
+      "type": "move",
+      "to": {
+        "x": 17,
+        "y": 15,
+        "z": 7
+      },
+      "drop": 0,
+      "ap": 1
+    },
+    {
+      "type": "mine",
+      "target": {
+        "x": 17,
+        "y": 15,
+        "z": 8
+      },
+      "ap": 2
+    },
+    {
+      "type": "drop",
+      "item": "stone",
+      "count": 1,
+      "ap": 0
+    },
+    {
+      "type": "mine",
+      "target": {
+        "x": 16,
+        "y": 15,
+        "z": 8
+      },
+      "ap": 2
+    },
+    {
+      "type": "drop",
+      "item": "stone",
+      "count": 1,
+      "ap": 0
+    },
+    {
+      "type": "endShift"
+    },
+    {
+      "type": "move",
+      "to": {
+        "x": 16,
+        "y": 15,
+        "z": 8
+      },
+      "drop": 0,
+      "ap": 1
+    },
+    {
+      "type": "mine",
+      "target": {
+        "x": 16,
+        "y": 14,
+        "z": 8
+      },
+      "ap": 2
+    },
+    {
+      "type": "drop",
+      "item": "stone",
+      "count": 1,
+      "ap": 0
+    },
+    {
+      "type": "move",
+      "to": {
+        "x": 16,
+        "y": 14,
+        "z": 8
+      },
+      "drop": 0,
+      "ap": 1
+    },
+    {
+      "type": "craft",
+      "recipe": "ladder",
+      "ap": 1
+    },
+    {
+      "type": "endShift"
+    },
+    {
+      "type": "mine",
+      "target": {
+        "x": 16,
+        "y": 13,
+        "z": 8
+      },
+      "ap": 2
+    },
+    {
+      "type": "mine",
+      "target": {
+        "x": 15,
+        "y": 13,
+        "z": 8
+      },
+      "ap": 2
+    },
+    {
+      "type": "move",
+      "to": {
+        "x": 16,
+        "y": 15,
+        "z": 8
+      },
+      "drop": 0,
+      "ap": 1
+    },
+    {
+      "type": "endShift"
+    },
+    {
+      "type": "move",
+      "to": {
+        "x": 17,
+        "y": 15,
+        "z": 8
+      },
+      "drop": 0,
+      "ap": 1
+    },
+    {
+      "type": "placeLadder",
+      "target": {
+        "x": 17,
+        "y": 15,
+        "z": 8
+      },
+      "ap": 1
+    },
+    {
+      "type": "placeLadder",
+      "target": {
+        "x": 17,
+        "y": 15,
+        "z": 7
+      },
+      "ap": 1
+    },
+    {
+      "type": "move",
+      "to": {
+        "x": 17,
+        "y": 15,
+        "z": 7
+      },
+      "drop": 0,
+      "ap": 1
+    },
+    {
+      "type": "move",
+      "to": {
+        "x": 17,
+        "y": 15,
+        "z": 6
+      },
+      "drop": 0,
+      "ap": 1
+    },
+    {
+      "type": "endShift"
+    },
+    {
+      "type": "placeLadder",
+      "target": {
+        "x": 17,
+        "y": 15,
+        "z": 5
+      },
+      "ap": 1
+    },
+    {
+      "type": "move",
+      "to": {
+        "x": 17,
+        "y": 15,
+        "z": 5
+      },
+      "drop": 0,
+      "ap": 1
+    },
+    {
+      "type": "move",
+      "to": {
+        "x": 17,
+        "y": 16,
+        "z": 4
+      },
+      "drop": 0,
+      "ap": 1
+    },
+    {
+      "type": "placeLadder",
+      "target": {
+        "x": 17,
+        "y": 16,
+        "z": 4
+      },
+      "ap": 1
+    },
+    {
+      "type": "placeLadder",
+      "target": {
+        "x": 17,
+        "y": 16,
+        "z": 3
+      },
+      "ap": 1
+    },
+    {
+      "type": "endShift"
+    },
+    {
+      "type": "move",
+      "to": {
+        "x": 17,
+        "y": 16,
+        "z": 3
+      },
+      "drop": 0,
+      "ap": 1
+    },
+    {
+      "type": "placeLadder",
+      "target": {
+        "x": 17,
+        "y": 16,
+        "z": 2
+      },
+      "ap": 1
+    },
+    {
+      "type": "move",
+      "to": {
+        "x": 17,
+        "y": 16,
+        "z": 2
+      },
+      "drop": 0,
+      "ap": 1
+    },
+    {
+      "type": "placeLadder",
+      "target": {
+        "x": 17,
+        "y": 16,
+        "z": 1
+      },
+      "ap": 1
+    },
+    {
+      "type": "move",
+      "to": {
+        "x": 17,
+        "y": 16,
+        "z": 1
+      },
+      "drop": 0,
+      "ap": 1
+    },
+    {
+      "type": "endShift"
+    },
+    {
+      "type": "placeLadder",
+      "target": {
+        "x": 17,
+        "y": 16,
+        "z": 0
+      },
+      "ap": 1
+    },
+    {
+      "type": "move",
+      "to": {
+        "x": 17,
+        "y": 16,
+        "z": 0
+      },
+      "drop": 0,
+      "ap": 1
+    },
+    {
+      "type": "move",
+      "to": {
+        "x": 16,
+        "y": 16,
+        "z": -1
+      },
+      "drop": 0,
+      "ap": 1
+    },
+    {
+      "type": "leave",
+      "ap": 0
+    }
   ],
-  "stateHash": "3e8bd4d19ed18021"
- }
+  "outcome": {
+    "outcome": "salvage",
+    "cause": "left",
+    "shiftsPlayed": 10,
+    "deepestLayer": 8,
+    "inventory": [
+      {
+        "item": "rawCopperOre",
+        "count": 2
+      },
+      {
+        "item": "timber",
+        "count": 1
+      }
+    ],
+    "stateHash": "3e8bd4d19ed18021"
+  }
 }
