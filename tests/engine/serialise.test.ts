@@ -18,7 +18,6 @@ function busyState(): GameState {
     ap: 3,
     fuel: 11,
     lampOil: 4,
-    bankedAp: 2,
     shift: 9,
     inventory: { timber: 2, ladder: 5, coal: 0 },
     looseItems: [
@@ -143,7 +142,6 @@ describe('hashState', () => {
       ap: (s) => (s.ap -= 1),
       fuel: (s) => (s.fuel -= 1),
       'lamp oil': (s) => (s.lampOil -= 1),
-      'banked AP': (s) => (s.bankedAp += 1),
       shift: (s) => (s.shift += 1),
       inventory: (s) => (s.inventory['timber'] = 3),
       'loose items': (s) => s.looseItems.pop(),

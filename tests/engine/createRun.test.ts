@@ -57,7 +57,6 @@ describe('createRun', () => {
     expect(state.avatar.health).toBe(AVATAR.startHealth);
     expect(state.ap).toBe(SHIFT.apPerShift);
     expect(state.shift).toBe(SHIFT.firstShiftNumber);
-    expect(state.bankedAp).toBe(0);
     expect(state.status).toEqual({ kind: 'active' });
   });
 
