@@ -144,9 +144,53 @@ export interface LoadoutDef {
   items: ItemStack[];
 }
 
+/** How likely one kind of plain rock is, at the top and at the bottom of a depth band. */
+export interface RockWeight {
+  /** A block id. */
+  block: string;
+  /** Relative weight in the band's first (highest) layer. */
+  weightAtTop: number;
+  /** Relative weight in the band's last (deepest) layer. Layers between are interpolated. */
+  weightAtBottom: number;
+}
+
+/** One kind of ore in one depth band, and how its veins are made. */
+export interface VeinDef {
+  /** A block id. */
+  block: string;
+  /** How many veins to place for each 1000 cells of the band. */
+  veinsPer1000Cells: number;
+  /** The fewest blocks in a vein. */
+  minSize: number;
+  /** The most blocks in a vein. */
+  maxSize: number;
+}
+
+/** What one depth band is made of (design doc 3.1). */
+export interface BandGenerationDef {
+  /** The id of a depth band in `WorldData.depthBands`. */
+  bandId: string;
+  /** The plain rock every cell starts as, chosen cell by cell by weight. */
+  rock: RockWeight[];
+  /** The ores that then replace some of that rock, in connected veins. */
+  veins: VeinDef[];
+}
+
+/** Every number cube generation uses (design doc 3.1 and 3.3). */
+export interface GenerationData {
+  /** One entry for each depth band. */
+  bands: BandGenerationDef[];
+  /**
+   * How many starting cells to try for one vein before giving up on it. A
+   * start fails when the vein cannot reach its smallest size there.
+   */
+  veinPlacementTries: number;
+}
+
 /** Everything in `src/data`, gathered so that it can be validated in one go. */
 export interface GameData {
   world: WorldData;
+  generation: GenerationData;
   blocks: Record<string, BlockDef>;
   items: Record<string, ItemDef>;
   structures: Record<string, StructureDef>;
