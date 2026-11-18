@@ -89,6 +89,10 @@ export function legalMoveActions(state: GameState): MoveAction[] {
       // Stepping off the bottom of a ladder: the one block climbed down
       // counts towards the longest drop a player may choose.
       const drop = avatarFallDistance(state, below);
+      // A ladder below is footing, so `drop` is then 0 and the second test
+      // is already true with today's data. The first test is kept because it
+      // is how 0005 item 6 words the rule, and it would decide if
+      // `maxChosenDropBlocks` were ever set to 0.
       if (hasLadder(state, below) || 1 + drop <= AVATAR.maxChosenDropBlocks) {
         actions.push(moveTo(below, drop));
       }

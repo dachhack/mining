@@ -153,6 +153,23 @@ describe('the avatar falling', () => {
     runSettle(state);
     expect(state.avatar.pos).toEqual({ x: 0, y: 0, z: 1 });
   });
+  it('takes fall damage when a ladder catches it after a long fall (owner question 35)', () => {
+    // The ladder is 4 cells down: the damage is the same as landing on rock.
+    const damage = (4 - AVATAR.freeFallBlocks) * AVATAR.fallDamagePerBlock;
+    const state = buildState({
+      layers: [['.'], ['.'], ['.'], ['.'], ['.'], ['.'], ['.'], ['#']],
+      avatar: { x: 0, y: 0, z: 0 },
+      ladders: [{ x: 0, y: 0, z: 4 }],
+    });
+    const events = runSettle(state);
+    expect(state.avatar.pos).toEqual({ x: 0, y: 0, z: 4 });
+    expect(damage).toBeGreaterThan(0);
+    expect(state.avatar.health).toBe(AVATAR.startHealth - damage);
+    expect(events).toEqual([
+      { type: 'fell', from: { x: 0, y: 0, z: 0 }, to: { x: 0, y: 0, z: 4 }, distance: 4 },
+      { type: 'damageTaken', amount: damage, cause: 'fall', health: AVATAR.startHealth - damage },
+    ]);
+  });
 });
 
 describe('loose items falling', () => {
