@@ -1,5 +1,5 @@
 // Light and reveal (design doc 3 and 5.1; 0005 items 10, 13, 14 and 15;
-// decision note 0010, "light matters").
+// decision note 0011, "light matters").
 //
 // Three things reveal a cell:
 // - light: the cell is lit, or shares a face with a lit cell;
@@ -30,7 +30,7 @@ import {
 } from './state';
 import type { GameState } from './state';
 
-/** True while the miner's lamp burns: there is lamp oil left (0010). */
+/** True while the miner's lamp burns: there is lamp oil left (0011). */
 export function isLampLit(state: GameState): boolean {
   return state.lampOil > 0;
 }
@@ -100,7 +100,7 @@ function positionKey(pos: Vec3): string {
  * cell the player has not seen, whatever the light (issue #15).
  *
  * Looking needs light: with the lamp out the avatar sees nothing over an
- * edge, and `updateReveal` does not call this (0010). The moves then check
+ * edge, and `updateReveal` does not call this (0011). The moves then check
  * for themselves that every cell they are judged by is revealed.
  *
  * The avatar looks down two kinds of column:
@@ -170,7 +170,7 @@ export function edgeLookCells(state: GameState): Vec3[] {
  * - With the lamp lit, the cells within the avatar's reach and the one
  *   overhead are revealed (0005 item 10), and so are the cells the avatar
  *   sees by looking over an edge (question 40; see `edgeLookCells`).
- * - With the lamp out, the miner works by touch (0010): only the six cells
+ * - With the lamp out, the miner works by touch (0011): only the six cells
  *   that share a face with its own are revealed by reach, and looking over
  *   an edge reveals nothing. Light from a torch or from the sky still
  *   reveals what it reaches, as above.

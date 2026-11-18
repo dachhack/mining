@@ -50,7 +50,7 @@ export function avatarFallDistance(state: GameState, pos: Vec3): number {
 /**
  * The same question as `avatarFallDistance`, answered only from cells the
  * player has seen, for a move that must show its drop before it is chosen
- * (issue #33; decision note 0010). The cell `pos` itself must be revealed.
+ * (issue #33; decision note 0011). The cell `pos` itself must be revealed.
  *
  * Returns:
  * - the number of blocks the avatar would fall from `pos`, if that is at most

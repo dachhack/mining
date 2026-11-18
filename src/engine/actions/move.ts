@@ -1,4 +1,4 @@
-// Moving the avatar (design doc 4.1; decision note 0005 items 6 and 7; 0010).
+// Moving the avatar (design doc 4.1; decision note 0005 items 6 and 7; 0011).
 
 import { ACTION_COSTS, AVATAR } from '../../data';
 import type { Vec3 } from '../../data';
@@ -44,7 +44,7 @@ function moveTo(to: Vec3, drop: number): MoveAction {
  * - No diagonal moves. The edge of the surface and of the cube need no check
  *   of their own: `blockAt` answers "bedrock" for everything beyond them.
  * - A move is offered only when every cell it is judged by is revealed
- *   (issue #33; 0010), so the list never depends on a cell the player has
+ *   (issue #33; 0011), so the list never depends on a cell the player has
  *   not seen. With the lamp lit, `updateReveal` reveals all of those cells
  *   and this removes nothing. With the lamp out it removes: a walk into a
  *   cell whose floor (or the drop under it) is not revealed, a step up onto

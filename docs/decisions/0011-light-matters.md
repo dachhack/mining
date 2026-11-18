@@ -1,4 +1,4 @@
-# 0010 — Light matters: with the lamp out the miner knows only the six cells it touches
+# 0011 — Light matters: with the lamp out the miner knows only the six cells it touches
 
 Date: 2026-11-18. Status: the owner's direction ("make light matter", the answer to questions 22 and 40 after playtest round m1-r1, finding 4, issue #24), in the form the coordinator assumed in issue #33. The form is for the owner to confirm.
 
@@ -27,7 +27,7 @@ Under 0005 item 10 the 17 cells in reach, the cell overhead, and the cells a dro
 ## Consequences
 
 - **In the dark the miner cannot walk into a cell it has just dug open beside it**, because the floor of that cell is one of the ring below and is not known. It can go back along what it saw earlier, dig straight down (and drop into the hole), or carry on where a torch shows the floor. So with the lamp out a horizontal tunnel cannot be extended at all without a torch. This is the largest effect of the rule and is listed for the owner in the pull request.
-- Mining the block underfoot in the dark is a drop of unknown depth: the cell under it is not known. The play tool already says "below that is unseen".
+- Mining the block underfoot in the dark is a fall of unknown depth: the cell under it is not known. Since 0010 (uncontrolled falls) that fall costs health from the first block, so in the dark it is both unknown and costly. The play tool says how far the fall is known to be, the least health it will cost, and "below that is unseen". A ladder in the miner's own cell holds it while it mines below.
 - The action list still never depends on an unrevealed cell. The property check in `tests/engine/properties.test.ts` runs with the lamp lit, out, and running out, and now also tries a ladder in each unseen cell.
 - With today's numbers (light radius 3 with oil, longest chosen drop 2) the lamp's own light already reaches every cell that looking over an edge reveals. The look is kept: it is what makes the move list safe if either number changes.
 - The golden run `wander-seed-9` was recorded again: its old decisions include diagonal mining after the lamp went out, which is no longer legal.

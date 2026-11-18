@@ -339,7 +339,7 @@ describe('property tests: unrevealed cells do not change the action list (issues
     UNSEEN_CELLS_TIMEOUT_MS,
   );
 
-  it.each([27, 34, 39])(
+  it.each([27, 34, 47])(
     'with the lamp out from the start, seed %i',
     (seed) => {
       const { checks, checksWithLampOut } = playAndCheckUnseenCells(seed, 0, 300, 2);

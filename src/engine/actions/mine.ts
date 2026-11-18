@@ -29,7 +29,7 @@ import type { GameState } from '../state';
  *   away a block the player cannot see. With the lamp lit `updateReveal`
  *   reveals every cell in reach (0005 item 10) and this test removes nothing.
  *   With the lamp out the miner knows only the six cells it touches (issue
- *   #33; decision note 0010), so the diagonals and the 8 cells around the one
+ *   #33; decision note 0011), so the diagonals and the 8 cells around the one
  *   below are mineable only if something else has revealed them: an earlier
  *   visit with the lamp lit, a torch, or daylight.
  * - Does not change `state`. Lists actions as if the avatar had unlimited AP;

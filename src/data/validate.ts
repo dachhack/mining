@@ -270,6 +270,11 @@ export function validateData(data: GameData): string[] {
   requireWholeAtLeast(avatar.freeFallBlocks, 0, 'avatar.freeFallBlocks');
   requireWholeAtLeast(avatar.fallDamagePerBlock, 0, 'avatar.fallDamagePerBlock');
   requireWholeAtLeast(
+    avatar.uncontrolledFallDamagePerBlock,
+    0,
+    'avatar.uncontrolledFallDamagePerBlock',
+  );
+  requireWholeAtLeast(
     avatar.fatalFallBlocks,
     Math.max(0, avatar.freeFallBlocks) + 1,
     'avatar.fatalFallBlocks (more than the free fall)',

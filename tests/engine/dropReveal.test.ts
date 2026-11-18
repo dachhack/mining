@@ -7,7 +7,7 @@
 // away what they held.
 //
 // The first fix (#15) revealed those cells whatever the light. Since issue
-// #33 (decision note 0010) the avatar looks over an edge only with the lamp
+// #33 (decision note 0011) the avatar looks over an edge only with the lamp
 // lit; with it out the cells stay unrevealed and the move is not offered.
 // Either way the action list must not depend on an unrevealed cell, and the
 // general check below is made in both lights.

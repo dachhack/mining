@@ -289,7 +289,13 @@ describe('climbing down off the bottom of a ladder', () => {
     expect(after.avatar.pos).toEqual({ x: 0, y: 0, z: 2 });
     expect(events).toEqual([
       { type: 'moved', from: { x: 0, y: 0, z: 0 }, to: { x: 0, y: 0, z: 1 } },
-      { type: 'fell', from: { x: 0, y: 0, z: 1 }, to: { x: 0, y: 0, z: 2 }, distance: 1 },
+      {
+        type: 'fell',
+        from: { x: 0, y: 0, z: 1 },
+        to: { x: 0, y: 0, z: 2 },
+        distance: 1,
+        kind: 'chosenDrop',
+      },
     ]);
   });
 

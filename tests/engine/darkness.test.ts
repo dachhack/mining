@@ -1,4 +1,4 @@
-// Scenario tests for "light matters" (issue #33; decision note 0010).
+// Scenario tests for "light matters" (issue #33; decision note 0011).
 //
 // With the lamp out the miner works by touch: only the six cells that share a
 // face with its own are revealed by reach. The diagonals and the ring of cells
