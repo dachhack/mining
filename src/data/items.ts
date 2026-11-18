@@ -12,7 +12,17 @@ export type ItemId =
   | 'keystone'
   | 'ladder'
   | 'support'
-  | 'torch';
+  | 'torch'
+  | 'ironIngot'
+  | 'copperIngot'
+  | 'drill'
+  | 'pump'
+  | 'vent'
+  | 'safetyLamp'
+  | 'scannerCharge'
+  | 'sealant'
+  | 'explosive'
+  | 'campKit';
 
 // Weights: decision note 0005 item 18. Fuel and lamp oil are gauges, not
 // items, so they are not here.
@@ -34,4 +44,16 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   ladder: { name: 'Ladder', weight: 0 },
   support: { name: 'Support', weight: 2 },
   torch: { name: 'Torch', weight: 1 },
+  // Camp-made items (design doc 7.2). Weights: decision note 0014 items 25
+  // and 31. An ingot weighs 1, half the raw ore it is smelted from.
+  ironIngot: { name: 'Iron ingot', weight: 1 },
+  copperIngot: { name: 'Copper ingot', weight: 1 },
+  drill: { name: 'Drill', weight: 3 },
+  pump: { name: 'Pump', weight: 3 },
+  vent: { name: 'Vent', weight: 2 },
+  safetyLamp: { name: 'Safety lamp', weight: 1 },
+  scannerCharge: { name: 'Scanner charge', weight: 1 },
+  sealant: { name: 'Sealant', weight: 1 },
+  explosive: { name: 'Explosive', weight: 1 },
+  campKit: { name: 'Camp kit', weight: 8 },
 };

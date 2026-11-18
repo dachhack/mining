@@ -124,6 +124,24 @@ export function validateData(data: GameData): string[] {
       problems.push(`${where} cannot be mined, so it must not have a yield`);
     }
     checkStacks(block.yields, `${where}: yield`);
+
+    // Cave-in numbers: every block that can be dug has both; open space and
+    // bedrock have neither.
+    const canFall = block.solid && block.mineCost !== null;
+    if (canFall) {
+      if (block.span === null) {
+        problems.push(`${where} is a solid, mineable block, so it needs a span`);
+      } else {
+        requireWholeAtLeast(block.span, 0, `${where}: span`);
+      }
+      if (block.shaftLimit === null) {
+        problems.push(`${where} is a solid, mineable block, so it needs a shaft limit`);
+      } else {
+        requireWholeAtLeast(block.shaftLimit, 1, `${where}: shaft limit`);
+      }
+    } else if (block.span !== null || block.shaftLimit !== null) {
+      problems.push(`${where} never falls, so its span and shaft limit must be null`);
+    }
   }
   // The engine relies on these three blocks.
   const air = data.blocks['air'];
@@ -136,6 +154,15 @@ export function validateData(data: GameData): string[] {
   }
   if (data.blocks['stone'] === undefined) {
     problems.push('there must be a block "stone"');
+  }
+  // The cave-in and sealant rules turn cells into these two (0014 items 8, 12).
+  for (const blockId of ['rubble', 'sealed']) {
+    const block = Object.hasOwn(data.blocks, blockId) ? data.blocks[blockId] : undefined;
+    if (block === undefined || !block.solid || block.mineCost === null) {
+      problems.push(`there must be a block "${blockId}" that is solid and can be mined`);
+    } else if (block.yields.length > 0) {
+      problems.push(`block "${blockId}" must not have a yield`);
+    }
   }
 
   // --- Generation ---
@@ -231,8 +258,10 @@ export function validateData(data: GameData): string[] {
   }
 
   // --- Recipes ---
+  // Field and camp recipes are checked the same way, and share one set of
+  // ids: a `craft` action names a recipe by its id alone.
   const recipeIds = new Set<string>();
-  for (const recipe of data.recipes) {
+  for (const recipe of [...data.recipes, ...data.campRecipes]) {
     const where = `recipe "${recipe.id}"`;
     if (recipeIds.has(recipe.id)) {
       problems.push(`recipe id "${recipe.id}" is used more than once`);
@@ -314,6 +343,80 @@ export function validateData(data: GameData): string[] {
       traceBlocks.add(blockId);
     }
   }
+
+  const hazardTells = data.tells.hazards;
+  requireWholeAtLeast(hazardTells.dampStoneDistance, 1, 'tells.hazards.dampStoneDistance');
+  requireWholeAtLeast(hazardTells.pittedRockDistance, 1, 'tells.hazards.pittedRockDistance');
+  requireWholeAtLeast(hazardTells.warmGlowDistance, 1, 'tells.hazards.warmGlowDistance');
+
+  // --- Hazards ---
+  const hazards = data.hazards;
+  // The number shown for a crack is the stored timer plus 1, and the cube
+  // stores that in one byte.
+  requireWholeAtLeast(hazards.caveIn.crackTimer, 0, 'hazards.caveIn.crackTimer');
+  if (hazards.caveIn.crackTimer + 1 > MAX_CODE) {
+    problems.push(`hazards.caveIn.crackTimer must be less than ${MAX_CODE}`);
+  }
+  requireWholeAtLeast(hazards.caveIn.rockfallDamage, 0, 'hazards.caveIn.rockfallDamage');
+  requireWholeAtLeast(hazards.caveIn.supportLiningReach, 0, 'hazards.caveIn.supportLiningReach');
+  for (const [name, sides] of [
+    ['tightCellSolidSides', hazards.caveIn.tightCellSolidSides],
+    ['supportHoldSolidSides', hazards.caveIn.supportHoldSolidSides],
+  ] as const) {
+    // A cell has four side neighbours.
+    if (!isWholeNumber(sides) || sides < 1 || sides > 4) {
+      problems.push(`hazards.caveIn.${name} must be a whole number 1 to 4, but is ${sides}`);
+    }
+  }
+  // The flow rules of 0014 item 12 are written for one unit in a cell.
+  if (hazards.water.unitsPerCell !== 1) {
+    problems.push(`hazards.water.unitsPerCell must be 1, but is ${hazards.water.unitsPerCell}`);
+  }
+  if (hazards.lava.unitsPerCell !== 1) {
+    problems.push(`hazards.lava.unitsPerCell must be 1, but is ${hazards.lava.unitsPerCell}`);
+  }
+  requireWholeAtLeast(hazards.water.floodedMoveExtraAp, 0, 'hazards.water.floodedMoveExtraAp');
+  requireWholeAtLeast(hazards.water.pumpUnitsPerShift, 1, 'hazards.water.pumpUnitsPerShift');
+  requireWholeAtLeast(hazards.water.pumpReach, 0, 'hazards.water.pumpReach');
+  requireWholeAtLeast(hazards.gas.pocketUnitsPerCell, 1, 'hazards.gas.pocketUnitsPerCell');
+  if (hazards.gas.pocketUnitsPerCell > MAX_CODE) {
+    problems.push(`hazards.gas.pocketUnitsPerCell must be at most ${MAX_CODE}`);
+  }
+  requireWholeAtLeast(hazards.gas.ventReach, 0, 'hazards.gas.ventReach');
+  requireWholeAtLeast(hazards.explosion.damage, 0, 'hazards.explosion.damage');
+  requireWholeAtLeast(hazards.lava.flowEveryShifts, 1, 'hazards.lava.flowEveryShifts');
+  requireWholeAtLeast(hazards.lava.sourcePocketCellsOver, 0, 'hazards.lava.sourcePocketCellsOver');
+  requireWholeAtLeast(hazards.lava.damageInCell, 0, 'hazards.lava.damageInCell');
+  requireWholeAtLeast(hazards.lava.damageBeside, 0, 'hazards.lava.damageBeside');
+  requireWholeAtLeast(hazards.air.max, 1, 'hazards.air.max');
+  requireWholeAtLeast(hazards.air.lossPerShift, 0, 'hazards.air.lossPerShift');
+  const unseen = Object.hasOwn(data.blocks, hazards.forecast.unseenBlock)
+    ? data.blocks[hazards.forecast.unseenBlock]
+    : undefined;
+  if (unseen === undefined || !unseen.solid) {
+    problems.push(
+      `hazards.forecast.unseenBlock names "${hazards.forecast.unseenBlock}", which is not a solid block`,
+    );
+  }
+
+  // --- Camps and camp tools ---
+  const camps = data.camps;
+  requireKnownItem(camps.kitItem, 'camps.kitItem');
+  requireWholeAtLeast(camps.maxKitsCarried, 1, 'camps.maxKitsCarried');
+  requireWholeAtLeast(camps.halfWidth, 0, 'camps.halfWidth');
+  requireWholeAtLeast(camps.height, 1, 'camps.height');
+  requireWholeAtLeast(camps.foundMinAp, 0, 'camps.foundMinAp');
+  requireWholeAtLeast(camps.restMinAp, 0, 'camps.restMinAp');
+  requireWholeAtLeast(camps.upkeepFuel, 0, 'camps.upkeepFuel');
+  requireWholeAtLeast(camps.upkeepEveryShifts, 1, 'camps.upkeepEveryShifts');
+  requireWholeAtLeast(camps.airLineMaxBadStretch, 0, 'camps.airLineMaxBadStretch');
+  const campTools = data.campTools;
+  requireKnownItem(campTools.drillItem, 'campTools.drillItem');
+  requireKnownItem(campTools.sealantItem, 'campTools.sealantItem');
+  requireKnownItem(campTools.scanChargeItem, 'campTools.scanChargeItem');
+  requireWholeAtLeast(campTools.scanChargesPerScan, 0, 'campTools.scanChargesPerScan');
+  requireWholeAtLeast(campTools.scanReach, 0, 'campTools.scanReach');
+  requireWholeAtLeast(campTools.scanRegionRadius, 0, 'campTools.scanRegionRadius');
 
   // --- Shift ---
   const shift = data.shift;

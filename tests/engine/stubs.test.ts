@@ -1,4 +1,5 @@
-// The rule modules are stubs until M1 tasks 2 to 5. This file pins the one
+// The rule modules were stubs until M1 tasks 2 to 5, and the M2 action
+// modules are stubs until M2 tasks 3, 5, 7, 8 and 9. This file pins the one
 // thing every later task relies on in the meantime: that the stubs keep the
 // engine usable (nothing legal, nothing thrown), so tasks can be built and
 // tested one at a time in any order.
@@ -11,8 +12,14 @@
 // rules are tested in shift.test.ts, craft.test.ts and leave.test.ts.
 
 import { describe, expect, it } from 'vitest';
-import { actionKey, sameAction } from '../../src/engine';
+import { actionKey, applyAction, legalActions, sameAction } from '../../src/engine';
 import type { Action } from '../../src/engine';
+import { legalCampActions } from '../../src/engine/actions/camp';
+import { legalCampToolActions } from '../../src/engine/actions/campTools';
+import { legalGiveUpActions } from '../../src/engine/actions/giveUp';
+import { legalPlaceExplosiveActions } from '../../src/engine/actions/placeExplosive';
+import { legalPlaceSupportActions } from '../../src/engine/actions/placeSupport';
+import { buildState } from './helpers';
 
 describe('actionKey and sameAction', () => {
   // One of each kind of action.
@@ -25,6 +32,20 @@ describe('actionKey and sameAction', () => {
     { type: 'pickUp', from: { x: 1, y: 2, z: 3 }, item: 'coal', count: 2, ap: 0 },
     { type: 'drop', item: 'coal', count: 2, ap: 0 },
     { type: 'leave', ap: 0 },
+    // The M2 actions (decision note 0015).
+    { type: 'placeSupport', target: { x: 1, y: 2, z: 3 }, ap: 1 },
+    { type: 'placeExplosive', target: { x: 1, y: 2, z: 3 }, ap: 1 },
+    { type: 'placePump', target: { x: 1, y: 2, z: 3 }, ap: 1 },
+    { type: 'placeVent', target: { x: 1, y: 2, z: 3 }, ap: 1 },
+    { type: 'placeSafetyLamp', target: { x: 1, y: 2, z: 3 }, ap: 1 },
+    { type: 'seal', target: { x: 1, y: 2, z: 3 }, ap: 1 },
+    { type: 'scan', centre: { x: 1, y: 2, z: 3 }, ap: 2 },
+    { type: 'foundCamp', ap: 5 },
+    { type: 'rest', ap: 5 },
+    { type: 'stashPut', item: 'coal', count: 2, ap: 0 },
+    { type: 'stashTake', item: 'coal', count: 2, ap: 0 },
+    { type: 'decommissionCamp', ap: 1 },
+    { type: 'giveUp', ap: 0 },
   ];
 
   it('give every kind of action its own key', () => {
@@ -50,5 +71,49 @@ describe('actionKey and sameAction', () => {
     };
     expect(sameAction(pickUp, { ...pickUp, item: 'stone' })).toBe(false);
     expect(sameAction(pickUp, { ...pickUp, count: 2 })).toBe(false);
+    const scan: Action = { type: 'scan', centre: { x: 1, y: 2, z: 3 }, ap: 2 };
+    expect(sameAction(scan, { ...scan, centre: { x: 1, y: 2, z: 4 } })).toBe(false);
+    const stash: Action = { type: 'stashPut', item: 'coal', count: 2, ap: 0 };
+    expect(sameAction(stash, { ...stash, item: 'stone' })).toBe(false);
+    expect(sameAction(stash, { ...stash, count: 3 })).toBe(false);
+    expect(sameAction(stash, { ...stash, type: 'stashTake' })).toBe(false);
+  });
+});
+
+describe('the M2 action modules are stubs (decision note 0015)', () => {
+  // Each M2 task deletes the line about the module it fills in.
+  const state = buildState({
+    layers: [['#.#'], ['###']],
+    avatar: { x: 1, y: 0, z: 0 },
+    revealAll: true,
+    inventory: { support: 2, explosive: 1, pump: 1, vent: 1, safetyLamp: 1, sealant: 1 },
+  });
+
+  it('offer nothing, so the game plays as it did in M1', () => {
+    expect(legalPlaceSupportActions(state)).toEqual([]);
+    expect(legalPlaceExplosiveActions(state)).toEqual([]);
+    expect(legalCampToolActions(state)).toEqual([]);
+    expect(legalCampActions(state)).toEqual([]);
+    expect(legalGiveUpActions(state)).toEqual([]);
+    const m1Types = [
+      'move',
+      'mine',
+      'placeLadder',
+      'placeTorch',
+      'craft',
+      'pickUp',
+      'drop',
+      'leave',
+    ];
+    for (const action of legalActions(state)) {
+      expect(m1Types).toContain(action.type);
+    }
+  });
+
+  it('are refused by applyAction, like any action that is not on the list', () => {
+    expect(() => applyAction(state, { type: 'giveUp', ap: 0 })).toThrow('Not a legal action');
+    expect(() =>
+      applyAction(state, { type: 'placeSupport', target: { x: 1, y: 0, z: 0 }, ap: 1 }),
+    ).toThrow('Not a legal action');
   });
 });

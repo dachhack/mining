@@ -484,9 +484,11 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   // The forecast comes from the engine's own preview, so it cannot disagree
   // with what ending the shift then does.
   const preview = previewCubePhase(state);
-  const hazards = preview.hazards.map((hazard) => {
-    const where = hazard.cells.map((c) => `x${c.x} y${c.y} ${layerName(c.z)}`).join('; ');
-    return `${hazard.kind} in ${hazard.inShifts} shift(s) at ${where}`;
+  // Countdowns only (0014 item 4, part 1); both parts of the forecast are
+  // empty until M2, and the play-tool task (M2-6) words them and adds flows.
+  const hazards = preview.countdowns.map((countdown) => {
+    const c = countdown.pos;
+    return `${countdown.kind} in ${countdown.inShifts} shift(s) at x${c.x} y${c.y} ${layerName(c.z)}`;
   });
   const upkeep = preview.upkeep;
   let forecast: string;

@@ -1,9 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { createRun, deserialise, hashState, serialise } from '../../src/engine';
-import type { GameState } from '../../src/engine';
+import { STRUCTURES } from '../../src/data';
+import type { ArmedCharge, Camp, GameState } from '../../src/engine';
 import { hashString } from '../../src/engine/hash';
 import { nextUint32 } from '../../src/engine/rng';
-import { addItem, addLooseItems, cloneState, inventoryEntries } from '../../src/engine/state';
+import {
+  STATE_VERSION,
+  addItem,
+  addLooseItems,
+  cloneState,
+  inventoryEntries,
+  crackTimerAt,
+  gasAt,
+  isLavaSource,
+  lavaAt,
+  setCrackTimer,
+  setLava,
+  structureAt,
+  waterAt,
+} from '../../src/engine/state';
 import { buildState } from './helpers';
 
 /** A small state with something in every part of it. */
@@ -26,11 +41,30 @@ function busyState(): GameState {
     ],
     ladders: [{ x: 1, y: 1, z: 0 }],
     seed: 4242,
+    // Every field the M2 skeleton added (issue #50), each with something in it.
+    air: 6,
+    water: [{ x: 0, y: 2, z: 0 }],
+    lava: [{ x: 1, y: 2, z: 1 }],
+    lavaSources: [{ x: 2, y: 2, z: 1 }],
+    gas: [{ pos: { x: 2, y: 1, z: 0 }, units: 4 }],
+    cracks: [
+      { pos: { x: 0, y: 0, z: 0 }, timer: 0 },
+      { pos: { x: 2, y: 0, z: 0 }, timer: 2 },
+    ],
+    structures: [{ pos: { x: 2, y: 2, z: 0 }, structure: 'explosive' }],
+    // Given out of order: the engine keeps both lists sorted.
+    armed: [
+      { pos: { x: 1, y: 0, z: 1 }, kind: 'unstableOre' },
+      { pos: { x: 2, y: 2, z: 0 }, kind: 'explosive' },
+    ],
+    camps: [
+      { pos: { x: 1, y: 1, z: 1 }, foundedShift: 7, stash: { stone: 3, coal: 1, timber: 0 } },
+      { pos: { x: 1, y: 1, z: 0 }, foundedShift: 3, stash: {} },
+    ],
   });
+  state.avatar.resting = true;
   state.revealed[0] = 1;
   state.revealed[4] = 1;
-  state.fluid[3] = 2;
-  state.gas[5] = 1;
   nextUint32(state.rng); // so the RNG is no longer at its seed
   return state;
 }
@@ -47,16 +81,47 @@ describe('serialise and deserialise', () => {
     expect(hashState(loaded)).toBe(hashState(state));
     // Everything except the zero-count inventory entry, which is dropped.
     expect(loaded.inventory).toEqual({ ladder: 5, timber: 2 });
-    expect({ ...loaded, inventory: {}, looseItems: [] }).toEqual({
+    expect({ ...loaded, inventory: {}, looseItems: [], camps: [] }).toEqual({
       ...state,
       inventory: {},
       looseItems: [],
+      camps: [],
     });
+    // Camps come back sorted by position, each stash without its zero counts.
+    expect(loaded.camps).toEqual([
+      { pos: { x: 1, y: 1, z: 0 }, foundedShift: 3, stash: {} },
+      { pos: { x: 1, y: 1, z: 1 }, foundedShift: 7, stash: { coal: 1, stone: 3 } },
+    ]);
     // Loose items come back in canonical order: by z, then y, then x.
     expect(loaded.looseItems).toEqual([
       { pos: { x: 0, y: 0, z: -1 }, item: 'coal', count: 1 },
       { pos: { x: 1, y: 1, z: 0 }, item: 'stone', count: 2 },
     ]);
+  });
+
+  it('round-trips every field the M2 skeleton added', () => {
+    const loaded = throughJson(busyState());
+    expect(loaded.avatar.air).toBe(6);
+    expect(loaded.avatar.resting).toBe(true);
+    expect(waterAt(loaded, { x: 0, y: 2, z: 0 })).toBe(1);
+    expect(lavaAt(loaded, { x: 1, y: 2, z: 1 })).toBe(1);
+    expect(isLavaSource(loaded, { x: 1, y: 2, z: 1 })).toBe(false);
+    expect(lavaAt(loaded, { x: 2, y: 2, z: 1 })).toBe(1);
+    expect(isLavaSource(loaded, { x: 2, y: 2, z: 1 })).toBe(true);
+    expect(gasAt(loaded, { x: 2, y: 1, z: 0 })).toBe(4);
+    // A stored timer of 0 is a crack; it must not come back as "no crack".
+    expect(crackTimerAt(loaded, { x: 0, y: 0, z: 0 })).toBe(0);
+    expect(crackTimerAt(loaded, { x: 2, y: 0, z: 0 })).toBe(2);
+    expect(crackTimerAt(loaded, { x: 1, y: 0, z: 0 })).toBeNull();
+    expect(structureAt(loaded, { x: 2, y: 2, z: 0 })).toBe(STRUCTURES.explosive.code);
+    expect(loaded.armed).toEqual([
+      { pos: { x: 2, y: 2, z: 0 }, kind: 'explosive' },
+      { pos: { x: 1, y: 0, z: 1 }, kind: 'unstableOre' },
+    ]);
+    for (const array of [loaded.water, loaded.lava, loaded.lavaSource, loaded.cracks]) {
+      expect(array).toBeInstanceOf(Uint8Array);
+      expect(array.length).toBe(18);
+    }
   });
 
   it('deserialise merges two piles of the same item in the same cell', () => {
@@ -107,14 +172,36 @@ describe('serialise and deserialise', () => {
     expect(() => deserialise({ ...saved, version: 999 })).toThrow('version 999');
     expect(() => deserialise({ ...saved, blocks: [2, 17] })).toThrow('"blocks"');
     expect(() => deserialise({ ...saved, gas: [0, 19] })).toThrow('"gas"');
+    expect(() => deserialise({ ...saved, water: [0, 17] })).toThrow('"water"');
+    expect(() => deserialise({ ...saved, lava: [0, 19] })).toThrow('"lava"');
+    expect(() => deserialise({ ...saved, lavaSource: [0, 17] })).toThrow('"lavaSource"');
+    expect(() => deserialise({ ...saved, cracks: [0, 19] })).toThrow('"cracks"');
     expect(() => deserialise({ ...saved, tracesSeen: [1, 17] })).toThrow('"tracesSeen"');
     expect(() => deserialise({ ...saved, size: { x: 3, y: 3, z: 3 } })).toThrow('damaged');
     expect(() =>
-      deserialise({ ...saved, avatar: { pos: { x: 9, y: 0, z: 0 }, health: 5 } }),
+      deserialise({ ...saved, avatar: { ...saved.avatar, pos: { x: 9, y: 0, z: 0 } } }),
     ).toThrow('the avatar is at (9, 0, 0)');
+    expect(() =>
+      deserialise({ ...saved, armed: [{ pos: { x: 0, y: 0, z: 5 }, kind: 'explosive' }] }),
+    ).toThrow('bad armed charge');
+    expect(() =>
+      deserialise({
+        ...saved,
+        camps: [{ pos: { x: 0, y: 0, z: -1 }, foundedShift: 1, stash: {} }],
+      }),
+    ).toThrow('a camp is at (0, 0, -1)');
     // A status this build does not know. The cast gets it past the type checker.
     const badStatus = { kind: 'paused' } as unknown as typeof saved.status;
     expect(() => deserialise({ ...saved, status: badStatus })).toThrow('unknown run status');
+  });
+
+  it('refuses a save from before the M2 skeleton with a clear error', () => {
+    // State version 3 was the last M1 shape (decision note 0012).
+    expect(STATE_VERSION).toBe(4);
+    const saved = serialise(busyState());
+    expect(() => deserialise({ ...saved, version: 3 })).toThrow(
+      'Saved state has version 3; this build reads version 4',
+    );
   });
 });
 
@@ -133,14 +220,28 @@ describe('hashState', () => {
     const changes: Record<string, (state: GameState) => void> = {
       block: (s) => (s.blocks[0] = 0),
       revealed: (s) => (s.revealed[1] = 1),
-      fluid: (s) => (s.fluid[0] = 1),
+      water: (s) => (s.water[0] = 1),
+      lava: (s) => (s.lava[0] = 1),
+      'lava source': (s) => setLava(s, { x: 1, y: 2, z: 1 }, 1, true),
       gas: (s) => (s.gas[0] = 1),
+      'a new crack': (s) => setCrackTimer(s, { x: 1, y: 0, z: 0 }, 0),
+      'a crack timer': (s) => setCrackTimer(s, { x: 2, y: 0, z: 0 }, 1),
       structure: (s) => (s.structures[0] = 1),
       'traces seen': (s) => (s.tracesSeen[0] = 1),
       rng: (s) => nextUint32(s.rng),
       seed: (s) => (s.seed += 1),
       'avatar position': (s) => (s.avatar.pos.x = 0),
       health: (s) => (s.avatar.health -= 1),
+      air: (s) => (s.avatar.air -= 1),
+      resting: (s) => (s.avatar.resting = false),
+      'an armed charge gone': (s) => s.armed.pop(),
+      'an armed charge of another kind': (s) => {
+        (s.armed[0] as ArmedCharge).kind = 'unstableOre';
+      },
+      'a camp gone': (s) => s.camps.pop(),
+      'a camp position': (s) => ((s.camps[0] as Camp).pos.x = 0),
+      'a camp founding shift': (s) => ((s.camps[0] as Camp).foundedShift += 1),
+      'a camp stash': (s) => ((s.camps[1] as Camp).stash['coal'] = 2),
       ap: (s) => (s.ap -= 1),
       fuel: (s) => (s.fuel -= 1),
       'lamp oil': (s) => (s.lampOil -= 1),
@@ -173,6 +274,18 @@ describe('hashState', () => {
     const shuffled = cloneState(base);
     shuffled.looseItems.reverse();
     expect(hashState(shuffled)).toBe(hashState(base));
+
+    // The order of the armed charges and of the camps, the order items were
+    // put into a stash, and a stash entry with a count of 0.
+    const m2 = cloneState(base);
+    m2.armed.reverse();
+    m2.camps.reverse();
+    for (const camp of m2.camps) {
+      if (camp.foundedShift === 7) {
+        camp.stash = { timber: 0, coal: 1, ladder: 0, stone: 3 };
+      }
+    }
+    expect(hashState(m2)).toBe(hashState(base));
   });
 
   it('treats piles of one item in one cell as their total, however they were added', () => {

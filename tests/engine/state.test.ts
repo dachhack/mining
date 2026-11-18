@@ -333,6 +333,8 @@ describe('cloneState', () => {
       inventory: { timber: 2 },
       looseItems: [{ pos: { x: 1, y: 0, z: 0 }, item: 'stone', count: 1 }],
       ladders: [{ x: 1, y: 0, z: 0 }],
+      armed: [{ pos: { x: 0, y: 0, z: 0 }, kind: 'unstableOre' }],
+      camps: [{ pos: { x: 1, y: 0, z: 0 }, foundedShift: 1, stash: { coal: 2 } }],
     });
     const before = hashState(state);
     const copy = cloneState(state);
@@ -341,13 +343,25 @@ describe('cloneState', () => {
     // Change every part of the copy.
     copy.blocks.fill(0);
     copy.revealed.fill(1);
-    copy.fluid.fill(1);
+    copy.water.fill(1);
+    copy.lava.fill(1);
+    copy.lavaSource.fill(1);
     copy.gas.fill(1);
+    copy.cracks.fill(1);
     copy.structures.fill(0);
     copy.rng.s += 1;
     copy.size.x = 99;
     copy.avatar.pos.z = 1;
     copy.avatar.health -= 1;
+    copy.avatar.air -= 1;
+    copy.avatar.resting = true;
+    copy.armed.push({ pos: { x: 0, y: 0, z: 1 }, kind: 'unstableOre' });
+    const firstCamp = copy.camps[0];
+    if (firstCamp !== undefined) {
+      firstCamp.pos.x = 0;
+      firstCamp.stash['coal'] = 9;
+    }
+    copy.camps.push({ pos: { x: 0, y: 0, z: 0 }, foundedShift: 1, stash: {} });
     copy.inventory['timber'] = 0;
     copy.looseItems.push({ pos: { x: 0, y: 0, z: -1 }, item: 'coal', count: 1 });
     const firstLoose = copy.looseItems[0];

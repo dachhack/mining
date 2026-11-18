@@ -1,0 +1,99 @@
+// Destroying things at the moment of an event (design doc 4; 0014 item 2).
+//
+// "Structures and camps are destroyed at the moment of the event that
+// destroys them, so a torch destroyed by a rockfall in (a) is not there to
+// light gas in (c)." So a hazard never queues a destruction for later: it
+// calls one of the three functions here, there and then.
+//
+// WHAT a hazard destroys is that hazard's rule (a falling block spares a
+// support; gas alone spares a camp). These functions only do it, the same way
+// for everyone: the state changes, the lists stay consistent, and one event
+// says what happened.
+
+import { NO_STRUCTURE, STRUCTURES } from '../data';
+import type { Vec3 } from '../data';
+import { campsAt } from './camps';
+import type { DestructionCause, GameEvent } from './events';
+import {
+  disarmCharge,
+  looseItemsAt,
+  removeCamp,
+  removeLooseItems,
+  setStructure,
+  structureAt,
+} from './state';
+import type { GameState } from './state';
+
+/**
+ * Destroy the structure in the cell `pos`, if there is one. Returns the code
+ * of what was destroyed, or `NO_STRUCTURE` if the cell held none (then
+ * nothing changes and no event is emitted).
+ *
+ * A destroyed explosive is also taken off `state.armed`, so it does not go
+ * off. Nothing is given back to the avatar.
+ */
+export function destroyStructure(
+  state: GameState,
+  pos: Vec3,
+  cause: DestructionCause,
+  events: GameEvent[],
+): number {
+  const structure = structureAt(state, pos);
+  if (structure === NO_STRUCTURE) {
+    return NO_STRUCTURE;
+  }
+  setStructure(state, pos, NO_STRUCTURE);
+  if (structure === STRUCTURES.explosive.code) {
+    disarmCharge(state, pos);
+  }
+  events.push({ type: 'structureDestroyed', pos: { ...pos }, structure, cause });
+  return structure;
+}
+
+/**
+ * Destroy every loose item lying in the cell `pos`. Emits one
+ * `looseItemsDestroyed` for each pile, in item-id order. Returns how many
+ * piles were destroyed.
+ */
+export function destroyLooseItems(
+  state: GameState,
+  pos: Vec3,
+  cause: DestructionCause,
+  events: GameEvent[],
+): number {
+  const piles = looseItemsAt(state, pos);
+  for (const pile of piles) {
+    removeLooseItems(state, pos, pile.item, pile.count);
+    events.push({
+      type: 'looseItemsDestroyed',
+      pos: { ...pos },
+      item: pile.item,
+      count: pile.count,
+      cause,
+    });
+  }
+  return piles.length;
+}
+
+/**
+ * Destroy every active camp that the cell `pos` belongs to (0014 item 30):
+ * the camp leaves `state.camps` and its stash is lost. Emits `campDestroyed`
+ * for each. Returns how many camps were destroyed.
+ *
+ * Call it for each cell the event touches: the cell water or lava enters,
+ * each exploding cell and the cells beside it, each cell a falling block
+ * passes through or rests in. It is cheap when there is no camp there.
+ */
+export function destroyCampsAt(
+  state: GameState,
+  pos: Vec3,
+  cause: DestructionCause,
+  events: GameEvent[],
+): number {
+  const camps = campsAt(state, pos);
+  for (const camp of camps) {
+    removeCamp(state, camp);
+    events.push({ type: 'campDestroyed', pos: { ...camp.pos }, cause });
+  }
+  return camps.length;
+}

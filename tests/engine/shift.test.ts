@@ -12,7 +12,6 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_LOADOUT_ID, LOADOUTS, SHIFT } from '../../src/data';
 import { applyAction, endShift, hashState, legalActions, previewCubePhase } from '../../src/engine';
 import type { GameEvent, GameState } from '../../src/engine';
-import { CUBE_PHASE_STEPS } from '../../src/engine/shift';
 import { act, buildState } from './helpers';
 import type { BuildStateOptions } from './helpers';
 
@@ -63,41 +62,8 @@ describe('endShift', () => {
     ]);
   });
 
-  it('runs the five cube-phase steps in the order of design doc 4', () => {
-    expect(CUBE_PHASE_STEPS.map((step) => step.name)).toEqual([
-      'supportAndFallingBlocks',
-      'fluidsFlow',
-      'gasSpreads',
-      'timersTick',
-      'applyDamage',
-    ]);
-  });
-
-  it('calls each cube-phase step once, in that order', () => {
-    // Swap every step's `run` for a recorder, end a shift, and put the real
-    // ones back (in `finally`, so a failure here cannot break later tests).
-    const originals = CUBE_PHASE_STEPS.map((step) => step.run);
-    const called: string[] = [];
-    try {
-      for (const step of CUBE_PHASE_STEPS) {
-        step.run = () => {
-          called.push(step.name);
-        };
-      }
-      endShift(surfaceState());
-    } finally {
-      CUBE_PHASE_STEPS.forEach((step, index) => {
-        step.run = originals[index] as (typeof originals)[number];
-      });
-    }
-    expect(called).toEqual([
-      'supportAndFallingBlocks',
-      'fluidsFlow',
-      'gasSpreads',
-      'timersTick',
-      'applyDamage',
-    ]);
-  });
+  // The cube phase's own tests (the order of its steps, recorded damage,
+  // health before air) are in cubePhase.test.ts.
 });
 
 describe('unspent AP (issue #32: no fuel refill)', () => {
@@ -272,7 +238,8 @@ describe('previewCubePhase', () => {
       const forecast = previewCubePhase(state);
       // The preview changes nothing.
       expect(hashState(state)).toBe(before);
-      expect(forecast.hazards).toEqual([]);
+      expect(forecast.countdowns).toEqual([]);
+      expect(forecast.flows).toEqual([]);
 
       const { state: after, events } = endShift(state);
       const upkeep = forecast.upkeep;

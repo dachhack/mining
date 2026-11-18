@@ -65,7 +65,17 @@ describe('createRun', () => {
     expect(state.size).toEqual(WORLD.size);
     expect(state.size).not.toBe(WORLD.size);
     const cells = cellCount(WORLD.size);
-    for (const array of [state.blocks, state.revealed, state.fluid, state.gas, state.structures]) {
+    for (const array of [
+      state.blocks,
+      state.revealed,
+      state.water,
+      state.lava,
+      state.lavaSource,
+      state.gas,
+      state.cracks,
+      state.structures,
+      state.tracesSeen,
+    ]) {
       expect(array).toBeInstanceOf(Uint8Array);
       expect(array.length).toBe(cells);
     }

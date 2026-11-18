@@ -3,21 +3,25 @@
 // `JSON.stringify(serialise(state))` is the save format, and it is also what
 // `hashState` hashes. So `serialise` must give the same output for two states
 // that mean the same thing: inventory entries are sorted and zero counts are
-// dropped, and loose items are merged (one entry per cell and item) and sorted.
+// dropped, loose items are merged (one entry per cell and item) and sorted, and
+// the armed charges and the camps are sorted (with each stash like the
+// inventory).
 
 import type { CubeSize, Vec3 } from '../data';
 import {
   STATE_VERSION,
+  canonicalArmed,
+  canonicalCamps,
   canonicalLooseItems,
   cellCount,
   compareStrings,
   inGrid,
   isSurface,
 } from './state';
-import type { GameState, LooseItems, RunStatus } from './state';
+import type { ArmedCharge, Camp, GameState, LooseItems, RunStatus } from './state';
 
 /**
- * A GameState with nothing in it that JSON cannot hold. The six cube arrays
+ * A GameState with nothing in it that JSON cannot hold. The nine cube arrays
  * are run-length encoded: `[value, runLength, value, runLength, ...]`. A cube
  * that is all stone becomes just `[2, 32768]`.
  */
@@ -30,18 +34,44 @@ export interface SerialisedState {
   size: CubeSize;
   blocks: number[];
   revealed: number[];
-  fluid: number[];
+  water: number[];
+  lava: number[];
+  lavaSource: number[];
   gas: number[];
+  cracks: number[];
   structures: number[];
   tracesSeen: number[];
-  avatar: { pos: Vec3; health: number };
+  avatar: { pos: Vec3; health: number; air: number; resting: boolean };
   ap: number;
   fuel: number;
   lampOil: number;
   shift: number;
   inventory: Record<string, number>;
   looseItems: LooseItems[];
+  armed: ArmedCharge[];
+  camps: Camp[];
   status: RunStatus;
+}
+
+/** A copy of an item-count dict with its keys sorted and zero counts dropped. */
+function sortedCounts(counts: Record<string, number>): Record<string, number> {
+  const sorted: Record<string, number> = {};
+  for (const item of Object.keys(counts).sort(compareStrings)) {
+    const count = counts[item] ?? 0;
+    if (count !== 0) {
+      sorted[item] = count;
+    }
+  }
+  return sorted;
+}
+
+/** Camps in canonical order, each stash sorted with zero counts dropped. */
+function serialiseCamps(camps: Camp[]): Camp[] {
+  return canonicalCamps(camps).map((camp) => ({
+    pos: camp.pos,
+    foundedShift: camp.foundedShift,
+    stash: sortedCounts(camp.stash),
+  }));
 }
 
 function runLengthEncode(cells: Uint8Array): number[] {
@@ -81,13 +111,7 @@ function runLengthDecode(encoded: number[], expectedLength: number, name: string
 
 /** A JSON-safe copy of `state`. Does not change `state`. */
 export function serialise(state: GameState): SerialisedState {
-  const inventory: Record<string, number> = {};
-  for (const item of Object.keys(state.inventory).sort(compareStrings)) {
-    const count = state.inventory[item] ?? 0;
-    if (count !== 0) {
-      inventory[item] = count;
-    }
-  }
+  const inventory = sortedCounts(state.inventory);
 
   // Already canonical if the state was only changed through the helpers in
   // state.ts; done again here so that the hash never depends on it.
@@ -102,13 +126,18 @@ export function serialise(state: GameState): SerialisedState {
     size: { x: state.size.x, y: state.size.y, z: state.size.z },
     blocks: runLengthEncode(state.blocks),
     revealed: runLengthEncode(state.revealed),
-    fluid: runLengthEncode(state.fluid),
+    water: runLengthEncode(state.water),
+    lava: runLengthEncode(state.lava),
+    lavaSource: runLengthEncode(state.lavaSource),
     gas: runLengthEncode(state.gas),
+    cracks: runLengthEncode(state.cracks),
     structures: runLengthEncode(state.structures),
     tracesSeen: runLengthEncode(state.tracesSeen),
     avatar: {
       pos: { x: state.avatar.pos.x, y: state.avatar.pos.y, z: state.avatar.pos.z },
       health: state.avatar.health,
+      air: state.avatar.air,
+      resting: state.avatar.resting,
     },
     ap: state.ap,
     fuel: state.fuel,
@@ -116,6 +145,8 @@ export function serialise(state: GameState): SerialisedState {
     shift: state.shift,
     inventory,
     looseItems,
+    armed: canonicalArmed(state.armed),
+    camps: serialiseCamps(state.camps),
     status:
       state.status.kind === 'active'
         ? { kind: 'active' }
@@ -126,8 +157,8 @@ export function serialise(state: GameState): SerialisedState {
 /**
  * Rebuild a GameState from the output of `serialise` (for example after
  * `JSON.parse`). Throws if the value is from another state version, its cube
- * arrays do not match its size, the avatar is outside the cube and its
- * surface, or the run status is not one this build knows. It does not check
+ * arrays do not match its size, the avatar, an armed charge or a camp is
+ * outside the cube, or the run status is not one this build knows. It does not check
  * every field: a save edited by hand can still be wrong in other ways.
  */
 export function deserialise(saved: SerialisedState): GameState {
@@ -149,6 +180,22 @@ export function deserialise(saved: SerialisedState): GameState {
   if (statusKind !== 'active' && statusKind !== 'ended') {
     throw new Error(`Saved state is damaged: unknown run status "${statusKind}"`);
   }
+  for (const charge of saved.armed) {
+    // `as string` for the same reason as the run status above.
+    const kind = charge.kind as string;
+    if (!inGrid(size, charge.pos) || (kind !== 'unstableOre' && kind !== 'explosive')) {
+      throw new Error(
+        `Saved state is damaged: bad armed charge "${kind}" at (${charge.pos.x}, ${charge.pos.y}, ${charge.pos.z})`,
+      );
+    }
+  }
+  for (const camp of saved.camps) {
+    if (!inGrid(size, camp.pos)) {
+      throw new Error(
+        `Saved state is damaged: a camp is at (${camp.pos.x}, ${camp.pos.y}, ${camp.pos.z}), outside the cube`,
+      );
+    }
+  }
   return {
     version: saved.version,
     seed: saved.seed,
@@ -158,17 +205,27 @@ export function deserialise(saved: SerialisedState): GameState {
     size,
     blocks: runLengthDecode(saved.blocks, cells, 'blocks'),
     revealed: runLengthDecode(saved.revealed, cells, 'revealed'),
-    fluid: runLengthDecode(saved.fluid, cells, 'fluid'),
+    water: runLengthDecode(saved.water, cells, 'water'),
+    lava: runLengthDecode(saved.lava, cells, 'lava'),
+    lavaSource: runLengthDecode(saved.lavaSource, cells, 'lavaSource'),
     gas: runLengthDecode(saved.gas, cells, 'gas'),
+    cracks: runLengthDecode(saved.cracks, cells, 'cracks'),
     structures: runLengthDecode(saved.structures, cells, 'structures'),
     tracesSeen: runLengthDecode(saved.tracesSeen, cells, 'tracesSeen'),
-    avatar: { pos: avatarPos, health: saved.avatar.health },
+    avatar: {
+      pos: avatarPos,
+      health: saved.avatar.health,
+      air: saved.avatar.air,
+      resting: saved.avatar.resting,
+    },
     ap: saved.ap,
     fuel: saved.fuel,
     lampOil: saved.lampOil,
     shift: saved.shift,
     inventory: { ...saved.inventory },
     looseItems: canonicalLooseItems(saved.looseItems),
+    armed: canonicalArmed(saved.armed),
+    camps: serialiseCamps(saved.camps),
     status:
       saved.status.kind === 'active'
         ? { kind: 'active' }

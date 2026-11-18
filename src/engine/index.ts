@@ -5,18 +5,25 @@
 //
 // This file is also the dispatcher: it owns what is common to every action
 // (copying the state, checking legality, spending AP, then gravity and
-// reveal) and hands the rest to one module per rule. Those modules are stubs
-// until M1 tasks 2 to 5 fill them in; each stub's doc comment is its contract.
+// reveal) and hands the rest to one module per rule. The modules of the M2
+// actions (supports, explosives, camp tools, camps, giving up) are stubs until
+// their tasks fill them in; each stub's doc comment is its contract
+// (decision note 0015).
 
-import { AVATAR, CONTRACT_IDS, SHIFT, WORLD, findLoadout } from '../data';
+import { AVATAR, CONTRACT_IDS, HAZARDS, SHIFT, WORLD, findLoadout } from '../data';
 import { actionKey } from './actionTypes';
 import type { Action } from './actionTypes';
+import { legalCampActions, applyCampAction } from './actions/camp';
+import { legalCampToolActions, applyCampToolAction } from './actions/campTools';
 import { legalCraftActions, applyCraft } from './actions/craft';
+import { legalGiveUpActions, applyGiveUp } from './actions/giveUp';
 import { legalDropActions, legalPickUpActions, applyDrop, applyPickUp } from './actions/items';
 import { legalLeaveActions, applyLeave } from './actions/leave';
 import { legalMineActions, applyMine } from './actions/mine';
 import { legalMoveActions, applyMove } from './actions/move';
+import { legalPlaceExplosiveActions, applyPlaceExplosive } from './actions/placeExplosive';
 import { legalPlaceLadderActions, applyPlaceLadder } from './actions/placeLadder';
+import { legalPlaceSupportActions, applyPlaceSupport } from './actions/placeSupport';
 import { legalPlaceTorchActions, applyPlaceTorch } from './actions/placeTorch';
 import type { FallKind, GameEvent } from './events';
 import { generateCube } from './generation/cube';
@@ -31,9 +38,12 @@ import type { GameState } from './state';
 
 /**
  * Changes whenever the rules or the shape of the state change, so that a play
- * log can say which engine it was played on. 0.2.0: no fuel refill (issue #32).
+ * log can say which engine it was played on. It is bumped once for each batch
+ * of such changes between two playtest rounds (CLAUDE.md).
+ * 0.2.0: no fuel refill (issue #32).
+ * 0.3.0: milestone M2, hazards and camps (0014 item 35; set by issue #50).
  */
-export const ENGINE_VERSION = '0.2.0';
+export const ENGINE_VERSION = '0.3.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
@@ -67,6 +77,7 @@ export function createRun(seed: number, contractId: string, loadoutId: string): 
 
   state.avatar.pos = { ...WORLD.startPosition };
   state.avatar.health = AVATAR.startHealth;
+  state.avatar.air = HAZARDS.air.max;
   state.shift = SHIFT.firstShiftNumber;
   state.ap = SHIFT.apPerShift;
   state.fuel = loadout.fuel;
@@ -98,10 +109,15 @@ export function legalActions(state: GameState): Action[] {
     ...legalMineActions(state),
     ...legalPlaceLadderActions(state),
     ...legalPlaceTorchActions(state),
+    ...legalPlaceSupportActions(state),
+    ...legalPlaceExplosiveActions(state),
+    ...legalCampToolActions(state),
     ...legalCraftActions(state),
     ...legalPickUpActions(state),
     ...legalDropActions(state),
+    ...legalCampActions(state),
     ...legalLeaveActions(state),
+    ...legalGiveUpActions(state),
   ];
   // An action the avatar cannot afford is not legal (0005 item 12). The rule
   // modules list actions without looking at AP; this is the one place it is
@@ -153,6 +169,31 @@ export function applyAction(state: GameState, action: Action): StepResult {
     case 'leave':
       applyLeave(next, action, events);
       break;
+    case 'placeSupport':
+      applyPlaceSupport(next, action, events);
+      break;
+    case 'placeExplosive':
+      applyPlaceExplosive(next, action, events);
+      break;
+    // Several `case` lines with one body: any of these types goes to the
+    // same module, which looks at `action.type` itself.
+    case 'placePump':
+    case 'placeVent':
+    case 'placeSafetyLamp':
+    case 'seal':
+    case 'scan':
+      applyCampToolAction(next, action, events);
+      break;
+    case 'foundCamp':
+    case 'rest':
+    case 'stashPut':
+    case 'stashTake':
+    case 'decommissionCamp':
+      applyCampAction(next, action, events);
+      break;
+    case 'giveUp':
+      applyGiveUp(next, action, events);
+      break;
   }
 
   // After any action: things fall, then light shows what is newly visible,
@@ -169,9 +210,14 @@ export function applyAction(state: GameState, action: Action): StepResult {
 }
 
 /**
- * End the player phase: run the cube phase, then upkeep (design doc 4).
- * Returns the new state and the events; `state` itself is not changed.
- * Throws if the run has already ended.
+ * End the player phase: run the cube phase, then upkeep (design doc 4; 0014
+ * items 1 and 2). Returns the new state and the events; `state` itself is not
+ * changed. Throws if the run has already ended.
+ *
+ * The order: the cube phase's steps (a) to (e) (shift.ts); `settle` once (the
+ * avatar and loose items fall if the phase took their floor); upkeep, if the
+ * avatar is still alive; reveal. The forecast for the next shift is not
+ * stored: `previewCubePhase` works it out from the new state when asked.
  */
 export function endShift(state: GameState): StepResult {
   if (!isRunActive(state)) {
@@ -182,6 +228,7 @@ export function endShift(state: GameState): StepResult {
 
   runCubePhase(next, events);
   // Nothing the cube phase does to the avatar's footing is the player's move.
+  // `settle` ends the run itself if the fall kills ("the death check").
   settle(next, events, 'uncontrolled');
   if (isRunActive(next)) {
     runUpkeep(next, events);
@@ -193,10 +240,10 @@ export function endShift(state: GameState): StepResult {
 }
 
 /**
- * What ending the shift now would do, for the end-shift preview: the cube
- * phase's effect on the hazards the player knows about (none until M2) and
- * upkeep's effect on fuel and lamp oil. Does not change `state`.
- * Throws if the run has already ended, as `endShift` does.
+ * What ending the shift now would do, for the end-shift preview (0014 item
+ * 4): the countdowns and flows the player can work out from what it sees
+ * (both empty until M2-6), and upkeep's effect on fuel and lamp oil. Does not
+ * change `state`. Throws if the run has already ended, as `endShift` does.
  */
 export function previewCubePhase(state: GameState): ShiftForecast {
   if (!isRunActive(state)) {
@@ -209,20 +256,40 @@ export function previewCubePhase(state: GameState): ShiftForecast {
 export { actionKey, sameAction } from './actionTypes';
 export type {
   Action,
+  CampAction,
+  CampToolAction,
   CraftAction,
+  DecommissionCampAction,
   DropAction,
+  FoundCampAction,
+  GiveUpAction,
   LeaveAction,
   MineAction,
   MoveAction,
   PickUpAction,
+  PlaceExplosiveAction,
   PlaceLadderAction,
+  PlacePumpAction,
+  PlaceSafetyLampAction,
+  PlaceSupportAction,
   PlaceTorchAction,
+  PlaceVentAction,
+  RestAction,
+  ScanAction,
+  SealAction,
+  StashPutAction,
+  StashTakeAction,
 } from './actionTypes';
+export { campCells, campsAt } from './camps';
 export type {
+  AirChangeReason,
   DamageCause,
+  DestructionCause,
   FallKind,
+  FluidKind,
   GameEvent,
   GaugeChangeReason,
+  RemovalReason,
   RunEndCause,
   RunOutcome,
 } from './events';
@@ -231,7 +298,13 @@ export { hashState } from './hash';
 export { canCarry, carriedWeight, carryCapacity } from './inventory';
 export { deserialise, serialise } from './serialise';
 export type { SerialisedState } from './serialise';
-export type { HazardForecast, ShiftForecast, UpkeepForecast } from './shift';
+// What the player sees of a cell (0014 item 3). Tools and the renderer read a
+// cell's water, lava, gas, cracks, structures and loose items through
+// `knownCell`, which answers `null` for a cell the player has not seen.
+export { knownCell } from './known';
+export type { KnownCell } from './known';
+export type { CountdownForecast } from './forecast';
+export type { ShiftForecast, UpkeepForecast } from './shift';
 export {
   blockAt,
   blockDefAt,
@@ -246,9 +319,18 @@ export {
   isSolid,
   isSurface,
   looseItemsAt,
+  stashEntries,
   structureAt,
 } from './state';
-export type { Avatar, GameState, LooseItems, RunStatus } from './state';
+export type {
+  ArmedCharge,
+  ArmedKind,
+  Avatar,
+  Camp,
+  GameState,
+  LooseItems,
+  RunStatus,
+} from './state';
 // Tells: the mineral traces the player has seen on rock near ore.
 export { showsMineralTraces, visibleMineralTraces } from './tells';
 // The seeded generator, for tools and tests that need random numbers of their

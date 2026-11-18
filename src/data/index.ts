@@ -5,7 +5,9 @@ import { BLOCKS } from './blocks';
 import { GENERATION } from './generation';
 import { ITEMS } from './items';
 import { CONTRACT_IDS, DEFAULT_LOADOUT_ID, LOADOUTS } from './loadouts';
-import { FIELD_RECIPES, GAUGES } from './recipes';
+import { CAMPS, CAMP_TOOLS } from './camps';
+import { HAZARDS } from './hazards';
+import { CAMP_RECIPES, FIELD_RECIPES, GAUGES } from './recipes';
 import { ACTION_COSTS, SHIFT } from './shift';
 import { STRUCTURES } from './structures';
 import { TELLS } from './tells';
@@ -20,7 +22,9 @@ export { ITEMS } from './items';
 export type { ItemId } from './items';
 export { CONTRACT_IDS, DEFAULT_LOADOUT_ID, LOADOUTS } from './loadouts';
 export type { LoadoutId } from './loadouts';
-export { FIELD_RECIPES, GAUGES } from './recipes';
+export { CAMPS, CAMP_TOOLS } from './camps';
+export { HAZARDS } from './hazards';
+export { CAMP_RECIPES, FIELD_RECIPES, GAUGES } from './recipes';
 export type { GaugeId } from './recipes';
 export { ACTION_COSTS, SHIFT } from './shift';
 export { NO_STRUCTURE, STRUCTURES } from './structures';
@@ -39,6 +43,10 @@ export const GAME_DATA: GameData = {
   structures: STRUCTURES,
   gauges: GAUGES,
   recipes: FIELD_RECIPES,
+  campRecipes: CAMP_RECIPES,
+  hazards: HAZARDS,
+  camps: CAMPS,
+  campTools: CAMP_TOOLS,
   avatar: AVATAR,
   tells: TELLS,
   shift: SHIFT,
@@ -89,4 +97,9 @@ export function findLoadout(loadoutId: string): LoadoutDef | undefined {
 /** The field recipe with this id, or `undefined` if there is none. */
 export function findRecipe(recipeId: string): RecipeDef | undefined {
   return FIELD_RECIPES.find((recipe) => recipe.id === recipeId);
+}
+
+/** The camp recipe with this id, or `undefined` if there is none. */
+export function findCampRecipe(recipeId: string): RecipeDef | undefined {
+  return CAMP_RECIPES.find((recipe) => recipe.id === recipeId);
 }

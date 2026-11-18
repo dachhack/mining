@@ -16,6 +16,7 @@ import {
   AVATAR,
   BLOCKS,
   DEFAULT_LOADOUT_ID,
+  HAZARDS,
   SHIFT,
   STRUCTURES,
   WORLD,
@@ -23,8 +24,27 @@ import {
 } from '../../src/data';
 import type { BlockId, StructureId, Vec3 } from '../../src/data';
 import { applyAction, legalActions } from '../../src/engine';
-import type { Action, GameState, LooseItems, RunStatus, StepResult } from '../../src/engine';
-import { blankState, canonicalLooseItems, cellIndex, setStructure } from '../../src/engine/state';
+import type {
+  Action,
+  ArmedCharge,
+  Camp,
+  GameState,
+  LooseItems,
+  RunStatus,
+  StepResult,
+} from '../../src/engine';
+import {
+  blankState,
+  canonicalArmed,
+  canonicalCamps,
+  canonicalLooseItems,
+  cellIndex,
+  setCrackTimer,
+  setGas,
+  setLava,
+  setStructure,
+  setWater,
+} from '../../src/engine/state';
 
 /** The character that stands for each block in a layer string. */
 export const BLOCK_CHARS: Record<string, BlockId> = {
@@ -40,6 +60,8 @@ export const BLOCK_CHARS: Record<string, BlockId> = {
   U: 'unstableOre',
   r: 'relic',
   k: 'keystone',
+  R: 'rubble',
+  S: 'sealed',
 };
 
 // A field marked `?` may be left out; it then reads as `undefined`, and
@@ -56,6 +78,8 @@ export interface BuildStateOptions {
   avatar?: Vec3;
   /** Default: full health from the data. */
   health?: number;
+  /** Default: full air from the data. */
+  air?: number;
   /** Default: a full shift's AP from the data. */
   ap?: number;
   /** Default: 10, enough that tests which do not care never run out. */
@@ -70,6 +94,24 @@ export interface BuildStateOptions {
   ladders?: Vec3[];
   /** Cells with a torch in them. */
   torches?: Vec3[];
+  /** Cells with a support in them. */
+  supports?: Vec3[];
+  /** Any other structure, by its id in src/data/structures.ts. */
+  structures?: { pos: Vec3; structure: StructureId }[];
+  /** Cells holding one unit of water. */
+  water?: Vec3[];
+  /** Cells holding one unit of lava that is not a source. */
+  lava?: Vec3[];
+  /** Cells holding lava that is a source (0014 item 16). */
+  lavaSources?: Vec3[];
+  /** Cells holding gas, with how many units. */
+  gas?: { pos: Vec3; units: number }[];
+  /** Cracked blocks, with their stored timer (0014 item 7). */
+  cracks?: { pos: Vec3; timer: number }[];
+  /** Armed unstable ore and placed explosives. Does not place the explosive's structure. */
+  armed?: ArmedCharge[];
+  /** Active camps. */
+  camps?: Camp[];
   /** Mark every cell as revealed. Default: false (nothing revealed). */
   revealAll?: boolean;
   seed?: number;
@@ -114,9 +156,32 @@ export function buildState(options: BuildStateOptions): GameState {
   }
   placeStructures(state, options.ladders ?? [], 'ladder');
   placeStructures(state, options.torches ?? [], 'torch');
+  placeStructures(state, options.supports ?? [], 'support');
+  for (const entry of options.structures ?? []) {
+    placeStructures(state, [entry.pos], entry.structure);
+  }
+  for (const pos of options.water ?? []) {
+    setWater(state, pos, HAZARDS.water.unitsPerCell);
+  }
+  for (const pos of options.lava ?? []) {
+    setLava(state, pos, HAZARDS.lava.unitsPerCell);
+  }
+  for (const pos of options.lavaSources ?? []) {
+    setLava(state, pos, HAZARDS.lava.unitsPerCell, true);
+  }
+  for (const entry of options.gas ?? []) {
+    setGas(state, entry.pos, entry.units);
+  }
+  for (const entry of options.cracks ?? []) {
+    setCrackTimer(state, entry.pos, entry.timer);
+  }
+  // Sorted, as the engine keeps the lists.
+  state.armed = canonicalArmed(options.armed ?? []);
+  state.camps = canonicalCamps(options.camps ?? []);
 
   state.avatar.pos = { ...(options.avatar ?? { x: 0, y: 0, z: WORLD.surfaceZ }) };
   state.avatar.health = options.health ?? AVATAR.startHealth;
+  state.avatar.air = options.air ?? HAZARDS.air.max;
   state.ap = options.ap ?? SHIFT.apPerShift;
   state.fuel = options.fuel ?? 10;
   state.lampOil = options.lampOil ?? 10;

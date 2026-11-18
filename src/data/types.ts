@@ -56,6 +56,18 @@ export interface BlockDef {
   mineCostWithDrill: number | null;
   /** Items the block gives when mined. Empty for none. */
   yields: ItemStack[];
+  /**
+   * How many steps along its own layer the block can hang from a block that
+   * rests on something (design doc 6.1; 0014 item 5). `null` for open space
+   * and bedrock, which never fall.
+   */
+  span: number | null;
+  /**
+   * How long an unlined vertical run of tight cells may be when this block is
+   * the weakest in its walls (0014 item 10). `null` for open space and
+   * bedrock, which are ignored.
+   */
+  shaftLimit: number | null;
 }
 
 /** One kind of carried item. Fuel and lamp oil are gauges, not items (0005 item 18). */
@@ -64,7 +76,7 @@ export interface ItemDef {
   weight: number;
 }
 
-/** Something placed in a cell that is not a block: a ladder, a torch, a support. */
+/** Something placed in a cell that is not a block: a ladder, a torch, a support, a pump, ... */
 export interface StructureDef {
   /** The number stored in the cube's structure array. 0 means "nothing here". */
   code: number;
@@ -83,7 +95,7 @@ export interface StructureDef {
 export type RecipeOutput =
   { kind: 'item'; item: string; count: number } | { kind: 'gauge'; gauge: string; amount: number };
 
-/** One field recipe (design doc 7.1). */
+/** One recipe: a field recipe (design doc 7.1) or a camp recipe (7.2). */
 export interface RecipeDef {
   id: string;
   name: string;
@@ -137,6 +149,21 @@ export interface ActionCostData {
   pickUp: number;
   drop: number;
   leave: number;
+  placeSupport: number;
+  placeExplosive: number;
+  placePump: number;
+  placeVent: number;
+  placeSafetyLamp: number;
+  /** Using sealant on a cell (0014 item 12). */
+  seal: number;
+  scan: number;
+  /** One camp recipe (0014 item 27). */
+  campCraft: number;
+  /** Putting into or taking from a camp's stash. */
+  stash: number;
+  decommissionCamp: number;
+  /** "Give up" (0014 item 23). */
+  giveUp: number;
 }
 
 /** A starting kit (0005 item 22). */
@@ -203,9 +230,100 @@ export interface MineralTracesDef {
   shownOnBlocks: string[];
 }
 
+/** How near each hazard must be for a block to show its tell (0014 item 18). */
+export interface HazardTellsDef {
+  /** Damp stone: within this many steps of water. */
+  dampStoneDistance: number;
+  /** Pitted rock: within this many steps of gas. */
+  pittedRockDistance: number;
+  /** Warm glow: within this many steps of lava. */
+  warmGlowDistance: number;
+}
+
 /** What blocks show about things hidden near them (design doc 6). */
 export interface TellsData {
   mineralTraces: MineralTracesDef;
+  hazards: HazardTellsDef;
+}
+
+/** Cave-in numbers that are not per material (0014 items 6 to 10). See hazards.ts. */
+export interface CaveInData {
+  crackTimer: number;
+  rockfallDamage: number;
+  supportLiningReach: number;
+  tightCellSolidSides: number;
+  supportHoldSolidSides: number;
+}
+
+export interface WaterData {
+  unitsPerCell: number;
+  floodedMoveExtraAp: number;
+  pumpUnitsPerShift: number;
+  pumpReach: number;
+}
+
+export interface GasData {
+  pocketUnitsPerCell: number;
+  ventReach: number;
+}
+
+export interface ExplosionData {
+  damage: number;
+}
+
+export interface LavaData {
+  unitsPerCell: number;
+  flowEveryShifts: number;
+  sourcePocketCellsOver: number;
+  damageInCell: number;
+  damageBeside: number;
+}
+
+export interface AirData {
+  /** A full gauge of air (design doc 5.1). */
+  max: number;
+  lossPerShift: number;
+}
+
+export interface ForecastData {
+  /** A block id: what an unrevealed cell is taken to be by the forecast (0014 item 4). */
+  unseenBlock: string;
+}
+
+/** Every hazard number (design doc 6; decision note 0014). See hazards.ts for what each means. */
+export interface HazardData {
+  caveIn: CaveInData;
+  water: WaterData;
+  gas: GasData;
+  explosion: ExplosionData;
+  lava: LavaData;
+  air: AirData;
+  forecast: ForecastData;
+}
+
+/** Camp numbers (design doc 8; 0014 items 25 to 30). See camps.ts for what each means. */
+export interface CampData {
+  /** An item id. */
+  kitItem: string;
+  maxKitsCarried: number;
+  halfWidth: number;
+  height: number;
+  foundMinAp: number;
+  restMinAp: number;
+  upkeepFuel: number;
+  upkeepEveryShifts: number;
+  airLineMaxBadStretch: number;
+}
+
+/** Numbers of the camp-made tools (0014 item 31). See camps.ts. */
+export interface CampToolData {
+  /** Item ids. */
+  drillItem: string;
+  sealantItem: string;
+  scanChargeItem: string;
+  scanChargesPerScan: number;
+  scanReach: number;
+  scanRegionRadius: number;
 }
 
 /** Everything in `src/data`, gathered so that it can be validated in one go. */
@@ -217,7 +335,13 @@ export interface GameData {
   structures: Record<string, StructureDef>;
   /** The names of the gauges a recipe may fill. */
   gauges: string[];
+  /** Field recipes (design doc 7.1). */
   recipes: RecipeDef[];
+  /** Camp recipes (design doc 7.2). */
+  campRecipes: RecipeDef[];
+  hazards: HazardData;
+  camps: CampData;
+  campTools: CampToolData;
   avatar: AvatarData;
   tells: TellsData;
   shift: ShiftData;

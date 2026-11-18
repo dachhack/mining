@@ -5,8 +5,10 @@
 // work out what changed. Events carry no information the state does not; they
 // are a record, not a second source of truth.
 //
-// All the events M1 needs are defined here, so that the tasks filling in the
-// rule modules do not have to edit this shared file.
+// All the events M1 and M2 need are defined here, so that the tasks filling
+// in the rule modules do not have to edit this shared file. The M2 events
+// (from `blockCracked` down) were added by the M2 skeleton (issue #50;
+// decision note 0015); nothing emits one until its task is built.
 
 import type { Vec3 } from '../data';
 
@@ -14,14 +16,37 @@ import type { Vec3 } from '../data';
 export type RunOutcome = 'fullSuccess' | 'partial' | 'salvage' | 'death';
 
 /**
- * Why a run ended. M1 has three: the avatar left from the surface (salvage),
- * died of a fall, or ran out of fuel at upkeep. M2 adds the other deaths of
- * design doc 5.3.
+ * Why a run ended: the avatar left from the surface (salvage), or one of the
+ * deaths of design doc 5.3 (0014 item 22).
  */
-export type RunEndCause = 'left' | 'fell' | 'outOfFuel';
+export type RunEndCause =
+  'left' | 'fell' | 'outOfFuel' | 'crushed' | 'drowned' | 'suffocated' | 'burned' | 'entombed';
 
-/** Why the avatar took damage. Only falls hurt in M1 (0005 item 8). */
-export type DamageCause = 'fall';
+/**
+ * Why the avatar took damage: a fall, a falling block, lava (in its cell or
+ * beside it), or an explosion (design doc 5.1; 0014 items 8, 15, 16).
+ */
+export type DamageCause = 'fall' | 'rockfall' | 'lava' | 'explosion';
+
+/** The two fluids. They flow by the same rules (0014 items 12 and 16). */
+export type FluidKind = 'water' | 'lava';
+
+/**
+ * What destroyed a structure, a camp, or loose items:
+ * - `rockfall`: a falling block passed through the cell or came to rest in it;
+ * - `water`, `lava`: the fluid entered the cell;
+ * - `explosion`: the cell exploded, or was beside one that did;
+ * - `noHold`: a support with nothing left to stand against (0014 item 6);
+ * - `sealed`: sealant turned the cell to rock (0014 item 12).
+ */
+export type DestructionCause = 'rockfall' | 'water' | 'lava' | 'explosion' | 'noHold' | 'sealed';
+
+/** Why water, lava or gas left the cube without moving to another cell. */
+export type RemovalReason =
+  'pumped' | 'vented' | 'burnt' | 'reachedSurface' | 'buried' | 'sealed' | 'turnedToStone';
+
+/** Why the air gauge changed. */
+export type AirChangeReason = 'noAir' | 'refilled' | 'rested';
 
 /**
  * The two kinds of descent (design doc 5.2, decision note 0010):
@@ -78,4 +103,59 @@ export type GameEvent =
   /** Lamp oil changed by `delta` and is now `lampOil`. */
   | { type: 'lampOilChanged'; delta: number; lampOil: number; reason: GaugeChangeReason }
   /** The run is over. */
-  | { type: 'runEnded'; outcome: RunOutcome; cause: RunEndCause };
+  | { type: 'runEnded'; outcome: RunOutcome; cause: RunEndCause }
+
+  // --- M2: hazards and camps ---
+
+  /**
+   * The block at `pos` (code `block`) cracked, or its stored timer changed
+   * (0014 item 7). `timer` is the stored timer; the number shown is `timer + 1`.
+   */
+  | { type: 'blockCracked'; pos: Vec3; block: number; timer: number }
+  /**
+   * A cracked block fell from `from` and stopped at `to` (0014 item 8).
+   * `block` is the code of what fell. `rubble` is true if it became rubble at
+   * `to`, false if it broke up there (on a support, or in the avatar's cell).
+   */
+  | { type: 'blockFell'; from: Vec3; to: Vec3; block: number; rubble: boolean }
+  /**
+   * The block at `pos` (code `block`) was destroyed with no yield: unstable
+   * ore going off, or rock beside an explosive (0014 items 15 and 17).
+   */
+  | { type: 'blockDestroyed'; pos: Vec3; block: number }
+  /** One unit of water or lava moved from one cell to another. */
+  | { type: 'fluidMoved'; fluid: FluidKind; from: Vec3; to: Vec3 }
+  /** The water or lava in the cell `pos` is gone. */
+  | { type: 'fluidRemoved'; fluid: FluidKind; pos: Vec3; reason: RemovalReason }
+  /** Water met lava at `pos`, and the cell is now stone (0014 item 16). */
+  | { type: 'stoneFormed'; pos: Vec3 }
+  /** `units` of gas moved from one cell to another (0014 item 13). */
+  | { type: 'gasMoved'; from: Vec3; to: Vec3; units: number }
+  /** `units` of gas in the cell `pos` are gone. */
+  | { type: 'gasRemoved'; pos: Vec3; units: number; reason: RemovalReason }
+  /** The unstable ore at `pos` was armed by mining beside it (0014 item 17). */
+  | { type: 'oreArmed'; pos: Vec3 }
+  /** One explosion: all of `cells` went off together (0014 item 15). */
+  | { type: 'exploded'; cells: Vec3[] }
+  /** The structure (its code is `structure`) in the cell `pos` was destroyed. */
+  | { type: 'structureDestroyed'; pos: Vec3; structure: number; cause: DestructionCause }
+  /** Loose items lying in the cell `pos` were destroyed. */
+  | { type: 'looseItemsDestroyed'; pos: Vec3; item: string; count: number; cause: DestructionCause }
+  /** The open cell `pos` was sealed with sealant and is now solid (0014 item 12). */
+  | { type: 'cellSealed'; pos: Vec3 }
+  /** The scanner revealed the region centred on `centre` (0014 item 31). */
+  | { type: 'scanned'; centre: Vec3 }
+  /** Air changed by `delta` and is now `air`. */
+  | { type: 'airChanged'; delta: number; air: number; reason: AirChangeReason }
+  /** Health was restored by `amount` (resting at a camp) and is now `health`. */
+  | { type: 'healthRestored'; amount: number; health: number }
+  /** A camp was founded; `pos` is its `Camp.pos`. */
+  | { type: 'campFounded'; pos: Vec3 }
+  /** The camp at `pos` was destroyed, and its stash with it (0014 item 30). */
+  | { type: 'campDestroyed'; pos: Vec3; cause: DestructionCause }
+  /** The camp at `pos` was decommissioned; its stash now lies loose (0014 item 28). */
+  | { type: 'campDecommissioned'; pos: Vec3 }
+  /** Items went from the inventory into the stash of the camp at `camp`. */
+  | { type: 'itemStashed'; camp: Vec3; item: string; count: number }
+  /** Items went from the stash of the camp at `camp` into the inventory. */
+  | { type: 'itemUnstashed'; camp: Vec3; item: string; count: number };

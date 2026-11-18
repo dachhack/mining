@@ -228,6 +228,26 @@ function describeAction(state: GameState, action: Action): string {
     }
     case 'leave':
       return 'Leave the cube with what you carry (ends the run alive)';
+    // The M2 actions. The engine offers none of them yet (their modules are
+    // stubs; decision note 0015), so these plain lines are never shown. The
+    // play-tool task (M2-6) gives each its wording.
+    case 'placeSupport':
+    case 'placeExplosive':
+    case 'placePump':
+    case 'placeVent':
+    case 'placeSafetyLamp':
+    case 'seal':
+      return `${action.type} in ${placeWhere(here, action.target)}`;
+    case 'scan':
+      return `scan around x${action.centre.x} y${action.centre.y} ${layerName(action.centre.z)}`;
+    case 'stashPut':
+    case 'stashTake':
+      return `${action.type} ${action.count} ${itemDef(action.item).name}`;
+    case 'foundCamp':
+    case 'rest':
+    case 'decommissionCamp':
+    case 'giveUp':
+      return action.type;
   }
 }
 
@@ -309,6 +329,24 @@ export function choiceName(state: GameState, entry: LogEntry): string {
         : `drop-all-${idInLowerCase(entry.item)}`;
     case 'leave':
       return 'leave';
+    // The M2 actions: never offered yet (see `describeAction`). M2-6 names them.
+    case 'placeSupport':
+    case 'placeExplosive':
+    case 'placePump':
+    case 'placeVent':
+    case 'placeSafetyLamp':
+    case 'seal':
+      return `${idInLowerCase(entry.type)}-${whereShort(here, entry.target)}`;
+    case 'scan':
+      return `scan-${whereShort(here, entry.centre)}`;
+    case 'stashPut':
+    case 'stashTake':
+      return `${idInLowerCase(entry.type)}-${entry.count}-${idInLowerCase(entry.item)}`;
+    case 'foundCamp':
+    case 'rest':
+    case 'decommissionCamp':
+    case 'giveUp':
+      return idInLowerCase(entry.type);
   }
 }
 
