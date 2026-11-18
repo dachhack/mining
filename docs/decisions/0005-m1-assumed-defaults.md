@@ -30,11 +30,12 @@ Section numbers refer to `docs/game-design-doc.md`.
 10. **Diagonal mining (Q5).** Mineable cells are the 4 orthogonal neighbours, the cell below, the 4 diagonals on the avatar's level, and the 8 cells around the one below: 17 in all. No line-of-sight test: a diagonal can be mined even if both cells it shares an edge with are solid, as 4.1 is written.
     - **Reach reveals (Q22).** The 17 mineable cells and the cell overhead are always revealed, whatever the light: the miner can inspect what the pick can reach. Without this, the diagonal cells would usually be unknown rock (none of their faces touches a lit open cell), and their AP cost in the action list would leak their type. Only revealed blocks can be mined, which with this rule is every block in reach.
     - **Looking over an edge (Q40).** The cells a drop is judged by (item 7) are revealed in the same way: the cells straight below each open orthogonal neighbour, and below the avatar when it is on a ladder, down to the first solid block or one cell past the longest drop a move may choose. Without this the move list would leak them when the lamp is out (issue #15).
+    - **Changed by 0010 (issue #33, "light matters").** The two points above now hold only while the lamp is lit. With the lamp out, reach reveals only the six cells that share a face with the avatar's, the avatar does not look over an edge, and a move is offered only when every cell it is judged by is revealed. See `0010-light-matters.md`.
 11. **Mining overhead (Q4).** Not a legal action in M1, because supports cannot be placed until M2. Proposed for M2: a support in the avatar's own cell allows it.
 12. **A block is mined in one action.** If the avatar has fewer AP than the block costs, mining it is not legal this shift.
 13. **Light (Q6).** A cell is lit if it is on the surface, or can be reached from the avatar through open cells in at most `lightRadius` steps (6-connected flood fill, so light does not pass through rock). A placed torch lights cells the same way from its own cell, out to `torchLightRadius` (3, the same as the lamp).
 14. **Reveal (Q6).** A block is revealed when any of its faces touches a lit open cell. Once revealed it stays revealed. So the top layer is revealed at the start.
-15. **Lamp oil (Q11).** The lamp burns 1 oil every 4 shifts at upkeep. With oil the light radius is 3; with none it is 1.
+15. **Lamp oil (Q11).** The lamp burns 1 oil every 4 shifts at upkeep. With oil the light radius is 3; with none it is 1. (Since 0010: with none it is 0, the avatar's own cell.)
 
 ### Items and weight
 

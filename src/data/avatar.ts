@@ -6,7 +6,11 @@ export const AVATAR: AvatarData = {
   startHealth: 10,
   carryCapacity: 20,
   lightRadiusWithOil: 3,
-  lightRadiusWithoutOil: 1,
+  // 0: with the lamp out only the miner's own cell counts as lit, so it knows
+  // just the six cells it touches (issue #33; decision note 0010). The move
+  // list is safe at 0 because every move checks that the cells it is judged
+  // by are revealed (this replaces the "at least 1" plan of issue #19).
+  lightRadiusWithoutOil: 0,
   torchLightRadius: 3,
   freeFallBlocks: 2,
   fallDamagePerBlock: 2,

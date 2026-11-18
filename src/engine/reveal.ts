@@ -1,9 +1,13 @@
-// Light and reveal (design doc 3 and 5.1; 0005 items 10, 13, 14 and 15).
+// Light and reveal (design doc 3 and 5.1; 0005 items 10, 13, 14 and 15;
+// decision note 0010, "light matters").
 //
 // Three things reveal a cell:
 // - light: the cell is lit, or shares a face with a lit cell;
-// - reach: the cell is one the avatar's pick can reach, or the one overhead;
-// - looking over an edge: the cell is one a drop is judged by (question 40).
+// - reach: with the lamp lit, the cell is one the avatar's pick can reach, or
+//   the one overhead; with the lamp out, only the six cells that share a face
+//   with the avatar's own (it works by touch);
+// - looking over an edge, with the lamp lit only: the cell is one a drop is
+//   judged by (question 40).
 //
 // Which cells are lit is worked out afresh each time and never stored. Only
 // the result, `state.revealed`, is kept, and a revealed cell stays revealed.
@@ -26,9 +30,14 @@ import {
 } from './state';
 import type { GameState } from './state';
 
+/** True while the miner's lamp burns: there is lamp oil left (0010). */
+export function isLampLit(state: GameState): boolean {
+  return state.lampOil > 0;
+}
+
 /** How far the avatar's lamp reaches now: less once the lamp oil is gone (0005 item 15). */
 export function avatarLightRadius(state: GameState): number {
-  return state.lampOil > 0 ? AVATAR.lightRadiusWithOil : AVATAR.lightRadiusWithoutOil;
+  return isLampLit(state) ? AVATAR.lightRadiusWithOil : AVATAR.lightRadiusWithoutOil;
 }
 
 /** The cells holding a placed torch, in the order the cube stores them. */
@@ -89,6 +98,10 @@ function positionKey(pos: Vec3): string {
  * extension of "reach reveals", 0005 item 10). These are the cells a drop is
  * judged by in actions/move.ts, so that the move list never depends on a
  * cell the player has not seen, whatever the light (issue #15).
+ *
+ * Looking needs light: with the lamp out the avatar sees nothing over an
+ * edge, and `updateReveal` does not call this (0010). The moves then check
+ * for themselves that every cell they are judged by is revealed.
  *
  * The avatar looks down two kinds of column:
  * - the one under each open sideways neighbour (a walk off an edge);
@@ -154,10 +167,13 @@ export function edgeLookCells(state: GameState): Vec3[] {
  * - A cell is revealed when it is lit or one of its faces touches a lit open
  *   cell (0005 item 14). That goes for open cells as well as solid blocks: the
  *   player sees that the tunnel goes on one cell past the edge of the light.
- * - The cells within the avatar's reach, and the one overhead, are always
- *   revealed (0005 item 10).
- * - So are the cells the avatar sees by looking over an edge (question 40;
- *   see `edgeLookCells`).
+ * - With the lamp lit, the cells within the avatar's reach and the one
+ *   overhead are revealed (0005 item 10), and so are the cells the avatar
+ *   sees by looking over an edge (question 40; see `edgeLookCells`).
+ * - With the lamp out, the miner works by touch (0010): only the six cells
+ *   that share a face with its own are revealed by reach, and looking over
+ *   an edge reveals nothing. Light from a torch or from the sky still
+ *   reveals what it reaches, as above.
  * - Only cells inside the grid have a revealed flag; the rest are skipped.
  * - Once revealed, a cell stays revealed.
  */
@@ -192,15 +208,24 @@ export function updateReveal(state: GameState, events: GameEvent[]): void {
     }
   }
 
-  // Reach: what the pick can touch, and the cell overhead.
-  for (const offset of MINE_REACH_OFFSETS) {
-    reveal(offsetPosition(state.avatar.pos, offset));
-  }
-  reveal(offsetPosition(state.avatar.pos, { x: 0, y: 0, z: -1 }));
+  if (isLampLit(state)) {
+    // Reach: what the pick can touch, and the cell overhead.
+    for (const offset of MINE_REACH_OFFSETS) {
+      reveal(offsetPosition(state.avatar.pos, offset));
+    }
+    reveal(offsetPosition(state.avatar.pos, { x: 0, y: 0, z: -1 }));
 
-  // Looking over an edge: the cells a drop is judged by.
-  for (const pos of edgeLookCells(state)) {
-    reveal(pos);
+    // Looking over an edge: the cells a drop is judged by.
+    for (const pos of edgeLookCells(state)) {
+      reveal(pos);
+    }
+  } else {
+    // By touch: the six cells that share a face with the avatar's own. This
+    // is written out, not left to the light radius, so that it holds whatever
+    // `AVATAR.lightRadiusWithoutOil` is.
+    for (const offset of FACE_OFFSETS) {
+      reveal(offsetPosition(state.avatar.pos, offset));
+    }
   }
 
   // Plain numeric sort; without the function, JavaScript sorts numbers as text.

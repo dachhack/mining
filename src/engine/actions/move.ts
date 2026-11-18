@@ -1,11 +1,11 @@
-// Moving the avatar (design doc 4.1; decision note 0005 items 6 and 7).
+// Moving the avatar (design doc 4.1; decision note 0005 items 6 and 7; 0010).
 
 import { ACTION_COSTS, AVATAR } from '../../data';
 import type { Vec3 } from '../../data';
 import type { MoveAction } from '../actionTypes';
 import type { GameEvent } from '../events';
-import { avatarFallDistance, cellBelow, hasLadder } from '../footing';
-import { isOpen } from '../state';
+import { cellBelow, hasLadder, knownFallDistance } from '../footing';
+import { isOpen, isRevealed } from '../state';
 import type { GameState } from '../state';
 
 /**
@@ -43,6 +43,21 @@ function moveTo(to: Vec3, drop: number): MoveAction {
  *   the cell it started in.
  * - No diagonal moves. The edge of the surface and of the cube need no check
  *   of their own: `blockAt` answers "bedrock" for everything beyond them.
+ * - A move is offered only when every cell it is judged by is revealed
+ *   (issue #33; 0010), so the list never depends on a cell the player has
+ *   not seen. With the lamp lit, `updateReveal` reveals all of those cells
+ *   and this removes nothing. With the lamp out it removes: a walk into a
+ *   cell whose floor (or the drop under it) is not revealed, a step up onto
+ *   a cell that is not revealed, and a climb down off the foot of a ladder
+ *   when the drop under it is not revealed. The cells each move is judged by:
+ *   - walk: the neighbour; then, unless it holds a ladder, the cells under it
+ *     in turn down to the first solid one, at most
+ *     `AVATAR.maxChosenDropBlocks + 1` of them;
+ *   - step up: the neighbour, the cell on top of it, the cell overhead;
+ *   - climb up: the cell overhead;
+ *   - climb down: the cell below; then, unless it holds a ladder, the cells
+ *     under it in turn down to the first solid one, at most
+ *     `AVATAR.maxChosenDropBlocks` of them.
  *
  * Contract:
  * - `drop` is the number of blocks the avatar falls after arriving in `to`
@@ -60,19 +75,37 @@ export function legalMoveActions(state: GameState): MoveAction[] {
   const here = state.avatar.pos;
   const actions: MoveAction[] = [];
 
+  // The longest drop a walk may end in. A climb down has already gone one
+  // block down by the time the avatar lets go of the ladder, so one less.
+  const longestWalkDrop = AVATAR.maxChosenDropBlocks;
+  const longestClimbDrop = AVATAR.maxChosenDropBlocks - 1;
+
   for (const step of SIDEWAYS) {
     const beside = { x: here.x + step.x, y: here.y + step.y, z: here.z };
+    if (!isRevealed(state, beside)) {
+      // Cannot happen in a state the engine produced (the cells touching the
+      // avatar's are always revealed), but then nothing may be offered.
+      continue;
+    }
     if (isOpen(state, beside)) {
-      // Walk. `drop` is 0 when the cell has footing.
-      const drop = avatarFallDistance(state, beside);
-      if (drop <= AVATAR.maxChosenDropBlocks) {
+      // Walk. `drop` is 0 when the cell has footing, and `null` when the
+      // drop cannot be judged from what the player has seen.
+      const drop = knownFallDistance(state, beside, longestWalkDrop);
+      if (drop !== null && drop <= longestWalkDrop) {
         actions.push(moveTo(beside, drop));
       }
     } else {
       // Step up onto the solid neighbour, if there is room above it and
-      // above the avatar's own head.
+      // above the avatar's own head. Each cell is tested for "revealed"
+      // before its content is read.
       const onTop = cellAbove(beside);
-      if (isOpen(state, onTop) && isOpen(state, cellAbove(here))) {
+      const overhead = cellAbove(here);
+      if (
+        isRevealed(state, onTop) &&
+        isOpen(state, onTop) &&
+        isRevealed(state, overhead) &&
+        isOpen(state, overhead)
+      ) {
         actions.push(moveTo(onTop, 0));
       }
     }
@@ -80,21 +113,22 @@ export function legalMoveActions(state: GameState): MoveAction[] {
 
   if (hasLadder(state, here)) {
     const above = cellAbove(here);
-    if (isOpen(state, above) && hasLadder(state, above)) {
+    if (isRevealed(state, above) && isOpen(state, above) && hasLadder(state, above)) {
       actions.push(moveTo(above, 0));
     }
 
     const below = cellBelow(here);
-    if (isOpen(state, below)) {
-      // Stepping off the bottom of a ladder: the one block climbed down
-      // counts towards the longest drop a player may choose.
-      const drop = avatarFallDistance(state, below);
-      // A ladder below is footing, so `drop` is then 0 and the second test
-      // is already true with today's data. The first test is kept because it
-      // is how 0005 item 6 words the rule, and it would decide if
-      // `maxChosenDropBlocks` were ever set to 0.
-      if (hasLadder(state, below) || 1 + drop <= AVATAR.maxChosenDropBlocks) {
-        actions.push(moveTo(below, drop));
+    if (isRevealed(state, below) && isOpen(state, below)) {
+      if (hasLadder(state, below)) {
+        // A ladder in the cell below is footing: nothing under it is read.
+        actions.push(moveTo(below, 0));
+      } else {
+        // Stepping off the bottom of a ladder: the one block climbed down
+        // counts towards the longest drop a player may choose.
+        const drop = knownFallDistance(state, below, longestClimbDrop);
+        if (drop !== null && 1 + drop <= AVATAR.maxChosenDropBlocks) {
+          actions.push(moveTo(below, drop));
+        }
       }
     }
   }

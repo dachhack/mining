@@ -195,7 +195,10 @@ function structureName(state: GameState, pos: Vec3): string | null {
 
 function hudLines(state: GameState, options: ViewOptions): string[] {
   const pos = state.avatar.pos;
-  const lamp = state.lampOil > 0 ? '' : ' (lamp is out: you see only one step around you)';
+  const lamp =
+    state.lampOil > 0
+      ? ''
+      : ' (LAMP IS OUT: you know only the six cells touching yours. No diagonal mining, no looking down a drop, no moves you cannot judge)';
   const gauges = [
     `Shift ${state.shift}`,
     `AP ${state.ap}/${SHIFT.apPerShift}`,

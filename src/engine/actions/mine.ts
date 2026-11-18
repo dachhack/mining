@@ -25,10 +25,13 @@ import type { GameState } from '../state';
  *   cost. Open space and bedrock (everything outside the grid) have none.
  *   There is no line-of-sight test: a diagonal is mineable even when both
  *   cells it shares an edge with are solid (0005 item 10).
- * - Every cell in reach is revealed by `updateReveal` (0005 item 10), so in a
- *   state the engine produced the revealed test never removes anything. It is
- *   here so that the rule "only revealed blocks can be mined" holds by itself,
- *   and an action's AP cost can never give away a block the player cannot see.
+ * - Only revealed blocks can be mined, so an action's AP cost can never give
+ *   away a block the player cannot see. With the lamp lit `updateReveal`
+ *   reveals every cell in reach (0005 item 10) and this test removes nothing.
+ *   With the lamp out the miner knows only the six cells it touches (issue
+ *   #33; decision note 0010), so the diagonals and the 8 cells around the one
+ *   below are mineable only if something else has revealed them: an earlier
+ *   visit with the lamp lit, a torch, or daylight.
  * - Does not change `state`. Lists actions as if the avatar had unlimited AP;
  *   the dispatcher in index.ts removes the ones that cost too much, which is
  *   what makes a block that costs more than the AP left not mineable this

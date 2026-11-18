@@ -166,6 +166,33 @@ describe('the view hides what the avatar cannot know', () => {
   });
 });
 
+describe('the lamp (issue #33)', () => {
+  // A dead-end pocket two layers down: the avatar at (1,1,2), rock all round.
+  const solid = ['###', '###', '###'];
+  const layers = [solid, solid, ['###', '#.#', '###'], solid, solid];
+  const here = { x: 1, y: 1, z: 2 };
+
+  it('says on the view when the lamp is out and what that costs', () => {
+    const lit = viewText(buildState({ layers, avatar: here, revealAll: true, lampOil: 1 }));
+    expect(lit).not.toContain('LAMP IS OUT');
+
+    const dark = viewText(buildState({ layers, avatar: here, revealAll: true, lampOil: 0 }));
+    expect(dark).toContain('LAMP IS OUT');
+    expect(dark).toContain('six cells touching yours');
+  });
+
+  it('draws the diagonals as unseen in the dark, and lists no diagonal mining', () => {
+    // Nothing is revealed until the engine has run: end a shift in the dark.
+    const built = buildState({ layers, avatar: here, lampOil: 0, ap: 0 });
+    const dark = endShift(built).state;
+    const text = viewText(dark);
+    // The avatar's row of its own layer: walls east and west are known.
+    expect(text).toContain('#@#');
+    expect(text).not.toMatch(/Mine .*north-east/);
+    expect(legalActions(dark).filter((action) => action.type === 'mine')).toHaveLength(5);
+  });
+});
+
 describe('the action list', () => {
   it('is the legal actions in order, then end shift', () => {
     for (const state of [createRun(7, 'none', 'standard'), dugInState()]) {
@@ -517,6 +544,7 @@ describe('--help', () => {
       'Falling',
       'Mining',
       'What you can see',
+      'In the dark',
       'Weight and loose items',
       'Crafting',
       'Leaving',
