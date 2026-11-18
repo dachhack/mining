@@ -6,7 +6,8 @@ import { BLOCKS, GENERATION, WORLD, blockDefByCode } from '../../src/data';
 import type { BlockId, CubeSize } from '../../src/data';
 import { createRun, hashState } from '../../src/engine';
 import { bandLayersForDepth } from '../../src/engine/generation/bands';
-import { generateCube } from '../../src/engine/generation/cube';
+import { generateCube, growVein } from '../../src/engine/generation/cube';
+import { hashString } from '../../src/engine/hash';
 import { createRng } from '../../src/engine/rng';
 import { cellCount, cellIndex, inGrid } from '../../src/engine/state';
 
@@ -140,6 +141,16 @@ describe('generateCube', () => {
     );
   });
 
+  it('gives exactly this cube for seed 7 (pinned)', () => {
+    // A known value, like the ones that pin the RNG and the hash (0006). It
+    // changes if a generation number changes, or if the order in which random
+    // numbers are drawn changes; both change every golden-run hash, so a
+    // change here must be meant and must be said in the PR description.
+    // Only the block array is hashed, so other parts of the state cannot move it.
+    const blocks = generate(FULL_SIZE, 7);
+    expect(hashString(Array.from(blocks).join(','))).toBe('aa65d74363adb60a');
+  });
+
   it('gives different cubes for different seeds', () => {
     const hashes = new Set(SEEDS.map((seed) => hashState(createRun(seed, 'none', 'standard'))));
     expect(hashes.size).toBe(SEEDS.length);
@@ -162,7 +173,9 @@ describe('generateCube', () => {
   });
 
   it('uses the band layers of the design doc for the full-size cube', () => {
-    // Spelled out here, not read from the data, so the test pins design doc 3.1.
+    // Spelled out here, not read from the data, so the test pins design doc
+    // 3.1 as read by 0005 item 4 and 0007: the doc's table does not itself
+    // list stone and hard rock for the middle band, or stone for the deep band.
     const upper = [BLOCKS.dirt, BLOCKS.stone, BLOCKS.coalSeam, BLOCKS.timberRoot];
     const middle = [BLOCKS.stone, BLOCKS.hardRock, BLOCKS.ironOre, BLOCKS.copperOre];
     const deep = [BLOCKS.stone, BLOCKS.hardRock, BLOCKS.crystal];
@@ -273,6 +286,68 @@ describe('generateCube', () => {
     ]) {
       expectCubeFollowsTheRules(generate(size, 5), size);
     }
+  });
+});
+
+describe('growVein', () => {
+  const size: CubeSize = { x: 9, y: 9, z: 9 };
+  const stone = BLOCKS.stone.code;
+  const ore = BLOCKS.ironOre.code;
+  const centre = cellIndex(size, { x: 4, y: 4, z: 4 });
+
+  /** A cube of stone, and a matching "may be replaced" array with every cell allowed. */
+  function stoneCube(): { blocks: Uint8Array; canReplace: Uint8Array } {
+    const blocks = new Uint8Array(cellCount(size)).fill(stone);
+    const canReplace = new Uint8Array(cellCount(size)).fill(1);
+    return { blocks, canReplace };
+  }
+
+  it('grows one connected vein of exactly the target size when there is room', () => {
+    for (const seed of SEEDS) {
+      for (const targetSize of [1, 2, 5, 9, 30]) {
+        const { blocks, canReplace } = stoneCube();
+        const grew = growVein(
+          blocks,
+          canReplace,
+          size,
+          centre,
+          ore,
+          2,
+          targetSize,
+          createRng(seed),
+        );
+        expect(grew).toBe(targetSize >= 2);
+        // Below minSize the vein is undone; otherwise it is one group of the target size.
+        expect(groupSizes(blocks, size, ore)).toEqual(targetSize >= 2 ? [targetSize] : []);
+        // Every ore cell, and no other, is closed to later veins.
+        blocks.forEach((code, cell) => {
+          expect(canReplace[cell]).toBe(code === ore ? 0 : 1);
+        });
+      }
+    }
+  });
+
+  it('stops at the room it has, and keeps the vein if it reached minSize', () => {
+    // Only a row of three cells may be replaced.
+    const { blocks, canReplace } = stoneCube();
+    canReplace.fill(0);
+    for (const x of [3, 4, 5]) {
+      canReplace[cellIndex(size, { x, y: 4, z: 4 })] = 1;
+    }
+    expect(growVein(blocks, canReplace, size, centre, ore, 2, 8, createRng(3))).toBe(true);
+    expect(groupSizes(blocks, size, ore)).toEqual([3]);
+  });
+
+  it('undoes a vein that is boxed in below minSize', () => {
+    const { blocks, canReplace } = stoneCube();
+    canReplace.fill(0);
+    canReplace[centre] = 1;
+    blocks[centre] = BLOCKS.dirt.code;
+    expect(growVein(blocks, canReplace, size, centre, ore, 2, 8, createRng(3))).toBe(false);
+    expect(blocks.includes(ore)).toBe(false);
+    // The cell is as it was, and may still be replaced.
+    expect(blocks[centre]).toBe(BLOCKS.dirt.code);
+    expect(canReplace[centre]).toBe(1);
   });
 });
 

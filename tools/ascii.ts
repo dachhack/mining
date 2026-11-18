@@ -10,12 +10,22 @@
 // Each layer is drawn from above: one character per block, x across (x = 0 on
 // the left) and y down (y = 0 at the top). Layer 0 is the top of the cube.
 
-import { BLOCKS, CONTRACT_IDS, DEFAULT_LOADOUT_ID, blockDefByCode } from '../src/data';
+import {
+  BLOCKS,
+  CONTRACT_IDS,
+  DEFAULT_LOADOUT_ID,
+  GAME_DATA,
+  blockDefByCode,
+  validateData,
+} from '../src/data';
 import type { BlockId } from '../src/data';
 import { blockAt, createRun } from '../src/engine';
 
 // One character for each block that can be stored in the cube. These are the
 // same characters the test helper uses (tests/engine/helpers.ts).
+//
+// `Partial<Record<BlockId, string>>` is a dict from block id to character that
+// may leave some ids out (bedrock is never stored in the cube).
 const BLOCK_CHARS: Partial<Record<BlockId, string>> = {
   air: '.',
   dirt: 'd',
@@ -33,6 +43,8 @@ const BLOCK_CHARS: Partial<Record<BlockId, string>> = {
 
 const CHAR_BY_CODE = new Map<number, string>();
 for (const [blockId, char] of Object.entries(BLOCK_CHARS)) {
+  // `Object.entries` gives the keys back as plain strings; `as BlockId` tells
+  // the compiler they are the block ids written just above.
   CHAR_BY_CODE.set(BLOCKS[blockId as BlockId].code, char);
 }
 
@@ -88,6 +100,12 @@ function parseArgs(args: string[]): Options {
 
 function main(): void {
   const options = parseArgs(process.argv.slice(2));
+  // Every tool checks the data tables before using them (0005 item 24), so a
+  // bad edit to src/data is reported here and not from deep inside the engine.
+  const problems = validateData(GAME_DATA);
+  if (problems.length > 0) {
+    fail(`the data in src/data is not valid:\n  ${problems.join('\n  ')}`);
+  }
   const contractId = CONTRACT_IDS[0];
   if (contractId === undefined) {
     fail('the data lists no contract');

@@ -87,10 +87,12 @@ function pickRock(rocks: RockWeight[], depthInBand: number, rng: RngState): numb
  * `canReplace[cell]` is 1 (plain rock of its own band), so it never leaves
  * its band and never eats another vein.
  *
+ * Exported only so that a test can grow a single vein.
+ *
  * Returns true if the vein reached `minSize`. If it could not (it was boxed
  * in), every cell it changed is put back and the result is false.
  */
-function growVein(
+export function growVein(
   blocks: Uint8Array,
   canReplace: Uint8Array,
   size: CubeSize,
@@ -158,7 +160,9 @@ function placeVeins(
 ): void {
   const oreCode = blockCode(vein.block);
   const cellsInBand = size.x * size.y * layers.length;
-  // At least one vein, so that every ore a band lists appears even in a small cube.
+  // At least one vein is attempted, so that an ore a band lists normally
+  // appears even in a small cube. It is not a promise: a vein that finds no
+  // room is left out (see the end of the loop below).
   const veinCount = Math.max(1, Math.round((vein.veinsPer1000Cells * cellsInBand) / 1000));
 
   for (let n = 0; n < veinCount; n += 1) {
