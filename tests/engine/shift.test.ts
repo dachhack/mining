@@ -76,6 +76,32 @@ describe('endShift', () => {
       'applyDamage',
     ]);
   });
+
+  it('calls each cube-phase step once, in that order', () => {
+    // Swap every step's `run` for a recorder, end a shift, and put the real
+    // ones back (in `finally`, so a failure here cannot break later tests).
+    const originals = CUBE_PHASE_STEPS.map((step) => step.run);
+    const called: string[] = [];
+    try {
+      for (const step of CUBE_PHASE_STEPS) {
+        step.run = () => {
+          called.push(step.name);
+        };
+      }
+      endShift(surfaceState());
+    } finally {
+      CUBE_PHASE_STEPS.forEach((step, index) => {
+        step.run = originals[index] as (typeof originals)[number];
+      });
+    }
+    expect(called).toEqual([
+      'supportAndFallingBlocks',
+      'fluidsFlow',
+      'gasSpreads',
+      'timersTick',
+      'applyDamage',
+    ]);
+  });
 });
 
 describe('banked AP', () => {
