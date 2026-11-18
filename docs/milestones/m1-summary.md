@@ -9,6 +9,20 @@ Written by the coordinator for the owner, 2026-11-18. This is the summary agent 
 3. **Look at the other three major findings** (questions 41, 42, and 22) when you can. None blocks M2 from starting; each shapes what M2 feels like.
 4. **Confirm or change the standing policies** (questions 15–17): the merge policy, proceeding on assumed defaults, and the playtest round size. I worked under all three as written.
 
+## Owner's answers (2026-11-18, after this summary was written)
+
+The owner answered the questions above the same day. They are recorded in `docs/owner-questions.md` and are being built as four tasks:
+
+| Decision                                                            | Question  | Task |
+| ------------------------------------------------------------------- | --------- | ---- |
+| No fuel refill: unspent AP is lost                                  | 23        | #32  |
+| Make light matter: in the dark the miner knows only what it touches | 22, 40    | #33  |
+| A one-block shaft should be dangerous                               | 42        | #34  |
+| Ore hints are wanted: rock near a vein shows mineral traces         | 41        | #35  |
+| The standing policies stand; leaving from the surface is salvage    | 15–17, 20 | none |
+
+For #33, #34, and #35 the owner gave the direction and the coordinator assumed the exact rule; each issue states it, for the owner to confirm or change. Item 2 under "What I need from you" is therefore settled; item 1 (merging this PR) remains.
+
 ## Is M1 done?
 
 Agent plan section 2: a milestone is done when its acceptance criteria pass and its playtest round has no open blocker findings.
