@@ -21,6 +21,8 @@ The owner answered the questions above the same day. They are recorded in `docs/
 | Ore hints are wanted: rock near a vein shows mineral traces         | 41        | #35  |
 | The standing policies stand; leaving from the surface is salvage    | 15–17, 20 | none |
 
+All four are now on `main` (PRs #36, #38, #37, #39; engine version 0.2.0). Building them raised questions 45–51 in `docs/owner-questions.md`: what the dark costs (45, 46, 48, 49), how long the lamp lasts against the fuel (47, issue #41), the still-free zigzag descent (50), and how far mineral traces reach (51).
+
 For #33, #34, and #35 the owner gave the direction and the coordinator assumed the exact rule; each issue states it, for the owner to confirm or change. Item 2 under "What I need from you" is therefore settled; item 1 (merging this PR) remains.
 
 ## Is M1 done?
