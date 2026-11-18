@@ -18,7 +18,7 @@ import type { BuildStateOptions } from './helpers';
 
 /** A one-layer stone cube, avatar on the surface, with the given gauges. */
 function surfaceState(options: Omit<BuildStateOptions, 'layers'> = {}): GameState {
-  return buildState({ layers: [['##', '##']], ...options });
+  return buildState({ layers: [['##', '##']], revealAll: true, ...options });
 }
 
 /** The events of one type, e.g. every `fuelChanged`. */

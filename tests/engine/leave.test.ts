@@ -34,7 +34,7 @@ describe('leave', () => {
   });
 
   it('ends the run with outcome "salvage"', () => {
-    const state = buildState({ layers: LAYERS, inventory: { coal: 2 } });
+    const state = buildState({ layers: LAYERS, revealAll: true, inventory: { coal: 2 } });
     const { state: after, events } = act(state, { type: 'leave' });
     expect(after.status).toEqual({ kind: 'ended', outcome: 'salvage', cause: 'left' });
     expect(events).toEqual([{ type: 'runEnded', outcome: 'salvage', cause: 'left' }]);

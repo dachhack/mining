@@ -10,7 +10,7 @@ import type { BuildStateOptions } from './helpers';
 
 /** A one-layer stone cube with the avatar on the surface. */
 function surfaceState(options: Omit<BuildStateOptions, 'layers'> = {}): GameState {
-  return buildState({ layers: [['##', '##']], ...options });
+  return buildState({ layers: [['##', '##']], revealAll: true, ...options });
 }
 
 /** The ids of the recipes that can be crafted now, in list order. */
