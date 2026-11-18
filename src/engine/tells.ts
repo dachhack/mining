@@ -25,7 +25,7 @@ import { AVATAR, BLOCKS, STRUCTURES, TELLS } from '../data';
 import type { Vec3 } from '../data';
 import type { GameEvent } from './events';
 import { FACE_OFFSETS, offsetPosition } from './neighbours';
-import { avatarLightRadius, litCellsFrom, torchPositions } from './reveal';
+import { avatarLightRadius, isLampLit, litCellsFrom, torchPositions } from './reveal';
 import { blockAt, cellCount, cellIndex, cellPosition, inGrid, isRevealed } from './state';
 import type { GameState } from './state';
 
@@ -92,9 +92,17 @@ export function carriesMineralTraces(state: GameState, pos: Vec3): boolean {
  * cell: exactly the blocks light reveals (0005 item 14). The surface is
  * always lit too, so every block of the top layer is in light;
  * `updateMineralTraces` adds those itself.
+ *
+ * With the lamp out it gives no light here at all (issue #33; decision note
+ * 0011). The miner then knows the six blocks it touches, and `updateReveal`
+ * still treats its own cell as lit to reveal them, but knowing a block by
+ * touch is not seeing it in light, so no traces are noticed on them. Torches
+ * and daylight show traces as before.
  */
 function lampAndTorchLight(state: GameState): Vec3[] {
-  const lit: Vec3[] = litCellsFrom(state, state.avatar.pos, avatarLightRadius(state));
+  const lit: Vec3[] = isLampLit(state)
+    ? litCellsFrom(state, state.avatar.pos, avatarLightRadius(state))
+    : [];
   // `includes` is a fast built-in search of the whole array. Most of the
   // time no torch is placed, and the slower cell-by-cell `torchPositions`
   // can be skipped. This runs after every action, so it is worth it.
@@ -141,8 +149,9 @@ function oreNearTopLayer(state: GameState): boolean {
  *   before, in the order the cube stores cells (top layer first), so the same
  *   state always gives the same events.
  * - A block that is revealed but not in light is left alone: traces need
- *   light to be noticed. So a miner whose lamp is out notices none on blocks
- *   the light does not touch, even those within the pick's reach.
+ *   light to be noticed. So a miner whose lamp is out notices none by touch,
+ *   not even on the six blocks around it; only on blocks a torch or daylight
+ *   lights (decision note 0011).
  * - Nothing else in `state` is changed, and no block is revealed.
  */
 export function updateMineralTraces(state: GameState, events: GameEvent[]): void {

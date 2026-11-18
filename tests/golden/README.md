@@ -7,7 +7,7 @@ Recorded runs: seed + list of decisions → expected state hash. `golden.test.ts
 | File                            | What it is                                                                 | Decisions | Ends                   | Hash               |
 | ------------------------------- | -------------------------------------------------------------------------- | --------- | ---------------------- | ------------------ |
 | `staircase-seed-8.json`         | The staircase policy: dig to layer 8, climb back, leave                    | 45        | salvage, left          | `4ba4abaf8f19ca05` |
-| `wander-seed-9.json`            | Random legal actions, never leaving, until the fuel runs out               | 199       | death, out of fuel     | `39f24d80c5eefd2b` |
+| `wander-seed-9.json`            | Random legal actions, never leaving, until the fuel runs out               | 184       | death, out of fuel     | `299a304a55072f30` |
 | `random-seed-25-cut-short.json` | Random legal actions, stopped after 150 decisions in the middle of a shift | 150       | still going (`active`) | `4ba4fbcae36279c8` |
 
 Each file holds:

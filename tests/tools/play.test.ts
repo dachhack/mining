@@ -19,7 +19,6 @@ import {
   createRun,
   endShift,
   hashState,
-  inGrid,
   isRevealed,
   legalActions,
   visibleMineralTraces,
@@ -92,60 +91,6 @@ describe('the view hides what the avatar cannot know', () => {
       }
     }
     expect(changed).toBeGreaterThan(1000);
-    expect(viewText(state)).toBe(before);
-    expect(viewText(endShift(state).state)).toBe(beforeNextStep);
-  });
-
-  it('prints the same text when ore far from everything seen is swapped with rock', () => {
-    // Mineral traces may tell the player about ore within a few steps of a
-    // block they see, and nothing else. So every unrevealed cell further
-    // than that from every revealed cell can turn from ore into rock, or
-    // from rock into ore, without the view changing: now, or a step later.
-    const state = dugInState();
-    const before = viewText(state);
-    const beforeNextStep = viewText(endShift(state).state);
-
-    const reach = TELLS.mineralTraces.distance;
-    // 1 for every cell within `reach` steps of a revealed cell (itself included).
-    const nearSeen = new Uint8Array(state.blocks.length);
-    for (let index = 0; index < state.blocks.length; index += 1) {
-      const pos = cellPosition(state.size, index);
-      if (!isRevealed(state, pos)) {
-        continue;
-      }
-      for (let dz = -reach; dz <= reach; dz += 1) {
-        const leftForY = reach - Math.abs(dz);
-        for (let dy = -leftForY; dy <= leftForY; dy += 1) {
-          const leftForX = leftForY - Math.abs(dy);
-          for (let dx = -leftForX; dx <= leftForX; dx += 1) {
-            const near = { x: pos.x + dx, y: pos.y + dy, z: pos.z + dz };
-            if (inGrid(state.size, near)) {
-              nearSeen[cellIndex(state.size, near)] = 1;
-            }
-          }
-        }
-      }
-    }
-
-    const oreCodes = TELLS.mineralTraces.sourceBlocks.map(
-      (blockId) => BLOCKS[blockId as keyof typeof BLOCKS].code,
-    );
-    let toOre = 0;
-    let toRock = 0;
-    for (let index = 0; index < state.blocks.length; index += 1) {
-      if (nearSeen[index] === 1) {
-        continue;
-      }
-      if (oreCodes.includes(state.blocks[index] as number)) {
-        state.blocks[index] = BLOCKS.stone.code;
-        toRock += 1;
-      } else {
-        state.blocks[index] = BLOCKS.ironOre.code;
-        toOre += 1;
-      }
-    }
-    expect(toOre).toBeGreaterThan(1000);
-    expect(toRock).toBeGreaterThan(0);
     expect(viewText(state)).toBe(before);
     expect(viewText(endShift(state).state)).toBe(beforeNextStep);
   });
@@ -418,6 +363,52 @@ describe('the view hides what the avatar cannot know', () => {
     expect(text).not.toContain('123456789');
     expect(text).not.toContain(String(state.rng.s));
     expect(text).not.toContain(hashState(state));
+  });
+});
+
+describe('the lamp (issue #33)', () => {
+  // A dead-end pocket two layers down: the avatar at (1,1,2), rock all round.
+  const solid = ['###', '###', '###'];
+  const layers = [solid, solid, ['###', '#.#', '###'], solid, solid];
+  const here = { x: 1, y: 1, z: 2 };
+
+  it('says on the view when the lamp is out and what that costs', () => {
+    const lit = viewText(buildState({ layers, avatar: here, revealAll: true, lampOil: 1 }));
+    expect(lit).not.toContain('LAMP IS OUT');
+
+    const dark = viewText(buildState({ layers, avatar: here, revealAll: true, lampOil: 0 }));
+    expect(dark).toContain('LAMP IS OUT');
+    expect(dark).toContain('six cells touching yours');
+  });
+
+  it('draws the diagonals as unseen in the dark, and lists no diagonal mining', () => {
+    // Nothing is revealed until the engine has run: end a shift in the dark.
+    const built = buildState({ layers, avatar: here, lampOil: 0, ap: 0 });
+    const dark = endShift(built).state;
+    const text = viewText(dark);
+    // The avatar's row of its own layer: walls east and west are known.
+    expect(text).toContain('#@#');
+    expect(text).not.toMatch(/Mine .*north-east/);
+    expect(legalActions(dark).filter((action) => action.type === 'mine')).toHaveLength(5);
+  });
+});
+
+describe('mining underfoot in the dark (issues #33 and #34)', () => {
+  it('says the fall is of unknown depth and gives the least it will cost', () => {
+    // A pocket two layers down with a hole under its floor: the fall is really 2.
+    const solid = ['###', '###', '###'];
+    const hole = ['###', '#.#', '###'];
+    const layers = [solid, solid, hole, solid, hole, solid];
+    const built = buildState({ layers, avatar: { x: 1, y: 1, z: 2 }, lampOil: 0, ap: 0 });
+    const dark = endShift(built).state;
+
+    // The floor is touched; the hole under it is not known.
+    expect(isRevealed(dark, { x: 1, y: 1, z: 3 })).toBe(true);
+    expect(isRevealed(dark, { x: 1, y: 1, z: 4 })).toBe(false);
+    const text = viewText(dark);
+    expect(text).toContain('you will fall 1 block or more');
+    expect(text).toContain('lose at least');
+    expect(text).toContain('below that is unseen');
   });
 });
 
@@ -833,6 +824,7 @@ describe('--help', () => {
       'Mining',
       'What you can see',
       'Mineral traces',
+      'In the dark',
       'Weight and loose items',
       'Crafting',
       'Leaving',

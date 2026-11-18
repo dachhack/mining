@@ -1,6 +1,6 @@
 # 0010 — An uncontrolled fall costs health from the first block
 
-Date: 2026-11-18. Status: the direction is the owner's answer to question 42 ("a single one-block shaft should be dangerous"); the form below is the coordinator's assumed default for it (issue #34), for the owner to confirm. It changes decision note 0005 item 7 and adds one sentence to design doc 5.2.
+Date: 2026-11-18. Status: the direction is the owner's answer to question 42 ("a single one-block shaft should be dangerous"); the form below is the coordinator's assumed default for it (issue #34), for the owner to confirm. It changes decision note 0005 item 7. In design doc 5.2 it rewords the first sentence of the fall bullet ("A chosen drop of 1–2 blocks is free") and adds the sentences on uncontrolled falls and on a ladder preventing the fall.
 
 ## Context
 

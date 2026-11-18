@@ -36,7 +36,7 @@ import {
 } from '../../src/engine';
 import type { GameState } from '../../src/engine';
 import type { Vec3 } from '../../src/data';
-import { cloneState, setBlock } from '../../src/engine/state';
+import { cloneState, setBlock, setStructure } from '../../src/engine/state';
 import { decisionKey, makePolicy } from '../../tools/policies';
 import { playRun } from '../../tools/simRun';
 
@@ -178,7 +178,7 @@ describe('property tests: random legal play', () => {
   const RANDOM_DECISIONS = 150;
 
   // `wander` never leaves, so these runs go deep and long: most end out of
-  // fuel between 180 and 320 decisions in.
+  // fuel between 170 and 240 decisions in.
   it.each(WANDER_SEEDS)(
     `wander policy, seed %i: the state stays valid for ${WANDER_DECISIONS} decisions`,
     (seed) => {
@@ -223,8 +223,13 @@ describe('property tests: random legal play', () => {
 });
 
 // ---------------------------------------------------------------------------
-// The action list shows only what the player can see (issue #15)
+// The action list shows only what the player can see (issues #15 and #33)
 // ---------------------------------------------------------------------------
+//
+// Since issue #33 the lamp decides how much the avatar knows: lit, it knows
+// the 17 cells in reach and looks over edges; out, only the six cells it
+// touches. The check below must hold in both, and across the moment the lamp
+// goes out, so it is run with the lamp lit, out, and running out.
 
 // How far around the avatar to look for cells that matter. No rule looks
 // further than this. Sideways and up, reach is 1 cell. Down, the furthest
@@ -238,10 +243,13 @@ const NEAR_BELOW = AVATAR.maxChosenDropBlocks + 4;
 
 /**
  * The unrevealed cells near the avatar whose content changes `legalActions`.
- * Each one in turn is swapped (open becomes stone, solid becomes air) in a
- * copy of the state, and the copy's action list is compared with the
- * original's. If the list changed, the player could learn what an unseen
- * cell holds by reading the list, so the result must be empty.
+ * Each one in turn is changed in a copy of the state, in two ways, and the
+ * copy's action list is compared with the original's:
+ * - the block is swapped (open becomes stone, solid becomes air);
+ * - the cell is made open with a ladder in it (footing depends on ladders
+ *   as well as on rock, so a ladder nobody has seen must not matter either).
+ * If the list changed, the player could learn what an unseen cell holds by
+ * reading the list, so the result must be empty.
  *
  * This is the check the review of issue #15 used, kept small enough for CI
  * by trying only unrevealed cells close to the avatar.
@@ -257,9 +265,15 @@ function unseenCellsThatChangeTheActionList(state: GameState): Vec3[] {
         if (!inGrid(state.size, pos) || isRevealed(state, pos)) {
           continue;
         }
-        const changed = cloneState(state);
-        setBlock(changed, pos, isOpen(state, pos) ? BLOCKS.stone.code : BLOCKS.air.code);
-        if (JSON.stringify(legalActions(changed)) !== before) {
+        const swapped = cloneState(state);
+        setBlock(swapped, pos, isOpen(state, pos) ? BLOCKS.stone.code : BLOCKS.air.code);
+        const withLadder = cloneState(state);
+        setBlock(withLadder, pos, BLOCKS.air.code);
+        setStructure(withLadder, pos, STRUCTURES.ladder.code);
+        if (
+          JSON.stringify(legalActions(swapped)) !== before ||
+          JSON.stringify(legalActions(withLadder)) !== before
+        ) {
           found.push(pos);
         }
       }
@@ -270,22 +284,26 @@ function unseenCellsThatChangeTheActionList(state: GameState): Vec3[] {
 
 /**
  * Play one run with the wander policy and make the check above after every
- * `every`-th decision. With `lampOut`, the lamp is empty from the first
- * shift on, so nearly everything the avatar digs into is unlit.
+ * `every`-th decision.
+ *
+ * `startingLampOil` is the oil the run starts with, or `null` for the
+ * loadout's own amount. With 0 the lamp is out from the first shift on, so
+ * the avatar works by touch nearly all the way. With 1 it goes out at the
+ * first burn, a few shifts in, with the avatar already underground.
  */
 function playAndCheckUnseenCells(
   seed: number,
-  lampOut: boolean,
+  startingLampOil: number | null,
   maxDecisions: number,
   every: number,
 ): { checks: number; checksWithLampOut: number } {
   const policy = makePolicy('wander', seed);
   let state = createRun(seed, CONTRACT, DEFAULT_LOADOUT_ID);
-  if (lampOut) {
-    // Not reachable through the public surface: empty the lamp by hand, as a
+  if (startingLampOil !== null) {
+    // Not reachable through the public surface: set the oil by hand, as a
     // scenario test would, then end a shift so that the engine has run with it.
     state = cloneState(state);
-    state.lampOil = 0;
+    state.lampOil = startingLampOil;
     state = endShift(state).state;
   }
   let checks = 0;
@@ -303,19 +321,45 @@ function playAndCheckUnseenCells(
   return { checks, checksWithLampOut };
 }
 
-describe('property tests: unrevealed cells do not change the action list (issue #15)', () => {
+// Each of these runs tries two changes to every unseen cell near the avatar,
+// hundreds of times, which takes a few seconds: more than the default limit
+// of 5 on a slow machine.
+const UNSEEN_CELLS_TIMEOUT_MS = 30000;
+
+describe('property tests: unrevealed cells do not change the action list (issues #15, #33)', () => {
   // The seeds are ones whose wander run lasts long enough to make the number
   // of checks asked for below. Without a fuel refill (issue #32) a wander run
   // ends out of fuel after about 130 to 250 decisions.
-  it.each([11, 16, 20])('with the lamp lit at the start, seed %i', (seed) => {
-    const { checks } = playAndCheckUnseenCells(seed, false, 300, 4);
-    expect(checks).toBeGreaterThan(40);
-  });
+  it.each([11, 16, 20])(
+    'with the lamp lit at the start, seed %i',
+    (seed) => {
+      const { checks } = playAndCheckUnseenCells(seed, null, 300, 4);
+      expect(checks).toBeGreaterThan(40);
+    },
+    UNSEEN_CELLS_TIMEOUT_MS,
+  );
 
-  it.each([24, 27, 32])('with the lamp out from the start, seed %i', (seed) => {
-    const { checks, checksWithLampOut } = playAndCheckUnseenCells(seed, true, 300, 2);
-    // Most checks are in the dark; the wander policy may craft a little oil.
-    expect(checks).toBeGreaterThan(80);
-    expect(checksWithLampOut).toBeGreaterThan(checks / 2);
-  });
+  it.each([27, 34, 47])(
+    'with the lamp out from the start, seed %i',
+    (seed) => {
+      const { checks, checksWithLampOut } = playAndCheckUnseenCells(seed, 0, 300, 2);
+      // Most checks are in the dark; the wander policy may craft a little oil.
+      expect(checks).toBeGreaterThan(80);
+      expect(checksWithLampOut).toBeGreaterThan(checks / 2);
+    },
+    UNSEEN_CELLS_TIMEOUT_MS,
+  );
+
+  it.each([31, 32, 33])(
+    'with the lamp running out during the run, seed %i',
+    (seed) => {
+      // Checked after every decision while the lamp is lit and for a good while
+      // after it goes out, so the decisions on both sides of that moment are
+      // covered. Both lights must have been seen.
+      const { checks, checksWithLampOut } = playAndCheckUnseenCells(seed, 1, 120, 1);
+      expect(checksWithLampOut).toBeGreaterThan(20);
+      expect(checks - checksWithLampOut).toBeGreaterThan(5);
+    },
+    UNSEEN_CELLS_TIMEOUT_MS,
+  );
 });

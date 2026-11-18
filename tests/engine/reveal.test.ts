@@ -278,7 +278,10 @@ describe('the surface', () => {
 
 describe('reach (0005 item 10)', () => {
   // The avatar walks to the dead end of a tunnel that is longer than its
-  // light, with the lamp out of oil so that light shows as little as possible.
+  // light. The lamp is lit: reach covers all 17 cells only then (with the
+  // lamp out it is the six cells the avatar touches; see darkness.test.ts).
+  // Light alone shows none of the cells tested here: no face of theirs
+  // touches an open cell.
   const length = WITH_OIL + 4;
   const end = length - 1;
   const level = TUNNEL_Z;
@@ -298,7 +301,7 @@ describe('reach (0005 item 10)', () => {
   }
 
   function atStart(): GameState {
-    const state = buildState({ layers: tunnelLayers(length), avatar: inTunnel(0), lampOil: 0 });
+    const state = buildState({ layers: tunnelLayers(length), avatar: inTunnel(0), lampOil: 1 });
     updateReveal(state, []);
     return state;
   }
