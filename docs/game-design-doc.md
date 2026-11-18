@@ -33,6 +33,7 @@ Working title: **Mining Game**. A turn-based roguelike for Android and iOS in wh
 - **Coordinates:** `(x, y, z)`, each 0–31. `z = 0` is the top layer and `z = 31` is the bottom. "Down" means increasing `z`.
 - **Generation:** Fully determined by a seed. Generated once at run start.
 - **Visibility:** A block is *revealed* when one of its six faces touches open space the avatar's light can reach, or when a scanner reveals it. Unrevealed blocks render as unknown rock.
+  - **Reach and the lamp [Default]:** With the lamp lit, the miner also knows every cell its pick can reach and the cell overhead, and can look over an edge: it sees the cells a drop would be judged by. With the lamp out, it knows only the six cells that touch its own. Torches and daylight reveal the same either way, and a revealed cell stays revealed. (Decision notes 0005 item 10 and 0011.)
 - **Surface:** The space above `z = 0` is open air. The avatar starts on top of the cube at the centre. Reaching the surface is how a run is completed.
 
 ### 3.1 Depth bands [Default]
@@ -64,6 +65,7 @@ Working title: **Mining Game**. A turn-based roguelike for Android and iOS in wh
 - **Fluid pockets:** Sealed volumes of water or lava that are released when breached.
 - **Gas pockets:** Sealed volumes of gas that spread when breached.
 - **Veins:** Ore generates in connected veins, so finding one block suggests more nearby.
+  - **Tell [Default]:** Mineral traces. Plain rock (dirt, stone, hard rock) within 2 steps of iron ore, copper ore, or crystal, counted through the grid, shows mineral traces once it is revealed and lit. They say ore is near, not which ore or which way. Traces stay on the map once seen. None are noticed in the dark: with the lamp out, only torches and daylight show them. (Decision note 0012.)
 
 ## 4. Turn structure
 
@@ -102,6 +104,8 @@ The player may end the player phase early. [Default] Unspent AP is lost when the
 | Air | 10 | 1 per shift while in gas or water, or cut off from an air source | Refills fully in connected air |
 | Carry capacity | 20 weight | — | Stashing at a camp; smelting (ingots are lighter) |
 | Light radius | 3 | Lamp oil running out (drops to 0: only the miner's own cell, so it knows just the six cells it touches; decision note 0011) | Lamp oil, torches |
+
+With the lamp lit the miner also knows the cells within its pick's reach and can look over an edge; with the lamp out it does neither (section 3, Visibility).
 
 ### 5.2 Movement and gravity
 

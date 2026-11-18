@@ -4,11 +4,12 @@ Recorded runs: seed + list of decisions → expected state hash. `golden.test.ts
 
 ## The files
 
-| File                            | What it is                                                                 | Decisions | Ends                   | Hash               |
-| ------------------------------- | -------------------------------------------------------------------------- | --------- | ---------------------- | ------------------ |
-| `staircase-seed-8.json`         | The staircase policy: dig to layer 8, climb back, leave                    | 45        | salvage, left          | `ad0fa8c0a4b98857` |
-| `wander-seed-9.json`            | Random legal actions, never leaving, until the fuel runs out               | 154       | death, out of fuel     | `9fc2561190f453aa` |
-| `random-seed-25-cut-short.json` | Random legal actions, stopped after 150 decisions in the middle of a shift | 150       | still going (`active`) | `da7071ec0e65ec11` |
+| File                            | What it is                                                                                                                   | Decisions | Ends                   | Hash               |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------- | ---------------------- | ------------------ |
+| `staircase-seed-8.json`         | The staircase policy: dig to layer 8, climb back, leave                                                                      | 45        | salvage, left          | `ad0fa8c0a4b98857` |
+| `wander-seed-9.json`            | Random legal actions, never leaving, until the fuel runs out                                                                 | 154       | death, out of fuel     | `9fc2561190f453aa` |
+| `random-seed-25-cut-short.json` | Random legal actions, stopped after 150 decisions in the middle of a shift                                                   | 150       | still going (`active`) | `da7071ec0e65ec11` |
+| `staircase-seed-11-traces.json` | The staircase policy on a seed where it lights rock near ore: mineral traces are seen, and stay after one ore block is mined | 45        | salvage, left          | `f0953973728b2350` |
 
 Each file holds:
 
@@ -38,6 +39,7 @@ If the rules, the data in `src/data`, cube generation, the RNG, `serialise` or t
    npm run golden -- --record staircase-seed-8 --seed 8 --policy staircase
    npm run golden -- --record wander-seed-9 --seed 9 --policy wander
    npm run golden -- --record random-seed-25-cut-short --seed 25 --policy random --max-decisions 150
+   npm run golden -- --record staircase-seed-11-traces --seed 11 --policy staircase
    ```
 
    Add `--description "..."` to keep a sentence about the run. A new recording may play out quite differently from the old one; check that it still covers what the table above says, and pick another seed if it does not.
