@@ -40,7 +40,7 @@ Three layers, with a one-way dependency: `app → render → engine`. The engine
   - `legalActions(state) → Action[]`
   - `applyAction(state, action) → { state, events }`
   - `endShift(state) → { state, events }` (runs the cube phase and upkeep)
-  - `previewCubePhase(state) → ShiftForecast` (`{ hazards, upkeep }`: what the cube phase will do to known hazards, and what upkeep will do to fuel, lamp oil and banked AP; throws once the run has ended, as `endShift` does)
+  - `previewCubePhase(state) → ShiftForecast` (`{ hazards, upkeep }`: what the cube phase will do to known hazards, and what upkeep will do to fuel and lamp oil (banked AP was removed by the owner's decision in issue #32); throws once the run has ended, as `endShift` does)
 - All randomness comes from a seeded PRNG stored in the state. Same seed plus same action list must give an identical final state (this is a tested invariant).
 - The cube is stored in typed arrays (32,768 cells): block type, revealed flag, fluid level, gas level, structure id.
 - `events` are a list of things that happened (block mined, block fell, water advanced, damage taken). The renderer animates from events; it never inspects engine internals.

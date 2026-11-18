@@ -21,7 +21,7 @@
 //
 //   {
 //     "sim": {                      what was asked for
-//       "engineVersion": "0.1.0", "policy": "random", "firstSeed": 123,
+//       "engineVersion": "0.2.0", "policy": "random", "firstSeed": 123,
 //       "runs": 1000, "maxShifts": 300, "contractId": "none", "loadoutId": "standard"
 //     },
 //     "aggregate": {                all runs together
@@ -32,6 +32,9 @@
 //       "deepestLayer":     spread+,   -1 is the surface
 //       "blocksMined":      spread+,
 //       "shareOfCubeMined": spread+,   a fraction: 0.02 is 2% of the cube's cells
+//       "runsThatMinedOre": n,         ore that gives mineral traces: iron, copper, crystal
+//       "runsWithTracesSeenBeforeFirstOre": n,    see "tracesSeenBeforeFirstOre" below
+//       "runsThatMinedOreAfterSeeingTraces": n,   runs counted in both lines above
 //       "legalActionsPerPhase":    spread,   legal actions at the start of each player
 //                                            phase: mean of the runs' means, lowest
 //                                            minimum, highest maximum
@@ -55,6 +58,10 @@
 //         "shiftsPlayed": n,        shifts started, counting the one the run ended in
 //         "actionsTaken": n,        not counting ends of shift
 //         "deepestLayer": n, "blocksMined": n, "shareOfCubeMined": x,
+//         "oreBlocksMined": n,      mined blocks of ore that gives mineral traces
+//         "tracesSeenBeforeFirstOre": true | false,
+//                                   were mineral traces seen on any block before the
+//                                   first such ore was mined (or at all, if none was)
 //         "legalActionsPerPhase": spread, "legalActionsPerDecision": spread,
 //         "recipesUsed": { "<recipe id>": crafts, ... },
 //         "itemsCrafted": { "<item or gauge id>": amount, ... },

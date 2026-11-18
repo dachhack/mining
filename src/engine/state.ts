@@ -15,7 +15,7 @@ import { createRng } from './rng';
 import type { RngState } from './rng';
 
 /** Bumped whenever the shape of GameState changes, so old saves can be told apart. */
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 3;
 
 /** Some loose items lying in a cell. */
 export interface LooseItems {
@@ -61,14 +61,19 @@ export interface GameState {
   gas: Uint8Array;
   /** Structure code of each cell (see src/data/structures.ts). 0 is none. */
   structures: Uint8Array;
+  /**
+   * 1 if the player has seen mineral traces on the cell's block, otherwise 0
+   * (decision note 0012). Set by `updateMineralTraces` in tells.ts and never
+   * cleared, so what was seen stays on the map like `revealed`. Read it
+   * through `showsMineralTraces`, which also checks the rock is still there.
+   */
+  tracesSeen: Uint8Array;
 
   avatar: Avatar;
   /** Action points left in this shift. */
   ap: number;
   fuel: number;
   lampOil: number;
-  /** Unspent AP saved up towards a fuel refund (0005 item 20). */
-  bankedAp: number;
   /** The number of the current shift. */
   shift: number;
 
@@ -398,11 +403,11 @@ export function blankState(size: CubeSize, seed: number): GameState {
     fluid: new Uint8Array(cells),
     gas: new Uint8Array(cells),
     structures: new Uint8Array(cells),
+    tracesSeen: new Uint8Array(cells),
     avatar: { pos: { x: 0, y: 0, z: WORLD.surfaceZ }, health: 0 },
     ap: 0,
     fuel: 0,
     lampOil: 0,
-    bankedAp: 0,
     shift: 0,
     inventory: {},
     looseItems: [],
@@ -430,11 +435,11 @@ export function cloneState(state: GameState): GameState {
     fluid: state.fluid.slice(),
     gas: state.gas.slice(),
     structures: state.structures.slice(),
+    tracesSeen: state.tracesSeen.slice(),
     avatar: { pos: { ...state.avatar.pos }, health: state.avatar.health },
     ap: state.ap,
     fuel: state.fuel,
     lampOil: state.lampOil,
-    bankedAp: state.bankedAp,
     shift: state.shift,
     inventory: { ...state.inventory },
     looseItems: state.looseItems.map((loose) => ({

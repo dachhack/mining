@@ -9,11 +9,11 @@ import { dirname } from 'node:path';
 import { CONTRACT_IDS, DEFAULT_LOADOUT_ID, GAME_DATA, validateData } from '../../src/data';
 import { ENGINE_VERSION, hashState, isRunActive, legalActions } from '../../src/engine';
 import type { GameState } from '../../src/engine';
-import { describeChoice, describeEvents } from './describe';
+import { choiceName, describeChoice, describeEvents } from './describe';
 import { helpText } from './help';
-import { END_SHIFT, logFromText, logToText, newSession, replayLog, step } from './log';
+import { END_SHIFT, logFromText, logToText, menuChoices, newSession, replayLog, step } from './log';
 import type { LogEntry, PlayLog, Session } from './log';
-import { DEFAULT_LAYERS, DEFAULT_RADIUS, buildView, renderView } from './view';
+import { DEFAULT_LAYERS, buildView, renderView } from './view';
 
 /** What the command line asked for. `null` means "not given". */
 export interface CliOptions {
@@ -25,7 +25,8 @@ export interface CliOptions {
   /** The choices of `--do`, split at the commas. */
   choices: string[];
   loadoutId: string;
-  radius: number;
+  /** `null` if --radius was not given: the view then chooses (see `ViewOptions`). */
+  radius: number | null;
   layers: number;
 }
 
@@ -47,7 +48,7 @@ export function parseArgs(args: string[]): CliOptions {
     replayPath: null,
     choices: [],
     loadoutId: DEFAULT_LOADOUT_ID,
-    radius: DEFAULT_RADIUS,
+    radius: null,
     layers: DEFAULT_LAYERS,
   };
 
@@ -111,21 +112,39 @@ export function splitChoices(text: string): string[] {
 
 /**
  * The menu entry a typed choice stands for, or `null` if it is not on the
- * list: "end" or 0 ends the shift, and 1, 2, ... are the engine's legal
- * actions in order, exactly as the view numbers them.
+ * list. A choice is a number or a name, exactly as the view prints them:
+ * - 1, 2, ... are the engine's legal actions in order, and 0 ends the shift;
+ * - a name ("e", "mine-down", "drop-all-stone", "end") is the choice on the
+ *   list now that has that name. If the list has no such choice (the move
+ *   is not possible here, say), the answer is `null`: a name never stands
+ *   for some other action. One name is also taken when it is not printed:
+ *   "drop-all-X" while exactly one X is carried means "drop-X".
  */
 export function resolveChoice(state: GameState, choice: string): LogEntry | null {
   if (!isRunActive(state)) {
     return null;
   }
-  if (choice === 'end' || choice === '0') {
+  if (choice === '0') {
     return END_SHIFT;
   }
-  if (!/^\d+$/.test(choice)) {
-    return null;
+  if (/^\d+$/.test(choice)) {
+    // An index past the end of the list gives `undefined`, hence the `??`.
+    return legalActions(state)[Number(choice) - 1] ?? null;
   }
-  // An index past the end of the list gives `undefined`, hence the `??`.
-  return legalActions(state)[Number(choice) - 1] ?? null;
+  // `find` gives `undefined` when nothing matches.
+  const named = menuChoices(state).find((entry) => choiceName(state, entry) === choice);
+  if (named !== undefined) {
+    return named;
+  }
+  // "drop-all-stone" with exactly one stone carried: the list then has only
+  // "drop-stone" (the engine offers "drop all" from two up), and dropping
+  // that one is dropping them all. So the name is read as that choice.
+  const dropAll = 'drop-all-';
+  if (choice.startsWith(dropAll)) {
+    const dropOne = `drop-${choice.slice(dropAll.length)}`;
+    return menuChoices(state).find((entry) => choiceName(state, entry) === dropOne) ?? null;
+  }
+  return null;
 }
 
 /** What `takeChoices` did. */
@@ -157,8 +176,9 @@ export function takeChoices(session: Session, choices: string[]): ChoicesResult 
         lines,
         taken,
         refused:
-          `Refused ${position}: it is not on the action list ` +
-          `(1 to ${count}, or 0 / end to end the shift). Nothing was done from it on.`,
+          `Refused ${position}: it is not on the action list as it stands now ` +
+          `(a number from 1 to ${count}, a name from the list, or 0 / end to end the shift). ` +
+          'Nothing was done from it on.',
       };
     }
     const text = describeChoice(session.state, entry);
@@ -277,6 +297,14 @@ function replayReport(path: string): CliResult {
       lines.push('This matches the outcome recorded in the log.');
     } else {
       lines.push(`MISMATCH: the log recorded final state hash ${log.outcome.stateHash}.`);
+      if (log.engineVersion !== ENGINE_VERSION) {
+        // The usual cause, so say it plainly rather than leave it to the
+        // version numbers in the first line.
+        lines.push(
+          `This is expected: the log was played on engine ${log.engineVersion} and this is engine ` +
+            `${ENGINE_VERSION}. A play log replays to its recorded hash only on the engine version it names.`,
+        );
+      }
       exitCode = 1;
     }
   }

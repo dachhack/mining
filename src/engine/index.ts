@@ -18,7 +18,7 @@ import { legalMineActions, applyMine } from './actions/mine';
 import { legalMoveActions, applyMove } from './actions/move';
 import { legalPlaceLadderActions, applyPlaceLadder } from './actions/placeLadder';
 import { legalPlaceTorchActions, applyPlaceTorch } from './actions/placeTorch';
-import type { GameEvent } from './events';
+import type { FallKind, GameEvent } from './events';
 import { generateCube } from './generation/cube';
 import { settle } from './gravity';
 import { updateReveal } from './reveal';
@@ -26,9 +26,14 @@ import { isValidSeed } from './rng';
 import { forecastShift, runCubePhase, runUpkeep } from './shift';
 import type { ShiftForecast } from './shift';
 import { addItem, blankState, cloneState, isRunActive } from './state';
+import { updateMineralTraces } from './tells';
 import type { GameState } from './state';
 
-export const ENGINE_VERSION = '0.1.0';
+/**
+ * Changes whenever the rules or the shape of the state change, so that a play
+ * log can say which engine it was played on. 0.2.0: no fuel refill (issue #32).
+ */
+export const ENGINE_VERSION = '0.2.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
@@ -73,6 +78,7 @@ export function createRun(seed: number, contractId: string, loadoutId: string): 
   // Reveal what can be seen from the start. Nobody is watching yet, so the
   // events are dropped.
   updateReveal(state, []);
+  updateMineralTraces(state, []);
   return state;
 }
 
@@ -149,9 +155,16 @@ export function applyAction(state: GameState, action: Action): StepResult {
       break;
   }
 
-  // After any action: things fall, then light shows what is newly visible.
-  settle(next, events);
+  // After any action: things fall, then light shows what is newly visible,
+  // and any mineral traces on the blocks it falls on.
+  // A fall straight after a move is one the player chose from the move list
+  // (a drop of 1 or 2 blocks, shown there). A fall after anything else, in
+  // practice after mining the block underfoot, is uncontrolled and costs
+  // health from the first block (design doc 5.2, decision note 0010).
+  const fallKind: FallKind = action.type === 'move' ? 'chosenDrop' : 'uncontrolled';
+  settle(next, events, fallKind);
   updateReveal(next, events);
+  updateMineralTraces(next, events);
   return { state: next, events };
 }
 
@@ -168,19 +181,21 @@ export function endShift(state: GameState): StepResult {
   const events: GameEvent[] = [];
 
   runCubePhase(next, events);
-  settle(next, events);
+  // Nothing the cube phase does to the avatar's footing is the player's move.
+  settle(next, events, 'uncontrolled');
   if (isRunActive(next)) {
     runUpkeep(next, events);
   }
   // The light radius can change at upkeep (lamp oil running out).
   updateReveal(next, events);
+  updateMineralTraces(next, events);
   return { state: next, events };
 }
 
 /**
  * What ending the shift now would do, for the end-shift preview: the cube
  * phase's effect on the hazards the player knows about (none until M2) and
- * upkeep's effect on fuel, lamp oil and banked AP. Does not change `state`.
+ * upkeep's effect on fuel and lamp oil. Does not change `state`.
  * Throws if the run has already ended, as `endShift` does.
  */
 export function previewCubePhase(state: GameState): ShiftForecast {
@@ -203,7 +218,15 @@ export type {
   PlaceLadderAction,
   PlaceTorchAction,
 } from './actionTypes';
-export type { DamageCause, GameEvent, GaugeChangeReason, RunEndCause, RunOutcome } from './events';
+export type {
+  DamageCause,
+  FallKind,
+  GameEvent,
+  GaugeChangeReason,
+  RunEndCause,
+  RunOutcome,
+} from './events';
+export { fallDamage, isFatalFall } from './gravity';
 export { hashState } from './hash';
 export { canCarry, carriedWeight, carryCapacity } from './inventory';
 export { deserialise, serialise } from './serialise';
@@ -226,6 +249,8 @@ export {
   structureAt,
 } from './state';
 export type { Avatar, GameState, LooseItems, RunStatus } from './state';
+// Tells: the mineral traces the player has seen on rock near ore.
+export { showsMineralTraces, visibleMineralTraces } from './tells';
 // The seeded generator, for tools and tests that need random numbers of their
 // own (a simulator policy, say). They make their own state with `createRng`;
 // `state.rng` belongs to the rules.

@@ -23,20 +23,36 @@ export type RunEndCause = 'left' | 'fell' | 'outOfFuel';
 /** Why the avatar took damage. Only falls hurt in M1 (0005 item 8). */
 export type DamageCause = 'fall';
 
+/**
+ * The two kinds of descent (design doc 5.2, decision note 0010):
+ * - `chosenDrop`: the player chose it as a move, by walking off a ledge or
+ *   climbing down off the bottom of a ladder.
+ * - `uncontrolled`: the avatar lost its footing some other way, for example
+ *   because the block under it was mined. It costs health from the first
+ *   block.
+ */
+export type FallKind = 'chosenDrop' | 'uncontrolled';
+
 /** Why a gauge (fuel or lamp oil) changed. */
-export type GaugeChangeReason = 'upkeep' | 'bankedApRefund' | 'crafted';
+export type GaugeChangeReason = 'upkeep' | 'crafted';
 
 export type GameEvent =
   /** The avatar moved under its own power from one cell to another. */
   | { type: 'moved'; from: Vec3; to: Vec3 }
-  /** The avatar fell `distance` blocks. */
-  | { type: 'fell'; from: Vec3; to: Vec3; distance: number }
+  /** The avatar fell `distance` blocks. `kind` says whether the player chose the drop. */
+  | { type: 'fell'; from: Vec3; to: Vec3; distance: number; kind: FallKind }
   /** The avatar lost `amount` health and now has `health`. */
   | { type: 'damageTaken'; amount: number; cause: DamageCause; health: number }
   /** The block at `pos` was mined out. `block` is the code of what was there. */
   | { type: 'blockMined'; pos: Vec3; block: number }
   /** The block at `pos` became known to the player. `block` is its code. */
   | { type: 'blockRevealed'; pos: Vec3; block: number }
+  /**
+   * The player saw mineral traces on the block at `pos` for the first time
+   * (decision note 0012). Sent once for a block; the traces then stay on the
+   * map. It follows the `blockRevealed` events of the same step.
+   */
+  | { type: 'mineralTracesSeen'; pos: Vec3 }
   /**
    * Items appeared in the inventory from nowhere on the board: a mining yield
    * (it follows the `blockMined` of the same action) or a crafted item (it
@@ -55,12 +71,6 @@ export type GameEvent =
   | { type: 'structurePlaced'; pos: Vec3; structure: number }
   /** The recipe was crafted once. Its inputs left the inventory. */
   | { type: 'crafted'; recipe: string }
-  /**
-   * At upkeep, `amount` unspent AP went into the banked counter (0005 item
-   * 20). `bankedAp` is the counter after any refund it paid for; the refund
-   * itself is a `fuelChanged` with reason `bankedApRefund`.
-   */
-  | { type: 'apBanked'; amount: number; bankedAp: number }
   /** Shift number `shift` ended and `nextShift` began. */
   | { type: 'shiftEnded'; shift: number; nextShift: number }
   /** Fuel changed by `delta` (negative when used) and is now `fuel`. */

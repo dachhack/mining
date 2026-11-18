@@ -18,7 +18,6 @@ function busyState(): GameState {
     ap: 3,
     fuel: 11,
     lampOil: 4,
-    bankedAp: 2,
     shift: 9,
     inventory: { timber: 2, ladder: 5, coal: 0 },
     looseItems: [
@@ -108,6 +107,7 @@ describe('serialise and deserialise', () => {
     expect(() => deserialise({ ...saved, version: 999 })).toThrow('version 999');
     expect(() => deserialise({ ...saved, blocks: [2, 17] })).toThrow('"blocks"');
     expect(() => deserialise({ ...saved, gas: [0, 19] })).toThrow('"gas"');
+    expect(() => deserialise({ ...saved, tracesSeen: [1, 17] })).toThrow('"tracesSeen"');
     expect(() => deserialise({ ...saved, size: { x: 3, y: 3, z: 3 } })).toThrow('damaged');
     expect(() =>
       deserialise({ ...saved, avatar: { pos: { x: 9, y: 0, z: 0 }, health: 5 } }),
@@ -136,6 +136,7 @@ describe('hashState', () => {
       fluid: (s) => (s.fluid[0] = 1),
       gas: (s) => (s.gas[0] = 1),
       structure: (s) => (s.structures[0] = 1),
+      'traces seen': (s) => (s.tracesSeen[0] = 1),
       rng: (s) => nextUint32(s.rng),
       seed: (s) => (s.seed += 1),
       'avatar position': (s) => (s.avatar.pos.x = 0),
@@ -143,7 +144,6 @@ describe('hashState', () => {
       ap: (s) => (s.ap -= 1),
       fuel: (s) => (s.fuel -= 1),
       'lamp oil': (s) => (s.lampOil -= 1),
-      'banked AP': (s) => (s.bankedAp += 1),
       shift: (s) => (s.shift += 1),
       inventory: (s) => (s.inventory['timber'] = 3),
       'loose items': (s) => s.looseItems.pop(),

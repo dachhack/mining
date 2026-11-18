@@ -189,15 +189,38 @@ describe('validateData', () => {
     const problems = problemsAfter((data) => {
       data.avatar.startHealth = 0;
       data.avatar.fatalFallBlocks = data.avatar.freeFallBlocks; // must be more
+      data.avatar.uncontrolledFallDamagePerBlock = -1;
       data.shift.apPerShift = 0;
-      data.shift.bankedApPerRefund = 0;
+      data.shift.lampOilBurnEveryShifts = 0;
       data.actionCosts.move = -1;
     });
     expect(problems.some((p) => p.includes('avatar.startHealth'))).toBe(true);
     expect(problems.some((p) => p.includes('avatar.fatalFallBlocks'))).toBe(true);
+    expect(problems.some((p) => p.includes('avatar.uncontrolledFallDamagePerBlock'))).toBe(true);
     expect(problems.some((p) => p.includes('shift.apPerShift'))).toBe(true);
-    expect(problems.some((p) => p.includes('shift.bankedApPerRefund'))).toBe(true);
+    expect(problems.some((p) => p.includes('shift.lampOilBurnEveryShifts'))).toBe(true);
     expect(problems.some((p) => p.includes('actionCosts.move'))).toBe(true);
+  });
+
+  it('reports bad mineral-trace data', () => {
+    const problems = problemsAfter((data) => {
+      data.tells.mineralTraces.distance = 0;
+      data.tells.mineralTraces.sourceBlocks = ['ironOre', 'mithril', 'air', 'ironOre'];
+      data.tells.mineralTraces.shownOnBlocks = [];
+    });
+    expect(problems.some((p) => p.includes('tells.mineralTraces.distance'))).toBe(true);
+    expect(problems.some((p) => p.includes('unknown block "mithril"'))).toBe(true);
+    expect(problems.some((p) => p.includes('"air", which is not a solid block'))).toBe(true);
+    expect(problems.some((p) => p.includes('lists block "ironOre" more than once'))).toBe(true);
+    expect(problems.some((p) => p.includes('shownOnBlocks is empty'))).toBe(true);
+  });
+
+  it('reports a block that both gives mineral traces and shows them', () => {
+    const problems = problemsAfter((data) => {
+      data.tells.mineralTraces.shownOnBlocks.push('crystal');
+    });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('lists block "crystal" more than once');
   });
 
   it('reports a loadout with an unknown item, too much weight, or a missing default', () => {

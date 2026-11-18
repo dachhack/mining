@@ -8,6 +8,7 @@ import { CONTRACT_IDS, DEFAULT_LOADOUT_ID, LOADOUTS } from './loadouts';
 import { FIELD_RECIPES, GAUGES } from './recipes';
 import { ACTION_COSTS, SHIFT } from './shift';
 import { STRUCTURES } from './structures';
+import { TELLS } from './tells';
 import type { BlockDef, GameData, ItemDef, LoadoutDef, RecipeDef } from './types';
 import { WORLD } from './world';
 
@@ -24,6 +25,7 @@ export type { GaugeId } from './recipes';
 export { ACTION_COSTS, SHIFT } from './shift';
 export { NO_STRUCTURE, STRUCTURES } from './structures';
 export type { StructureId } from './structures';
+export { TELLS } from './tells';
 export { WORLD } from './world';
 export { validateData } from './validate';
 export type * from './types';
@@ -38,6 +40,7 @@ export const GAME_DATA: GameData = {
   gauges: GAUGES,
   recipes: FIELD_RECIPES,
   avatar: AVATAR,
+  tells: TELLS,
   shift: SHIFT,
   actionCosts: ACTION_COSTS,
   loadouts: LOADOUTS,

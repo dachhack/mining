@@ -2,7 +2,7 @@
 
 One folder per round, named `<milestone>-r<n>` (for example `m1-r1`). Each holds:
 
-- `<persona>-<seed>.json`: the play log (seed, contract, loadout, engine version, action list). Replaying it reproduces the run exactly.
+- `<persona>-<seed>.json`: the play log (seed, contract, loadout, engine version, action list). Replaying it reproduces the run exactly. A play log replays to its recorded hash only on the engine version it names: round `m1-r1` was played on engine 0.1.0, and the rules changed in 0.2.0 (no fuel refill, issue #32).
 - `<persona>-<seed>.md`: the playtester's report, using the template below.
 - `evaluation.md`: the evaluator's findings for the round.
 

@@ -31,7 +31,7 @@ async function interactive(options: CliOptions): Promise<void> {
   }
   console.log([...opened.notes, sessionView(session, options)].join('\n'));
 
-  const prompt = 'Choice (a number, "end", or "q" to stop)> ';
+  const prompt = 'Choice (a number or a name from the list, or "q" to stop)> ';
   // `for await` reads the lines of standard input one at a time as they
   // arrive, and ends when the input is closed (Ctrl-D, or the end of a pipe).
   const lines = createInterface({ input: process.stdin });

@@ -5,7 +5,7 @@
   "loadoutId": "standard",
   "recordedWith": "staircase",
   "expectedStatus": "ended: salvage, left",
-  "expectedHash": "2681dc0617cd3000",
+  "expectedHash": "ad0fa8c0a4b98857",
   "decisions": [
     "mine 17,16,0 ap 1",
     "move to 17,16,-1 drop 1 ap 1",

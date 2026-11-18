@@ -5,9 +5,18 @@
 // is described from the action itself (which the engine offers only for cells
 // in reach, all of them revealed) and from the data tables.
 
-import { AVATAR, STRUCTURES, WORLD, blockDefByCode, findRecipe, itemDef } from '../../src/data';
+import { STRUCTURES, WORLD, blockDefByCode, findRecipe, itemDef } from '../../src/data';
 import type { ItemStack, Vec3 } from '../../src/data';
-import { blockDefAt, canCarry, isRevealed, isSolid, structureAt } from '../../src/engine';
+import {
+  blockDefAt,
+  canCarry,
+  fallDamage,
+  isFatalFall,
+  isRevealed,
+  isSolid,
+  showsMineralTraces,
+  structureAt,
+} from '../../src/engine';
 import type { Action, GameEvent, GameState } from '../../src/engine';
 import type { LogEntry } from './log';
 
@@ -58,7 +67,8 @@ function blocksText(count: number): string {
 /**
  * What the player knows about the fall that follows mining the block the
  * avatar stands on, for the action list. This is the one lethal choice in
- * M1, so the list must say it.
+ * M1, and it costs health from the first block (an uncontrolled fall,
+ * decision note 0010), so the list must say what it costs.
  *
  * It is worked out from revealed cells only. The column under the avatar is
  * walked downwards, and at the first cell the player has not seen the answer
@@ -92,14 +102,17 @@ function knownFallText(state: GameState): string {
     }
   }
 
-  const harm =
-    fall >= AVATAR.fatalFallBlocks
-      ? ', FATAL'
-      : fall > AVATAR.freeFallBlocks
-        ? ', it will cost health'
-        : known
-          ? ', no harm'
-          : '';
+  // The cost of the fall as far as it is known. If the bottom is unseen the
+  // real fall may be longer, so the real cost may be higher, never lower.
+  const cost = fallDamage('uncontrolled', fall);
+  let harm: string;
+  if (isFatalFall(fall) || cost >= state.avatar.health) {
+    harm = ', FATAL';
+  } else if (cost > 0) {
+    harm = known ? ` and lose ${cost} health` : ` and lose at least ${cost} health`;
+  } else {
+    harm = known ? ', no harm' : '';
+  }
   return known
     ? `you will fall ${blocksText(fall)}${harm}`
     : `you will fall ${blocksText(fall)} or more${harm}; below that is unseen`;
@@ -115,6 +128,21 @@ const RUN_END_TEXT: Record<string, string> = {
 /** How a run ended, in words. `cause` is the engine's `RunEndCause`. */
 export function runEndText(cause: string): string {
   return RUN_END_TEXT[cause] ?? cause;
+}
+
+/**
+ * What mining the revealed block at `target` gives: "Stone, mineral traces,
+ * gives 1 Stone". `underfoot` is put after the block's name; it is the note
+ * about the fall for the block the avatar stands on, and '' otherwise.
+ */
+function mineOutcomeText(state: GameState, target: Vec3, underfoot: string): string {
+  const block = blockDefAt(state, target);
+  // A yield that does not fit the carry limit is left in the hole.
+  const fits = block.yields.every((stack) => canCarry(state, stack.item, stack.count));
+  const tooHeavy = fits ? '' : ' (too heavy to carry: it will be left lying there)';
+  // Shown only for a block the player has seen traces on; the engine decides.
+  const traces = showsMineralTraces(state, target) ? ', mineral traces' : '';
+  return `${block.name}${traces}${underfoot}, gives ${stackListText(block.yields)}${tooHeavy}`;
 }
 
 function describeAction(state: GameState, action: Action): string {
@@ -135,18 +163,11 @@ function describeAction(state: GameState, action: Action): string {
       return `Move ${side}${drop}`;
     }
     case 'mine': {
-      const block = blockDefAt(state, action.target);
-      // A yield that does not fit the carry limit is left in the hole.
-      const fits = block.yields.every((stack) => canCarry(state, stack.item, stack.count));
-      const tooHeavy = fits ? '' : ' (too heavy to carry: it will be left lying there)';
       const underfoot =
         action.target.x === here.x && action.target.y === here.y
           ? ` (you are standing on it: ${knownFallText(state)})`
           : '';
-      return (
-        `Mine ${whereFrom(here, action.target)}: ${block.name}${underfoot}` +
-        `, gives ${stackListText(block.yields)}${tooHeavy}`
-      );
+      return `Mine ${whereFrom(here, action.target)}: ${mineOutcomeText(state, action.target, underfoot)}`;
     }
     case 'placeLadder':
       return `Place a ladder in ${placeWhere(here, action.target)}`;
@@ -178,6 +199,99 @@ function placeWhere(here: Vec3, target: Vec3): string {
   return where === 'your cell' ? where : `the cell ${where}`;
 }
 
+/** "n", "ne", "sw", ... for a sideways offset; '' for none. The short form of `compass`. */
+function compassShort(dx: number, dy: number): string {
+  return (dy < 0 ? 'n' : dy > 0 ? 's' : '') + (dx > 0 ? 'e' : dx < 0 ? 'w' : '');
+}
+
+/**
+ * The short form of `whereFrom`, for the names of choices: "here", "up",
+ * "down", "n", "ne", "n-down" (north, one layer down), "n-up".
+ */
+function whereShort(from: Vec3, to: Vec3): string {
+  const side = compassShort(to.x - from.x, to.y - from.y);
+  const dz = to.z - from.z;
+  const level = dz === 0 ? '' : dz < 0 ? 'up' : 'down';
+  if (side === '') {
+    return level === '' ? 'here' : level;
+  }
+  return level === '' ? side : `${side}-${level}`;
+}
+
+/** "lampOil" -> "lamp-oil": an id from src/data in the lower case a choice is typed in. */
+function idInLowerCase(id: string): string {
+  return id.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+}
+
+/**
+ * The name of a choice: what the player may type instead of its number.
+ *
+ * A number says where a choice stands in the list, and the list changes
+ * after every action. A name says what the choice does, seen from where the
+ * avatar stands ("e" is always "go east", "mine-down" is always "mine the
+ * block underfoot"), so it means the same thing at every step and is safe in
+ * a chain (issue #30). It is made from the action alone, never from the cube.
+ *
+ * The names:
+ * - moves: n, e, s, w (a walk or a step up: a direction offers one or the
+ *   other, never both), up and down (on a ladder);
+ * - mine-n, mine-ne, ... on your layer; mine-down for the block underfoot;
+ *   mine-n-down, mine-ne-down, ... for the layer below;
+ * - ladder-here, ladder-n, ladder-up, ladder-down; torch- the same;
+ * - craft-ladder, craft-lamp-oil, ...: "craft-" and the recipe;
+ * - take-here-stone, take-n-coal, ...: "take-", where from, and the item;
+ * - drop-stone (one) and drop-all-stone (the whole stack);
+ * - leave, and end for "end the shift".
+ */
+export function choiceName(state: GameState, entry: LogEntry): string {
+  const here = state.avatar.pos;
+  switch (entry.type) {
+    case 'endShift':
+      return 'end';
+    case 'move': {
+      const side = compassShort(entry.to.x - here.x, entry.to.y - here.y);
+      if (side !== '') {
+        return side;
+      }
+      return entry.to.z < here.z ? 'up' : 'down';
+    }
+    case 'mine':
+      return `mine-${whereShort(here, entry.target)}`;
+    case 'placeLadder':
+      return `ladder-${whereShort(here, entry.target)}`;
+    case 'placeTorch':
+      return `torch-${whereShort(here, entry.target)}`;
+    case 'craft':
+      return `craft-${idInLowerCase(entry.recipe)}`;
+    case 'pickUp':
+      return `take-${whereShort(here, entry.from)}-${idInLowerCase(entry.item)}`;
+    case 'drop':
+      return entry.count === 1
+        ? `drop-${idInLowerCase(entry.item)}`
+        : `drop-all-${idInLowerCase(entry.item)}`;
+    case 'leave':
+      return 'leave';
+  }
+}
+
+/**
+ * For a mine action, what it does apart from where the block is: "Stone,
+ * gives 1 Stone". Mine actions with the same words here and the same AP cost
+ * differ only in direction, and the list prints them as one line (issue #30).
+ * `null` for the block underfoot, whose line says what the fall will cost
+ * and so always stands alone, and for every other kind of choice.
+ */
+export function mineGroupText(state: GameState, entry: LogEntry): string | null {
+  if (entry.type !== 'mine') {
+    return null;
+  }
+  const here = state.avatar.pos;
+  if (entry.target.x === here.x && entry.target.y === here.y) {
+    return null;
+  }
+  return mineOutcomeText(state, entry.target, '');
+}
+
 /** The text of one line of the action list. */
 export function describeChoice(state: GameState, entry: LogEntry): string {
   if (entry.type === 'endShift') {
@@ -198,7 +312,6 @@ function structureNameByCode(code: number): string {
 
 const GAUGE_REASONS: Record<string, string> = {
   upkeep: 'the shift',
-  bankedApRefund: 'banked AP',
   crafted: 'crafted',
 };
 
@@ -211,13 +324,19 @@ const DAMAGE_CAUSES: Record<string, string> = { fall: 'the fall' };
  */
 export function describeEvents(after: GameState, events: GameEvent[]): string[] {
   const lines: string[] = [];
+  // Said once for a step, however many blocks it was seen on.
+  let tracesSaid = false;
   for (const event of events) {
     switch (event.type) {
       case 'moved':
         // The new position is in the view; no need to say it twice.
         break;
       case 'fell':
-        lines.push(`You fell ${blocksText(event.distance)}.`);
+        lines.push(
+          event.kind === 'chosenDrop'
+            ? `You dropped ${blocksText(event.distance)}.`
+            : `You lost your footing and fell ${blocksText(event.distance)}.`,
+        );
         break;
       case 'damageTaken':
         lines.push(
@@ -229,6 +348,12 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
         break;
       case 'blockRevealed':
         // The map shows what is newly known.
+        break;
+      case 'mineralTracesSeen':
+        if (!tracesSaid) {
+          lines.push('You notice mineral traces in the rock: ore is near. The map marks them "%".');
+          tracesSaid = true;
+        }
         break;
       case 'itemGained':
         lines.push(`Got ${event.count} ${itemDef(event.item).name}.`);
@@ -257,11 +382,6 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
         break;
       case 'crafted':
         lines.push(`Crafted ${findRecipe(event.recipe)?.name ?? event.recipe}.`);
-        break;
-      case 'apBanked':
-        if (event.amount > 0) {
-          lines.push(`Banked ${event.amount} AP (counter now ${event.bankedAp}).`);
-        }
         break;
       case 'shiftEnded':
         lines.push(`Shift ${event.shift} ended; shift ${event.nextShift} begins.`);
