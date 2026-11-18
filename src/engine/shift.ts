@@ -1,6 +1,7 @@
 // The end of a shift: cube phase and upkeep (design doc 4).
 
 import { SHIFT } from '../data';
+import { campFuelDue } from './camps';
 import { stepAvatarEffects } from './cube/avatarEffects';
 import { stepCaveIns } from './cube/caveIns';
 import { stepFluids } from './cube/fluids';
@@ -131,9 +132,12 @@ function computeUpkeep(state: GameState): UpkeepForecast {
     };
   }
 
-  // 2. The shift's fuel. Never more than there is, so the gauge cannot go
-  //    below 0 if `fuelPerShift` is ever tuned above 1.
-  const fuelConsumed = Math.min(SHIFT.fuelPerShift, state.fuel);
+  // 2. The shift's fuel: the avatar's own, plus 1 for each active camp whose
+  //    turn it is (every 4th shift, counted from the shift it was founded;
+  //    design doc 4, 0014 item 28). Never more than there is, so the gauge
+  //    cannot go below 0: a miner whose camps take the last of the fuel is at
+  //    0 and has one last shift, like any other (design doc 4).
+  const fuelConsumed = Math.min(SHIFT.fuelPerShift + campFuelDue(state), state.fuel);
 
   // 3. Lamp oil burns at the upkeep that ends every Nth shift of the run,
   //    counting the first shift as 1 (owner question 29).
@@ -159,7 +163,9 @@ function computeUpkeep(state: GameState): UpkeepForecast {
  *    and stop. The shift number and `state.ap` are left as they were. So a
  *    player may finish a shift on 0 fuel and survive only by crafting fuel
  *    before the next upkeep.
- * 2. Otherwise consume the shift's fuel (`fuelChanged`, reason `upkeep`).
+ * 2. Otherwise consume the shift's fuel (`fuelChanged`, reason `upkeep`): the
+ *    avatar's own and that of each active camp that is due (`campFuelDue` in
+ *    camps.ts), as one amount, and never more than there is.
  * 3. Burn lamp oil when it is due (`lampOilChanged`, reason `upkeep`): at the
  *    upkeep that ends every `lampOilBurnEveryShifts`-th shift of the run,
  *    counting the first shift as 1 (so with 4, at the end of the 4th, 8th,

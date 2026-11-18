@@ -1,8 +1,12 @@
-// Field crafting (design doc 7.1).
+// Crafting: field recipes anywhere (design doc 7.1), and camp recipes in any
+// cell of an active camp (design doc 7.2 and 8; 0014 item 27). Both use the
+// one `craft` action, which names a recipe by its id; ids are unique across
+// the two tables.
 
-import { ACTION_COSTS, FIELD_RECIPES, findRecipe } from '../../data';
+import { ACTION_COSTS, CAMP_RECIPES, FIELD_RECIPES, findCampRecipe, findRecipe } from '../../data';
 import type { RecipeDef } from '../../data';
 import type { CraftAction } from '../actionTypes';
+import { campOfAvatar, kitLimitRoomFor } from '../camps';
 import type { GameEvent } from '../events';
 import { carriedWeight, carryCapacity, stackWeight } from '../inventory';
 import { addItem, countItem, removeItem } from '../state';
@@ -35,6 +39,18 @@ function weightAfterCraft(state: GameState, recipe: RecipeDef): number {
 }
 
 /**
+ * True if crafting `recipe` once would leave the avatar with more camp kits
+ * than it may carry (design doc 8: "the avatar can carry only one kit"). Only
+ * the camp-kit recipe can; for every other recipe this is false.
+ */
+function breaksKitLimit(state: GameState, recipe: RecipeDef): boolean {
+  if (recipe.output.kind !== 'item') {
+    return false;
+  }
+  return recipe.output.count > kitLimitRoomFor(state, recipe.output.item);
+}
+
+/**
  * Every `CraftAction` the player could take now.
  *
  * - One action for each recipe in `FIELD_RECIPES` whose inputs the avatar
@@ -45,11 +61,16 @@ function weightAfterCraft(state: GameState, recipe: RecipeDef): number {
  *   so this only ever refuses a craft when the avatar is already over the
  *   limit.
  * - `ap` is `ACTION_COSTS.craft`.
+ * - Then, only if the avatar is in a cell of an active camp: one action for
+ *   each recipe in `CAMP_RECIPES` (design doc 7.2), in that table's order,
+ *   by the same two tests, at `ACTION_COSTS.campCraft`. The camp-kit recipe
+ *   is not offered while the avatar already carries a kit (design doc 8).
+ *   Inputs come from the inventory, not from the stash.
  * - Does not change `state`.
  * - Lists actions as if the avatar had unlimited AP; the dispatcher in
  *   index.ts removes the ones that cost more than the AP left.
- * - The order depends only on `FIELD_RECIPES`, so it is the same for any two
- *   states with the same hash.
+ * - The order depends only on the two recipe tables, so it is the same for
+ *   any two states with the same hash.
  */
 export function legalCraftActions(state: GameState): CraftAction[] {
   const actions: CraftAction[] = [];
@@ -61,6 +82,20 @@ export function legalCraftActions(state: GameState): CraftAction[] {
       continue;
     }
     actions.push({ type: 'craft', recipe: recipe.id, ap: ACTION_COSTS.craft });
+  }
+  if (campOfAvatar(state) !== null) {
+    for (const recipe of CAMP_RECIPES) {
+      if (!hasInputs(state, recipe)) {
+        continue;
+      }
+      if (weightAfterCraft(state, recipe) > carryCapacity()) {
+        continue;
+      }
+      if (breaksKitLimit(state, recipe)) {
+        continue;
+      }
+      actions.push({ type: 'craft', recipe: recipe.id, ap: ACTION_COSTS.campCraft });
+    }
   }
   return actions;
 }
@@ -78,9 +113,10 @@ export function legalCraftActions(state: GameState): CraftAction[] {
  * - Does not apply gravity or reveal: the dispatcher does that afterwards.
  */
 export function applyCraft(state: GameState, action: CraftAction, events: GameEvent[]): void {
-  const recipe = findRecipe(action.recipe);
+  // A field recipe, or else a camp recipe. (`??` means "or, if missing".)
+  const recipe = findRecipe(action.recipe) ?? findCampRecipe(action.recipe);
   if (recipe === undefined) {
-    throw new Error(`Unknown field recipe: ${action.recipe}`);
+    throw new Error(`Unknown recipe: ${action.recipe}`);
   }
 
   for (const input of recipe.inputs) {

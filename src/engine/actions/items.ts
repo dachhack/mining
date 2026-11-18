@@ -18,6 +18,7 @@
 import { ACTION_COSTS } from '../../data';
 import type { Vec3 } from '../../data';
 import type { DropAction, PickUpAction } from '../actionTypes';
+import { kitLimitRoomFor } from '../camps';
 import type { GameEvent } from '../events';
 import { canCarry } from '../inventory';
 import { FACE_OFFSETS, offsetPosition } from '../neighbours';
@@ -33,10 +34,11 @@ import type { GameState } from '../state';
 
 /**
  * The most of `item`, up to `available`, that still fits the carry limit.
- * 0 if not even one fits.
+ * 0 if not even one fits. A camp kit is also held to the limit of one carried
+ * (design doc 8), so a second kit is never picked up.
  */
 function countThatFits(state: GameState, item: string, available: number): number {
-  let count = available;
+  let count = Math.min(available, kitLimitRoomFor(state, item));
   while (count > 0 && !canCarry(state, item, count)) {
     count -= 1;
   }
