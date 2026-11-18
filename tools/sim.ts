@@ -21,7 +21,7 @@
 //
 //   {
 //     "sim": {                      what was asked for
-//       "engineVersion": "0.1.0", "policy": "random", "firstSeed": 123,
+//       "engineVersion": "0.2.0", "policy": "random", "firstSeed": 123,
 //       "runs": 1000, "maxShifts": 300, "contractId": "none", "loadoutId": "standard"
 //     },
 //     "aggregate": {                all runs together

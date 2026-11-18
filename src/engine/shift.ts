@@ -25,12 +25,6 @@ export interface HazardForecast {
  * what `endShift` would produce if the player ended the shift now.
  */
 export interface UpkeepForecast {
-  /** Unspent AP that will go into the banked counter. */
-  apBanked: number;
-  /** The banked counter after upkeep. */
-  bankedApAfter: number;
-  /** Fuel refunded from banked AP. */
-  fuelRefunded: number;
   /** Fuel consumed by the shift. */
   fuelConsumed: number;
   /** Fuel after upkeep. */
@@ -126,46 +120,33 @@ export function runCubePhase(state: GameState, events: GameEvent[]): void {
  * disagree with what then happens.
  */
 function computeUpkeep(state: GameState): UpkeepForecast {
-  // 1. Unspent AP goes into the banked counter; every full `bankedApPerRefund`
-  //    in the counter comes off it and refunds fuel (0005 item 20).
-  const apBanked = state.ap;
-  const counter = state.bankedAp + apBanked;
-  const refundSteps = Math.floor(counter / SHIFT.bankedApPerRefund);
-  const bankedApAfter = counter - refundSteps * SHIFT.bankedApPerRefund;
-  const fuelRefunded = refundSteps * SHIFT.fuelPerRefund;
-  const fuelAfterRefund = state.fuel + fuelRefunded;
+  // Unspent AP plays no part here: it is lost when the shift ends (design
+  // doc 4; issue #32). So upkeep depends only on the gauges and the shift.
 
-  // 2. No fuel even after the refund: the run ends and nothing else happens
-  //    (0005 item 21).
-  if (fuelAfterRefund <= 0) {
+  // 1. No fuel: the run ends and nothing else happens.
+  if (state.fuel <= 0) {
     return {
-      apBanked,
-      bankedApAfter,
-      fuelRefunded,
       fuelConsumed: 0,
-      fuelAfter: fuelAfterRefund,
+      fuelAfter: state.fuel,
       lampOilBurned: 0,
       lampOilAfter: state.lampOil,
       runEnds: 'outOfFuel',
     };
   }
 
-  // 3. The shift's fuel. Never more than there is, so the gauge cannot go
+  // 2. The shift's fuel. Never more than there is, so the gauge cannot go
   //    below 0 if `fuelPerShift` is ever tuned above 1.
-  const fuelConsumed = Math.min(SHIFT.fuelPerShift, fuelAfterRefund);
+  const fuelConsumed = Math.min(SHIFT.fuelPerShift, state.fuel);
 
-  // 4. Lamp oil burns at the upkeep that ends every Nth shift of the run,
+  // 3. Lamp oil burns at the upkeep that ends every Nth shift of the run,
   //    counting the first shift as 1 (owner question 29).
   const shiftsPlayed = state.shift - SHIFT.firstShiftNumber + 1;
   const burnIsDue = shiftsPlayed % SHIFT.lampOilBurnEveryShifts === 0;
   const lampOilBurned = burnIsDue ? Math.min(SHIFT.lampOilPerBurn, state.lampOil) : 0;
 
   return {
-    apBanked,
-    bankedApAfter,
-    fuelRefunded,
     fuelConsumed,
-    fuelAfter: fuelAfterRefund - fuelConsumed,
+    fuelAfter: state.fuel - fuelConsumed,
     lampOilBurned,
     lampOilAfter: state.lampOil - lampOilBurned,
     runEnds: null,
@@ -173,24 +154,22 @@ function computeUpkeep(state: GameState): UpkeepForecast {
 }
 
 /**
- * Upkeep (design doc 4; 0005 items 15, 20 and 21). `endShift` in index.ts
+ * Upkeep (design doc 4; 0005 item 15; issue #32). `endShift` in index.ts
  * calls this after the cube phase, if the run is still going.
  *
  * In this order, with every number from `SHIFT`:
- * 1. Add the unspent `state.ap` to `state.bankedAp`; for each full refund
- *    step in the counter, take it off and add fuel. All the refund steps of
- *    one upkeep are reported as a single `fuelChanged` (reason
- *    `bankedApRefund`). Then emit `apBanked` with the AP added and the
- *    counter as it now stands, even when the amount is 0.
- * 2. If fuel is 0, end the run: `endRun(state, 'death', 'outOfFuel', events)`,
- *    and stop. The shift number and `state.ap` are left as they were.
- * 3. Otherwise consume the shift's fuel (`fuelChanged`, reason `upkeep`).
- * 4. Burn lamp oil when it is due (`lampOilChanged`, reason `upkeep`): at the
+ * 1. If fuel is 0, end the run: `endRun(state, 'death', 'outOfFuel', events)`,
+ *    and stop. The shift number and `state.ap` are left as they were. So a
+ *    player may finish a shift on 0 fuel and survive only by crafting fuel
+ *    before the next upkeep.
+ * 2. Otherwise consume the shift's fuel (`fuelChanged`, reason `upkeep`).
+ * 3. Burn lamp oil when it is due (`lampOilChanged`, reason `upkeep`): at the
  *    upkeep that ends every `lampOilBurnEveryShifts`-th shift of the run,
  *    counting the first shift as 1 (so with 4, at the end of the 4th, 8th,
  *    ... shift), and only if there is oil left.
- * 5. Start the next shift: add 1 to `state.shift`, reset `state.ap`, and emit
- *    `shiftEnded`. Unspent AP is not carried over as AP.
+ * 4. Start the next shift: add 1 to `state.shift`, reset `state.ap`, and emit
+ *    `shiftEnded`. Unspent AP is lost: it does not carry over and does not
+ *    become fuel.
  *
  * Reveal is not this function's job: `endShift` calls `updateReveal` after
  * it, which is how the light shrinks when the oil runs out.
@@ -198,26 +177,13 @@ function computeUpkeep(state: GameState): UpkeepForecast {
 export function runUpkeep(state: GameState, events: GameEvent[]): void {
   const upkeep = computeUpkeep(state);
 
-  // 1. Bank the unspent AP and pay any refund.
-  state.bankedAp = upkeep.bankedApAfter;
-  if (upkeep.fuelRefunded > 0) {
-    state.fuel += upkeep.fuelRefunded;
-    events.push({
-      type: 'fuelChanged',
-      delta: upkeep.fuelRefunded,
-      fuel: state.fuel,
-      reason: 'bankedApRefund',
-    });
-  }
-  events.push({ type: 'apBanked', amount: upkeep.apBanked, bankedAp: state.bankedAp });
-
-  // 2. Out of fuel: the run ends here.
+  // 1. Out of fuel: the run ends here.
   if (upkeep.runEnds !== null) {
     endRun(state, 'death', upkeep.runEnds, events);
     return;
   }
 
-  // 3. The shift's fuel.
+  // 2. The shift's fuel.
   if (upkeep.fuelConsumed > 0) {
     state.fuel -= upkeep.fuelConsumed;
     events.push({
@@ -228,7 +194,7 @@ export function runUpkeep(state: GameState, events: GameEvent[]): void {
     });
   }
 
-  // 4. Lamp oil.
+  // 3. Lamp oil.
   if (upkeep.lampOilBurned > 0) {
     state.lampOil -= upkeep.lampOilBurned;
     events.push({
@@ -239,7 +205,7 @@ export function runUpkeep(state: GameState, events: GameEvent[]): void {
     });
   }
 
-  // 5. The next shift begins.
+  // 4. The next shift begins, with fresh AP whatever was left unspent.
   const endedShift = state.shift;
   state.shift = endedShift + 1;
   state.ap = SHIFT.apPerShift;
