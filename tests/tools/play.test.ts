@@ -9,11 +9,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { AVATAR, BLOCKS, STRUCTURES, TELLS } from '../../src/data';
+import { AVATAR, BLOCKS, SHIFT, STRUCTURES, TELLS } from '../../src/data';
 import type { Vec3 } from '../../src/data';
 import {
   ENGINE_VERSION,
   applyAction,
+  blockDefAt,
   cellIndex,
   cellPosition,
   createRun,
@@ -21,6 +22,7 @@ import {
   hashState,
   inGrid,
   isRevealed,
+  isSolid,
   legalActions,
   visibleMineralTraces,
 } from '../../src/engine';
@@ -274,7 +276,7 @@ describe('the view hides what the avatar cannot know', () => {
       }
     });
     expect(mineLinesChanged).toBeGreaterThan(0);
-    expect(after).toContain('% rock with mineral traces');
+    expect(after).toContain('% Stone with mineral traces');
   });
 
   it('prints traces for a block exactly when the engine says the player sees them', () => {
@@ -299,8 +301,10 @@ describe('the view hides what the avatar cannot know', () => {
       if (char === null) {
         continue;
       }
-      expect(char === '%').toBe(shown.has(index));
-      if (char === '%') {
+      // Traced rock is drawn as D (dirt), % (stone) or h (hard rock).
+      const isTracedChar = char === 'D' || char === '%' || char === 'h';
+      expect(isTracedChar).toBe(shown.has(index));
+      if (isTracedChar) {
         expect(isRevealed(state, pos)).toBe(true);
         marked += 1;
       }
@@ -347,7 +351,7 @@ describe('the view hides what the avatar cannot know', () => {
       { type: 'mineralTracesSeen', pos: { x: 2, y: 2, z: 3 } },
     ]);
     expect(said).toEqual([
-      'You notice mineral traces in the rock: ore is near. The map marks them "%".',
+      'You notice mineral traces in the rock: ore is near. (On the map: D, % or h.)',
     ]);
   });
 
@@ -428,9 +432,11 @@ describe('the view hides what the avatar cannot know', () => {
         count: 1,
       },
     ];
-    expect(describeEvents(state, events)).toEqual(['1 Coal fell out of sight.']);
+    expect(describeEvents(state, events)).toEqual(['A loose pile of 1 Coal fell out of sight.']);
     state.revealed[cellIndex(state.size, { x: 4, y: 2, z: 1 })] = 1;
-    expect(describeEvents(state, events)).toEqual(['1 Coal fell 1 block to layer 1.']);
+    expect(describeEvents(state, events)).toEqual([
+      'A loose pile of 1 Coal fell 1 block to layer 1.',
+    ]);
   });
 
   it('never prints the seed, the RNG state or a state hash in a view', () => {
@@ -484,7 +490,7 @@ describe('mining underfoot in the dark (issues #33 and #34)', () => {
     const text = viewText(dark);
     expect(text).toContain('you will fall 1 block or more');
     expect(text).toContain('lose at least');
-    expect(text).toContain('below that is unseen');
+    expect(text).toContain('the cell under that (layer 4) is unseen');
   });
 });
 
@@ -518,9 +524,18 @@ describe('the action list', () => {
         if (lines[0]?.endsWith(`[${cost}] ${choice.text}`) !== true) {
           // Not on a line of its own, so it is on a shared line: the shared
           // words must be this choice's own words, less the direction.
+          const group = choice.group ?? '';
           expect(choice.group).not.toBeNull();
-          expect(lines[0]).toContain(`[${cost}] Mine ${choice.group ?? ''}:`);
-          expect(choice.text.endsWith(`: ${choice.group ?? ''}`)).toBe(true);
+          expect(lines[0]).toContain(`[${cost}] ${group}:`);
+          if (choice.entry.type === 'mine') {
+            // "Mine north: Stone, gives 1 Stone" shares "Mine Stone, gives 1 Stone".
+            expect(group.startsWith('Mine ')).toBe(true);
+            expect(choice.text.endsWith(`: ${group.slice('Mine '.length)}`)).toBe(true);
+          } else {
+            // The two drops of an item share "Drop Stone (one, or all 3)".
+            expect(choice.entry.type).toBe('drop');
+            expect(group.startsWith('Drop ')).toBe(true);
+          }
         }
       }
       // And nothing else is printed as a choice: the "N. name" labels under
@@ -549,7 +564,7 @@ describe('the action list', () => {
     );
     // 10 stone weigh 20, the carry limit, so one more does not fit.
     expect(text).toContain('(too heavy to carry: it will be left lying there)');
-    expect(text).toContain('[0] Drop all 10 Stone');
+    expect(text).toContain('[0] Drop Stone (one, or all 10): ');
     expect(text).toContain('Leave the cube');
   });
 
@@ -642,7 +657,7 @@ describe('the action list', () => {
     }
     const before = viewText(state);
     expect(mineBelowLine(state)).toContain(
-      'you will fall 3 blocks or more and lose at least 4 health; below that is unseen',
+      'you will fall 3 blocks or more and lose at least 4 health; the cell under that (layer 3) is unseen',
     );
     // Whatever the unseen cells hold, the text is the same.
     state.blocks[cellIndex(state.size, { x: 1, y: 0, z: 3 })] = BLOCKS.stone.code;
@@ -930,7 +945,7 @@ describe('--help', () => {
     expect(result.output).toContain('mine-down');
     expect(result.output).toContain('--do mine-e,e,end');
     expect(result.output).toContain('Not on the list:');
-    expect(result.output).toContain('While you\n  stand on the surface the map is the whole cube');
+    expect(result.output).toContain('While you\n  stand on the surface the map is layer 0 alone');
   });
 
   it('says unspent AP is lost, and nothing about banking (issue #32)', () => {
@@ -1044,6 +1059,137 @@ function darkDugState(): GameState {
   take('mine-down');
   take('mine-e');
   return state;
+}
+
+/** Take the choice called `name`, which must be on the list, and return the new state. */
+function takeNamed(state: GameState, name: string): GameState {
+  const entry = resolveChoice(state, name);
+  if (entry === null) {
+    throw new Error(`expected "${name}" to be on the list`);
+  }
+  return entry.type === 'endShift' ? endShift(state).state : applyAction(state, entry).state;
+}
+
+/** Take the choices in order. */
+function takeAll(state: GameState, names: string[]): GameState {
+  let current = state;
+  for (const name of names) {
+    current = takeNamed(current, name);
+  }
+  return current;
+}
+
+/**
+ * Seed 7, two blocks dug straight down from the start with no ladder: the
+ * miner stands on layer 1 with rock on all four sides and rock on top of it.
+ */
+function pitInRun(): GameState {
+  return takeAll(createRun(7, 'none', 'standard'), ['mine-down', 'mine-down', 'end']);
+}
+
+/** A state made to print one of the notes of issues #47 and #46, and what it prints. */
+interface NoteState {
+  name: string;
+  state: GameState;
+  /** Pieces of text the default view of `state` contains. */
+  prints: string[];
+}
+
+/**
+ * One state for each new note or wording, all grown from a real run of seed
+ * 7 so that there are thousands of unseen cells to change. The leak test at
+ * the end of this file changes every unseen cell of each and requires the
+ * same text.
+ */
+function noteStates(): NoteState[] {
+  const made: NoteState[] = [];
+
+  // A pit after a fall, lamp lit, with full AP.
+  made.push({ name: 'pit', state: pitInRun(), prints: [`Not on the list: ${PIT_NOTE}`] });
+
+  // The same pit with the lamp out.
+  const darkPit = pitInRun();
+  darkPit.lampOil = 0;
+  made.push({
+    name: 'pit in the dark',
+    state: endShift(darkPit).state,
+    prints: ['Not on the list: No move at all', 'LAMP IS OUT'],
+  });
+
+  // The pit with a torch in the miner's cell: no ladder can go there.
+  const torchPit = pitInRun();
+  torchPit.structures[cellIndex(torchPit.size, torchPit.avatar.pos)] = STRUCTURES.torch.code;
+  made.push({
+    name: 'pit with a torch',
+    state: torchPit,
+    prints: ['No move at all', 'The cell above you is open.\n'],
+  });
+
+  // 1 AP left in the pit: the stone beside the miner costs more.
+  const tired = pitInRun();
+  tired.ap = 1;
+  made.push({
+    name: 'too little AP',
+    state: tired,
+    prints: ['Not on the list: these cost more than the 1 AP you have left: [2] mine-'],
+  });
+  const spent = pitInRun();
+  spent.ap = 0;
+  made.push({
+    name: 'no AP',
+    state: spent,
+    prints: ['Not on the list: everything that costs AP: you have 0 AP left.'],
+  });
+
+  // A step that is gone: from the first pit, open the cell north and the
+  // cell under it. A walk north then drops 1 block, and there is nothing
+  // north to step up onto.
+  const stepGone = takeAll(createRun(7, 'none', 'standard'), [
+    'mine-down',
+    'mine-n',
+    'mine-n-down',
+  ]);
+  made.push({
+    name: 'step gone',
+    state: stepGone,
+    prints: ['Not on the list: No step up north: there is no rock there to step onto'],
+  });
+
+  // Fuel 1: ending the shift leaves 0.
+  const lastFuel = pitInRun();
+  lastFuel.fuel = SHIFT.fuelPerShift;
+  made.push({ name: 'last fuel', state: lastFuel, prints: ['FUEL WILL BE 0'] });
+
+  // The lamp out on the surface, in daylight.
+  const darkSurface = createRun(7, 'none', 'standard');
+  darkSurface.lampOil = 0;
+  made.push({ name: 'lamp out on the surface', state: darkSurface, prints: ['(lamp is out)'] });
+
+  // More loose coal in the miner's cell than fits the pack (coal weighs 1).
+  const heavy = pitInRun();
+  heavy.inventory = { coal: AVATAR.carryCapacity - 4 };
+  heavy.looseItems = [{ pos: { ...heavy.avatar.pos }, item: 'coal', count: 5 }];
+  made.push({
+    name: 'pile too big',
+    state: heavy,
+    prints: ['Pick up 4 of the 5 Coal from your cell (only 4 fit your carry limit)'],
+  });
+
+  // A drop too long beside the miner, with a torch in the cell it would walk into.
+  const besideDrop = takeAll(createRun(7, 'none', 'standard'), ['mine-down', 'mine-n']);
+  const north = { x: besideDrop.avatar.pos.x, y: besideDrop.avatar.pos.y - 1, z: 0 };
+  for (let z = 1; z <= AVATAR.maxChosenDropBlocks + 1; z += 1) {
+    const index = cellIndex(besideDrop.size, { ...north, z });
+    besideDrop.blocks[index] = BLOCKS.air.code;
+    besideDrop.revealed[index] = 1;
+  }
+  besideDrop.structures[cellIndex(besideDrop.size, north)] = STRUCTURES.torch.code;
+  made.push({
+    name: 'drop beside a torch',
+    state: besideDrop,
+    prints: [`No move north: the drop there is more than ${AVATAR.maxChosenDropBlocks} blocks.\n`],
+  });
+  return made;
 }
 
 describe('names for choices (issue #30)', () => {
@@ -1194,7 +1340,9 @@ describe('a shorter action list (issue #30)', () => {
 
     const printed = text.slice(text.indexOf(ACTIONS_HEADING)).split('\n').slice(1);
     expect(view.choices).toHaveLength(20);
-    expect(printed).toHaveLength(14);
+    // 4 moves, mine-down, 2 lines of grouped mines, craft, 2 lines of drops
+    // (issue #46 item 3), leave, end.
+    expect(printed).toHaveLength(12);
   });
 
   it('still lists every legal action, with its number and name, exactly once', () => {
@@ -1255,11 +1403,16 @@ describe('the map on the surface (issue #30)', () => {
     const state = createRun(7, 'none', 'standard');
     const view = buildView(state, { radius: 4, layers: 1, deepestZ: -1 });
     expect(view.window).toEqual({ x0: 12, x1: 20, y0: 12, y1: 20 });
-    // The avatar is at (16, 16); the far corner of the top layer is 16 away.
-    expect(view.radiusForAllSeen).toBe(16);
-    expect(renderView(view)).toContain(
-      'you have seen more of these layers than is drawn: --radius 16 shows it all',
-    );
+    // With --radius the surface is drawn as before, beside layer 0.
+    expect(view.layers.map((layer) => layer.label)).toEqual(['surface', 'layer 0']);
+    // Only the top layer goes on beyond the map. The player knows all of it
+    // from the start, so there is no hint (issue #46 item 5), and the line
+    // does not claim that everything seen is on the map either.
+    expect(view.radiusForAllSeen).toBeNull();
+    expect(view.allSeenOnMap).toBe(false);
+    const text = renderView(view);
+    expect(text).not.toContain('--radius');
+    expect(text).not.toContain('everything you have seen');
   });
 
   it('underground the default map is the small one, and says when more is known', () => {
@@ -1268,7 +1421,18 @@ describe('the map on the surface (issue #30)', () => {
     expect(state.avatar.pos.z).toBe(0);
     const view = buildView(state, { ...DEFAULT_VIEW, deepestZ: 0 });
     expect(view.window).toEqual({ x0: 12, x1: 20, y0: 12, y1: 20 });
-    expect(renderView(view)).toContain('--radius 16 shows it all');
+    // Only the top layer is cut off by the map: no hint (issue #46 item 5).
+    expect(renderView(view)).not.toContain('--radius');
+
+    // The hint is for cells seen below the top layer that are off the map.
+    // Here the player has seen a cell of layer 1 that is 9 away; the top
+    // layer, also drawn, reaches 16 away, and "shows it all" must be true.
+    state.revealed[cellIndex(state.size, { x: 25, y: 16, z: 1 })] = 1;
+    const further = buildView(state, { ...DEFAULT_VIEW, deepestZ: 0 });
+    expect(further.radiusForAllSeen).toBe(16);
+    expect(renderView(further)).toContain(
+      'you have seen more of these layers than is drawn: --radius 16 shows it all',
+    );
 
     // A pocket the player has seen all of: nothing more to show.
     const pocket = buildState({
@@ -1323,6 +1487,12 @@ describe('layer labels on a narrow map (issue #20)', () => {
   });
 });
 
+/** The note for a cell with no move at all, with the ladder advice (issue #47 item 2). */
+const PIT_NOTE =
+  'No move at all: there is rock on all four sides of you and no step up out. ' +
+  'The cell above you is open: a ladder in your cell (ladder-here), then one in the cell ' +
+  'above (ladder-up), would let you climb up (up).';
+
 describe('why a move is not on the list (issue #30)', () => {
   /** The "Not on the list" lines of the view. */
   function notOffered(state: GameState): string[] {
@@ -1341,7 +1511,11 @@ describe('why a move is not on the list (issue #30)', () => {
     const longest = AVATAR.maxChosenDropBlocks;
     const shallow = besidePit(longest);
     expect(resolveChoice(shallow, 'e')).toMatchObject({ type: 'move', drop: longest });
-    expect(notOffered(shallow)).toEqual([]);
+    // Nothing about the move east, which is on the list. (The one line is
+    // about the step up that is not there: issue #47 item 2.)
+    expect(notOffered(shallow).join(' ')).not.toContain('No move');
+    expect(notOffered(shallow)).toHaveLength(1);
+    expect(notOffered(shallow)[0]).toContain('No step up east: there is no rock there');
 
     const deep = besidePit(longest + 1);
     expect(resolveChoice(deep, 'e')).toBeNull();
@@ -1388,7 +1562,7 @@ describe('why a move is not on the list (issue #30)', () => {
     expect(defaultViewText(unseen)).not.toContain('would hold you');
   });
 
-  it('says nothing about a plain wall, or when there is no AP to move at all', () => {
+  it('says nothing about a plain wall, and nothing about moves when there is no AP at all', () => {
     const solid = ['###', '###', '###'];
     const layers = [solid, ['###', '#.#', '###'], solid];
     const walled = buildState({ layers, avatar: { x: 1, y: 1, z: 1 }, revealAll: true });
@@ -1397,7 +1571,8 @@ describe('why a move is not on the list (issue #30)', () => {
 
     const tired = besidePit(AVATAR.maxChosenDropBlocks + 1);
     tired.ap = 0;
-    expect(notOffered(tired)).toEqual([]);
+    // No line about the move east; only the line that says AP is the reason.
+    expect(notOffered(tired)).toEqual(['everything that costs AP: you have 0 AP left.']);
   });
 
   it('in the dark, says the floor of a cell just dug open has not been seen', () => {
@@ -1452,9 +1627,11 @@ describe('why a move is not on the list (issue #30)', () => {
     // Ending a shift runs the engine's reveal: in the dark, the six cells touched.
     const dark = endShift(state).state;
     expect(isRevealed(dark, { x: 2, y: 0, z: 1 })).toBe(false);
-    // One line for both directions.
+    // One line for both directions, and then the line for a cell with no
+    // move at all (issue #47 item 2).
     expect(notOffered(dark)).toEqual([
       'No step up east, west: you have not seen what is on top of the rock there.',
+      PIT_NOTE,
     ]);
     const before = defaultViewText(dark);
     dark.blocks[cellIndex(dark.size, { x: 2, y: 0, z: 1 })] = BLOCKS.air.code;
@@ -1500,9 +1677,20 @@ describe('why a move is not on the list (issue #30)', () => {
         notes += 1;
         // The directions a note is about stand before its colon.
         const about = note.slice(0, note.indexOf(':'));
+        // One kind of note is about a direction that does have a move: "No
+        // step up north: there is no rock there to step onto" (issue #47
+        // item 2). The move on the list that way is then a walk with a drop,
+        // never a step up.
+        const stepGone = note.includes('there is no rock there to step onto');
         words.forEach((word, index) => {
           if (about.includes(word)) {
-            expect(resolveChoice(state, names[index] ?? '')).toBeNull();
+            const move = resolveChoice(state, names[index] ?? '');
+            if (stepGone) {
+              expect(move).toMatchObject({ type: 'move', to: { z: state.avatar.pos.z } });
+              expect(move).not.toMatchObject({ drop: 0 });
+            } else {
+              expect(move).toBeNull();
+            }
           }
         });
       }
@@ -1550,6 +1738,8 @@ describe('unseen cells never change the view (issues #30 and #33)', () => {
       darkDugState(),
       // Every tenth state of a run, lit and dark, in tunnels and on ladders.
       ...statesAlongARun(150).filter((_state, index) => index % 10 === 0),
+      // One state for each note and wording added for issues #47 and #46.
+      ...noteStates().map((made) => made.state),
     ];
     for (const state of states) {
       const texts = [defaultViewText(state), viewText(state)];
@@ -1568,8 +1758,457 @@ describe('unseen cells never change the view (issues #30 and #33)', () => {
     }
   });
 
+  it('the states under test do print each new note (issues #47 and #46)', () => {
+    // So the test above is known to cover every one of them.
+    for (const made of noteStates()) {
+      for (const text of made.prints) {
+        expect(defaultViewText(made.state), made.name).toContain(text);
+      }
+    }
+  });
+
   it('the dark view under test does have a move left out and explained', () => {
     // So the test above is known to cover the "Not on the list" line.
     expect(defaultViewText(darkDugState())).toContain('Not on the list: No move east');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #47 (text bugs from playtest round m1-r2) and issue #46 items 1 to 5.
+// ---------------------------------------------------------------------------
+
+describe('the lamp-out banner (issue #47 item 1)', () => {
+  it('says what the lamp no longer shows, and that seen blocks can still be mined', () => {
+    // Seed 7, one block down, the lamp out: diagonal blocks seen earlier are
+    // still on the mine list, and the banner must not say otherwise.
+    let state = takeAll(createRun(7, 'none', 'standard'), ['mine-down']);
+    state.lampOil = 0;
+    state = endShift(state).state;
+    const text = defaultViewText(state);
+    expect(text).toMatch(/\d+\. mine-ne/);
+    expect(text).not.toContain('No diagonal mining');
+    expect(text).toContain(
+      'Lamp oil 0 (LAMP IS OUT: your lamp shows nothing. By touch you learn only the six ' +
+        'cells touching yours; blocks you saw earlier, or that a torch or daylight shows, ' +
+        'can still be mined)',
+    );
+  });
+
+  it('on the surface, in daylight, says only that the lamp is out', () => {
+    const state = createRun(7, 'none', 'standard');
+    state.lampOil = 0;
+    const text = defaultViewText(state);
+    expect(text).toContain('Lamp oil 0 (lamp is out) |');
+    expect(text).not.toContain('six cells');
+    expect(text).not.toContain('LAMP IS OUT');
+  });
+});
+
+describe('more "Not on the list" notes (issue #47 item 2)', () => {
+  function notOffered(state: GameState): string[] {
+    return buildView(state, { ...DEFAULT_VIEW, deepestZ: 0 }).notOffered;
+  }
+
+  it('explains a pit: no move at all, open overhead, and how a ladder gets you out', () => {
+    const state = pitInRun();
+    expect(legalActions(state).filter((action) => action.type === 'move')).toEqual([]);
+    expect(notOffered(state)).toEqual([PIT_NOTE]);
+
+    // The advice is true: after the two ladders, "up" is on the list.
+    const out = takeAll(state, ['ladder-here', 'ladder-up']);
+    expect(resolveChoice(out, 'up')).toMatchObject({ type: 'move' });
+    expect(notOffered(out)).toEqual([]);
+  });
+
+  it('gives no pit note when a move is on the list, or when the pit has a roof', () => {
+    // One block down from the surface: a step up is offered every way.
+    const shallow = takeAll(createRun(7, 'none', 'standard'), ['mine-down']);
+    expect(notOffered(shallow)).toEqual([]);
+    // A closed pocket is a plain wall four times and rock overhead.
+    const solid = ['###', '###', '###'];
+    const walled = buildState({
+      layers: [solid, ['###', '#.#', '###'], solid],
+      avatar: { x: 1, y: 1, z: 1 },
+      revealAll: true,
+    });
+    expect(notOffered(walled)).toEqual([]);
+  });
+
+  it('names what costs more AP than is left, with its cost', () => {
+    // Hard rock east and east-down (3 AP), stone west (2 AP), dirt underfoot (1 AP).
+    const state = buildState({
+      layers: [['#.H'], ['#dH'], ['###']],
+      avatar: { x: 1, y: 0, z: 0 },
+      revealAll: true,
+      ap: 2,
+    });
+    expect(BLOCKS.hardRock.mineCost).toBeGreaterThan(2);
+    expect(resolveChoice(state, 'mine-e')).toBeNull();
+    expect(resolveChoice(state, 'mine-w')).not.toBeNull();
+    const cost = BLOCKS.hardRock.mineCost ?? 0;
+    expect(notOffered(state)).toContain(
+      `these cost more than the 2 AP you have left: [${cost}] mine-e, mine-e-down.`,
+    );
+    expect(defaultViewText(state)).toContain('Not on the list: these cost more than the 2 AP');
+
+    // Every name in the note is a real choice once the AP is there.
+    state.ap = SHIFT.apPerShift;
+    expect(resolveChoice(state, 'mine-e')).toMatchObject({ type: 'mine', ap: cost });
+    expect(resolveChoice(state, 'mine-e-down')).toMatchObject({ type: 'mine', ap: cost });
+    expect(notOffered(state).join(' ')).not.toContain('cost more');
+  });
+
+  it('with no AP at all, says so in one short line', () => {
+    const state = pitInRun();
+    state.ap = 0;
+    expect(notOffered(state)).toEqual(['everything that costs AP: you have 0 AP left.']);
+  });
+
+  it('says when there is nothing to step up onto and the walk that way drops', () => {
+    // The miner stands on a ledge of layer 1. North of it the cell is open,
+    // and so are the cell on top of that and the cell under it: the block
+    // that was the step is gone (playtest m1-r2, Speed-runner 23, shift 7).
+    const state = buildState({
+      layers: [
+        ['.', '.', '#'],
+        ['.', '.', '#'],
+        ['.', '#', '#'],
+        ['#', '#', '#'],
+      ],
+      avatar: { x: 0, y: 1, z: 1 },
+      revealAll: true,
+    });
+    expect(resolveChoice(state, 'n')).toMatchObject({ type: 'move', drop: 1 });
+    expect(notOffered(state)).toEqual([
+      'No step up north: there is no rock there to step onto (the cell beside you is open). ' +
+        'The move that way on the list walks off an edge and drops.',
+    ]);
+
+    // Not said for a walk on the flat, or where there is rock on top of the open cell.
+    const flat = structuredClone(state);
+    flat.blocks[cellIndex(flat.size, { x: 0, y: 0, z: 2 })] = BLOCKS.stone.code;
+    expect(resolveChoice(flat, 'n')).toMatchObject({ type: 'move', drop: 0 });
+    expect(notOffered(flat)).toEqual([]);
+    const roofed = structuredClone(state);
+    roofed.blocks[cellIndex(roofed.size, { x: 0, y: 0, z: 0 })] = BLOCKS.stone.code;
+    expect(notOffered(roofed)).toEqual([]);
+  });
+
+  it('the step note reads only seen cells', () => {
+    const state = buildState({
+      layers: [
+        ['.', '.', '#'],
+        ['.', '.', '#'],
+        ['.', '#', '#'],
+        ['#', '#', '#'],
+      ],
+      avatar: { x: 0, y: 1, z: 1 },
+      revealAll: true,
+    });
+    // The cell on top of the open cell north has not been seen: no note,
+    // whatever it holds.
+    state.revealed[cellIndex(state.size, { x: 0, y: 0, z: 0 })] = 0;
+    const before = defaultViewText(state);
+    expect(before).not.toContain('No step up');
+    state.blocks[cellIndex(state.size, { x: 0, y: 0, z: 0 })] = BLOCKS.stone.code;
+    expect(defaultViewText(state)).toBe(before);
+  });
+});
+
+describe('traced rock keeps its rock type on the map (issue #47 item 3)', () => {
+  // Iron ore in layer 1, east of the block under the miner's pit. Within 2
+  // steps of it and in light: the dirt beside the miner, the hard rock of the
+  // top layer beyond that, and the stone under the miner.
+  function tracedState(): GameState {
+    const built = buildState({
+      layers: [['#.dH#'], ['##i##'], ['#####']],
+      avatar: { x: 1, y: 0, z: 0 },
+      ap: 0,
+    });
+    // An end of shift runs the engine's reveal and notes the traces.
+    return endShift(built).state;
+  }
+
+  it('draws traced dirt, stone and hard rock each with its own character', () => {
+    const state = tracedState();
+    const view = buildView(state, { radius: 4, layers: 1, deepestZ: 0 });
+    const shown = new Set(visibleMineralTraces(state).map((pos) => cellIndex(state.size, pos)));
+    const plain: Record<string, string> = { Dirt: 'd', Stone: '#', 'Hard rock': 'H' };
+    const traced: Record<string, string> = { Dirt: 'D', Stone: '%', 'Hard rock': 'h' };
+    const kinds = new Set<string>();
+    for (const layer of view.layers) {
+      if (layer.z < 0) {
+        continue;
+      }
+      layer.rows.forEach((row, rowIndex) => {
+        for (let column = 0; column < row.length; column += 1) {
+          const pos = { x: view.window.x0 + column, y: view.window.y0 + rowIndex, z: layer.z };
+          if (!inGrid(state.size, pos) || !isRevealed(state, pos) || !isSolid(state, pos)) {
+            continue;
+          }
+          const name = blockDefAt(state, pos).name;
+          if (plain[name] === undefined) {
+            continue; // the ore itself
+          }
+          const isTraced = shown.has(cellIndex(state.size, pos));
+          expect(row.charAt(column)).toBe(isTraced ? traced[name] : plain[name]);
+          if (isTraced) {
+            kinds.add(name);
+          }
+        }
+      });
+    }
+    // The picture really has all three.
+    expect([...kinds].sort()).toEqual(['Dirt', 'Hard rock', 'Stone']);
+
+    const text = renderView(view);
+    expect(text).toContain('D Dirt with mineral traces');
+    expect(text).toContain('% Stone with mineral traces');
+    expect(text).toContain('h Hard rock with mineral traces');
+  });
+
+  it('the help explains the three characters', () => {
+    const help = helpText();
+    expect(help).toContain('"D" is dirt, "%" is stone and "h" is hard rock');
+  });
+});
+
+describe('the fuel preview at the last fuel (issue #47 item 4)', () => {
+  const layers = [['###'], ['###']];
+  const avatar = { x: 1, y: 0, z: -1 };
+
+  it('says the next shift is the last unless fuel is crafted', () => {
+    const state = buildState({ layers, avatar, ap: 0, fuel: SHIFT.fuelPerShift, revealAll: true });
+    expect(viewText(state)).toContain(
+      `fuel ${SHIFT.fuelPerShift} -> 0 (-${SHIFT.fuelPerShift} shift), lamp oil 10 -> 10. ` +
+        'FUEL WILL BE 0: the next shift is your last unless you craft fuel during it ' +
+        '(ending a shift with no fuel ends the run).',
+    );
+    // And that is what happens: the next shift is played, and ending it ends the run.
+    const next = endShift(state).state;
+    expect(next.status.kind).toBe('active');
+    expect(endShift(next).state.status).toMatchObject({ kind: 'ended', cause: 'outOfFuel' });
+  });
+
+  it('says nothing of the kind while fuel is left after the shift', () => {
+    const state = buildState({
+      layers,
+      avatar,
+      fuel: SHIFT.fuelPerShift + 1,
+      revealAll: true,
+    });
+    expect(viewText(state)).not.toContain('FUEL WILL BE 0');
+  });
+});
+
+describe('the fall warning (issue #47 item 5)', () => {
+  function mineBelowLine(state: GameState): string {
+    const line = defaultViewText(state)
+      .split('\n')
+      .find((text) => text.includes('Mine below you'));
+    return line ?? '';
+  }
+
+  it('says "1 block", not "or more", when the cell below the landing is seen', () => {
+    // The pit of seed 7 with a lit lamp: stand on a ladder, mine the block
+    // below (the ladder holds), and from the ladder the cell under the hole
+    // is seen. Back off the ladder the fall into the hole is known exactly.
+    const state = createRun(7, 'none', 'standard');
+    const below = { x: state.avatar.pos.x, y: state.avatar.pos.y, z: 1 };
+    state.revealed[cellIndex(state.size, below)] = 1;
+    expect(isSolid(state, below)).toBe(true);
+    expect(mineBelowLine(state)).toContain(
+      '(you are standing on it: you will fall 1 block and lose 1 health)',
+    );
+    expect(mineBelowLine(state)).not.toContain('or more');
+  });
+
+  it('keeps "or more" when that cell is unseen, and names the unseen cell', () => {
+    const state = createRun(7, 'none', 'standard');
+    expect(isRevealed(state, { x: state.avatar.pos.x, y: state.avatar.pos.y, z: 1 })).toBe(false);
+    expect(mineBelowLine(state)).toContain(
+      '(you are standing on it: you will fall 1 block or more and lose at least 1 health; ' +
+        'the cell under that (layer 1) is unseen)',
+    );
+  });
+});
+
+describe('small wording (issue #47 item 6)', () => {
+  it('the help states the lamp-oil rate from the data', () => {
+    const help = helpText();
+    expect(help).not.toContain('a little every few shifts');
+    expect(help).toContain(
+      `The lamp uses ${SHIFT.lampOilPerBurn} oil every ${SHIFT.lampOilBurnEveryShifts} shifts`,
+    );
+  });
+
+  it('a pick-up of part of a pile says how many fit', () => {
+    const state = buildState({
+      layers: [['#.#'], ['###']],
+      avatar: { x: 1, y: 0, z: 0 },
+      revealAll: true,
+      // Coal weighs 1, so 4 more fit under the carry limit.
+      inventory: { coal: AVATAR.carryCapacity - 4 },
+      looseItems: [{ pos: { x: 1, y: 0, z: 0 }, item: 'coal', count: 5 }],
+    });
+    const text = defaultViewText(state);
+    expect(text).toContain('Loose in your cell: 5 Coal');
+    expect(text).toMatch(
+      /take-here-coal +\[0\] Pick up 4 of the 5 Coal from your cell \(only 4 fit your carry limit\)\n/,
+    );
+    // The name and the action are as before; a whole pile reads as before.
+    expect(resolveChoice(state, 'take-here-coal')).toMatchObject({ type: 'pickUp', count: 4 });
+    state.inventory = {};
+    expect(defaultViewText(state)).toContain('[0] Pick up 5 Coal from your cell\n');
+  });
+
+  it('a stone that fell is not read as the stone just got', () => {
+    // A loose stone lies in the miner's cell; mining underfoot gives another
+    // stone to the pack, and the loose one falls with the miner.
+    const state = buildState({
+      layers: [['#.#'], ['###'], ['###']],
+      avatar: { x: 1, y: 0, z: 0 },
+      revealAll: true,
+      looseItems: [{ pos: { x: 1, y: 0, z: 0 }, item: 'stone', count: 1 }],
+    });
+    const { state: after, events } = act(state, { type: 'mine', target: { x: 1, y: 0, z: 1 } });
+    const lines = describeEvents(after, events);
+    expect(lines).toContain('Got 1 Stone.');
+    expect(lines).toContain('A loose pile of 1 Stone fell 1 block to layer 1.');
+  });
+
+  it('traces uncovered by mining ore are not announced as new ore', () => {
+    const state = buildState({ layers: [['#i#']], revealAll: true });
+    const orePos = { x: 1, y: 0, z: 0 };
+    const mined = { type: 'blockMined' as const, pos: orePos, block: BLOCKS.ironOre.code };
+    const near = { type: 'mineralTracesSeen' as const, pos: { x: 2, y: 0, z: 0 } };
+    expect(describeEvents(state, [mined, near])).toContain(
+      'You notice mineral traces in the rock this uncovered. They may come from the ore ' +
+        'you just mined, so they do not show that more ore is near. (On the map: D, % or h.)',
+    );
+
+    // Traces too far from the mined ore to come from it do mean other ore.
+    const distance = TELLS.mineralTraces.distance;
+    const far = {
+      type: 'mineralTracesSeen' as const,
+      pos: { x: orePos.x + distance + 1, y: 0, z: 0 },
+    };
+    expect(describeEvents(state, [mined, near, far])).toContain(
+      'You notice mineral traces in the rock: ore is near. (On the map: D, % or h.)',
+    );
+    // Mining plain rock, or coal, changes nothing.
+    const stone = { type: 'blockMined' as const, pos: orePos, block: BLOCKS.stone.code };
+    expect(describeEvents(state, [stone, near])).toContain(
+      'You notice mineral traces in the rock: ore is near. (On the map: D, % or h.)',
+    );
+  });
+});
+
+describe('ladder advice only where a ladder can go (issue #46 item 1)', () => {
+  function notOffered(state: GameState): string[] {
+    return buildView(state, { ...DEFAULT_VIEW, deepestZ: 0 }).notOffered;
+  }
+  const longest = AVATAR.maxChosenDropBlocks;
+
+  it('leaves the advice out when the cell beside you holds a torch', () => {
+    // A ledge on layer 0 with a pit east of it, one block too deep to drop into.
+    const layers: string[][] = [['#..']];
+    for (let z = 1; z <= 5; z += 1) {
+      layers.push([z <= longest + 1 ? '##.' : '###']);
+    }
+    const east = { x: 2, y: 0, z: 0 };
+    const state = buildState({
+      layers,
+      avatar: { x: 1, y: 0, z: 0 },
+      revealAll: true,
+      torches: [east],
+      inventory: { ladder: 2 },
+    });
+    expect(resolveChoice(state, 'ladder-e')).toBeNull();
+    expect(notOffered(state)).toEqual([
+      `No move east: the drop there is more than ${longest} blocks.`,
+    ]);
+  });
+
+  it('leaves the advice out when the cell below your ladder holds a torch', () => {
+    const below = { x: 1, y: 0, z: 2 };
+    const state = buildState({
+      layers: [['#.#'], ['#.#'], ['#.#'], ['#.#'], ['#.#'], ['###']],
+      avatar: { x: 1, y: 0, z: 1 },
+      ladders: [
+        { x: 1, y: 0, z: 0 },
+        { x: 1, y: 0, z: 1 },
+      ],
+      torches: [below],
+      revealAll: true,
+      inventory: { ladder: 2 },
+    });
+    expect(resolveChoice(state, 'down')).toBeNull();
+    expect(resolveChoice(state, 'ladder-down')).toBeNull();
+    expect(notOffered(state)).toEqual([
+      `No climb down: off the foot of your ladder the drop is more than ${longest} blocks.`,
+    ]);
+  });
+});
+
+describe('the surface map (issue #46 item 2)', () => {
+  it('draws layer 0 alone, with @ on the block the miner stands on', () => {
+    const state = createRun(7, 'none', 'standard');
+    const view = buildView(state, { ...DEFAULT_VIEW, deepestZ: -1 });
+    expect(view.layers.map((layer) => layer.label)).toEqual(['layer 0']);
+    expect(view.layers[0]?.relation).toBe('under you');
+    // Row and column 0 of the drawing are the edge, so (16, 16) is at 17, 17.
+    expect(view.layers[0]?.rows[17]?.charAt(17)).toBe('@');
+    const text = renderView(view);
+    expect(text).toContain('@ you, on the surface: drawn on the block of layer 0 you stand on');
+    // Half as wide as it was: one layer of 34 characters after the row label.
+    const row = text.split('\n').find((line) => line.startsWith('y 16 ')) ?? '';
+    expect(row).toHaveLength('y 16 '.length + state.size.x + 2);
+    // The block under the miner is named where it is mined.
+    expect(text).toContain('Mine below you: Dirt');
+  });
+
+  it('still lists loose items lying on the surface, which is not drawn', () => {
+    const state = createRun(7, 'none', 'standard');
+    state.looseItems = [
+      { pos: { x: 3, y: 4, z: -1 }, item: 'stone', count: 2 },
+      { pos: { ...state.avatar.pos }, item: 'coal', count: 1 },
+    ];
+    const text = defaultViewText(state);
+    expect(text).toContain('Loose at x3 y4, the surface: 2 Stone');
+    expect(text).toContain('Loose in your cell: 1 Coal');
+  });
+
+  it('one layer down the map is as before: your layer with those above and below', () => {
+    const state = takeAll(createRun(7, 'none', 'standard'), ['mine-down']);
+    const view = buildView(state, { ...DEFAULT_VIEW, deepestZ: 0 });
+    expect(view.layers.map((layer) => layer.label)).toEqual(['surface', 'layer 0', 'layer 1']);
+  });
+});
+
+describe('drop choices share a line (issue #46 item 3)', () => {
+  it('prints drop-<item> and drop-all-<item> on one line', () => {
+    const text = defaultViewText(createRun(7, 'none', 'standard'));
+    expect(text).toContain('[0] Drop Ladder (one, or all 6): 15. drop-ladder  16. drop-all-ladder');
+    expect(text).toContain('[0] Drop Timber (one, or all 2): 17. drop-timber  18. drop-all-timber');
+  });
+
+  it('a single carried item keeps its own line', () => {
+    const state = createRun(7, 'none', 'standard');
+    state.inventory = { timber: 1 };
+    expect(defaultViewText(state)).toMatch(/\d+\. drop-timber +\[0\] Drop 1 Timber\n/);
+  });
+});
+
+describe('the drop-all alias is strict (issue #46 item 4)', () => {
+  it('reads drop-all-X as drop-X only while exactly one X is carried', () => {
+    const state = createRun(7, 'none', 'standard');
+    state.inventory = { timber: 1, ladder: 6 };
+    expect(resolveChoice(state, 'drop-all-timber')).toMatchObject({ item: 'timber', count: 1 });
+    // "drop-all-all-ladder" used to be read as "drop-all-ladder".
+    expect(resolveChoice(state, 'drop-all-ladder')).toMatchObject({ item: 'ladder', count: 6 });
+    expect(resolveChoice(state, 'drop-all-all-ladder')).toBeNull();
+    expect(resolveChoice(state, 'drop-all-all-timber')).toBeNull();
+    expect(resolveChoice(state, 'drop-all-all-all-timber')).toBeNull();
   });
 });

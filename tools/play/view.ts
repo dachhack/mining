@@ -12,12 +12,12 @@
 //
 // Mineral traces (decision note 0012) are the one thing shown that depends on
 // cells the player has not seen: rock the player has seen in light near ore
-// is drawn as `%`. That is the hint the rule intends. The engine's
-// `visibleMineralTraces` decides it, and only ever names revealed blocks.
+// is drawn with its own "traced" character (`D`, `%`, `h`: see symbols.ts).
+// That is the hint the rule intends. The engine's `visibleMineralTraces`
+// decides it, and only ever names revealed blocks.
 
 import {
   AVATAR,
-  BLOCKS,
   NO_STRUCTURE,
   SHIFT,
   STRUCTURES,
@@ -25,7 +25,7 @@ import {
   blockDefByCode,
   itemDef,
 } from '../../src/data';
-import type { BlockId, Vec3 } from '../../src/data';
+import type { Vec3 } from '../../src/data';
 import {
   blockAt,
   carriedWeight,
@@ -44,15 +44,28 @@ import {
 import type { GameState } from '../../src/engine';
 import {
   choiceName,
+  choiceGroupText,
   describeChoice,
   layerName,
-  mineGroupText,
   runEndText,
   stackListText,
 } from './describe';
 import { END_SHIFT, menuChoices } from './log';
 import type { LogEntry } from './log';
-import { missingMoveNotes } from './missing';
+import { missingMoveNotes, tooLittleApNote } from './missing';
+import {
+  SYMBOL_AVATAR,
+  SYMBOL_EDGE,
+  SYMBOL_ITEMS,
+  SYMBOL_LADDER,
+  SYMBOL_OPEN,
+  SYMBOL_SUPPORT,
+  SYMBOL_TORCH,
+  SYMBOL_TRACES,
+  SYMBOL_UNKNOWN,
+  blockSymbol,
+  tracedSymbol,
+} from './symbols';
 
 /** How much of the map to draw. These change the picture only, never the game. */
 export interface ViewOptions {
@@ -61,6 +74,8 @@ export interface ViewOptions {
    * "not asked for": then the map is the whole cube while the avatar stands
    * on the surface (so that the whole top layer, which the player knows from
    * the start, is on it: issue #30), and `DEFAULT_RADIUS` underground.
+   * On the surface with `null`, the surface itself is not drawn: see
+   * `surfaceMode` in `buildView` (issue #46 item 2).
    */
   radius: number | null;
   /** How many layers above and below the avatar's own are drawn. */
@@ -72,46 +87,11 @@ export interface ViewOptions {
 export const DEFAULT_RADIUS = 4;
 export const DEFAULT_LAYERS = 1;
 
-// Map characters for everything that is not a block.
-const SYMBOL_AVATAR = '@';
-const SYMBOL_UNKNOWN = '?';
-const SYMBOL_OPEN = '.';
-const SYMBOL_EDGE = 'X';
-const SYMBOL_ITEMS = '*';
-const SYMBOL_LADDER = '=';
-const SYMBOL_TORCH = '!';
-const SYMBOL_SUPPORT = 'T';
-const SYMBOL_TRACES = '%';
-
-// One character for each block that can be stored in the cube: the same
-// characters as tools/ascii.ts and the test helper.
-const BLOCK_SYMBOLS: Partial<Record<BlockId, string>> = {
-  dirt: 'd',
-  stone: '#',
-  hardRock: 'H',
-  coalSeam: 'c',
-  timberRoot: 't',
-  ironOre: 'i',
-  copperOre: 'u',
-  crystal: 'x',
-  unstableOre: 'U',
-  relic: 'r',
-  keystone: 'k',
-};
-
-/** Block code (the number stored in the cube) -> map character. */
-const SYMBOL_BY_CODE = new Map<number, string>();
-for (const [blockId, symbol] of Object.entries(BLOCK_SYMBOLS)) {
-  // `Object.entries` gives the keys back as plain strings; `as BlockId` tells
-  // the compiler they are the block ids written just above.
-  SYMBOL_BY_CODE.set(BLOCKS[blockId as BlockId].code, symbol);
-}
-
 /** One drawn layer: its `z`, a label such as "layer 3", and one string per row. */
 export interface LayerView {
   z: number;
   label: string;
-  /** "above", "yours" or "below". */
+  /** "above", "yours" or "below"; "under you" for layer 0 drawn alone on the surface. */
   relation: string;
   rows: string[];
 }
@@ -130,9 +110,11 @@ export interface ChoiceView {
   ap: number | null;
   text: string;
   /**
-   * For a mine action that differs from others only in direction: what they
-   * share ("Stone, gives 1 Stone"). `renderView` prints choices with the same
-   * `group` and AP cost as one line. `null` for a choice printed on its own.
+   * For a choice that may share a line with others: what they have in common
+   * ("Mine Stone, gives 1 Stone" for mine actions that differ only in
+   * direction; "Drop Ladder (one, or all 6)" for the two drops of an item).
+   * `renderView` prints choices with the same `group` and AP cost as one
+   * line. `null` for a choice printed on its own.
    */
   group: string | null;
   /** What goes into the play log if this is chosen. */
@@ -157,18 +139,24 @@ export interface PlayerView {
   /** The first and last x and y drawn, after trimming unseen edges. */
   window: { x0: number; x1: number; y0: number; y1: number };
   /**
-   * `null` if every cell the player has seen in the drawn layers is on the
-   * map. Otherwise the `--radius` that would show them all.
+   * The `--radius` that would show every cell the player has seen in the
+   * drawn layers, when the player has seen cells BELOW THE TOP LAYER that
+   * are off the map. `null` otherwise. The top layer does not count: the
+   * player knows all of it from the start, so near the top the hint was on
+   * almost every view (issue #46 item 5).
    */
   radiusForAllSeen: number | null;
+  /** True if every cell the player has seen in the drawn layers is on the map. */
+  allSeenOnMap: boolean;
   layers: LayerView[];
   legend: string[];
   /** Things the map cannot show with one character per cell. */
   notes: string[];
   hazards: string[];
   /**
-   * Moves the player might look for that are not on the list, and why: one
-   * line each (see missing.ts). Worked out from revealed cells only.
+   * Things the player might look for that are not on the list, and why: one
+   * line each (see missing.ts). Moves first, then what costs more AP than is
+   * left. Worked out from revealed cells only.
    */
   notOffered: string[];
   /** What ending the shift now would do; `null` once the run is over. */
@@ -186,11 +174,27 @@ interface CellView {
  * The map character for the cell `pos`, and what it means (for the legend).
  * This is the only function that looks inside a cell, and it looks only
  * after checking that the cell is revealed.
+ *
+ * `surfaceMode` is true when the avatar stands on the surface and layer 0 is
+ * drawn alone: the avatar is then drawn on the block it stands on.
  */
-function cellView(state: GameState, pos: Vec3, traced: Set<string>): CellView {
+function cellView(
+  state: GameState,
+  pos: Vec3,
+  traced: Set<string>,
+  surfaceMode: boolean,
+): CellView {
   const here = state.avatar.pos;
   if (pos.x === here.x && pos.y === here.y && pos.z === here.z) {
     return { symbol: SYMBOL_AVATAR, meaning: 'you' };
+  }
+  if (surfaceMode && pos.x === here.x && pos.y === here.y && pos.z === here.z + 1) {
+    return {
+      symbol: SYMBOL_AVATAR,
+      meaning:
+        'you, on the surface: drawn on the block of layer 0 you stand on ' +
+        '(the mine-down line names that block)',
+    };
   }
   if (!inGrid(state.size, pos) && !isSurface(state.size, pos)) {
     return { symbol: SYMBOL_EDGE, meaning: 'edge of the cube (cannot be entered or mined)' };
@@ -202,16 +206,17 @@ function cellView(state: GameState, pos: Vec3, traced: Set<string>): CellView {
   const block = blockDefByCode(code);
   if (block.solid) {
     if (traced.has(positionKey(pos))) {
-      // One character per cell, so the traces take the place of the rock's own
-      // character; the mine line for the block names the rock.
-      return {
-        symbol: SYMBOL_TRACES,
-        meaning: 'rock with mineral traces: ore is near',
-      };
+      // One character per cell, so traced rock has a character of its own for
+      // each kind of rock (symbols.ts): the map shows the rock, and so its
+      // cost, as well as the traces (issue #47 item 3).
+      const symbol = tracedSymbol(code);
+      if (symbol === null) {
+        // A kind of rock added to the data's traces list without a character.
+        return { symbol: SYMBOL_TRACES, meaning: 'rock with mineral traces' };
+      }
+      return { symbol, meaning: `${block.name} with mineral traces` };
     }
-    // Every solid block the cube can store has a character; `?? '?'` is only
-    // there for a block added to the data without one.
-    return { symbol: SYMBOL_BY_CODE.get(code) ?? SYMBOL_UNKNOWN, meaning: block.name };
+    return { symbol: blockSymbol(code), meaning: block.name };
   }
   if (looseItemsAt(state, pos).length > 0) {
     return { symbol: SYMBOL_ITEMS, meaning: 'loose items (listed below the map)' };
@@ -249,10 +254,20 @@ function structureName(state: GameState, pos: Vec3): string | null {
 
 function hudLines(state: GameState, options: ViewOptions): string[] {
   const pos = state.avatar.pos;
-  const lamp =
-    state.lampOil > 0
-      ? ''
-      : ' (LAMP IS OUT: you know only the six cells touching yours. No diagonal mining, no looking down a drop, no moves you cannot judge)';
+  // The lamp-out banner says what the lamp no longer shows. It does not say
+  // what may not be done: blocks seen earlier can still be mined, diagonals
+  // too (issue #47 item 1). On the surface daylight shows the top layer
+  // whatever the lamp does, so there the banner is only "lamp is out".
+  // Both read the player's own state only: the oil gauge and where it stands.
+  let lamp = '';
+  if (state.lampOil <= 0) {
+    lamp =
+      pos.z === WORLD.surfaceZ
+        ? ' (lamp is out)'
+        : ' (LAMP IS OUT: your lamp shows nothing. By touch you learn only the six cells ' +
+          'touching yours; blocks you saw earlier, or that a torch or daylight shows, ' +
+          'can still be mined)';
+  }
   const gauges = [
     `Shift ${state.shift}`,
     `AP ${state.ap}/${SHIFT.apPerShift}`,
@@ -282,8 +297,13 @@ function hudLines(state: GameState, options: ViewOptions): string[] {
  */
 export function buildView(state: GameState, options: ViewOptions): PlayerView {
   const here = state.avatar.pos;
+  // On the surface, with no --radius, layer 0 is drawn alone and the avatar
+  // is drawn on the block it stands on (issue #46 item 2). The surface is
+  // open air everywhere, so drawing it beside layer 0 doubled the width of
+  // the map and made the block under "@" hard to find.
+  const surfaceMode = options.radius === null && here.z === WORLD.surfaceZ;
   let window: { x0: number; x1: number; y0: number; y1: number };
-  if (options.radius === null && here.z === WORLD.surfaceZ) {
+  if (surfaceMode) {
     // On the surface, with no --radius: the whole cube and one cell round it,
     // so the whole top layer is drawn and its edge shows as the edge.
     window = { x0: -1, x1: state.size.x, y0: -1, y1: state.size.y };
@@ -309,12 +329,30 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     if (z < WORLD.surfaceZ || z >= state.size.z) {
       continue;
     }
+    if (surfaceMode && z === WORLD.surfaceZ) {
+      // Not drawn. The one thing a surface cell can hold is loose items, so
+      // those are still listed. (Surface cells are always known.)
+      for (let y = window.y0; y <= window.y1; y += 1) {
+        for (let x = window.x0; x <= window.x1; x += 1) {
+          const pos = { x, y, z };
+          const isOwnCell = x === here.x && y === here.y;
+          if (isOwnCell || !isSurface(state.size, pos)) {
+            continue; // the avatar's own cell has its own line further down
+          }
+          const loose = looseItemsAt(state, pos);
+          if (loose.length > 0) {
+            notes.push(`Loose at x${x} y${y}, ${layerName(z)}: ${stackListText(loose)}`);
+          }
+        }
+      }
+      continue;
+    }
     const rows: string[] = [];
     for (let y = window.y0; y <= window.y1; y += 1) {
       let row = '';
       for (let x = window.x0; x <= window.x1; x += 1) {
         const pos = { x, y, z };
-        const cell = cellView(state, pos, traced);
+        const cell = cellView(state, pos, traced, surfaceMode);
         row += cell.symbol;
         legend.set(cell.symbol, cell.meaning);
         if (cell.symbol === SYMBOL_ITEMS) {
@@ -327,14 +365,19 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       }
       rows.push(row);
     }
-    const relation = z < here.z ? 'above' : z > here.z ? 'below' : 'yours';
+    let relation = z < here.z ? 'above' : z > here.z ? 'below' : 'yours';
+    if (surfaceMode && z === here.z + 1) {
+      relation = 'under you';
+    }
     layers.push({ z, label: z === WORLD.surfaceZ ? 'surface' : `layer ${z}`, relation, rows });
   }
 
   // Has the player seen cells of the drawn layers that lie outside the map?
-  // If so the view says which --radius shows them. Only the "revealed" flag
-  // of each cell is read here, not what the cell holds.
+  // Only the "revealed" flag of each cell is read here, not what the cell
+  // holds. `furthestSeen` is how far the furthest such cell is; `seenBelowTop`
+  // says whether any of them is below the top layer (see `radiusForAllSeen`).
   let furthestSeen = 0;
+  let seenBelowTop = false;
   for (const layer of layers) {
     if (layer.z === WORLD.surfaceZ) {
       continue; // the surface is open air everywhere: nothing to miss
@@ -344,11 +387,15 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
         const outside = x < window.x0 || x > window.x1 || y < window.y0 || y > window.y1;
         if (outside && isRevealed(state, { x, y, z: layer.z })) {
           furthestSeen = Math.max(furthestSeen, Math.abs(x - here.x), Math.abs(y - here.y));
+          if (layer.z > 0) {
+            seenBelowTop = true;
+          }
         }
       }
     }
   }
-  const radiusForAllSeen = furthestSeen === 0 ? null : furthestSeen;
+  const allSeenOnMap = furthestSeen === 0;
+  const radiusForAllSeen = seenBelowTop ? furthestSeen : null;
 
   // Trim the map to what has something in it: rows and columns at the edge of
   // the window that are unseen in every drawn layer are left out. Underground
@@ -417,6 +464,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       hud: hudLines(state, options),
       window,
       radiusForAllSeen,
+      allSeenOnMap,
       layers,
       legend: legendLines,
       notes,
@@ -445,6 +493,14 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     forecast =
       `${unspent}fuel ${state.fuel} -> ${upkeep.fuelAfter} (-${upkeep.fuelConsumed} shift)` +
       `, lamp oil ${state.lampOil} -> ${upkeep.lampOilAfter}.`;
+    if (upkeep.fuelAfter <= 0) {
+      // The run does not end at this end of shift, but it will at the next
+      // one unless fuel is crafted first (decision note 0005 item 21;
+      // issue #47 item 4).
+      forecast +=
+        ' FUEL WILL BE 0: the next shift is your last unless you craft fuel during it' +
+        ' (ending a shift with no fuel ends the run).';
+    }
   }
 
   // The menu: the engine's legal actions in the engine's order, numbered from
@@ -459,7 +515,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       ap: entry.type === 'endShift' ? null : entry.ap,
       name: choiceName(state, entry),
       text: describeChoice(state, entry),
-      group: mineGroupText(state, entry),
+      group: choiceGroupText(state, entry),
       entry,
     });
   });
@@ -473,16 +529,24 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     throw new Error('play: the menu does not match legalActions');
   }
 
+  // What is not on the list and why: moves first, then what costs too much AP.
+  const notOffered = missingMoveNotes(state);
+  const apNote = tooLittleApNote(state);
+  if (apNote !== null) {
+    notOffered.push(apNote);
+  }
+
   return {
     ended: null,
     hud: hudLines(state, options),
     window,
     radiusForAllSeen,
+    allSeenOnMap,
     layers,
     legend: legendLines,
     notes,
     hazards,
-    notOffered: missingMoveNotes(state),
+    notOffered,
     forecast,
     choices,
   };
@@ -515,13 +579,18 @@ export function renderView(view: PlayerView): string {
   const height = view.window.y1 - view.window.y0 + 1;
   const gap = '  ';
   const margin = '     ';
-  const beyond =
-    view.radiusForAllSeen === null
-      ? 'everything you have seen of these layers is on the map'
-      : `you have seen more of these layers than is drawn: --radius ${view.radiusForAllSeen} shows it all`;
+  // What the map leaves out. Nothing is said when only the top layer goes on
+  // beyond the map: the player knows all of it from the start, and saying so
+  // on every view near the top was noise (issue #46 item 5).
+  let beyond = '';
+  if (view.radiusForAllSeen !== null) {
+    beyond = `; you have seen more of these layers than is drawn: --radius ${view.radiusForAllSeen} shows it all`;
+  } else if (view.allSeenOnMap) {
+    beyond = '; everything you have seen of these layers is on the map';
+  }
   lines.push(
     `Map: x ${view.window.x0}..${view.window.x1} left to right (east is right), ` +
-      `y ${view.window.y0}..${view.window.y1} top to bottom (north is up); ${beyond}`,
+      `y ${view.window.y0}..${view.window.y1} top to bottom (north is up)${beyond}`,
   );
   // Each layer gets a column as wide as its map or its labels, whichever is
   // wider, so the labels stay over their maps on a narrow map (issue #20).
@@ -577,9 +646,7 @@ export function renderView(view: PlayerView): string {
     }
     printedGroups.add(groupKey);
     const members = sharing.map((other) => `${other.number}. ${other.name}`);
-    lines.push(
-      `    ${pad('', nameWidth)} [${cost}] Mine ${choice.group ?? ''}: ${members.join('  ')}`,
-    );
+    lines.push(`    ${pad('', nameWidth)} [${cost}] ${choice.group ?? ''}: ${members.join('  ')}`);
   }
   return lines.join('\n');
 }

@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname } from 'node:path';
 
 import { CONTRACT_IDS, DEFAULT_LOADOUT_ID, GAME_DATA, validateData } from '../../src/data';
-import { ENGINE_VERSION, hashState, isRunActive, legalActions } from '../../src/engine';
+import { ENGINE_VERSION, countItem, hashState, isRunActive, legalActions } from '../../src/engine';
 import type { GameState } from '../../src/engine';
 import { choiceName, describeChoice, describeEvents } from './describe';
 import { helpText } from './help';
@@ -118,7 +118,8 @@ export function splitChoices(text: string): string[] {
  *   list now that has that name. If the list has no such choice (the move
  *   is not possible here, say), the answer is `null`: a name never stands
  *   for some other action. One name is also taken when it is not printed:
- *   "drop-all-X" while exactly one X is carried means "drop-X".
+ *   "drop-all-X" while exactly one X is carried means "drop-X". Nothing else
+ *   is read that way: "drop-all-all-X" is not a choice (issue #46 item 4).
  */
 export function resolveChoice(state: GameState, choice: string): LogEntry | null {
   if (!isRunActive(state)) {
@@ -139,10 +140,21 @@ export function resolveChoice(state: GameState, choice: string): LogEntry | null
   // "drop-all-stone" with exactly one stone carried: the list then has only
   // "drop-stone" (the engine offers "drop all" from two up), and dropping
   // that one is dropping them all. So the name is read as that choice.
+  // Only that: the choice found must be a drop of one item while exactly one
+  // is carried. Without the check "drop-all-all-stone" was read as
+  // "drop-all-stone".
   const dropAll = 'drop-all-';
   if (choice.startsWith(dropAll)) {
     const dropOne = `drop-${choice.slice(dropAll.length)}`;
-    return menuChoices(state).find((entry) => choiceName(state, entry) === dropOne) ?? null;
+    const found = menuChoices(state).find((entry) => choiceName(state, entry) === dropOne);
+    if (
+      found !== undefined &&
+      found.type === 'drop' &&
+      found.count === 1 &&
+      countItem(state, found.item) === 1
+    ) {
+      return found;
+    }
   }
   return null;
 }
