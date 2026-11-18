@@ -72,7 +72,7 @@ Working title: **Mining Game**. A turn-based roguelike for Android and iOS in wh
 A run is a sequence of **shifts**. Each shift has three phases.
 
 1. **Player phase.** The player spends **action points (AP)**. [Default] 5 AP per shift.
-2. **Cube phase.** Hazards advance one step, in a fixed order: (a) support check and falling blocks, (b) fluids flow, (c) gas spreads, (d) timers tick, (e) damage is applied to the avatar and structures.
+2. **Cube phase.** Hazards advance one step, in a fixed order: (a) support check and falling blocks, (b) fluids flow, (c) gas spreads, (d) timers tick, (e) damage is applied to the avatar. Structures are destroyed at the moment of the event that destroys them.
 3. **Upkeep.** Fuel is consumed. [Default] 1 fuel per shift, plus 1 per active camp every 4 shifts. If fuel is already 0 when upkeep comes, the run ends; otherwise the shift's fuel is taken. So a miner whose fuel reaches 0 has one last shift to reach the surface and leave, or craft fuel: in a tunnel that is almost always fatal.
 
 The player may end the player phase early. [Default] Unspent AP is lost when the shift ends: it does not carry over and does not become fuel.
