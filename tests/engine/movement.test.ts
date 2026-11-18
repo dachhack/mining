@@ -21,6 +21,7 @@ function moveTargets(state: GameState): Vec3[] {
 /** A corridor along y = 1 in the top layer, with a stone floor under it. */
 function corridor(avatar: Vec3, ap: number = SHIFT.apPerShift): GameState {
   return buildState({
+    revealAll: true,
     layers: [
       ['###', '...', '###'],
       ['###', '###', '###'],
@@ -40,7 +41,7 @@ function ledge(depth: number): GameState {
     layers.push(['#.']);
   }
   layers.push(['##']);
-  return buildState({ layers, avatar: { x: 0, y: 0, z: -1 } });
+  return buildState({ revealAll: true, layers, avatar: { x: 0, y: 0, z: -1 } });
 }
 
 describe('walking', () => {
@@ -76,6 +77,7 @@ describe('walking', () => {
 
   it('is blocked at the edge of the surface', () => {
     const state = buildState({
+      revealAll: true,
       layers: [['##', '##']],
       avatar: { x: 0, y: 0, z: -1 },
     });
@@ -88,6 +90,7 @@ describe('walking', () => {
 
   it('has no diagonal moves', () => {
     const state = buildState({
+      revealAll: true,
       layers: [['###', '###', '###']],
       avatar: { x: 1, y: 1, z: -1 },
     });
@@ -108,6 +111,7 @@ describe('walking', () => {
 describe('stepping up', () => {
   it('climbs onto a block one level up', () => {
     const state = buildState({
+      revealAll: true,
       layers: [['.#'], ['##']],
       avatar: { x: 0, y: 0, z: 0 },
     });
@@ -124,6 +128,7 @@ describe('stepping up', () => {
     // The avatar is at z = 1 under a stone ceiling; the step at x = 1 has
     // room on top of it.
     const blocked = buildState({
+      revealAll: true,
       layers: [['#.'], ['.#'], ['##']],
       avatar: { x: 0, y: 0, z: 1 },
     });
@@ -131,6 +136,7 @@ describe('stepping up', () => {
 
     // The same cube with the ceiling opened: now the step is legal.
     const open = buildState({
+      revealAll: true,
       layers: [['..'], ['.#'], ['##']],
       avatar: { x: 0, y: 0, z: 1 },
     });
@@ -139,6 +145,7 @@ describe('stepping up', () => {
 
   it('is refused for a step two blocks high', () => {
     const state = buildState({
+      revealAll: true,
       layers: [['.#'], ['.#'], ['##']],
       avatar: { x: 0, y: 0, z: 1 },
     });
@@ -180,6 +187,7 @@ describe('walking off a ledge', () => {
   it('counts the drop only as far as a ladder that would catch the avatar', () => {
     // A pit 4 deep with a ladder 2 down: the avatar lands on the ladder.
     const state = buildState({
+      revealAll: true,
       layers: [['#.'], ['#.'], ['#.'], ['#.'], ['##']],
       avatar: { x: 0, y: 0, z: -1 },
       ladders: [{ x: 1, y: 0, z: 1 }],

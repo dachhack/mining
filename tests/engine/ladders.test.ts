@@ -26,6 +26,7 @@ function ladderTargets(state: GameState): Vec3[] {
  */
 function ladderShaft(avatar: Vec3): GameState {
   return buildState({
+    revealAll: true,
     layers: [['.#'], ['.#'], ['.#'], ['##']],
     avatar,
     ladders: [
@@ -47,6 +48,7 @@ function ladderOverPit(openBelow: number): GameState {
   }
   layers.push(['#']);
   return buildState({
+    revealAll: true,
     layers,
     avatar: { x: 0, y: 0, z: 0 },
     ladders: [{ x: 0, y: 0, z: 0 }],
@@ -56,6 +58,7 @@ function ladderOverPit(openBelow: number): GameState {
 describe('placing a ladder', () => {
   it('puts a ladder in the avatar’s cell for 1 AP and 1 ladder', () => {
     const state = buildState({
+      revealAll: true,
       layers: [['.'], ['#']],
       avatar: { x: 0, y: 0, z: 0 },
       inventory: { ladder: 2 },
@@ -81,6 +84,7 @@ describe('placing a ladder', () => {
     // The avatar is in the middle of a plus-shaped room at z = 1, with an
     // open cell above it and stone below. The corners of the room are stone.
     const state = buildState({
+      revealAll: true,
       layers: [
         ['###', '#.#', '###'],
         ['#.#', '...', '#.#'],
@@ -109,6 +113,7 @@ describe('placing a ladder', () => {
 
   it('is not offered for a cell that already holds a ladder or a torch', () => {
     const state = buildState({
+      revealAll: true,
       layers: [['...'], ['###']],
       avatar: { x: 1, y: 0, z: 0 },
       inventory: { ladder: 3 },
@@ -120,6 +125,7 @@ describe('placing a ladder', () => {
 
   it('is not offered on the surface (owner question 28)', () => {
     const onSurface = buildState({
+      revealAll: true,
       layers: [['##']],
       avatar: { x: 0, y: 0, z: -1 },
       inventory: { ladder: 3 },
@@ -128,6 +134,7 @@ describe('placing a ladder', () => {
 
     // From the top layer, the surface cell overhead is not offered either.
     const below = buildState({
+      revealAll: true,
       layers: [['.'], ['#']],
       avatar: { x: 0, y: 0, z: 0 },
       inventory: { ladder: 3 },
@@ -138,13 +145,18 @@ describe('placing a ladder', () => {
   it('is not legal without a ladder in the inventory', () => {
     const layers = [['.'], ['#']];
     const avatar = { x: 0, y: 0, z: 0 };
-    expect(ladderTargets(buildState({ layers, avatar }))).toEqual([]);
-    expect(ladderTargets(buildState({ layers, avatar, inventory: { ladder: 0 } }))).toEqual([]);
-    expect(ladderTargets(buildState({ layers, avatar, inventory: { ladder: 1 } }))).toHaveLength(1);
+    expect(ladderTargets(buildState({ revealAll: true, layers, avatar }))).toEqual([]);
+    expect(
+      ladderTargets(buildState({ revealAll: true, layers, avatar, inventory: { ladder: 0 } })),
+    ).toEqual([]);
+    expect(
+      ladderTargets(buildState({ revealAll: true, layers, avatar, inventory: { ladder: 1 } })),
+    ).toHaveLength(1);
   });
 
   it('is not legal with 0 AP', () => {
     const state = buildState({
+      revealAll: true,
       layers: [['.'], ['#']],
       avatar: { x: 0, y: 0, z: 0 },
       inventory: { ladder: 1 },
@@ -155,6 +167,7 @@ describe('placing a ladder', () => {
 
   it('uses up the last ladder, after which no more can be placed', () => {
     const state = buildState({
+      revealAll: true,
       layers: [['..'], ['##']],
       avatar: { x: 0, y: 0, z: 0 },
       inventory: { ladder: 1 },
@@ -211,6 +224,7 @@ describe('climbing a ladder', () => {
 
   it('needs a ladder in the cell above to climb up', () => {
     const state = buildState({
+      revealAll: true,
       layers: [['.'], ['.'], ['#']],
       avatar: { x: 0, y: 0, z: 1 },
       ladders: [{ x: 0, y: 0, z: 1 }],
@@ -221,6 +235,7 @@ describe('climbing a ladder', () => {
   it('needs a ladder in the avatar’s own cell to climb up', () => {
     // "On a ladder" (0005 item 6): a ladder overhead alone is out of reach.
     const state = buildState({
+      revealAll: true,
       layers: [['.'], ['.'], ['#']],
       avatar: { x: 0, y: 0, z: 1 },
       ladders: [{ x: 0, y: 0, z: 0 }],
@@ -230,6 +245,7 @@ describe('climbing a ladder', () => {
 
   it('cannot climb up into a solid cell', () => {
     const state = buildState({
+      revealAll: true,
       layers: [['#'], ['.'], ['#']],
       avatar: { x: 0, y: 0, z: 1 },
       ladders: [{ x: 0, y: 0, z: 1 }],
@@ -241,6 +257,7 @@ describe('climbing a ladder', () => {
     // The ladder is at the top of a pit 3 deep, which would otherwise be too
     // deep to walk into.
     const state = buildState({
+      revealAll: true,
       layers: [['#.'], ['#.'], ['#.'], ['##']],
       avatar: { x: 0, y: 0, z: -1 },
       ladders: [{ x: 1, y: 0, z: 0 }],
@@ -282,6 +299,7 @@ describe('climbing down off the bottom of a ladder', () => {
 
   it('is legal onto a ladder below, however deep the shaft under it', () => {
     const state = buildState({
+      revealAll: true,
       layers: [['.'], ['.'], ['.'], ['.'], ['.'], ['#']],
       avatar: { x: 0, y: 0, z: 0 },
       ladders: [
