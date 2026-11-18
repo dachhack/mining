@@ -49,6 +49,19 @@ Four minor findings are bugs in the text play tool (wrong lamp-out banner, missi
 
 This used the first of the two fix-and-replay rounds the plan allows. M1 is still done by the plan's definition: acceptance passes and neither round has an open blocker.
 
+## Owner's second answers (2026-11-18, after round m1-r2)
+
+| Owner said                                                                      | Question | What follows                                                                                           |
+| ------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
+| "Straight shafts should have cave in risk."                                     | 52       | The shaft's danger comes from M2's cave-ins; the M2 tasks give it a concrete form                      |
+| "Start with fuel to get to coal so we don't need to have close coal necessary." | 53, 47   | A balance task checks, over many seeds, that starting fuel reaches coal, and adjusts `src/data` if not |
+| "Misleading hints are okay."                                                    | 54, 51   | Traces stay as they are                                                                                |
+| "You can easily get lost if you go into the dark."                              | 45       | The dark stays harsh: no step into a cell whose floor is unseen                                        |
+| "Zero fuel is a almost certain death sentence in a tunnel."                     | 19       | The rule stands (one last shift at zero fuel); the design doc sentence will be reworded                |
+| "Let's merge."                                                                  |          | This PR is merged and M1 is closed                                                                     |
+
+Where the answer gave a direction, the concrete form is the coordinator's reading, recorded as such in `docs/owner-questions.md`.
+
 ## Is M1 done?
 
 Agent plan section 2: a milestone is done when its acceptance criteria pass and its playtest round has no open blocker findings.
