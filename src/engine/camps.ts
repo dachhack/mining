@@ -37,6 +37,22 @@ export function campsAt(state: GameState, pos: Vec3): Camp[] {
 }
 
 /**
+ * Contract for M2-7: true if the camp's air line is intact (0014 item 29): a
+ * path of open cells joins one of the camp's cells to the surface, on which
+ * every stretch that is flooded or gassy is at most
+ * `CAMPS.airLineMaxBadStretch` cells long and has a vent at each end.
+ *
+ * Two tasks read it: `updateAir` in air.ts (M2-4; item 20, "or to an active
+ * camp whose air line is intact") and `applyRest` below (M2-7). It is here
+ * so that neither waits for the other. Reads the true cube (0014 item 21).
+ *
+ * Until M2-7 fills it in, no camp has an air line.
+ */
+export function campAirLineIntact(_state: GameState, _camp: Camp): boolean {
+  return false;
+}
+
+/**
  * Contract for M2-7. Called in step (e) of the cube phase when
  * `state.avatar.resting` is true and the avatar is alive after damage and
  * air (0014 items 2 and 27).

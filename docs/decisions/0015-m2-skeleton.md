@@ -27,7 +27,7 @@ M2 task 1 fixes the shapes the other M2 tasks build on, so that issues #51 to #5
 
 ### The cube phase (`src/engine/shift.ts`, `src/engine/cube/`)
 
-`endShift` runs, in this order: the five steps; `settle` once; upkeep, if the avatar is alive; reveal. The forecast is not stored: `previewCubePhase` works it out from the new state when asked.
+`endShift` runs, in this order: the five steps; `settle` once; upkeep, if the avatar is alive; reveal. An avatar that step (e) killed does not fall in `settle`: it stays where it died, and no `fell` follows `runEnded`. The forecast is not stored: `previewCubePhase` works it out from the new state when asked.
 
 | Step | File                    | Function            | Filled in by                           |
 | ---- | ----------------------- | ------------------- | -------------------------------------- |
@@ -94,13 +94,20 @@ All M2 events are defined: `blockCracked`, `blockFell`, `blockDestroyed`, `fluid
 | M2-8 (#58) camp tools       | `actions/campTools.ts`                                                                 | `actions/mine.ts` (drill), `cube/fluids.ts` (pump), `reveal.ts` (safety lamp as a light)            |
 | M2-9 (#59) entombment, sim  | `actions/giveUp.ts`, new `entombment.ts`, `tests/engine/deaths.test.ts`, the sim tools | none in the engine                                                                                  |
 
-`actions/mine.ts` and `actions/move.ts` are each edited by more than one task; the edits are in different places and small. Every task adds its tests in new files under `tests/engine/`. The test helper `buildState` already takes `water`, `lava`, `lavaSources`, `gas`, `cracks`, `supports`, `structures`, `armed`, `camps`, and `air`, and the characters `R` (rubble) and `S` (sealed rock).
+Where parallel PRs will still meet, so that the coordinator can order the merges:
+
+- `actions/mine.ts`: three tasks (overhead in M2-3, arming in M2-5, drill in M2-8). `actions/move.ts`: two (M2-3, M2-4). The edits are in different places and small.
+- The four golden files and the table in `tests/golden/README.md`: every task that changes play (M2-2 and M2-3 for certain) rewrites the same `expectedHash` lines, and the second to merge must re-hash on top of the first.
+- `STATE_VERSION`, if two tasks change the shape of the state.
+- `tests/engine/stubs.test.ts`: each task deletes the one test of the module it fills in. Each test is a block of its own with its own import, so the deletions do not touch.
+
+Every task adds its tests in new files under `tests/engine/`. The test helper `buildState` already takes `water`, `lava`, `lavaSources`, `gas`, `cracks`, `supports`, `structures`, `armed`, `camps`, and `air`, and the characters `R` (rubble) and `S` (sealed rock).
 
 Notes for particular tasks:
 
 - **M2-2.** Pockets are written with `setWater`, `setLava(state, pos, units, true)` for sources, and `setGas`.
 - **M2-3.** `stepTimers` is yours as well as `stepCaveIns`, because "running" is your rule. A falling block calls `recordDamage`, `destroyStructure` (not for a support), `destroyLooseItems`, and `destroyCampsAt` for each cell it passes through or rests in.
-- **M2-4.** You do not need to edit `cube/avatarEffects.ts`: fill in `updateAir` in `air.ts` (it must not end the run; step (e) checks for air at 0), and record lava's damage to the avatar at the end of `stepFluids` (see Readings). Gas is already in the state, so "not breathable" needs no stub: read `gasAt`.
+- **M2-4.** For the camp half of item 20, call `campAirLineIntact(state, camp)` in `camps.ts`; it answers `false` until M2-7 fills it in, so neither task waits for the other. You do not need to edit `cube/avatarEffects.ts`: fill in `updateAir` in `air.ts` (it must not end the run; step (e) checks for air at 0), and record lava's damage to the avatar at the end of `stepFluids` (see Readings). Gas is already in the state, so "not breathable" needs no stub: read `gasAt`.
 - **M2-5.** `stepGas` goes through `state.armed` and empties it. Placing an explosive sets the structure and calls `armCharge(state, pos, 'explosive')`.
 - **M2-6.** `forecastShift` in `shift.ts` already calls `forecastCountdowns` and `forecastFlows`; fill those in. Extend the property test with `knownCube`: the forecast of a state must equal the forecast of any state that differs only in unrevealed cells.
 - **M2-7.** Resting sets `state.avatar.resting`; fill in `applyRest` in `camps.ts`. Step (e) clears the flag.
@@ -130,6 +137,6 @@ Choices made here where 0014 or the issue left room. Each is small to change.
 ## Consequences
 
 - A save from state version 3 does not load. Play logs recorded on engine 0.2.0 replay with a warning and need not reach their recorded hash.
-- Later M2 tasks change no shared type for the usual case, so their PRs should not conflict with one another except in `actions/mine.ts` and `actions/move.ts`.
+- Later M2 tasks change no shared type for the usual case, so their PRs should conflict with one another only in the places listed under "Where each task puts its code".
 - `tools/sim --json` lists the new item and structure ids in its tallies, all 0 for now. `tools/play` output is unchanged.
 - The stub action modules throw if their `apply…` is called. It cannot be: `applyAction` accepts only an action that `legalActions` lists, and the stubs list none (`tests/engine/stubs.test.ts`).

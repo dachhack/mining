@@ -13,6 +13,9 @@ import type { GameState } from './state';
  *
  * - With connected air the avatar's air refills fully; without it, or in a
  *   flooded or gassy cell, it loses `HAZARDS.air.lossPerShift` (0014 item 20).
+ * - "Connected" is a path of breathable open cells to the surface, or to a
+ *   cell of an active camp for which `campAirLineIntact(state, camp)`
+ *   (camps.ts, filled in by M2-7) is true.
  * - Changes `state.avatar.air` (never below 0) and emits `airChanged` when it
  *   changed.
  * - Does NOT end the run: `stepAvatarEffects` checks for air at 0 straight

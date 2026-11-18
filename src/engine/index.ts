@@ -228,7 +228,8 @@ export function endShift(state: GameState): StepResult {
 
   runCubePhase(next, events);
   // Nothing the cube phase does to the avatar's footing is the player's move.
-  // `settle` ends the run itself if the fall kills ("the death check").
+  // `settle` ends the run itself if the fall kills ("the death check"). An
+  // avatar that step (e) already killed does not fall; loose items still do.
   settle(next, events, 'uncontrolled');
   if (isRunActive(next)) {
     runUpkeep(next, events);
@@ -280,7 +281,7 @@ export type {
   StashPutAction,
   StashTakeAction,
 } from './actionTypes';
-export { campCells, campsAt } from './camps';
+export { campAirLineIntact, campCells, campsAt } from './camps';
 export type {
   AirChangeReason,
   DamageCause,

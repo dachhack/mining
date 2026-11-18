@@ -433,4 +433,33 @@ describe('after step (e): settle once, then upkeep (0014 item 2)', () => {
       },
     );
   });
+
+  it('an avatar that step (e) kills does not then fall: it was crushed, not fell', () => {
+    // The same shaft, deeper (a fall of 8 would be fatal by itself), and the
+    // rockfall takes all the health that is left.
+    const state = buildState({
+      layers: [['.'], ['#'], ['.'], ['.'], ['.'], ['.'], ['.'], ['.'], ['.'], ['#']],
+      avatar: { x: 0, y: 0, z: 0 },
+      revealAll: true,
+      health: 4,
+      looseItems: [{ pos: { x: 0, y: 0, z: 0 }, item: 'coal', count: 1 }],
+    });
+    withSteps(
+      {
+        caveIns: (current, _events, phase) => {
+          current.blocks[1] = 0;
+          recordDamage(phase, 4, 'rockfall');
+        },
+      },
+      () => {
+        const { state: after, events } = endShift(state);
+        expect(after.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'crushed' });
+        // The avatar stays where it died, and nothing follows `runEnded`
+        // except the loose coal dropping down the shaft.
+        expect(after.avatar.pos).toEqual({ x: 0, y: 0, z: 0 });
+        expect(events.map((event) => event.type)).toEqual(['damageTaken', 'runEnded', 'itemFell']);
+        expect(after.looseItems).toEqual([{ pos: { x: 0, y: 0, z: 8 }, item: 'coal', count: 1 }]);
+      },
+    );
+  });
 });

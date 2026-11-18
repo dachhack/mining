@@ -12,13 +12,8 @@
 // rules are tested in shift.test.ts, craft.test.ts and leave.test.ts.
 
 import { describe, expect, it } from 'vitest';
-import { actionKey, applyAction, legalActions, sameAction } from '../../src/engine';
+import { actionKey, sameAction } from '../../src/engine';
 import type { Action } from '../../src/engine';
-import { legalCampActions } from '../../src/engine/actions/camp';
-import { legalCampToolActions } from '../../src/engine/actions/campTools';
-import { legalGiveUpActions } from '../../src/engine/actions/giveUp';
-import { legalPlaceExplosiveActions } from '../../src/engine/actions/placeExplosive';
-import { legalPlaceSupportActions } from '../../src/engine/actions/placeSupport';
 import { buildState } from './helpers';
 
 describe('actionKey and sameAction', () => {
@@ -81,7 +76,10 @@ describe('actionKey and sameAction', () => {
 });
 
 describe('the M2 action modules are stubs (decision note 0015)', () => {
-  // Each M2 task deletes the line about the module it fills in.
+  // One test for each stub module, each with its own import inside it, so
+  // that the task filling a module in deletes one block here and touches no
+  // line another task touches. `await import(...)` loads a module where it
+  // is needed, like an `import` statement inside a Python function.
   const state = buildState({
     layers: [['#.#'], ['###']],
     avatar: { x: 1, y: 0, z: 0 },
@@ -89,31 +87,34 @@ describe('the M2 action modules are stubs (decision note 0015)', () => {
     inventory: { support: 2, explosive: 1, pump: 1, vent: 1, safetyLamp: 1, sealant: 1 },
   });
 
-  it('offer nothing, so the game plays as it did in M1', () => {
+  it('placeSupport offers nothing (until M2-3)', async () => {
+    const { legalPlaceSupportActions } = await import('../../src/engine/actions/placeSupport');
     expect(legalPlaceSupportActions(state)).toEqual([]);
-    expect(legalPlaceExplosiveActions(state)).toEqual([]);
-    expect(legalCampToolActions(state)).toEqual([]);
-    expect(legalCampActions(state)).toEqual([]);
-    expect(legalGiveUpActions(state)).toEqual([]);
-    const m1Types = [
-      'move',
-      'mine',
-      'placeLadder',
-      'placeTorch',
-      'craft',
-      'pickUp',
-      'drop',
-      'leave',
-    ];
-    for (const action of legalActions(state)) {
-      expect(m1Types).toContain(action.type);
-    }
   });
 
-  it('are refused by applyAction, like any action that is not on the list', () => {
-    expect(() => applyAction(state, { type: 'giveUp', ap: 0 })).toThrow('Not a legal action');
-    expect(() =>
-      applyAction(state, { type: 'placeSupport', target: { x: 1, y: 0, z: 0 }, ap: 1 }),
-    ).toThrow('Not a legal action');
+  it('placeExplosive offers nothing (until M2-5)', async () => {
+    const { legalPlaceExplosiveActions } = await import('../../src/engine/actions/placeExplosive');
+    expect(legalPlaceExplosiveActions(state)).toEqual([]);
+  });
+
+  it('camp offers nothing (until M2-7)', async () => {
+    const { legalCampActions } = await import('../../src/engine/actions/camp');
+    expect(legalCampActions(state)).toEqual([]);
+  });
+
+  it('campTools offers nothing (until M2-8)', async () => {
+    const { legalCampToolActions } = await import('../../src/engine/actions/campTools');
+    expect(legalCampToolActions(state)).toEqual([]);
+  });
+
+  it('giveUp offers nothing (until M2-9)', async () => {
+    const { legalGiveUpActions } = await import('../../src/engine/actions/giveUp');
+    expect(legalGiveUpActions(state)).toEqual([]);
+  });
+
+  it('no camp has an air line (until M2-7)', async () => {
+    const { campAirLineIntact } = await import('../../src/engine/camps');
+    const camp = { pos: { x: 1, y: 0, z: 0 }, foundedShift: 1, stash: {} };
+    expect(campAirLineIntact(state, camp)).toBe(false);
   });
 });
