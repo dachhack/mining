@@ -203,7 +203,6 @@ function hudLines(state: GameState, options: ViewOptions): string[] {
     `Lamp oil ${state.lampOil}${lamp}`,
     `Health ${state.avatar.health}/${AVATAR.startHealth}`,
     `Carry ${carriedWeight(state)}/${carryCapacity()}`,
-    `Banked AP ${state.bankedAp}/${SHIFT.bankedApPerRefund}`,
   ].join(' | ');
 
   const onLadder = structureAt(state, pos) === STRUCTURES.ladder.code ? ', on a ladder' : '';
@@ -348,12 +347,13 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   const upkeep = preview.upkeep;
   let forecast: string;
   if (upkeep.runEnds !== null) {
-    forecast = `THE RUN ENDS: ${runEndText(upkeep.runEnds)}. No fuel is left even after banking ${upkeep.apBanked} AP.`;
+    forecast = `THE RUN ENDS: ${runEndText(upkeep.runEnds)}. No fuel is left, and unspent AP does not become fuel.`;
   } else {
-    const refund = upkeep.fuelRefunded > 0 ? ` +${upkeep.fuelRefunded} refund` : '';
+    // Unspent AP is lost at the end of a shift (issue #32); say so only when
+    // there is some, so a player does not end a shift early by oversight.
+    const unspent = state.ap > 0 ? `${state.ap} unspent AP will be lost, ` : '';
     forecast =
-      `${upkeep.apBanked} unspent AP banked (counter ${state.bankedAp} -> ${upkeep.bankedApAfter})` +
-      `, fuel ${state.fuel} -> ${upkeep.fuelAfter} (-${upkeep.fuelConsumed} shift${refund})` +
+      `${unspent}fuel ${state.fuel} -> ${upkeep.fuelAfter} (-${upkeep.fuelConsumed} shift)` +
       `, lamp oil ${state.lampOil} -> ${upkeep.lampOilAfter}.`;
   }
 

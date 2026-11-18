@@ -73,7 +73,7 @@ A run is a sequence of **shifts**. Each shift has three phases.
 2. **Cube phase.** Hazards advance one step, in a fixed order: (a) support check and falling blocks, (b) fluids flow, (c) gas spreads, (d) timers tick, (e) damage is applied to the avatar and structures.
 3. **Upkeep.** Fuel is consumed. [Default] 1 fuel per shift, plus 1 per active camp every 4 shifts. Zero fuel at upkeep ends the run.
 
-The player may end the player phase early. [Default] Unspent AP is banked, and every 3 banked AP refunds 1 fuel. The refund is deterministic.
+The player may end the player phase early. [Default] Unspent AP is lost when the shift ends: it does not carry over and does not become fuel.
 
 ### 4.1 Actions [Default]
 

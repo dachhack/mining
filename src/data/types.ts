@@ -123,10 +123,6 @@ export interface ShiftData {
   apPerShift: number;
   /** Fuel consumed at each upkeep (design doc 4). */
   fuelPerShift: number;
-  /** Each time the banked-AP counter reaches this, it drops by this much... */
-  bankedApPerRefund: number;
-  /** ...and this much fuel is refunded (0005 item 20). */
-  fuelPerRefund: number;
   /** The lamp burns oil once every this many shifts (0005 item 15). */
   lampOilBurnEveryShifts: number;
   lampOilPerBurn: number;

@@ -191,14 +191,14 @@ describe('validateData', () => {
       data.avatar.fatalFallBlocks = data.avatar.freeFallBlocks; // must be more
       data.avatar.uncontrolledFallDamagePerBlock = -1;
       data.shift.apPerShift = 0;
-      data.shift.bankedApPerRefund = 0;
+      data.shift.lampOilBurnEveryShifts = 0;
       data.actionCosts.move = -1;
     });
     expect(problems.some((p) => p.includes('avatar.startHealth'))).toBe(true);
     expect(problems.some((p) => p.includes('avatar.fatalFallBlocks'))).toBe(true);
     expect(problems.some((p) => p.includes('avatar.uncontrolledFallDamagePerBlock'))).toBe(true);
     expect(problems.some((p) => p.includes('shift.apPerShift'))).toBe(true);
-    expect(problems.some((p) => p.includes('shift.bankedApPerRefund'))).toBe(true);
+    expect(problems.some((p) => p.includes('shift.lampOilBurnEveryShifts'))).toBe(true);
     expect(problems.some((p) => p.includes('actionCosts.move'))).toBe(true);
   });
 

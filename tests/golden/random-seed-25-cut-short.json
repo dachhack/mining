@@ -5,7 +5,7 @@
   "loadoutId": "standard",
   "recordedWith": "random",
   "expectedStatus": "active",
-  "expectedHash": "2992abf1593d2642",
+  "expectedHash": "e96978dbb70679a0",
   "decisions": [
     "mine 15,17,0 ap 1",
     "mine 16,15,0 ap 1",

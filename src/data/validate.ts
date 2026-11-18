@@ -289,8 +289,6 @@ export function validateData(data: GameData): string[] {
   requireWholeAtLeast(shift.firstShiftNumber, 0, 'shift.firstShiftNumber');
   requireWholeAtLeast(shift.apPerShift, 1, 'shift.apPerShift');
   requireWholeAtLeast(shift.fuelPerShift, 0, 'shift.fuelPerShift');
-  requireWholeAtLeast(shift.bankedApPerRefund, 1, 'shift.bankedApPerRefund');
-  requireWholeAtLeast(shift.fuelPerRefund, 0, 'shift.fuelPerRefund');
   requireWholeAtLeast(shift.lampOilBurnEveryShifts, 1, 'shift.lampOilBurnEveryShifts');
   requireWholeAtLeast(shift.lampOilPerBurn, 0, 'shift.lampOilPerBurn');
 

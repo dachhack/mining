@@ -28,7 +28,11 @@ import type { ShiftForecast } from './shift';
 import { addItem, blankState, cloneState, isRunActive } from './state';
 import type { GameState } from './state';
 
-export const ENGINE_VERSION = '0.1.0';
+/**
+ * Changes whenever the rules or the shape of the state change, so that a play
+ * log can say which engine it was played on. 0.2.0: no fuel refill (issue #32).
+ */
+export const ENGINE_VERSION = '0.2.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
@@ -186,7 +190,7 @@ export function endShift(state: GameState): StepResult {
 /**
  * What ending the shift now would do, for the end-shift preview: the cube
  * phase's effect on the hazards the player knows about (none until M2) and
- * upkeep's effect on fuel, lamp oil and banked AP. Does not change `state`.
+ * upkeep's effect on fuel and lamp oil. Does not change `state`.
  * Throws if the run has already ended, as `endShift` does.
  */
 export function previewCubePhase(state: GameState): ShiftForecast {

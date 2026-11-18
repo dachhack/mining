@@ -210,7 +210,6 @@ function structureNameByCode(code: number): string {
 
 const GAUGE_REASONS: Record<string, string> = {
   upkeep: 'the shift',
-  bankedApRefund: 'banked AP',
   crafted: 'crafted',
 };
 
@@ -273,11 +272,6 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
         break;
       case 'crafted':
         lines.push(`Crafted ${findRecipe(event.recipe)?.name ?? event.recipe}.`);
-        break;
-      case 'apBanked':
-        if (event.amount > 0) {
-          lines.push(`Banked ${event.amount} AP (counter now ${event.bankedAp}).`);
-        }
         break;
       case 'shiftEnded':
         lines.push(`Shift ${event.shift} ended; shift ${event.nextShift} begins.`);

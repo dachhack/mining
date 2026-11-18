@@ -40,9 +40,6 @@ let cubePhaseEndsRun = false;
 const FAKE_FORECAST: ShiftForecast = {
   hazards: [{ kind: 'test', cells: [], inShifts: 1 }],
   upkeep: {
-    apBanked: 1,
-    bankedApAfter: 1,
-    fuelRefunded: 0,
     fuelConsumed: 1,
     fuelAfter: 9,
     lampOilBurned: 0,
