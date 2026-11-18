@@ -23,6 +23,7 @@
 - One milestone task per PR. Small PRs.
 - Every rule change comes with a test. Every bug fix comes with a failing test first.
 - If a golden-run hash changes, say so in the PR description and explain why.
+- `ENGINE_VERSION` (src/engine/index.ts) changes when the rules or the shape of the state change. It is bumped once for each batch of such changes that lands between two playtest rounds, in the first PR of the batch; the coordinator says which PR that is. A play log replays to its recorded hash only on the engine version it names.
 - Run before pushing: npm run lint && npm run typecheck && npm test
 - PR descriptions: what changed, how it was tested, and any design question raised.
 - Record significant decisions in docs/decisions/ as short notes.
