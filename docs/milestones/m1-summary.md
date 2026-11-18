@@ -25,6 +25,30 @@ All four are now on `main` (PRs #36, #38, #37, #39; engine version 0.2.0). Build
 
 For #33, #34, and #35 the owner gave the direction and the coordinator assumed the exact rule; each issue states it, for the owner to confirm or change. Item 2 under "What I need from you" is therefore settled; item 1 (merging this PR) remains.
 
+## Second playtest round (m1-r2), after the owner's decisions
+
+Because the rules changed materially, the coordinator ran a second round on engine 0.2.0 (commit `8f0001a`): the same four personas on the same seeds 11, 23, and 37. All 12 runs left alive with ore, no blockers, and all 12 logs replay. The evaluation is `docs/playtests/m1-r2/evaluation.md`: 17 findings, 0 blockers, 4 major (all design), 13 minor.
+
+What became of round one's four major findings:
+
+| Round one finding                         | Round two | Evidence                                                                                                                                    |
+| ----------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fuel is not a clock                       | Fixed     | Nobody idled; runs without coal were ended by fuel                                                                                          |
+| Finding ore is luck                       | Improved  | All 12 runs brought ore out, including all four on seed 11, where round one found none; following traces was the most-liked part of play    |
+| One repeated move between surface and ore | Unchanged | The move is now "ladder, mine below, climb down"; all 12 reports still call the descent or the climb automatic                              |
+| Light changes nothing                     | Improved  | Two runs worked by touch for 6 and 11 shifts and called it the best part; but only the runs with no coal near the start met the dark at all |
+
+Round two's major findings, each a question for the owner and none a defect:
+
+1. **The shaft is not dangerous yet** (question 52). The fall costs 1 health; a ladder in the miner's own cell cancels it; one persona spent health as action points.
+2. **Going down and coming up is still automatic.** M2's hazards and cave-ins are the planned answer; the M2 playtest brief will test whether they are enough.
+3. **Coal near the start switches off both the fuel clock and the lamp clock** (question 53). How long the lamp should last (question 47) follows from the answer.
+4. **Traces find ore and then mislead** (question 54): unlit rock looks clean, and marks stay after the ore is gone.
+
+Four minor findings are bugs in the text play tool (wrong lamp-out banner, missing "Not on the list" notes in three cases, the trace mark hiding the rock type, small wording) and are one developer task, issue #47. One sentence of the design doc is for the owner to confirm (question 19: the game gives one last shift at zero fuel).
+
+This used the first of the two fix-and-replay rounds the plan allows. M1 is still done by the plan's definition: acceptance passes and neither round has an open blocker.
+
 ## Is M1 done?
 
 Agent plan section 2: a milestone is done when its acceptance criteria pass and its playtest round has no open blocker findings.
@@ -39,7 +63,7 @@ Agent plan section 2: a milestone is done when its acceptance criteria pass and 
 
 The reviewer of the acceptance PR broke the engine 19 different ways locally and confirmed that the tests turn red each time, so these tests can fail.
 
-No fix-and-replay round was used (the plan allows two).
+One fix-and-replay round was used (the plan allows two): see the section on round m1-r2 above.
 
 ## What was built
 
