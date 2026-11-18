@@ -177,8 +177,9 @@ describe('property tests: random legal play', () => {
   const RANDOM_SEEDS = [101, 102, 103, 104, 105, 106, 107, 108];
   const RANDOM_DECISIONS = 150;
 
-  // `wander` never leaves, so these runs go deep and long: most end out of
-  // fuel between 180 and 320 decisions in.
+  // `wander` never leaves, so these runs go deeper and longer than `random`
+  // ones: without a fuel refill (issue #32) they end out of fuel after about
+  // 130 to 250 decisions, so none reaches the cap below.
   it.each(WANDER_SEEDS)(
     `wander policy, seed %i: the state stays valid for ${WANDER_DECISIONS} decisions`,
     (seed) => {
