@@ -3,6 +3,7 @@
 import { BLOCKS } from '../../data';
 import type { MineAction } from '../actionTypes';
 import type { GameEvent } from '../events';
+import { armUnstableOreBeside } from '../explosions';
 import { MINE_REACH_OFFSETS, offsetPosition } from '../neighbours';
 import { canCarry } from '../inventory';
 import {
@@ -59,6 +60,8 @@ export function legalMineActions(state: GameState): MineAction[] {
  * legal list.
  *
  * - Opens the cell and emits `blockMined`.
+ * - Arms revealed, unbraced unstable ore beside the mined block (`oreArmed`;
+ *   0014 item 17). Mining the ore itself disarms it: `setBlock` does that.
  * - Gives the yield, one stack at a time: a stack that fits the carry limit
  *   goes into the inventory (`itemGained`); a stack that does not is left
  *   loose in the mined cell (`itemLeft`; 0005 item 16). A stack is never
@@ -76,6 +79,9 @@ export function applyMine(state: GameState, action: MineAction, events: GameEven
 
   setBlock(state, target, BLOCKS.air.code);
   events.push({ type: 'blockMined', pos: { ...target }, block: minedCode });
+  // Unstable ore beside the mined block is armed, if the player could already
+  // see it and it is not braced (0014 item 17; explosions.ts).
+  armUnstableOreBeside(state, target, events);
 
   for (const stack of yields) {
     if (canCarry(state, stack.item, stack.count)) {
