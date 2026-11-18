@@ -32,6 +32,8 @@ const FAKE_LEAVE_COST = 2;
 
 // The fakes record the order they were called in here.
 const calls: string[] = [];
+// The kind of fall each call of the fake `settle` was given.
+const settleKinds: string[] = [];
 // Set by a test to make the fake cube phase end the run.
 let cubePhaseEndsRun = false;
 
@@ -64,8 +66,11 @@ vi.mock('../../src/engine/actions/leave', () => ({
 }));
 
 vi.mock('../../src/engine/gravity', () => ({
-  settle: (): void => {
+  // The third argument is the kind of fall the dispatcher says this would be
+  // (decision note 0010). The fake only writes it down.
+  settle: (_state: GameState, _events: GameEvent[], fallKind: string): void => {
     calls.push('settle');
+    settleKinds.push(fallKind);
   },
 }));
 
@@ -110,6 +115,7 @@ const LEAVE: Action = { type: 'leave', ap: FAKE_LEAVE_COST };
 
 beforeEach(() => {
   calls.length = 0; // empty the list
+  settleKinds.length = 0;
   cubePhaseEndsRun = false;
 });
 
@@ -139,6 +145,15 @@ describe('applyAction', () => {
   it('applies the action, then gravity, then reveal, in that order (0006)', () => {
     applyAction(startState(5), LEAVE);
     expect(calls).toEqual(['applyLeave', 'settle', 'updateReveal']);
+  });
+
+  it('tells gravity a fall after a move is a chosen drop, and after anything else is not (0010)', () => {
+    // The move module is the real one: a walk east along the surface.
+    act(startState(5), { type: 'move', to: { x: 1, y: 0, z: -1 } });
+    expect(settleKinds).toEqual(['chosenDrop']);
+
+    applyAction(startState(5), LEAVE);
+    expect(settleKinds).toEqual(['chosenDrop', 'uncontrolled']);
   });
 
   it('spends the AP of the action and returns the events', () => {
@@ -201,6 +216,8 @@ describe('endShift', () => {
   it('runs the cube phase, gravity, upkeep, then reveal, in that order (0006)', () => {
     endShift(startState(5));
     expect(calls).toEqual(['runCubePhase', 'settle', 'runUpkeep', 'updateReveal']);
+    // Whatever the cube phase does to the avatar's footing, the player did not choose it.
+    expect(settleKinds).toEqual(['uncontrolled']);
   });
 
   it('skips upkeep when the cube phase ends the run', () => {

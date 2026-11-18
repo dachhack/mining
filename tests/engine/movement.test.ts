@@ -171,7 +171,7 @@ describe('walking off a ledge', () => {
     expect(after.status).toEqual({ kind: 'active' });
     expect(events).toEqual([
       { type: 'moved', from: { x: 0, y: 0, z: -1 }, to },
-      { type: 'fell', from: to, to: landed, distance: depth },
+      { type: 'fell', from: to, to: landed, distance: depth, kind: 'chosenDrop' },
     ]);
   });
 

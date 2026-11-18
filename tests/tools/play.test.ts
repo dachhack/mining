@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { BLOCKS, STRUCTURES } from '../../src/data';
+import { AVATAR, BLOCKS, STRUCTURES } from '../../src/data';
 import type { Vec3 } from '../../src/data';
 import {
   ENGINE_VERSION,
@@ -209,7 +209,7 @@ describe('the action list', () => {
     expect(text).toContain('[1] Move west, then drop 2 blocks to layer 1');
     expect(text).toContain('[1] Move east');
     expect(text).toContain(
-      'Mine below you: Stone (you are standing on it: you will fall 1 block, no harm), gives 1 Stone',
+      'Mine below you: Stone (you are standing on it: you will fall 1 block and lose 1 health), gives 1 Stone',
     );
     // 10 stone weigh 20, the carry limit, so one more does not fit.
     expect(text).toContain('(too heavy to carry: it will be left lying there)');
@@ -237,18 +237,48 @@ describe('the action list', () => {
   it('says how far the avatar will fall when it mines the block it stands on', () => {
     // Each case is checked against what the engine then does.
     const cases = [
-      { open: 0, text: 'you will fall 1 block, no harm' },
-      { open: 1, text: 'you will fall 2 blocks, no harm' },
-      { open: 3, text: 'you will fall 4 blocks, it will cost health' },
-      { open: 5, text: 'you will fall 6 blocks, FATAL' },
+      { open: 0, text: 'you will fall 1 block and lose 1 health', lost: 1 },
+      { open: 1, text: 'you will fall 2 blocks and lose 2 health', lost: 2 },
+      { open: 2, text: 'you will fall 3 blocks and lose 4 health', lost: 4 },
+      { open: 3, text: 'you will fall 4 blocks and lose 6 health', lost: 6 },
+      { open: 4, text: 'you will fall 5 blocks and lose 8 health', lost: 8 },
+      { open: 5, text: 'you will fall 6 blocks, FATAL', lost: AVATAR.startHealth },
     ];
-    for (const { open, text } of cases) {
+    for (const { open, text, lost } of cases) {
       const state = overVoid(open, 8);
       expect(mineBelowLine(state)).toContain(`(you are standing on it: ${text})`);
-      const { events } = act(state, { type: 'mine', target: { x: 1, y: 0, z: 0 } });
+      const { state: after, events } = act(state, { type: 'mine', target: { x: 1, y: 0, z: 0 } });
       const fell = events.find((event) => event.type === 'fell');
-      expect(fell).toMatchObject({ distance: open + 1 });
+      expect(fell).toMatchObject({ distance: open + 1, kind: 'uncontrolled' });
+      expect(state.avatar.health - after.avatar.health).toBe(lost);
     }
+  });
+
+  it('says FATAL when the health the fall costs is all the avatar has left', () => {
+    // A 1-block fall costs 1 health. With 1 health left that kills.
+    const lastPoint = overVoid(0, 8);
+    lastPoint.avatar.health = 1;
+    expect(mineBelowLine(lastPoint)).toContain(
+      '(you are standing on it: you will fall 1 block, FATAL)',
+    );
+    const { state: after } = act(lastPoint, { type: 'mine', target: { x: 1, y: 0, z: 0 } });
+    expect(after.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'fell' });
+
+    const twoLeft = overVoid(0, 8);
+    twoLeft.avatar.health = 2;
+    expect(mineBelowLine(twoLeft)).toContain('you will fall 1 block and lose 1 health)');
+  });
+
+  it('tells a chosen drop from a lost footing in what happened', () => {
+    const state = overVoid(0, 8);
+    const mined = act(state, { type: 'mine', target: { x: 1, y: 0, z: 0 } });
+    const lines = describeEvents(mined.state, mined.events);
+    expect(lines).toContain('You lost your footing and fell 1 block.');
+    expect(lines).toContain('You lost 1 health from the fall (now 9).');
+
+    const ledge = buildState({ layers: [['#.'], ['##']], revealAll: true });
+    const walked = act(ledge, { type: 'move', to: { x: 1, y: 0, z: -1 } });
+    expect(describeEvents(walked.state, walked.events)).toEqual(['You dropped 1 block.']);
   });
 
   it('says so when a ladder holds the avatar, or one further down will catch it', () => {
@@ -262,9 +292,10 @@ describe('the action list', () => {
 
     const caught = overVoid(5, 8);
     caught.structures[cellIndex(caught.size, { x: 1, y: 0, z: 2 })] = STRUCTURES.ladder.code;
-    expect(mineBelowLine(caught)).toContain('you will fall 3 blocks, it will cost health)');
-    const { events } = act(caught, { type: 'mine', target: { x: 1, y: 0, z: 0 } });
+    expect(mineBelowLine(caught)).toContain('you will fall 3 blocks and lose 4 health)');
+    const { state: after, events } = act(caught, { type: 'mine', target: { x: 1, y: 0, z: 0 } });
     expect(events.find((event) => event.type === 'fell')).toMatchObject({ distance: 3 });
+    expect(caught.avatar.health - after.avatar.health).toBe(4);
   });
 
   it('judges the fall by revealed cells only, and says when it cannot see the bottom', () => {
@@ -275,7 +306,7 @@ describe('the action list', () => {
     }
     const before = viewText(state);
     expect(mineBelowLine(state)).toContain(
-      'you will fall 3 blocks or more, it will cost health; below that is unseen',
+      'you will fall 3 blocks or more and lose at least 4 health; below that is unseen',
     );
     // Whatever the unseen cells hold, the text is the same.
     state.blocks[cellIndex(state.size, { x: 1, y: 0, z: 3 })] = BLOCKS.stone.code;

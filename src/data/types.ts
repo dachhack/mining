@@ -104,6 +104,13 @@ export interface AvatarData {
   freeFallBlocks: number;
   /** Damage for each block fallen beyond `freeFallBlocks`. */
   fallDamagePerBlock: number;
+  /**
+   * Damage for each of the first `freeFallBlocks` blocks of an uncontrolled
+   * fall: one the player did not choose as a move, because the block under
+   * the avatar was mined (design doc 5.2, issue #34). A chosen drop does not
+   * pay this.
+   */
+  uncontrolledFallDamagePerBlock: number;
   /** A fall of this many blocks or more is fatal. */
   fatalFallBlocks: number;
   /** The longest drop the player may choose to walk off (0005 item 7). */

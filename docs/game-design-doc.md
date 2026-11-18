@@ -106,7 +106,7 @@ The player may end the player phase early. [Default] Unspent AP is lost when the
 ### 5.2 Movement and gravity
 
 - The avatar stands on solid blocks, ladders, or camp floors.
-- A fall of 1–2 blocks is free. A fall of 3–5 deals [Default] 2 damage per block beyond 2. A fall of 6 or more is fatal.
+- A chosen drop of 1–2 blocks is free. An uncontrolled fall, any fall that does not directly follow a move (the miner lost its footing for any reason, such as the block under it being mined), is not free: it also deals [Default] 1 damage for each of the first 2 blocks. A ladder in the miner's own cell is footing, so it prevents the fall. A fall of 3–5 deals [Default] 2 damage per block beyond 2. A fall of 6 or more is fatal.
 - Mining the block the avatar stands on causes a fall if nothing is beneath it.
 - Climbing up more than 1 block requires a ladder or cut steps.
 
