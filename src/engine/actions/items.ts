@@ -1,4 +1,5 @@
-// Picking up and dropping loose items. STUB: filled in by M1 task 4.
+// Picking up and dropping loose items (design doc 4.1; 0005 item 17; owner
+// question 30).
 //
 // Both follow the same contract as the other action modules:
 // - the `legal...` function does not change `state`, and lists actions as if
@@ -14,34 +15,79 @@
 // - loose items are changed only through `addLooseItems` and
 //   `removeLooseItems` in state.ts, which keep one pile per cell and item.
 
+import { ACTION_COSTS } from '../../data';
+import type { Vec3 } from '../../data';
 import type { DropAction, PickUpAction } from '../actionTypes';
 import type { GameEvent } from '../events';
+import { canCarry } from '../inventory';
+import { FACE_OFFSETS, offsetPosition } from '../neighbours';
+import {
+  addItem,
+  addLooseItems,
+  inventoryEntries,
+  looseItemsAt,
+  removeItem,
+  removeLooseItems,
+} from '../state';
 import type { GameState } from '../state';
 
 /**
- * Every pick-up the player could make now: loose items in the avatar's cell
- * or a face neighbour (0005 item 17) that fit the carry limit (`canCarry` in
- * inventory.ts). `ap` is `ACTION_COSTS.pickUp`.
- *
- * One action for each pile (a cell and an item): `count` is the whole pile,
- * or, when only part of it fits, as many as fit. A pile of which not even
- * one fits gets no action. Order: the avatar's cell first, then the face
- * neighbours in a fixed order, and within a cell by item id.
- *
- * Stub behaviour: returns an empty list.
+ * The most of `item`, up to `available`, that still fits the carry limit.
+ * 0 if not even one fits.
  */
-export function legalPickUpActions(_state: GameState): PickUpAction[] {
-  return [];
+function countThatFits(state: GameState, item: string, available: number): number {
+  let count = available;
+  while (count > 0 && !canCarry(state, item, count)) {
+    count -= 1;
+  }
+  return count;
 }
 
 /**
- * Move the items from the pile into the inventory (`removeLooseItems`, then
- * `addItem`). Emits `itemPickedUp` with the cell they came from.
+ * Every pick-up the player could make now: loose items in the avatar's cell
+ * or a face neighbour (0005 item 17) that fit the carry limit. `ap` is
+ * `ACTION_COSTS.pickUp`.
  *
- * Stub behaviour: throws "not implemented".
+ * One action for each pile (a cell and an item): `count` is the whole pile,
+ * or, when only part of it fits, as many as fit. A pile of which not even
+ * one fits gets no action. Order: the avatar's cell first, then the six face
+ * neighbours in the order of `FACE_OFFSETS`, and within a cell by item id.
  */
-export function applyPickUp(_state: GameState, _action: PickUpAction, _events: GameEvent[]): void {
-  throw new Error('applyPickUp: not implemented');
+export function legalPickUpActions(state: GameState): PickUpAction[] {
+  const cells: Vec3[] = [state.avatar.pos];
+  for (const offset of FACE_OFFSETS) {
+    cells.push(offsetPosition(state.avatar.pos, offset));
+  }
+
+  const actions: PickUpAction[] = [];
+  for (const cell of cells) {
+    // `looseItemsAt` gives the piles of one cell sorted by item id.
+    for (const pile of looseItemsAt(state, cell)) {
+      const count = countThatFits(state, pile.item, pile.count);
+      if (count > 0) {
+        actions.push({
+          type: 'pickUp',
+          from: { ...cell },
+          item: pile.item,
+          count,
+          ap: ACTION_COSTS.pickUp,
+        });
+      }
+    }
+  }
+  return actions;
+}
+
+/** Move the items from the pile into the inventory. Emits `itemPickedUp`. */
+export function applyPickUp(state: GameState, action: PickUpAction, events: GameEvent[]): void {
+  removeLooseItems(state, action.from, action.item, action.count);
+  addItem(state, action.item, action.count);
+  events.push({
+    type: 'itemPickedUp',
+    from: { ...action.from },
+    item: action.item,
+    count: action.count,
+  });
 }
 
 /**
@@ -51,19 +97,25 @@ export function applyPickUp(_state: GameState, _action: PickUpAction, _events: G
  * For each carried item, in `inventoryEntries` order: one action that drops a
  * single unit and, if more than one is carried, one that drops them all. Not
  * one action for every count in between, so the list stays short.
- *
- * Stub behaviour: returns an empty list.
  */
-export function legalDropActions(_state: GameState): DropAction[] {
-  return [];
+export function legalDropActions(state: GameState): DropAction[] {
+  const actions: DropAction[] = [];
+  for (const entry of inventoryEntries(state)) {
+    actions.push({ type: 'drop', item: entry.item, count: 1, ap: ACTION_COSTS.drop });
+    if (entry.count > 1) {
+      actions.push({ type: 'drop', item: entry.item, count: entry.count, ap: ACTION_COSTS.drop });
+    }
+  }
+  return actions;
 }
 
 /**
- * Move the items from the inventory to the avatar's cell (`removeItem`, then
- * `addLooseItems`). Emits `itemDropped`; if they then fall, that is `settle`'s.
- *
- * Stub behaviour: throws "not implemented".
+ * Move the items from the inventory to the avatar's cell. Emits
+ * `itemDropped`; if they then fall, that is `settle`'s.
  */
-export function applyDrop(_state: GameState, _action: DropAction, _events: GameEvent[]): void {
-  throw new Error('applyDrop: not implemented');
+export function applyDrop(state: GameState, action: DropAction, events: GameEvent[]): void {
+  const pos = { ...state.avatar.pos };
+  removeItem(state, action.item, action.count);
+  addLooseItems(state, pos, action.item, action.count);
+  events.push({ type: 'itemDropped', pos, item: action.item, count: action.count });
 }

@@ -173,12 +173,14 @@ describe('applyAction', () => {
 
   it('rejects an action that costs more AP than the avatar has', () => {
     const state = startState(FAKE_LEAVE_COST - 1);
-    expect(legalActions(state)).toEqual([]);
+    // Only the leave actions are compared: the real rule modules may offer
+    // others in this state (dropping the timber costs 0 AP).
+    expect(findActions(state, { type: 'leave' })).toEqual([]);
     expect(() => applyAction(state, LEAVE)).toThrow('Not a legal action');
 
     // With exactly enough AP it is legal.
     const enough = startState(FAKE_LEAVE_COST);
-    expect(legalActions(enough)).toEqual([LEAVE]);
+    expect(findActions(enough, { type: 'leave' })).toEqual([LEAVE]);
     expect(applyAction(enough, LEAVE).state.ap).toBe(0);
   });
 
@@ -195,7 +197,7 @@ describe('legalActions', () => {
   it('returns the actions of the rule modules without changing the state', () => {
     const state = startState(5);
     const before = hashState(state);
-    expect(legalActions(state)).toEqual([LEAVE]);
+    expect(findActions(state, { type: 'leave' })).toEqual([LEAVE]);
     expect(hashState(state)).toBe(before);
   });
 });

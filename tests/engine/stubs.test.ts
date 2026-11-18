@@ -11,17 +11,12 @@ import {
   createRun,
   endShift,
   hashState,
-  legalActions,
   previewCubePhase,
   sameAction,
 } from '../../src/engine';
 import type { Action } from '../../src/engine';
 
 describe('rule-module stubs', () => {
-  it('offer no actions, so a new run has an empty action list', () => {
-    expect(legalActions(createRun(1, 'none', 'standard'))).toEqual([]);
-  });
-
   it('let a shift end without throwing', () => {
     const state = createRun(1, 'none', 'standard');
     const before = hashState(state);

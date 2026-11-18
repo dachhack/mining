@@ -1,49 +1,69 @@
-// Placing a torch. STUB: filled in by M1 task 4.
+// Placing a torch (design doc 4.1; 0005 items 13 and 19).
 
+import { ACTION_COSTS, NO_STRUCTURE, STRUCTURES } from '../../data';
+import type { Vec3 } from '../../data';
 import type { PlaceTorchAction } from '../actionTypes';
 import type { GameEvent } from '../events';
+import { FACE_OFFSETS, offsetPosition } from '../neighbours';
+import { countItem, inGrid, isOpen, removeItem, setStructure, structureAt } from '../state';
 import type { GameState } from '../state';
 
 /**
  * Every `PlaceTorchAction` the player could take now.
  *
- * Contract:
- * - One action for each cell a torch may go in (0005 item 19: the same cells
- *   as a ladder), if the avatar carries a torch.
- * - `ap` is `ACTION_COSTS.placeTorch`. Uses up one torch; emits `structurePlaced`.
- * - Does not change `state`.
- * - Lists actions as if the avatar had unlimited AP, each with its true `ap`
- *   cost; the dispatcher in index.ts removes the ones that cost more than the
- *   AP left.
- * - The order of the list must be the same for any two states with the same
- *   hash, including a state and its saved-and-loaded copy. Walk cells in a
- *   fixed order, the inventory with `inventoryEntries(state)` and loose
- *   items with `state.looseItems` or `looseItemsAt`; never loop over
- *   `state.inventory` itself, whose key order a save does not keep.
- *
- * Stub behaviour: returns an empty list.
+ * - One action for each cell a torch may go in, if the avatar carries a
+ *   torch. Those are the same cells as for a ladder (0005 item 19): the
+ *   avatar's own cell or a face neighbour, which must be open, inside the
+ *   grid (so not on the surface; owner question 28), and hold no structure
+ *   yet. A cell holds one structure, so a torch cannot share a cell with a
+ *   ladder.
+ * - Order: the avatar's cell, then the neighbours in the order of
+ *   `FACE_OFFSETS`.
+ * - `ap` is `ACTION_COSTS.placeTorch`.
+ * - Does not change `state`. Lists actions as if the avatar had unlimited AP;
+ *   the dispatcher in index.ts removes the ones that cost too much.
  */
-export function legalPlaceTorchActions(_state: GameState): PlaceTorchAction[] {
-  return [];
+export function legalPlaceTorchActions(state: GameState): PlaceTorchAction[] {
+  if (countItem(state, STRUCTURES.torch.placedFromItem) < 1) {
+    return [];
+  }
+  const cells: Vec3[] = [state.avatar.pos];
+  for (const offset of FACE_OFFSETS) {
+    cells.push(offsetPosition(state.avatar.pos, offset));
+  }
+
+  const actions: PlaceTorchAction[] = [];
+  for (const cell of cells) {
+    if (
+      inGrid(state.size, cell) &&
+      isOpen(state, cell) &&
+      structureAt(state, cell) === NO_STRUCTURE
+    ) {
+      actions.push({ type: 'placeTorch', target: { ...cell }, ap: ACTION_COSTS.placeTorch });
+    }
+  }
+  return actions;
 }
 
 /**
  * Carry out `action`, which the dispatcher has already checked is in the
- * legal list.
+ * legal list: use up one torch, put the torch structure in the cell, and emit
+ * `structurePlaced`.
  *
- * Contract:
- * - Changes `state` in place (it is the dispatcher's private copy) and
- *   appends what happened to `events`.
- * - Does not spend the AP: the dispatcher has already taken `action.ap` off.
- * - Does not apply gravity or reveal: the dispatcher calls `settle` and
- *   `updateReveal` afterwards.
- *
- * Stub behaviour: throws "not implemented".
+ * The torch gives light from then on (0005 item 13). Nothing is stored for
+ * that: `updateReveal`, which the dispatcher calls next, finds the torches in
+ * the cube each time. Does not spend the AP; the dispatcher has.
  */
 export function applyPlaceTorch(
-  _state: GameState,
-  _action: PlaceTorchAction,
-  _events: GameEvent[],
+  state: GameState,
+  action: PlaceTorchAction,
+  events: GameEvent[],
 ): void {
-  throw new Error('applyPlaceTorch: not implemented');
+  removeItem(state, STRUCTURES.torch.placedFromItem, 1);
+  setStructure(state, action.target, STRUCTURES.torch.code);
+  events.push({
+    type: 'structurePlaced',
+    pos: { ...action.target },
+    structure: STRUCTURES.torch.code,
+  });
 }
