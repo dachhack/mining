@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { AVATAR, BLOCKS, SHIFT } from '../../src/data';
 import type { Vec3 } from '../../src/data';
-import { createRun, endShift, isRevealed } from '../../src/engine';
+import { cellIndex, createRun, endShift, isRevealed } from '../../src/engine';
 import type { GameEvent, GameState } from '../../src/engine';
 import { updateReveal } from '../../src/engine/reveal';
 import { buildState } from './helpers';
@@ -217,6 +217,14 @@ describe('what stays revealed', () => {
       pos: inTunnel(0),
       block: BLOCKS.air.code,
     });
+
+    // The events come in the order the cube stores cells (top layer first,
+    // then row by row), whatever order the light found them in.
+    const indexes = first.map((event) =>
+      event.type === 'blockRevealed' ? cellIndex(state.size, event.pos) : -1,
+    );
+    const ascending = indexes.slice().sort((x, y) => x - y);
+    expect(indexes).toEqual(ascending);
 
     const second: GameEvent[] = [];
     updateReveal(state, second);
