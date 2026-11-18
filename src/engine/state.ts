@@ -15,7 +15,7 @@ import { createRng } from './rng';
 import type { RngState } from './rng';
 
 /** Bumped whenever the shape of GameState changes, so old saves can be told apart. */
-export const STATE_VERSION = 3;
+export const STATE_VERSION = 4;
 
 /** Some loose items lying in a cell. */
 export interface LooseItems {
@@ -31,6 +31,39 @@ export type RunStatus =
 export interface Avatar {
   pos: Vec3;
   health: number;
+  /** Air left (design doc 5.1; 0014 item 20). Full is `HAZARDS.air.max`. */
+  air: number;
+  /**
+   * True from the moment the avatar chooses to rest at a camp until step (e)
+   * of the cube phase that ends that shift, which applies the rest and clears
+   * the flag (0014 items 2 and 27).
+   */
+  resting: boolean;
+}
+
+/** The two things that go off in step (c) of a cube phase (0014 items 15 and 17). */
+export type ArmedKind = 'unstableOre' | 'explosive';
+
+/** An armed unstable-ore block, or a placed explosive, waiting to go off. */
+export interface ArmedCharge {
+  pos: Vec3;
+  kind: ArmedKind;
+}
+
+/** An active camp (design doc 8; 0014 items 26 to 30). */
+export interface Camp {
+  /**
+   * The cell the avatar stood in when it founded the camp: the middle of the
+   * lower of the camp's two layers. `campCells` in camps.ts lists all 18.
+   */
+  pos: Vec3;
+  /** The number of the shift the camp was founded in; upkeep counts from it. */
+  foundedShift: number;
+  /**
+   * What is stored here: item id -> count, like `GameState.inventory`, and
+   * with the same warning: walk it only through `stashEntries(camp)`.
+   */
+  stash: Record<string, number>;
 }
 
 export interface GameState {
@@ -55,10 +88,21 @@ export interface GameState {
   blocks: Uint8Array;
   /** 1 if the player has seen what the cell holds, otherwise 0. */
   revealed: Uint8Array;
-  /** Fluid level of each cell. Unused until M2; always 0 in M1. */
-  fluid: Uint8Array;
-  /** Gas level of each cell. Unused until M2; always 0 in M1. */
+  /** Units of water in each cell: 0 or 1 (0014 item 12). Read it with `waterAt`. */
+  water: Uint8Array;
+  /** Units of lava in each cell: 0 or 1 (0014 item 16). Read it with `lavaAt`. */
+  lava: Uint8Array;
+  /** 1 if the cell is a lava source, which never runs dry (0014 item 16), otherwise 0. */
+  lavaSource: Uint8Array;
+  /** Units of gas in each cell (0014 item 13). Read it with `gasAt`. */
   gas: Uint8Array;
+  /**
+   * Cracks. 0 means the block is not cracked; any other value is the block's
+   * stored crack timer plus 1, which is also the number the player is shown
+   * (0014 item 7). Use `crackTimerAt`, `setCrackTimer` and `clearCrack`, which
+   * hide the "plus 1". Whether a countdown is running is never stored.
+   */
+  cracks: Uint8Array;
   /** Structure code of each cell (see src/data/structures.ts). 0 is none. */
   structures: Uint8Array;
   /**
@@ -96,6 +140,21 @@ export interface GameState {
    * the same order before and after a save and load.
    */
   looseItems: LooseItems[];
+
+  /**
+   * Armed unstable ore and placed explosives: everything that goes off in
+   * step (c) of the coming cube phase. Canonical like `looseItems`: at most
+   * one entry for a cell, sorted by z, then y, then x. Change it only through
+   * `armCharge` and `disarmCharge`. A placed explosive is also a structure in
+   * its cell; `destroyStructure` (destroy.ts) keeps the two in step.
+   */
+  armed: ArmedCharge[];
+  /**
+   * The active camps, sorted by z, then y, then x of `pos`, then by the shift
+   * they were founded. A destroyed or decommissioned camp is removed. Change
+   * the list only through `addCamp` and `removeCamp`.
+   */
+  camps: Camp[];
 
   status: RunStatus;
 }
@@ -213,12 +272,80 @@ export function isRevealed(state: GameState, pos: Vec3): boolean {
   return state.revealed[cellIndex(state.size, pos)] === 1;
 }
 
+// What a cell holds besides its block. Like `structureAt`, each answers for
+// any position: outside the grid (the surface air, the bedrock) there is never
+// any water, lava, gas or crack. These read the TRUE cube. Code that decides
+// what the player is shown or offered must go through known.ts instead.
+
+/** Units of water in the cell `pos`: 0 or 1. */
+export function waterAt(state: GameState, pos: Vec3): number {
+  if (!inGrid(state.size, pos)) {
+    return 0;
+  }
+  return state.water[cellIndex(state.size, pos)] as number;
+}
+
+/** Units of lava in the cell `pos`: 0 or 1. */
+export function lavaAt(state: GameState, pos: Vec3): number {
+  if (!inGrid(state.size, pos)) {
+    return 0;
+  }
+  return state.lava[cellIndex(state.size, pos)] as number;
+}
+
+/** True if the cell `pos` is a lava source (0014 item 16). */
+export function isLavaSource(state: GameState, pos: Vec3): boolean {
+  if (!inGrid(state.size, pos)) {
+    return false;
+  }
+  return state.lavaSource[cellIndex(state.size, pos)] === 1;
+}
+
+/** Units of gas in the cell `pos`. */
+export function gasAt(state: GameState, pos: Vec3): number {
+  if (!inGrid(state.size, pos)) {
+    return 0;
+  }
+  return state.gas[cellIndex(state.size, pos)] as number;
+}
+
+/**
+ * The stored crack timer of the block at `pos`, or `null` if it is not
+ * cracked (0014 item 7). A stored 0 means "falls in the coming cube phase, if
+ * its countdown is running"; the number shown to the player is this plus 1.
+ */
+export function crackTimerAt(state: GameState, pos: Vec3): number | null {
+  if (!inGrid(state.size, pos)) {
+    return null;
+  }
+  const stored = state.cracks[cellIndex(state.size, pos)] as number;
+  return stored === 0 ? null : stored - 1;
+}
+
 // ---------------------------------------------------------------------------
 // Changing the cube. Each throws if `pos` is outside the grid.
 // ---------------------------------------------------------------------------
 
+/**
+ * Put another block (or open space) in the cell `pos`.
+ *
+ * A crack belongs to the block that has it, and so does the arming of an
+ * unstable-ore block. So whatever replaces a block, the cell's crack is
+ * cleared and armed unstable ore there is forgotten: a mined block leaves no
+ * crack behind for the rubble that may land in its place, and armed ore that
+ * is mined out does not go off (0014 item 17). Setting the block a cell
+ * already has changes nothing.
+ */
 export function setBlock(state: GameState, pos: Vec3, blockCode: number): void {
-  state.blocks[cellIndex(state.size, pos)] = blockCode;
+  const index = cellIndex(state.size, pos);
+  if (state.blocks[index] === blockCode) {
+    return;
+  }
+  state.blocks[index] = blockCode;
+  state.cracks[index] = 0;
+  if (armedAt(state, pos) === 'unstableOre') {
+    disarmCharge(state, pos);
+  }
 }
 
 export function setStructure(state: GameState, pos: Vec3, structureCode: number): void {
@@ -227,6 +354,49 @@ export function setStructure(state: GameState, pos: Vec3, structureCode: number)
 
 export function setRevealed(state: GameState, pos: Vec3, revealed: boolean): void {
   state.revealed[cellIndex(state.size, pos)] = revealed ? 1 : 0;
+}
+
+/** A cell array holds one byte per cell: whole numbers 0 to 255. */
+function requireByte(value: number, what: string): void {
+  if (!Number.isInteger(value) || value < 0 || value > 255) {
+    throw new Error(`${what} must be a whole number 0 to 255, but is ${value}`);
+  }
+}
+
+export function setWater(state: GameState, pos: Vec3, units: number): void {
+  requireByte(units, 'Water units');
+  state.water[cellIndex(state.size, pos)] = units;
+}
+
+/**
+ * Set the lava in the cell `pos`. `source` says whether the cell is a lava
+ * source; a cell with no lava is never one, so `setLava(state, pos, 0)` also
+ * clears the flag.
+ */
+export function setLava(state: GameState, pos: Vec3, units: number, source = false): void {
+  requireByte(units, 'Lava units');
+  const index = cellIndex(state.size, pos);
+  state.lava[index] = units;
+  state.lavaSource[index] = units > 0 && source ? 1 : 0;
+}
+
+export function setGas(state: GameState, pos: Vec3, units: number): void {
+  requireByte(units, 'Gas units');
+  state.gas[cellIndex(state.size, pos)] = units;
+}
+
+/** Crack the block at `pos`, or change its stored timer (0014 item 7). */
+export function setCrackTimer(state: GameState, pos: Vec3, timer: number): void {
+  // 0 to 254: the cell stores the timer plus 1, and 0 there means "no crack".
+  if (!Number.isInteger(timer) || timer < 0 || timer > 254) {
+    throw new Error(`A crack timer must be a whole number 0 to 254, but is ${timer}`);
+  }
+  state.cracks[cellIndex(state.size, pos)] = timer + 1;
+}
+
+/** Remove the crack from the cell `pos`, for example when its block falls or is mined. */
+export function clearCrack(state: GameState, pos: Vec3): void {
+  state.cracks[cellIndex(state.size, pos)] = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -356,6 +526,116 @@ export function removeLooseItems(state: GameState, pos: Vec3, item: string, coun
 }
 
 // ---------------------------------------------------------------------------
+// Armed charges and camps. Both lists are kept in canonical form (see
+// GameState); these are the only functions that should change them.
+// ---------------------------------------------------------------------------
+
+/** Sort order of positions: by z, then y, then x. */
+export function comparePositions(a: Vec3, b: Vec3): number {
+  return a.z - b.z || a.y - b.y || a.x - b.x;
+}
+
+/** A canonical copy of a list of armed charges: sorted, one entry for a cell. */
+export function canonicalArmed(list: ArmedCharge[]): ArmedCharge[] {
+  const sorted = list
+    .map((charge) => ({ pos: { ...charge.pos }, kind: charge.kind }))
+    .sort((a, b) => comparePositions(a.pos, b.pos));
+  for (let i = 1; i < sorted.length; i += 1) {
+    // `as ArmedCharge`: the indexes are inside the list.
+    const before = (sorted[i - 1] as ArmedCharge).pos;
+    const here = (sorted[i] as ArmedCharge).pos;
+    if (samePosition(before, here)) {
+      throw new Error(`Two armed charges in the cell (${here.x}, ${here.y}, ${here.z})`);
+    }
+  }
+  return sorted;
+}
+
+/** The kind of charge armed in the cell `pos`, or `null` if there is none. */
+export function armedAt(state: GameState, pos: Vec3): ArmedKind | null {
+  const charge = state.armed.find((entry) => samePosition(entry.pos, pos));
+  return charge === undefined ? null : charge.kind;
+}
+
+/**
+ * Record that the unstable ore or the explosive in the cell `pos` goes off in
+ * step (c) of the coming cube phase. Does nothing if the cell is already
+ * armed. `pos` must be inside the grid.
+ */
+export function armCharge(state: GameState, pos: Vec3, kind: ArmedKind): void {
+  if (!inGrid(state.size, pos)) {
+    throw new Error(`(${pos.x}, ${pos.y}, ${pos.z}) is outside the cube`);
+  }
+  if (armedAt(state, pos) !== null) {
+    return;
+  }
+  state.armed.push({ pos: { x: pos.x, y: pos.y, z: pos.z }, kind });
+  state.armed = canonicalArmed(state.armed);
+}
+
+/** Forget the armed charge in the cell `pos`, if there is one. */
+export function disarmCharge(state: GameState, pos: Vec3): void {
+  state.armed = state.armed.filter((entry) => !samePosition(entry.pos, pos));
+}
+
+/** Sort order of camps: by position, then by the shift they were founded in. */
+export function compareCamps(a: Camp, b: Camp): number {
+  return comparePositions(a.pos, b.pos) || a.foundedShift - b.foundedShift;
+}
+
+/** An independent copy of a camp. */
+export function cloneCamp(camp: Camp): Camp {
+  return { pos: { ...camp.pos }, foundedShift: camp.foundedShift, stash: { ...camp.stash } };
+}
+
+/** A canonical copy of a list of camps: sorted. */
+export function canonicalCamps(list: Camp[]): Camp[] {
+  return list.map(cloneCamp).sort(compareCamps);
+}
+
+/**
+ * What a camp's stash holds, as a list sorted by item id, without the items
+ * it has none of. The one way rule code should walk a stash (see
+ * `inventoryEntries`).
+ */
+export function stashEntries(camp: Camp): ItemStack[] {
+  const entries: ItemStack[] = [];
+  for (const item of Object.keys(camp.stash).sort(compareStrings)) {
+    const count = camp.stash[item] ?? 0;
+    if (count !== 0) {
+      entries.push({ item, count });
+    }
+  }
+  return entries;
+}
+
+/**
+ * Add an active camp founded at `pos` in the current shift, with an empty
+ * stash, and return it. `pos` must be inside the grid.
+ */
+export function addCamp(state: GameState, pos: Vec3): Camp {
+  if (!inGrid(state.size, pos)) {
+    throw new Error(`(${pos.x}, ${pos.y}, ${pos.z}) is outside the cube`);
+  }
+  const camp: Camp = {
+    pos: { x: pos.x, y: pos.y, z: pos.z },
+    foundedShift: state.shift,
+    stash: {},
+  };
+  state.camps.push(camp);
+  state.camps.sort(compareCamps);
+  return camp;
+}
+
+/**
+ * Take `camp` (one of the objects in `state.camps`) off the list: it is no
+ * longer active. What becomes of its stash is the caller's rule.
+ */
+export function removeCamp(state: GameState, camp: Camp): void {
+  state.camps = state.camps.filter((entry) => entry !== camp);
+}
+
+// ---------------------------------------------------------------------------
 // Run status
 // ---------------------------------------------------------------------------
 
@@ -386,7 +666,8 @@ export function endRun(
 
 /**
  * A blank state for a cube of the given size: every cell open and unrevealed,
- * nothing carried, every gauge at 0, the avatar at (0, 0) on the surface.
+ * nothing carried, every gauge at 0 (health and air too), no camps, the avatar
+ * at (0, 0) on the surface.
  * `createRun` and the test helper both start from this and fill it in.
  */
 export function blankState(size: CubeSize, seed: number): GameState {
@@ -400,17 +681,22 @@ export function blankState(size: CubeSize, seed: number): GameState {
     size: { x: size.x, y: size.y, z: size.z },
     blocks: new Uint8Array(cells),
     revealed: new Uint8Array(cells),
-    fluid: new Uint8Array(cells),
+    water: new Uint8Array(cells),
+    lava: new Uint8Array(cells),
+    lavaSource: new Uint8Array(cells),
     gas: new Uint8Array(cells),
+    cracks: new Uint8Array(cells),
     structures: new Uint8Array(cells),
     tracesSeen: new Uint8Array(cells),
-    avatar: { pos: { x: 0, y: 0, z: WORLD.surfaceZ }, health: 0 },
+    avatar: { pos: { x: 0, y: 0, z: WORLD.surfaceZ }, health: 0, air: 0, resting: false },
     ap: 0,
     fuel: 0,
     lampOil: 0,
     shift: 0,
     inventory: {},
     looseItems: [],
+    armed: [],
+    camps: [],
     status: { kind: 'active' },
   };
 }
@@ -432,11 +718,19 @@ export function cloneState(state: GameState): GameState {
     size: { ...state.size },
     blocks: state.blocks.slice(),
     revealed: state.revealed.slice(),
-    fluid: state.fluid.slice(),
+    water: state.water.slice(),
+    lava: state.lava.slice(),
+    lavaSource: state.lavaSource.slice(),
     gas: state.gas.slice(),
+    cracks: state.cracks.slice(),
     structures: state.structures.slice(),
     tracesSeen: state.tracesSeen.slice(),
-    avatar: { pos: { ...state.avatar.pos }, health: state.avatar.health },
+    avatar: {
+      pos: { ...state.avatar.pos },
+      health: state.avatar.health,
+      air: state.avatar.air,
+      resting: state.avatar.resting,
+    },
     ap: state.ap,
     fuel: state.fuel,
     lampOil: state.lampOil,
@@ -447,6 +741,8 @@ export function cloneState(state: GameState): GameState {
       item: loose.item,
       count: loose.count,
     })),
+    armed: state.armed.map((charge) => ({ pos: { ...charge.pos }, kind: charge.kind })),
+    camps: state.camps.map(cloneCamp),
     status: { ...state.status },
   };
 }

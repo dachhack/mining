@@ -1,24 +1,18 @@
 // The end of a shift: cube phase and upkeep (design doc 4).
 
 import { SHIFT } from '../data';
-import type { Vec3 } from '../data';
+import { stepAvatarEffects } from './cube/avatarEffects';
+import { stepCaveIns } from './cube/caveIns';
+import { stepFluids } from './cube/fluids';
+import { stepGas } from './cube/gas';
+import { newCubePhase } from './cube/phase';
+import type { CubePhase } from './cube/phase';
+import { stepTimers } from './cube/timers';
 import type { GameEvent, RunEndCause } from './events';
+import { forecastCountdowns, forecastFlows } from './forecast';
+import type { CountdownForecast } from './forecast';
 import { endRun, isRunActive } from './state';
 import type { GameState } from './state';
-
-/**
- * One thing the cube phase is going to do to a hazard the player knows about,
- * shown by the end-shift preview (design doc 11). M1 has no hazards, so
- * nothing produces one yet; M2 will extend this.
- */
-export interface HazardForecast {
-  /** What kind of hazard, e.g. "caveIn". */
-  kind: string;
-  /** The cells it will affect. */
-  cells: Vec3[];
-  /** How many shifts from now: 1 means "in the coming cube phase". */
-  inShifts: number;
-}
 
 /**
  * What the coming upkeep will do, for the end-shift preview. Every field is
@@ -38,11 +32,26 @@ export interface UpkeepForecast {
 }
 
 /**
- * Everything `previewCubePhase` reports: what the cube phase will do to known
- * hazards, and what upkeep will do to the gauges.
+ * Everything `previewCubePhase` reports (0014 item 4). It is a function of
+ * what the player sees (0014 item 3) and nothing else.
  */
 export interface ShiftForecast {
-  hazards: HazardForecast[];
+  /**
+   * Part 1, countdowns: every revealed block whose countdown is running and
+   * shows 1, every armed unstable ore, and every placed explosive. A
+   * countdown cannot turn out differently.
+   */
+  countdowns: CountdownForecast[];
+  /**
+   * Part 2, flows: the events that steps (b) and (c) of the cube phase emit
+   * when they are run on `knownCube(state)`, the copy of the cube in which
+   * every unrevealed cell is plain rock. They are ordinary engine events
+   * (`fluidMoved`, `gasMoved`, `exploded`, `structureDestroyed`, ...), in the
+   * order they would happen. A flow can turn out differently when something
+   * unseen takes part.
+   */
+  flows: GameEvent[];
+  /** What upkeep will do to the gauges. */
   upkeep: UpkeepForecast;
 }
 
@@ -50,63 +59,51 @@ export interface ShiftForecast {
 // Cube phase
 // ---------------------------------------------------------------------------
 
-// The five steps of the cube phase, in the order design doc 4 gives them.
-// M1 has no hazards, so each is an empty hook: it exists so that M2 has one
-// obvious place for each hazard and the order is already fixed.
-
-/** (a) Support check and falling blocks. Empty until M2. */
-function stepSupportAndFallingBlocks(_state: GameState, _events: GameEvent[]): void {
-  // Nothing in M1.
-}
-
-/** (b) Fluids flow. Empty until M2. */
-function stepFluidsFlow(_state: GameState, _events: GameEvent[]): void {
-  // Nothing in M1.
-}
-
-/** (c) Gas spreads. Empty until M2. */
-function stepGasSpreads(_state: GameState, _events: GameEvent[]): void {
-  // Nothing in M1.
-}
-
-/** (d) Timers tick. Empty until M2. */
-function stepTimersTick(_state: GameState, _events: GameEvent[]): void {
-  // Nothing in M1.
-}
-
-/** (e) Damage is applied to the avatar and structures. Empty until M2. */
-function stepApplyDamage(_state: GameState, _events: GameEvent[]): void {
-  // Nothing in M1.
-}
+// The five steps of the cube phase, in the fixed order of design doc 4 and
+// 0014 item 1. Each step is one function in its own file under cube/, so that
+// the tasks building the hazards do not edit the same file:
+//
+//   (a) cube/caveIns.ts        support check and falling blocks
+//   (b) cube/fluids.ts         water, then lava, then water beside lava
+//   (c) cube/gas.ts            gas spreads, vents, charges go off, ignition
+//   (d) cube/timers.ts         crack timers tick
+//   (e) cube/avatarEffects.ts  recorded damage, air, rest
+//
+// During (a) to (d) the avatar does not move and is not hurt: damage is
+// recorded in the phase's notes (`recordDamage` in cube/phase.ts) and applied
+// in (e), in the order it happened (0014 item 2).
 
 /** One step of the cube phase: a name (for logs and tests) and what it does. */
 export interface CubePhaseStep {
   name: string;
-  run: (state: GameState, events: GameEvent[]) => void;
+  run: (state: GameState, events: GameEvent[], phase: CubePhase) => void;
 }
 
-/** The cube phase's steps, in the order they run (design doc 4, (a) to (e)). */
+/** The cube phase's steps, in the order they run (0014 item 1, (a) to (e)). */
 export const CUBE_PHASE_STEPS: CubePhaseStep[] = [
-  { name: 'supportAndFallingBlocks', run: stepSupportAndFallingBlocks },
-  { name: 'fluidsFlow', run: stepFluidsFlow },
-  { name: 'gasSpreads', run: stepGasSpreads },
-  { name: 'timersTick', run: stepTimersTick },
-  { name: 'applyDamage', run: stepApplyDamage },
+  { name: 'caveIns', run: stepCaveIns },
+  { name: 'fluids', run: stepFluids },
+  { name: 'gas', run: stepGas },
+  { name: 'timers', run: stepTimers },
+  { name: 'avatarEffects', run: stepAvatarEffects },
 ];
 
 /**
- * The cube phase (design doc 4): hazards advance one step in a fixed order.
- * `endShift` in index.ts calls this first.
+ * The cube phase (design doc 4; 0014 items 1 and 2): hazards advance one step
+ * in a fixed order. `endShift` in index.ts calls this first, then `settle`
+ * (the one fall the phase may cause), then upkeep.
  *
- * Contract: changes `state` in place and appends to `events`. Must use only
- * `state.rng` for randomness.
+ * Contract: changes `state` in place and appends to `events`. Nothing in the
+ * cube phase uses the RNG (0014 item 1).
  *
- * Runs the steps of `CUBE_PHASE_STEPS` in order. All five are empty in M1, so
- * nothing happens yet.
+ * Runs the steps of `CUBE_PHASE_STEPS` in order, handing each the same
+ * `CubePhase` notes. Steps (a) to (d) are empty until their M2 tasks, and
+ * with nothing recorded step (e) changes nothing, so the game plays as in M1.
  */
 export function runCubePhase(state: GameState, events: GameEvent[]): void {
+  const phase = newCubePhase();
   for (const step of CUBE_PHASE_STEPS) {
-    step.run(state, events);
+    step.run(state, events, phase);
   }
 }
 
@@ -213,21 +210,26 @@ export function runUpkeep(state: GameState, events: GameEvent[]): void {
 }
 
 /**
- * What ending the shift now would do: the cube phase's effect on hazards the
- * player knows about, and upkeep's effect on the gauges. `previewCubePhase`
- * in index.ts returns this.
+ * What ending the shift now would do (0014 item 4): the countdowns and flows
+ * the player can work out, and upkeep's effect on the gauges.
+ * `previewCubePhase` in index.ts returns this.
  *
- * - Does not change `state`, and reveals nothing the player could not know.
- * - `upkeep` agrees with what `runUpkeep` then does (both use
- *   `computeUpkeep`). This holds in M1 because the cube phase is empty; once
- *   M2's hazards can change the gauges or end the run first, the forecast
- *   must take them into account.
- * - `hazards` is empty in M1.
+ * - Does not change `state`, and is a function of what the player sees
+ *   (0014 item 3) and nothing else: changing any unrevealed cell must not
+ *   change the result.
+ * - `countdowns` and `flows` come from forecast.ts, and are empty until the
+ *   tells and forecast task (M2-6, issue #56) fills that file in.
+ * - `upkeep` agrees with what `runUpkeep` then does when the cube phase does
+ *   not end the run first (both use `computeUpkeep`).
  * - Throws if the run has already ended, as `endShift` does.
  */
 export function forecastShift(state: GameState): ShiftForecast {
   if (!isRunActive(state)) {
     throw new Error('The run has ended; there is no shift to forecast');
   }
-  return { hazards: [], upkeep: computeUpkeep(state) };
+  return {
+    countdowns: forecastCountdowns(state),
+    flows: forecastFlows(state),
+    upkeep: computeUpkeep(state),
+  };
 }

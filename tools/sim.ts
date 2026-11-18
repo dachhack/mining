@@ -29,7 +29,7 @@
 //
 //   {
 //     "sim": {                      what was asked for
-//       "engineVersion": "0.2.0", "policy": "random", "firstSeed": 123,
+//       "engineVersion": "0.3.0", "policy": "random", "firstSeed": 123,
 //       "runs": 1000, "maxShifts": 300, "contractId": "none", "loadoutId": "standard"
 //     },
 //     "aggregate": {                all runs together
@@ -51,7 +51,7 @@
 //                                            every field recipe, so unused ones show 0;
 //                                            "runs" is how many runs crafted it at all
 //       "itemsCrafted": { "<item or gauge id>": amount, ... },
-//       "structuresPlaced": { "ladder": n, "torch": n, "support": n },
+//       "structuresPlaced": { "<structure id>": n, ... },   every structure
 //       "fuelAtEnd":        spread+,
 //       "shiftsAtZeroFuel": spread+,   shifts that began with 0 fuel (fuel was 0
 //                                      after the upkeep before them), per run
@@ -76,7 +76,7 @@
 //         "legalActionsPerPhase": spread, "legalActionsPerDecision": spread,
 //         "recipesUsed": { "<recipe id>": crafts, ... },
 //         "itemsCrafted": { "<item or gauge id>": amount, ... },
-//         "structuresPlaced": { "ladder": n, "torch": n, "support": n },
+//         "structuresPlaced": { "<structure id>": n, ... },   every structure
 //         "damageTaken": n, "healthAtEnd": n, "fuelAtEnd": n, "lampOilAtEnd": n,
 //         "shiftsAtZeroFuel": n, "shiftsInTheDark": n,
 //         "finalInventory": { "<item id>": count, ... },   every item

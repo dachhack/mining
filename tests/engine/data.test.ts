@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { GAME_DATA, blockDefByCode, itemDef, validateData } from '../../src/data';
+import {
+  GAME_DATA,
+  blockDefByCode,
+  findCampRecipe,
+  findRecipe,
+  itemDef,
+  validateData,
+} from '../../src/data';
 import type { GameData } from '../../src/data';
 
 /** Run the validator on a deep copy of the real data after `breakIt` has changed it. */
@@ -358,5 +365,283 @@ describe('data lookups', () => {
     });
     expect(upsideDown).toHaveLength(1);
     expect(upsideDown[0]).toContain('maxSize');
+  });
+});
+
+// The tables the M2 skeleton added (issue #50): the numbers of decision note
+// 0014, checked against the note so that a typo in src/data shows here, and
+// the validator's checks on them.
+describe('M2 data (decision note 0014)', () => {
+  it('gives every block that can be dug its span and shaft limit (items 5 and 10)', () => {
+    const spans: Record<string, number | null> = {};
+    const limits: Record<string, number | null> = {};
+    for (const [blockId, block] of Object.entries(GAME_DATA.blocks)) {
+      spans[blockId] = block.span;
+      limits[blockId] = block.shaftLimit;
+    }
+    // Item 5: dirt and rubble 0, hard rock 3, every other block 2.
+    // Item 10: dirt and rubble 3, hard rock 8, every other block 5.
+    const others = [
+      'stone',
+      'coalSeam',
+      'timberRoot',
+      'ironOre',
+      'copperOre',
+      'crystal',
+      'unstableOre',
+      'relic',
+      'keystone',
+      'sealed',
+    ];
+    const expectedSpans: Record<string, number | null> = {
+      air: null,
+      bedrock: null,
+      dirt: 0,
+      rubble: 0,
+      hardRock: 3,
+    };
+    const expectedLimits: Record<string, number | null> = {
+      air: null,
+      bedrock: null,
+      dirt: 3,
+      rubble: 3,
+      hardRock: 8,
+    };
+    for (const blockId of others) {
+      expectedSpans[blockId] = 2;
+      expectedLimits[blockId] = 5;
+    }
+    expect(spans).toEqual(expectedSpans);
+    expect(limits).toEqual(expectedLimits);
+  });
+
+  it('has rubble and sealed rock as the note describes them (items 8 and 12)', () => {
+    const rubble = entry(GAME_DATA.blocks, 'rubble');
+    expect([rubble.solid, rubble.mineCost, rubble.yields]).toEqual([true, 1, []]);
+    const sealed = entry(GAME_DATA.blocks, 'sealed');
+    expect([sealed.solid, sealed.mineCost, sealed.yields]).toEqual([true, 2, []]);
+    // New codes only: the codes of the M1 blocks are part of the save format.
+    expect(entry(GAME_DATA.blocks, 'bedrock').code).toBe(12);
+    expect([rubble.code, sealed.code]).toEqual([13, 14]);
+  });
+
+  it('has the hazard numbers of the note', () => {
+    expect(GAME_DATA.hazards).toEqual({
+      caveIn: {
+        crackTimer: 2,
+        rockfallDamage: 4,
+        supportLiningReach: 2,
+        tightCellSolidSides: 3,
+        supportHoldSolidSides: 2,
+      },
+      water: { unitsPerCell: 1, floodedMoveExtraAp: 1, pumpUnitsPerShift: 3, pumpReach: 2 },
+      gas: { pocketUnitsPerCell: 4, ventReach: 2 },
+      explosion: { damage: 6 },
+      lava: {
+        unitsPerCell: 1,
+        flowEveryShifts: 2,
+        sourcePocketCellsOver: 8,
+        damageInCell: 5,
+        damageBeside: 1,
+      },
+      air: { max: 10, lossPerShift: 1 },
+      forecast: { unseenBlock: 'stone' },
+    });
+    expect(GAME_DATA.tells.hazards).toEqual({
+      dampStoneDistance: 1,
+      pittedRockDistance: 1,
+      warmGlowDistance: 2,
+    });
+  });
+
+  it('has the camp numbers of design doc 8 and the note (items 25 to 31)', () => {
+    expect(GAME_DATA.camps).toEqual({
+      kitItem: 'campKit',
+      maxKitsCarried: 1,
+      halfWidth: 1,
+      height: 2,
+      foundMinAp: 1,
+      restMinAp: 1,
+      upkeepFuel: 1,
+      upkeepEveryShifts: 4,
+      airLineMaxBadStretch: 8,
+    });
+    expect(GAME_DATA.campTools).toEqual({
+      drillItem: 'drill',
+      sealantItem: 'sealant',
+      scanChargeItem: 'scannerCharge',
+      scanChargesPerScan: 1,
+      scanReach: 3,
+      scanRegionRadius: 1,
+    });
+    const weights: Record<string, number> = {};
+    for (const itemId of [
+      'campKit',
+      'drill',
+      'pump',
+      'vent',
+      'safetyLamp',
+      'explosive',
+      'sealant',
+      'scannerCharge',
+      'ironIngot',
+      'copperIngot',
+    ]) {
+      weights[itemId] = entry(GAME_DATA.items, itemId).weight;
+    }
+    expect(weights).toEqual({
+      campKit: 8,
+      drill: 3,
+      pump: 3,
+      vent: 2,
+      safetyLamp: 1,
+      explosive: 1,
+      sealant: 1,
+      scannerCharge: 1,
+      ironIngot: 1,
+      copperIngot: 1,
+    });
+    // An ingot is half the weight of the raw ore it is smelted from (7.2).
+    expect(entry(GAME_DATA.items, 'ironIngot').weight * 2).toBe(
+      entry(GAME_DATA.items, 'rawIronOre').weight,
+    );
+  });
+
+  it('has the camp recipes of design doc 7.2, each with its own id', () => {
+    /** "2 rawIronOre + 1 coal -> 2 ironIngot" */
+    const lines = GAME_DATA.campRecipes.map((recipe) => {
+      const inputs = recipe.inputs.map((stack) => `${stack.count} ${stack.item}`).join(' + ');
+      const output =
+        recipe.output.kind === 'item' ? `${recipe.output.count} ${recipe.output.item}` : 'a gauge';
+      return `${recipe.id}: ${inputs} -> ${output}`;
+    });
+    expect(lines).toEqual([
+      'ironIngot: 2 rawIronOre + 1 coal -> 2 ironIngot',
+      'copperIngot: 2 rawCopperOre + 1 coal -> 2 copperIngot',
+      'drill: 3 ironIngot -> 1 drill',
+      'pump: 2 ironIngot + 1 copperIngot -> 1 pump',
+      'vent: 2 copperIngot + 1 timber -> 1 vent',
+      'safetyLamp: 1 ironIngot + 1 copperIngot -> 1 safetyLamp',
+      'scannerCharge: 1 copperIngot + 1 crystal -> 1 scannerCharge',
+      'sealant: 1 stone + 1 coal -> 1 sealant',
+      'explosive: 2 coal + 1 ironIngot -> 1 explosive',
+      'campKit: 4 ironIngot + 4 timber + 2 copperIngot -> 1 campKit',
+    ]);
+    const fieldIds = GAME_DATA.recipes.map((recipe) => recipe.id);
+    for (const recipe of GAME_DATA.campRecipes) {
+      expect(fieldIds).not.toContain(recipe.id);
+    }
+    expect(findCampRecipe('pump')?.name).toBe('Pump');
+    expect(findCampRecipe('ladder')).toBeUndefined();
+    // Camp recipes are not field recipes: nothing can craft them yet.
+    expect(findRecipe('pump')).toBeUndefined();
+  });
+
+  it('has a structure for each placed tool, with new codes only', () => {
+    const codes: Record<string, number> = {};
+    for (const [structureId, structure] of Object.entries(GAME_DATA.structures)) {
+      codes[structureId] = structure.code;
+      expect(structure.placedFromItem).toBe(structureId);
+    }
+    expect(codes).toEqual({
+      ladder: 1,
+      torch: 2,
+      support: 3,
+      vent: 4,
+      pump: 5,
+      safetyLamp: 6,
+      explosive: 7,
+    });
+  });
+
+  it('reports a diggable block with no span or shaft limit, and bedrock with one', () => {
+    const problems = problemsAfter((data) => {
+      entry(data.blocks, 'stone').span = null;
+      entry(data.blocks, 'dirt').shaftLimit = 0;
+      entry(data.blocks, 'bedrock').span = 2;
+    });
+    expect(problems).toHaveLength(3);
+    expect(problems.some((p) => p.includes('block "stone"') && p.includes('needs a span'))).toBe(
+      true,
+    );
+    expect(problems.some((p) => p.includes('block "dirt": shaft limit'))).toBe(true);
+    expect(problems.some((p) => p.includes('block "bedrock" never falls'))).toBe(true);
+  });
+
+  it('reports a missing rubble block, or sealed rock with a yield', () => {
+    const problems = problemsAfter((data) => {
+      delete data.blocks['rubble'];
+      entry(data.blocks, 'sealed').yields = [{ item: 'stone', count: 1 }];
+    });
+    expect(problems).toHaveLength(2);
+    expect(problems[0]).toContain('there must be a block "rubble"');
+    expect(problems[1]).toContain('block "sealed" must not have a yield');
+  });
+
+  it('reports a camp recipe that reuses a field recipe id or names an unknown item', () => {
+    const problems = problemsAfter((data) => {
+      data.campRecipes.push({
+        id: 'ladder',
+        name: 'Clash',
+        inputs: [{ item: 'adamantium', count: 1 }],
+        output: { kind: 'item', item: 'ladder', count: 1 },
+      });
+    });
+    expect(problems).toHaveLength(2);
+    expect(problems[0]).toContain('recipe id "ladder" is used more than once');
+    expect(problems[1]).toContain('unknown item "adamantium"');
+  });
+
+  it('reports bad hazard numbers', () => {
+    const problems = problemsAfter((data) => {
+      data.hazards.caveIn.crackTimer = -1;
+      data.hazards.caveIn.tightCellSolidSides = 5;
+      data.hazards.water.unitsPerCell = 2;
+      data.hazards.gas.pocketUnitsPerCell = 300;
+      data.hazards.lava.flowEveryShifts = 0;
+      data.hazards.air.max = 0;
+      data.hazards.forecast.unseenBlock = 'air';
+      data.tells.hazards.warmGlowDistance = 0;
+    });
+    expect(problems).toHaveLength(8);
+    for (const part of [
+      'hazards.caveIn.crackTimer',
+      'hazards.caveIn.tightCellSolidSides',
+      'hazards.water.unitsPerCell',
+      'hazards.gas.pocketUnitsPerCell',
+      'hazards.lava.flowEveryShifts',
+      'hazards.air.max',
+      'hazards.forecast.unseenBlock',
+      'tells.hazards.warmGlowDistance',
+    ]) {
+      expect(
+        problems.some((p) => p.includes(part)),
+        `no problem mentions ${part}`,
+      ).toBe(true);
+    }
+  });
+
+  it('reports bad camp numbers and unknown camp items', () => {
+    const problems = problemsAfter((data) => {
+      data.camps.kitItem = 'tent';
+      data.camps.height = 0;
+      data.camps.upkeepEveryShifts = 0;
+      data.campTools.scanChargeItem = 'battery';
+      data.campTools.scanReach = -1;
+    });
+    expect(problems).toHaveLength(5);
+    expect(problems[0]).toContain('unknown item "tent"');
+    expect(problems[1]).toContain('camps.height');
+    expect(problems[2]).toContain('camps.upkeepEveryShifts');
+    expect(problems[3]).toContain('unknown item "battery"');
+    expect(problems[4]).toContain('campTools.scanReach');
+  });
+
+  it('reports a bad cost for an M2 action', () => {
+    const problems = problemsAfter((data) => {
+      data.actionCosts.scan = -2;
+    });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('actionCosts.scan');
   });
 });

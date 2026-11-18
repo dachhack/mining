@@ -5,7 +5,7 @@ import { AVATAR } from '../data';
 import type { Vec3 } from '../data';
 import type { FallKind, GameEvent } from './events';
 import { avatarFallDistance, cellBelow } from './footing';
-import { addLooseItems, endRun, isOpen, removeLooseItems } from './state';
+import { addLooseItems, endRun, isOpen, isRunActive, removeLooseItems } from './state';
 import type { GameState } from './state';
 
 /**
@@ -53,6 +53,12 @@ export function isFatalFall(distance: number): boolean {
 
 /** Let the avatar fall if it has no footing, and apply the damage. */
 function settleAvatar(state: GameState, events: GameEvent[], fallKind: FallKind): void {
+  // An avatar whose run has ended stays where it is. This matters when the
+  // cube phase kills it and takes its floor in the same shift: it was
+  // crushed (say), and no `fell` follows the `runEnded` (0014 item 2).
+  if (!isRunActive(state)) {
+    return;
+  }
   const from = state.avatar.pos;
   const distance = avatarFallDistance(state, from);
   if (distance === 0) {
@@ -111,7 +117,8 @@ function settleLooseItems(state: GameState, events: GameEvent[]): void {
  *
  * Contract:
  * - Changes `state` in place and appends to `events`.
- * - The avatar: if it has no footing (0005 item 5: a solid block below it, or
+ * - The avatar: nothing happens to it if the run has already ended. Otherwise,
+ *   if it has no footing (0005 item 5: a solid block below it, or
  *   a ladder in its own cell), it falls until it has. Emits `fell`, and for a
  *   fall that hurts (`fallDamage` above: design doc 5.2, numbers in `AVATAR`)
  *   emits `damageTaken`. A fatal fall, or health reaching 0, ends the run with

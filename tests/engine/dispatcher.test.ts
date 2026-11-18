@@ -38,7 +38,8 @@ const settleKinds: string[] = [];
 let cubePhaseEndsRun = false;
 
 const FAKE_FORECAST: ShiftForecast = {
-  hazards: [{ kind: 'test', cells: [], inShifts: 1 }],
+  countdowns: [{ kind: 'explosive', pos: { x: 0, y: 0, z: 0 }, inShifts: 1 }],
+  flows: [],
   upkeep: {
     fuelConsumed: 1,
     fuelAfter: 9,
