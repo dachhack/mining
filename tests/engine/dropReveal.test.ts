@@ -7,10 +7,11 @@
 // `drop` value, gave away what they held.
 
 import { describe, expect, it } from 'vitest';
-import { BLOCKS } from '../../src/data';
+import { AVATAR, BLOCKS } from '../../src/data';
 import type { Vec3 } from '../../src/data';
 import { endShift, isRevealed, legalActions } from '../../src/engine';
-import type { GameState } from '../../src/engine';
+import type { GameEvent, GameState } from '../../src/engine';
+import { edgeLookCells, updateReveal } from '../../src/engine/reveal';
 import { cellPosition, cloneState, isOpen, setBlock } from '../../src/engine/state';
 import { buildState, findActions } from './helpers';
 
@@ -140,4 +141,96 @@ describe('issue #15: with the lamp out, the move list shows only what is reveale
       expect(unrevealed(state, cellsThatChangeTheActionList(state))).toEqual([]);
     },
   );
+});
+
+// The rule itself (owner question 40): how far the avatar sees over an edge.
+describe('looking over an edge (question 40)', () => {
+  /** A 3 x 1 cube: the avatar at (0,0,0) beside a shaft `depth` cells deep at x = 1. */
+  function shaftLayers(depth: number): string[][] {
+    const layers: string[][] = [['..#']];
+    for (let z = 1; z <= depth; z += 1) {
+      layers.push(['#.#']);
+    }
+    layers.push(['###'], ['###']);
+    return layers;
+  }
+
+  it('sees down to the first solid block, and no further', () => {
+    const state = stateWithLampOut(shaftLayers(1), EDGE_AVATAR);
+    // (1,0,1) is open, (1,0,2) is the floor of the shaft.
+    expect(edgeLookCells(state)).toEqual([
+      { x: 1, y: 0, z: 1 },
+      { x: 1, y: 0, z: 2 },
+    ]);
+    expect(isRevealed(state, { x: 1, y: 0, z: 2 })).toBe(true);
+    expect(isRevealed(state, { x: 1, y: 0, z: 3 })).toBe(false);
+  });
+
+  it('sees one cell past the longest drop a move may choose, and no further', () => {
+    const lastSeen = AVATAR.maxChosenDropBlocks + 1;
+    // A shaft much deeper than that.
+    const state = stateWithLampOut(shaftLayers(lastSeen + 3), EDGE_AVATAR);
+    expect(edgeLookCells(state)).toHaveLength(lastSeen);
+    for (let z = 1; z <= lastSeen; z += 1) {
+      expect(isRevealed(state, { x: 1, y: 0, z })).toBe(true);
+    }
+    expect(isRevealed(state, { x: 1, y: 0, z: lastSeen + 1 })).toBe(false);
+    // The drop is too long to choose, so the walk is not offered.
+    expect(findActions(state, { type: 'move' })).toEqual([]);
+  });
+
+  it('sees only straight down: the walls of the shaft stay unknown', () => {
+    const state = stateWithLampOut(shaftLayers(2), EDGE_AVATAR);
+    expect(isRevealed(state, { x: 1, y: 0, z: 2 })).toBe(true);
+    expect(isRevealed(state, { x: 2, y: 0, z: 2 })).toBe(false);
+    expect(isRevealed(state, { x: 0, y: 0, z: 2 })).toBe(false);
+  });
+
+  it('does not look under a solid neighbour', () => {
+    // The avatar is in a one-cell pit: every sideways neighbour is solid.
+    const state = stateWithLampOut([['#.#'], ['###'], ['###'], ['###']], { x: 1, y: 0, z: 0 });
+    expect(edgeLookCells(state)).toEqual([]);
+    expect(isRevealed(state, { x: 0, y: 0, z: 2 })).toBe(false);
+    expect(isRevealed(state, { x: 2, y: 0, z: 2 })).toBe(false);
+  });
+
+  it('looks down its own column only when it is on a ladder', () => {
+    // A shaft 4 deep at x = 1, the avatar in its top cell.
+    const layers = [['#.#'], ['#.#'], ['#.#'], ['#.#'], ['###']];
+    const top = { x: 1, y: 0, z: 0 };
+
+    const onLadder = stateWithLampOut(layers, top, [top]);
+    expect(edgeLookCells(onLadder)).toEqual([
+      { x: 1, y: 0, z: 1 },
+      { x: 1, y: 0, z: 2 },
+      { x: 1, y: 0, z: 3 },
+    ]);
+    expect(isRevealed(onLadder, { x: 1, y: 0, z: 3 })).toBe(true);
+    // The floor is 3 below the ladder's foot: too far, so no climb down.
+    expect(findActions(onLadder, { type: 'move', to: { x: 1, y: 0, z: 1 } })).toEqual([]);
+
+    // Without the ladder (the avatar is put there by hand; it would fall in
+    // play) only light and reach reveal: one cell less.
+    const noLadder = buildState({ layers, avatar: top, lampOil: 0 });
+    updateReveal(noLadder, []);
+    expect(edgeLookCells(noLadder)).toEqual([]);
+    expect(isRevealed(noLadder, { x: 1, y: 0, z: 2 })).toBe(true);
+    expect(isRevealed(noLadder, { x: 1, y: 0, z: 3 })).toBe(false);
+  });
+
+  it('emits a blockRevealed event for each cell seen over the edge', () => {
+    const state = buildState({ layers: shaftLayers(2), avatar: EDGE_AVATAR, lampOil: 0 });
+    const events: GameEvent[] = [];
+    updateReveal(state, events);
+    expect(events).toContainEqual({
+      type: 'blockRevealed',
+      pos: { x: 1, y: 0, z: 2 },
+      block: BLOCKS.air.code,
+    });
+    expect(events).toContainEqual({
+      type: 'blockRevealed',
+      pos: { x: 1, y: 0, z: 3 },
+      block: BLOCKS.stone.code,
+    });
+  });
 });
