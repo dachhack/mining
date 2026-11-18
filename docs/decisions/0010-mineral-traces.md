@@ -39,4 +39,4 @@ Traces are first seen from layer 8.4 on average; where both show, traces come 1.
 - At a distance of 2, about 23% of the cells in the ore layers (8 to 31) carry traces, measured over seeds 1 to 20. Whether that is a hint or noise is for the next playtest round; the distance is one number in `src/data/tells.ts`.
 - The `%` hides which rock a traced block is on the map. The mine list names it for blocks in reach.
 - Traces are not remembered. To see them again the player has to light the block again. Remembering them would mean storing them in the state.
-- `visibleMineralTraces` costs a flood fill per light source on each call. The sim calls it on every step until traces are seen or ore is mined, which roughly doubles the time of a `random` run that never goes deep.
+- `visibleMineralTraces` costs a flood fill per light source on each call. The sim calls it on every step until traces are seen or ore is mined. 1,000 `random` runs took 18 seconds and 1,000 `wander` runs 53 seconds on a cloud container; 0008 records about 13 and 35.
