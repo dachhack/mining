@@ -346,7 +346,13 @@ describe('health is checked before air (0014 item 2)', () => {
   });
 
   it('an avatar that survives the damage and has no air left suffocates', () => {
-    const state = tunnelState({ health: 10, air: 0 });
+    // Gas in the avatar's cell: since the air rule was built (M2-4) an open
+    // tunnel under the surface has connected air, and air at 0 would refill.
+    const state = tunnelState({
+      health: 10,
+      air: 0,
+      gas: [{ pos: { x: 1, y: 0, z: 0 }, units: 1 }],
+    });
     const events: GameEvent[] = [];
     const phase = newCubePhase();
     recordDamage(phase, 4, 'rockfall');
@@ -362,14 +368,16 @@ describe('health is checked before air (0014 item 2)', () => {
     expect(state.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'drowned' });
   });
 
-  it('with air left nothing happens: the air rule itself is not built yet', () => {
-    const state = tunnelState({ air: 1 });
+  it('with full air in connected air nothing happens', () => {
+    // Until M2-4 this pinned the empty air rule (air stayed at 1). The rule
+    // itself is tested in air.test.ts; here, a step (e) with nothing to do.
+    const state = tunnelState({ air: HAZARDS.air.max });
     const before = hashState(state);
     const events: GameEvent[] = [];
     stepAvatarEffects(state, events, newCubePhase());
     expect(events).toEqual([]);
     expect(hashState(state)).toBe(before);
-    expect(state.avatar.air).toBe(1);
+    expect(state.avatar.air).toBe(HAZARDS.air.max);
   });
 
   it('a new run starts with full health and full air', () => {

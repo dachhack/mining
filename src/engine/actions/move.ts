@@ -1,10 +1,11 @@
 // Moving the avatar (design doc 4.1; decision note 0005 items 6 and 7; 0011).
 
-import { ACTION_COSTS, AVATAR } from '../../data';
+import { ACTION_COSTS, AVATAR, HAZARDS } from '../../data';
 import type { Vec3 } from '../../data';
 import type { MoveAction } from '../actionTypes';
 import type { GameEvent } from '../events';
 import { cellBelow, hasLadder, knownFallDistance } from '../footing';
+import { knownCell } from '../known';
 import { isOpen, isRevealed } from '../state';
 import type { GameState } from '../state';
 
@@ -62,7 +63,9 @@ function moveTo(to: Vec3, drop: number): MoveAction {
  * Contract:
  * - `drop` is the number of blocks the avatar falls after arriving in `to`
  *   (0 for none), so `to.z + drop` is the level it ends on.
- * - `ap` is `ACTION_COSTS.move`. Emits `moved`; the fall itself is `settle`'s.
+ * - `ap` is `ACTION_COSTS.move`, plus `HAZARDS.water.floodedMoveExtraAp` when
+ *   the cell `to` is flooded (0014 item 12). Emits `moved`; the fall itself
+ *   is `settle`'s.
  * - Does not change `state`.
  * - Lists actions as if the avatar had unlimited AP, each with its true `ap`
  *   cost; the dispatcher in index.ts removes the ones that cost more than the
@@ -130,6 +133,18 @@ export function legalMoveActions(state: GameState): MoveAction[] {
           actions.push(moveTo(below, drop));
         }
       }
+    }
+  }
+
+  // A flooded cell costs extra AP to enter (design doc 6.2; 0014 item 12).
+  // Only the cell the avatar moves into counts, not cells it then drops
+  // through. `knownCell` gives what the player sees of that cell; every `to`
+  // above was checked to be revealed before its move was offered, so the cost
+  // never depends on a cell the player has not seen (0014 item 3).
+  for (const action of actions) {
+    const destination = knownCell(state, action.to);
+    if (destination !== null && destination.water > 0) {
+      action.ap += HAZARDS.water.floodedMoveExtraAp;
     }
   }
 
