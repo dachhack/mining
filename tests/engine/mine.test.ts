@@ -257,9 +257,10 @@ describe('yield (0005 item 16)', () => {
 
 describe('after mining', () => {
   it('reveals what the new opening shows', () => {
-    // With no lamp oil the light reaches one step. Before, the block 2 east
-    // is hidden behind the block 1 east; mining that lets the light through.
-    const state = seenState({ layers: POCKET, avatar: IN_POCKET, lampOil: 0 });
+    // Before, the block 2 east is hidden behind the block 1 east; mining that
+    // lets the lamp's light through. (With the lamp out nothing would show:
+    // the miner knows only the cells it touches. See darkness.test.ts.)
+    const state = seenState({ layers: POCKET, avatar: IN_POCKET });
     const twoEast = { x: 4, y: 2, z: 1 };
     const { state: after, events } = act(state, { type: 'mine', target: EAST });
     expect(events).toContainEqual({

@@ -154,8 +154,12 @@ describe('applyAction', () => {
   });
 
   it('tells gravity a fall after a move is a chosen drop, and after anything else is not (0010)', () => {
-    // The move module is the real one: a walk east along the surface.
-    act(startState(5), { type: 'move', to: { x: 1, y: 0, z: -1 } });
+    // The move module is the real one: a walk east along the surface. A move
+    // is offered only onto a floor the player has seen (issue #33), and the
+    // reveal module is a fake here, so the top layer is revealed by hand.
+    const seen = startState(5);
+    seen.revealed.fill(1);
+    act(seen, { type: 'move', to: { x: 1, y: 0, z: -1 } });
     expect(settleKinds).toEqual(['chosenDrop']);
 
     applyAction(startState(5), LEAVE);

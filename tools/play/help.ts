@@ -64,7 +64,7 @@ THE GAME
     Nothing refills fuel except crafting it. The "If you end the shift now" line says exactly
     what will happen, including when it would end the run.
   - The lamp uses oil slowly, a little every few shifts. With no oil the lamp goes out and you
-    see only one step around you.
+    work by touch: see "In the dark" below. Crafting lamp oil lights it again at once.
 
   Moving (${ACTION_COSTS.move} AP each)
   - Walk north, east, south or west into an open cell. There are no diagonal moves.
@@ -110,17 +110,40 @@ THE GAME
   - You know the whole top layer from the start. Below it you know what your lamp has shown.
     Light spreads from you a few steps through open cells: round corners, never through rock.
     You see every lit cell and every cell touching one.
-  - You also always know the cells your pick can reach and the cell over your head, and you can
-    look over an edge: beside a drop, or on a ladder, you see far enough down to judge the drop.
+  - While your lamp is lit you also know the cells your pick can reach and the cell over your
+    head, and you can look over an edge: beside a drop, or on a ladder, you see far enough down
+    to judge the drop.
   - Daylight does not shine down a hole: from the surface you see that a hole is there, not
     what is at its bottom.
   - What you have seen stays on the map. An unseen cell is "?" whether it is rock or open.
-  - A torch lights the cells around it for good, the way your lamp does. Place it in your own
-    cell or an open cell touching yours. A cell holds one thing: a ladder or a torch, not both.
+  - A torch lights the cells around it for good, the way your lamp does, and it needs no oil.
+    Place it in your own cell or an open cell touching yours. A cell holds one thing: a ladder
+    or a torch, not both.
   - Mineral traces: rock that lies within ${traceSteps} steps of iron ore, copper ore or crystal shows
     mineral traces, drawn as "%" on the map and named in the mine list ("Stone, mineral traces").
     They say ore is near, not which ore or which way. You notice them only on rock your light
-    touches; once noticed they stay on the map. Coal and timber-root give no traces.
+    touches; once noticed they stay on the map. Coal and timber-root give no traces. With the
+    lamp out you notice none by touch: only a torch's light or daylight shows new ones.
+
+  In the dark (lamp oil 0)
+  - You know only the six cells touching yours: north, east, south, west, above and below.
+    Nothing diagonal, nothing around the cell below you, and you cannot look down a drop.
+  - You can mine only blocks you know, so in the dark that is the walls beside you and the
+    floor under you, plus anything you saw earlier or a torch shows.
+  - A move is on the list only when you know every cell it depends on. In the dark you cannot
+    walk into a cell unless you know what is under it, step up onto a cell you have not seen,
+    or climb down off the foot of a ladder into a drop you have not seen. So you can go back
+    the way you came, but a cell you have just dug open beside you cannot be entered: you do
+    not know its floor.
+  - Digging straight down still works, but in the dark you do not know what is under the block
+    you stand on: the list says "N blocks or more; below that is unseen" and the least health it
+    will cost. The fall may be longer and cost more. A ladder in your own cell holds you while
+    you mine below, and from it you can feel the cell underneath.
+  - You notice no mineral traces in the dark, even on the rock you touch: feeling a block is
+    not seeing it. Traces you noticed earlier stay on the map, and a torch's light still shows
+    new ones.
+  - What you saw while the lamp was lit stays known, and a torch keeps showing the cells round
+    it. A torch placed where you are working, before the oil runs out, lets you carry on there.
 
   Weight and loose items
   - Everything you carry has a weight, shown in brackets after it, and there is a carry limit

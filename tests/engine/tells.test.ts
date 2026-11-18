@@ -167,8 +167,8 @@ describe('mineral traces', () => {
     expect(showsMineralTraces(state, FLOOR_2_STEPS)).toBe(true);
   });
 
-  it('needs the light to touch the block: a lamp with no oil shows less', () => {
-    // With no oil the lamp reaches 1 step, so from x = 4 it lights x = 3 to 5.
+  it('needs the light to touch the block: a lamp with no oil shows nothing', () => {
+    // With no oil the lamp gives no light at all (decision note 0011).
     const state = tunnelState({ avatar: { x: 4, y: 1, z: 1 }, lampOil: 0 });
     expect(visibleMineralTraces(state)).toEqual([]);
     // With oil it reaches x = 1, and both traced floor blocks are in light.
@@ -402,6 +402,73 @@ describe('mineral traces', () => {
     expect(TELLS.mineralTraces.sourceBlocks).toEqual(['ironOre', 'copperOre', 'crystal']);
     expect(TELLS.mineralTraces.shownOnBlocks).toEqual(['dirt', 'stone', 'hardRock']);
     expect(BLOCKS.ironOre.solid).toBe(true);
+  });
+});
+
+// Issue #33 (decision note 0011): with the lamp out the miner knows the six
+// blocks it touches, but knowing a block by touch is not seeing it in light.
+describe('mineral traces with the lamp out', () => {
+  /** The events of noticing traces in `state` now, and the state itself. */
+  function lookedWithEvents(state: GameState): GameEvent[] {
+    const events: GameEvent[] = [];
+    updateMineralTraces(state, events);
+    return events;
+  }
+
+  it('are not noticed on the blocks the miner touches', () => {
+    // At the west end the miner stands on the traced floor block.
+    const state = bareTunnelState({ avatar: WEST_END, lampOil: 0 });
+    const events = lookedWithEvents(state);
+
+    expect(carriesMineralTraces(state, FLOOR_1_STEP)).toBe(true);
+    expect(state.tracesSeen[cellIndex(state.size, FLOOR_1_STEP)]).toBe(0);
+    expect(showsMineralTraces(state, FLOOR_1_STEP)).toBe(false);
+    expect(visibleMineralTraces(state)).toEqual([]);
+    expect(events).toEqual([]);
+  });
+
+  it('are not noticed through real play either: arriving and ending shifts in the dark', () => {
+    // Nothing revealed to start with; the engine reveals the six touched cells.
+    const built = bareTunnelState({ avatar: WEST_END, lampOil: 0, revealAll: false });
+    const { state, events } = endShift(built);
+
+    expect(state.revealed[cellIndex(state.size, FLOOR_1_STEP)]).toBe(1);
+    expect(showsMineralTraces(state, FLOOR_1_STEP)).toBe(false);
+    expect(events.filter((event) => event.type === 'mineralTracesSeen')).toEqual([]);
+  });
+
+  it('are noticed once the lamp is lit again', () => {
+    const dark = looked(bareTunnelState({ avatar: WEST_END, lampOil: 0 }));
+    dark.inventory = { coal: 1 };
+    const { state: lit, events } = act(dark, { type: 'craft', recipe: 'lampOil' });
+
+    expect(showsMineralTraces(lit, FLOOR_1_STEP)).toBe(true);
+    expect(showsMineralTraces(lit, FLOOR_2_STEPS)).toBe(true);
+    expect(events).toContainEqual({ type: 'mineralTracesSeen', pos: FLOOR_1_STEP });
+  });
+
+  it('are still shown by a torch', () => {
+    // The miner is far away at the east end; the torch is over the traced floor.
+    const state = bareTunnelState({ avatar: EAST_END, lampOil: 0, torches: [WEST_END] });
+    const events = lookedWithEvents(state);
+
+    expect(showsMineralTraces(state, FLOOR_1_STEP)).toBe(true);
+    expect(showsMineralTraces(state, FLOOR_2_STEPS)).toBe(true);
+    expect(events).toEqual([
+      { type: 'mineralTracesSeen', pos: FLOOR_1_STEP },
+      { type: 'mineralTracesSeen', pos: FLOOR_2_STEPS },
+    ]);
+  });
+
+  it('stay on the map when the lamp goes out after they were seen', () => {
+    let state = tunnelState({ avatar: WEST_END, lampOil: 1 });
+    expect(showsMineralTraces(state, FLOOR_1_STEP)).toBe(true);
+    for (let shifts = 0; shifts < 20 && state.lampOil > 0; shifts += 1) {
+      state = endShift(state).state;
+    }
+    expect(state.lampOil).toBe(0);
+    expect(showsMineralTraces(state, FLOOR_1_STEP)).toBe(true);
+    expect(showsMineralTraces(state, FLOOR_2_STEPS)).toBe(true);
   });
 });
 

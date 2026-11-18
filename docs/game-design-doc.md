@@ -101,7 +101,7 @@ The player may end the player phase early. [Default] Unspent AP is lost when the
 | Health | 10 | Falls, rockfall, burns, explosions | Resting at a camp |
 | Air | 10 | 1 per shift while in gas or water, or cut off from an air source | Refills fully in connected air |
 | Carry capacity | 20 weight | — | Stashing at a camp; smelting (ingots are lighter) |
-| Light radius | 3 | Lamp oil running out (drops to 1) | Lamp oil, torches |
+| Light radius | 3 | Lamp oil running out (drops to 0: only the miner's own cell, so it knows just the six cells it touches; decision note 0011) | Lamp oil, torches |
 
 ### 5.2 Movement and gravity
 
