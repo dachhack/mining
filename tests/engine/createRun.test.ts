@@ -1,0 +1,107 @@
+import { describe, expect, it } from 'vitest';
+import { AVATAR, CONTRACT_IDS, LOADOUTS, SHIFT, WORLD } from '../../src/data';
+import {
+  createRun,
+  hashState,
+  isOpen,
+  isSolid,
+  isSurface,
+  legalActions,
+  previewCubePhase,
+} from '../../src/engine';
+import { cellCount } from '../../src/engine/state';
+
+describe('createRun', () => {
+  it('puts the avatar at the start position from the data, on the surface', () => {
+    const state = createRun(1, 'none', 'standard');
+    expect(state.avatar.pos).toEqual(WORLD.startPosition);
+    expect(isSurface(state.size, state.avatar.pos)).toBe(true);
+    expect(isOpen(state, state.avatar.pos)).toBe(true);
+    // It stands on the top layer of the cube.
+    const below = { ...state.avatar.pos, z: state.avatar.pos.z + 1 };
+    expect(isSolid(state, below)).toBe(true);
+    // A copy, so that moving the avatar cannot change the data table.
+    expect(state.avatar.pos).not.toBe(WORLD.startPosition);
+  });
+
+  it('gives the starting kit of the loadout', () => {
+    const state = createRun(1, 'none', 'standard');
+    const loadout = LOADOUTS.standard;
+    expect(state.fuel).toBe(loadout.fuel);
+    expect(state.lampOil).toBe(loadout.lampOil);
+    const expectedInventory: Record<string, number> = {};
+    for (const stack of loadout.items) {
+      expectedInventory[stack.item] = stack.count;
+    }
+    expect(state.inventory).toEqual(expectedInventory);
+    expect(state.looseItems).toEqual([]);
+    expect(state.loadoutId).toBe('standard');
+    expect(state.contractId).toBe('none');
+  });
+
+  it('matches decision note 0005 item 22 (the standard kit) and item 2 (the start)', () => {
+    // The one test that states the numbers themselves, so that an accidental
+    // edit of the data shows up. A deliberate change updates this test.
+    const state = createRun(1, 'none', 'standard');
+    expect(state.fuel).toBe(24);
+    expect(state.lampOil).toBe(6);
+    expect(state.inventory).toEqual({ ladder: 6, timber: 2 });
+    expect(state.avatar.pos).toEqual({ x: 16, y: 16, z: -1 });
+    expect(state.avatar.health).toBe(10);
+    expect(state.ap).toBe(5);
+    expect(state.size).toEqual({ x: 32, y: 32, z: 32 });
+  });
+
+  it('starts a full-health avatar on the first shift with a full shift of AP', () => {
+    const state = createRun(1, 'none', 'standard');
+    expect(state.avatar.health).toBe(AVATAR.startHealth);
+    expect(state.ap).toBe(SHIFT.apPerShift);
+    expect(state.shift).toBe(SHIFT.firstShiftNumber);
+    expect(state.bankedAp).toBe(0);
+    expect(state.status).toEqual({ kind: 'active' });
+  });
+
+  it('builds a cube of the size in the data, with every cell solid', () => {
+    const state = createRun(1, 'none', 'standard');
+    expect(state.size).toEqual(WORLD.size);
+    expect(state.size).not.toBe(WORLD.size);
+    const cells = cellCount(WORLD.size);
+    for (const array of [state.blocks, state.revealed, state.fluid, state.gas, state.structures]) {
+      expect(array).toBeInstanceOf(Uint8Array);
+      expect(array.length).toBe(cells);
+    }
+    // M1 generates no open space (0005 item 3).
+    expect(state.blocks.every((code) => code !== 0)).toBe(true);
+  });
+
+  it('gives the same state for the same seed', () => {
+    expect(hashState(createRun(77, 'none', 'standard'))).toBe(
+      hashState(createRun(77, 'none', 'standard')),
+    );
+  });
+
+  it('gives a different state for a different seed', () => {
+    const a = createRun(77, 'none', 'standard');
+    const b = createRun(78, 'none', 'standard');
+    expect(a.seed).toBe(77);
+    expect(b.seed).toBe(78);
+    expect(hashState(a)).not.toBe(hashState(b));
+  });
+
+  it('rejects a bad seed, an unknown contract and an unknown loadout', () => {
+    expect(() => createRun(-1, 'none', 'standard')).toThrow('Seed');
+    expect(() => createRun(1.5, 'none', 'standard')).toThrow('Seed');
+    expect(() => createRun(2 ** 32, 'none', 'standard')).toThrow('Seed');
+    expect(() => createRun(1, 'deep-relic', 'standard')).toThrow('Unknown contract id');
+    expect(() => createRun(1, 'none', 'surveyor')).toThrow('Unknown loadout id');
+    expect(CONTRACT_IDS).toContain('none');
+  });
+
+  it('does not change its input when read: legalActions and previewCubePhase leave the state alone', () => {
+    const state = createRun(5, 'none', 'standard');
+    const before = hashState(state);
+    legalActions(state);
+    previewCubePhase(state);
+    expect(hashState(state)).toBe(before);
+  });
+});
