@@ -6,20 +6,18 @@
 //
 // Three policies:
 // - `random`: every legal action and "end the shift" are equally likely.
-// - `wander`: the same, but it never chooses to leave. A `random` player
-//   starts on the surface, where leaving is always on offer, so most of its
-//   runs end within a few choices; `wander` shows what happens further in.
+// - `wander`: the same, but it never chooses to leave. It exists because a
+//   `random` player starts on the surface, where leaving is always on offer,
+//   so about four in five of its runs end within a few choices and say little
+//   about play underground. `wander` gives the simulator and the property
+//   tests long, deep runs. Neither is how a person plays.
 // - `staircase`: cuts a staircase down to a target layer, walks back up it,
 //   and leaves. This is the M1 acceptance test's policy.
 
 import { SHIFT } from '../src/data';
 import type { Vec3 } from '../src/data';
-import { actionKey, isSolid, isSurface, legalActions } from '../src/engine';
+import { actionKey, createRng, isSolid, isSurface, legalActions, nextInt } from '../src/engine';
 import type { Action, GameState } from '../src/engine';
-// The engine's own seeded generator, used here with a state of the policy's
-// own: a policy must never draw from `state.rng`, which belongs to the rules.
-// It is not on the engine's public surface, so this is the one deep import.
-import { createRng, nextInt } from '../src/engine/rng';
 
 /** What a policy chooses: a legal action, or the string 'endShift'. */
 export type Decision = Action | 'endShift';
@@ -61,6 +59,8 @@ export function decisionKey(decision: Decision): string {
  * the very same number sequence that built the cube.
  */
 export function makeRandomPolicy(seed: number, allowLeave: boolean): Policy {
+  // The policy's own generator state: a policy must never draw from
+  // `state.rng`, which belongs to the rules.
   // `>>> 0` turns the result back into an unsigned 32-bit whole number.
   const rng = createRng((seed ^ 0x9e3779b9) >>> 0);
   return {
