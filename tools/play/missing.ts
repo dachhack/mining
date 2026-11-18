@@ -102,17 +102,17 @@ export function missingMoveNotes(state: GameState): string[] {
     const side = compass(step.x, step.y);
     if (isOpen(state, beside)) {
       const drop = dropUnder(state, beside, longest);
+      // The advice is given only where it can be followed: nothing can be
+      // placed on the surface, so there the note stops at the reason.
+      const advice = inGrid(state.size, beside) ? ' A ladder in that cell would hold you.' : '';
       if (drop.kind === 'tooLong') {
-        notes.push(
-          `No move ${side}: the drop there is more than ${longest} blocks. ` +
-            'A ladder in that cell would hold you.',
-        );
+        notes.push(`No move ${side}: the drop there is more than ${longest} blocks.${advice}`);
       } else if (drop.kind === 'unseen') {
         const what =
           drop.seenOpen === 0
             ? 'you have not seen what is under that cell'
             : `there is a drop of at least ${drop.seenOpen} block(s) and you have not seen its bottom`;
-        notes.push(`No move ${side}: ${what}. A ladder in that cell would hold you.`);
+        notes.push(`No move ${side}: ${what}.${advice}`);
       }
     } else {
       // Rock beside the avatar. A step up needs the cell overhead and the

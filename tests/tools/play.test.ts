@@ -515,10 +515,18 @@ describe('the action list', () => {
         const lines = printed.filter((line) => label.test(line));
         expect(lines).toHaveLength(1);
         expect(lines[0]).toContain(`[${cost}] `);
-        if (choice.group === null) {
-          expect(lines[0]?.endsWith(`[${cost}] ${choice.text}`)).toBe(true);
+        if (lines[0]?.endsWith(`[${cost}] ${choice.text}`) !== true) {
+          // Not on a line of its own, so it is on a shared line: the shared
+          // words must be this choice's own words, less the direction.
+          expect(choice.group).not.toBeNull();
+          expect(lines[0]).toContain(`[${cost}] Mine ${choice.group ?? ''}:`);
+          expect(choice.text.endsWith(`: ${choice.group ?? ''}`)).toBe(true);
         }
       }
+      // And nothing else is printed as a choice: the "N. name" labels under
+      // the heading are as many as the choices.
+      const labels = printed.join('\n').match(/(^| )\d+\. [a-z]+(-[a-z]+)*(?= |$)/gm) ?? [];
+      expect(labels).toHaveLength(view.choices.length);
     }
   });
 
@@ -1338,6 +1346,38 @@ describe('why a move is not on the list (issue #30)', () => {
     deep.structures[cellIndex(deep.size, { x: 2, y: 0, z: 0 })] = STRUCTURES.ladder.code;
     expect(resolveChoice(deep, 'e')).toMatchObject({ type: 'move', drop: 0 });
     expect(notOffered(deep)).toEqual([]);
+  });
+
+  it('on the surface, gives the reason without the ladder advice (nothing can be placed there)', () => {
+    // The miner stands on the surface beside a hole. The cell east of it is
+    // a surface cell, where no ladder can be placed.
+    const longest = AVATAR.maxChosenDropBlocks;
+    const hole = (depth: number): GameState => {
+      const layers: string[][] = [];
+      for (let z = 0; z < 6; z += 1) {
+        layers.push([z < depth ? '##.' : '###']);
+      }
+      return buildState({ layers, avatar: { x: 1, y: 0, z: -1 }, revealAll: true });
+    };
+
+    const deep = hole(longest + 1);
+    expect(resolveChoice(deep, 'e')).toBeNull();
+    expect(resolveChoice(deep, 'ladder-e')).toBeNull();
+    expect(notOffered(deep)).toEqual([
+      `No move east: the drop there is more than ${longest} blocks.`,
+    ]);
+
+    // The same with the bottom of the hole unseen.
+    const unseen = hole(longest);
+    for (let z = 1; z < 6; z += 1) {
+      unseen.revealed[cellIndex(unseen.size, { x: 2, y: 0, z })] = 0;
+    }
+    expect(resolveChoice(unseen, 'e')).toBeNull();
+    expect(notOffered(unseen)).toEqual([
+      'No move east: there is a drop of at least 1 block(s) and you have not seen its bottom.',
+    ]);
+    expect(defaultViewText(deep)).not.toContain('would hold you');
+    expect(defaultViewText(unseen)).not.toContain('would hold you');
   });
 
   it('says nothing about a plain wall, or when there is no AP to move at all', () => {
