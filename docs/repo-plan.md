@@ -74,6 +74,7 @@ Three layers, with a one-way dependency: `app → render → engine`. The engine
 │  ├─ agent-plan.md          # roles and loop for agent development
 │  ├─ agents/                # one brief per agent role
 │  ├─ playtests/             # playtest reports, play logs, evaluations
+│  ├─ milestones/            # the coordinator's summary for each milestone
 │  ├─ owner-questions.md     # design questions waiting for the owner
 │  └─ decisions/             # short ADRs, one per significant decision
 ├─ src/
