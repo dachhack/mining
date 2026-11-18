@@ -102,7 +102,7 @@ function knownFallText(state: GameState): string {
           : '';
   return known
     ? `you will fall ${blocksText(fall)}${harm}`
-    : `you will fall ${blocksText(fall)} or more${harm}: below that is unseen`;
+    : `you will fall ${blocksText(fall)} or more${harm}; below that is unseen`;
 }
 
 /** What the player is told when the run is over, in words (the engine's ids are not shown). */

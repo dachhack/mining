@@ -260,7 +260,7 @@ describe('the action list', () => {
     }
     const before = viewText(state);
     expect(mineBelowLine(state)).toContain(
-      'you will fall 3 blocks or more, it will cost health: below that is unseen',
+      'you will fall 3 blocks or more, it will cost health; below that is unseen',
     );
     // Whatever the unseen cells hold, the text is the same.
     state.blocks[cellIndex(state.size, { x: 1, y: 0, z: 3 })] = BLOCKS.stone.code;
