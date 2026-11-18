@@ -19,6 +19,7 @@ import {
   createRun,
   endShift,
   hashState,
+  inGrid,
   isRevealed,
   legalActions,
   visibleMineralTraces,
@@ -91,6 +92,60 @@ describe('the view hides what the avatar cannot know', () => {
       }
     }
     expect(changed).toBeGreaterThan(1000);
+    expect(viewText(state)).toBe(before);
+    expect(viewText(endShift(state).state)).toBe(beforeNextStep);
+  });
+
+  it('prints the same text when ore far from everything seen is swapped with rock', () => {
+    // Mineral traces may tell the player about ore within a few steps of a
+    // block they see, and nothing else. So every unrevealed cell further
+    // than that from every revealed cell can turn from ore into rock, or
+    // from rock into ore, without the view changing: now, or a step later.
+    const state = dugInState();
+    const before = viewText(state);
+    const beforeNextStep = viewText(endShift(state).state);
+
+    const reach = TELLS.mineralTraces.distance;
+    // 1 for every cell within `reach` steps of a revealed cell (itself included).
+    const nearSeen = new Uint8Array(state.blocks.length);
+    for (let index = 0; index < state.blocks.length; index += 1) {
+      const pos = cellPosition(state.size, index);
+      if (!isRevealed(state, pos)) {
+        continue;
+      }
+      for (let dz = -reach; dz <= reach; dz += 1) {
+        const leftForY = reach - Math.abs(dz);
+        for (let dy = -leftForY; dy <= leftForY; dy += 1) {
+          const leftForX = leftForY - Math.abs(dy);
+          for (let dx = -leftForX; dx <= leftForX; dx += 1) {
+            const near = { x: pos.x + dx, y: pos.y + dy, z: pos.z + dz };
+            if (inGrid(state.size, near)) {
+              nearSeen[cellIndex(state.size, near)] = 1;
+            }
+          }
+        }
+      }
+    }
+
+    const oreCodes = TELLS.mineralTraces.sourceBlocks.map(
+      (blockId) => BLOCKS[blockId as keyof typeof BLOCKS].code,
+    );
+    let toOre = 0;
+    let toRock = 0;
+    for (let index = 0; index < state.blocks.length; index += 1) {
+      if (nearSeen[index] === 1) {
+        continue;
+      }
+      if (oreCodes.includes(state.blocks[index] as number)) {
+        state.blocks[index] = BLOCKS.stone.code;
+        toRock += 1;
+      } else {
+        state.blocks[index] = BLOCKS.ironOre.code;
+        toOre += 1;
+      }
+    }
+    expect(toOre).toBeGreaterThan(1000);
+    expect(toRock).toBeGreaterThan(0);
     expect(viewText(state)).toBe(before);
     expect(viewText(endShift(state).state)).toBe(beforeNextStep);
   });

@@ -153,6 +153,14 @@ describe('mineral traces', () => {
     expect(visibleMineralTraces(state)).toEqual([FLOOR_2_STEPS]);
   });
 
+  it('does not show a flag that sits on an unrevealed block (a damaged save, say)', () => {
+    const state = bareTunnelState({ revealAll: false });
+    // The engine never sets this; a save edited by hand could.
+    state.tracesSeen[cellIndex(state.size, FLOOR_1_STEP)] = 1;
+    expect(showsMineralTraces(state, FLOOR_1_STEP)).toBe(false);
+    expect(visibleMineralTraces(state)).toEqual([]);
+  });
+
   it('is not noticed on a revealed block that is not in light', () => {
     // The avatar is at the east end: its lamp reaches 3 steps, to x = 4.
     const state = tunnelState({ avatar: EAST_END });
