@@ -95,8 +95,7 @@ describe('playRun', () => {
     expect(metrics.blocksMined).toBe(17);
     expect(metrics.shareOfCubeMined).toBeCloseTo(17 / 32768, 10);
     expect(metrics.shiftsPlayed).toBe(10);
-    // 24 fuel at the start, 1 used at each of the 9 ends of shift, and no
-    // unspent AP banked along the way.
+    // 24 fuel at the start, 1 used at each of the 9 ends of shift.
     expect(metrics.fuelAtEnd).toBe(15);
     expect(metrics.shiftsAtZeroFuel).toBe(0);
     expect(metrics.legalActionsPerPhase.min).toBeGreaterThan(0);

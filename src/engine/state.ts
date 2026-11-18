@@ -15,7 +15,7 @@ import { createRng } from './rng';
 import type { RngState } from './rng';
 
 /** Bumped whenever the shape of GameState changes, so old saves can be told apart. */
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 2;
 
 /** Some loose items lying in a cell. */
 export interface LooseItems {
@@ -67,8 +67,6 @@ export interface GameState {
   ap: number;
   fuel: number;
   lampOil: number;
-  /** Unspent AP saved up towards a fuel refund (0005 item 20). */
-  bankedAp: number;
   /** The number of the current shift. */
   shift: number;
 
@@ -402,7 +400,6 @@ export function blankState(size: CubeSize, seed: number): GameState {
     ap: 0,
     fuel: 0,
     lampOil: 0,
-    bankedAp: 0,
     shift: 0,
     inventory: {},
     looseItems: [],
@@ -434,7 +431,6 @@ export function cloneState(state: GameState): GameState {
     ap: state.ap,
     fuel: state.fuel,
     lampOil: state.lampOil,
-    bankedAp: state.bankedAp,
     shift: state.shift,
     inventory: { ...state.inventory },
     looseItems: state.looseItems.map((loose) => ({

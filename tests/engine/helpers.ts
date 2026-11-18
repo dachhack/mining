@@ -62,7 +62,6 @@ export interface BuildStateOptions {
   fuel?: number;
   /** Default: 10. */
   lampOil?: number;
-  bankedAp?: number;
   shift?: number;
   /** Item id -> count. Default: nothing carried. */
   inventory?: Record<string, number>;
@@ -121,7 +120,6 @@ export function buildState(options: BuildStateOptions): GameState {
   state.ap = options.ap ?? SHIFT.apPerShift;
   state.fuel = options.fuel ?? 10;
   state.lampOil = options.lampOil ?? 10;
-  state.bankedAp = options.bankedAp ?? 0;
   state.shift = options.shift ?? SHIFT.firstShiftNumber;
   state.inventory = { ...(options.inventory ?? {}) };
   // Merged and sorted, as the engine keeps the list.

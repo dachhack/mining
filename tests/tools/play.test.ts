@@ -527,4 +527,54 @@ describe('--help', () => {
     expect(result.output).not.toContain('undefined');
     expect(result.output).not.toContain('NaN');
   });
+
+  it('says unspent AP is lost, and nothing about banking (issue #32)', () => {
+    const help = helpText();
+    expect(help).toContain('Unspent AP is lost when the shift ends');
+    expect(help.toLowerCase()).not.toContain('bank');
+    expect(help.toLowerCase()).not.toContain('refund');
+  });
+});
+
+describe('unspent AP in the view (issue #32: no fuel refill)', () => {
+  const layers = [['###'], ['###']];
+  const avatar = { x: 1, y: 0, z: -1 };
+
+  it('has no banked-AP gauge', () => {
+    const text = viewText(buildState({ layers, avatar, revealAll: true }));
+    expect(text).toContain('Fuel 10');
+    expect(text.toLowerCase()).not.toContain('bank');
+  });
+
+  it('the end-of-shift line says unspent AP will be lost and what fuel will be', () => {
+    const state = buildState({ layers, avatar, ap: 5, fuel: 10, lampOil: 6, revealAll: true });
+    expect(viewText(state)).toContain(
+      'If you end the shift now: 5 unspent AP will be lost, fuel 10 -> 9 (-1 shift), lamp oil 6 -> 6.',
+    );
+    // And that is what then happens.
+    expect(endShift(state).state.fuel).toBe(9);
+  });
+
+  it('the end-of-shift line does not mention AP when none is unspent', () => {
+    const state = buildState({ layers, avatar, ap: 0, fuel: 10, lampOil: 6, revealAll: true });
+    expect(viewText(state)).toContain(
+      'If you end the shift now: fuel 10 -> 9 (-1 shift), lamp oil 6 -> 6.',
+    );
+  });
+
+  it('warns that the run ends on 0 fuel even with every AP unspent', () => {
+    const state = buildState({ layers, avatar, ap: 5, fuel: 0, revealAll: true });
+    expect(viewText(state)).toContain(
+      'THE RUN ENDS: you ran out of fuel and died. No fuel is left, and unspent AP does not become fuel.',
+    );
+  });
+
+  it('ending a shift reports only the fuel the shift used', () => {
+    const state = buildState({ layers, avatar, ap: 5, fuel: 10, revealAll: true });
+    const { state: after, events } = endShift(state);
+    expect(describeEvents(after, events)).toEqual([
+      'Fuel -1 (the shift), now 9.',
+      'Shift 1 ended; shift 2 begins.',
+    ]);
+  });
 });
