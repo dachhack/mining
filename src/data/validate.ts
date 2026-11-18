@@ -284,6 +284,37 @@ export function validateData(data: GameData): string[] {
     problems.push('avatar.maxChosenDropBlocks must be less than avatar.fatalFallBlocks');
   }
 
+  // --- Tells ---
+  const traces = data.tells.mineralTraces;
+  requireWholeAtLeast(traces.distance, 1, 'tells.mineralTraces.distance');
+  if (traces.sourceBlocks.length === 0) {
+    problems.push('tells.mineralTraces.sourceBlocks is empty');
+  }
+  if (traces.shownOnBlocks.length === 0) {
+    problems.push('tells.mineralTraces.shownOnBlocks is empty');
+  }
+  const traceBlocks = new Set<string>();
+  for (const [listName, blockIds] of [
+    ['sourceBlocks', traces.sourceBlocks],
+    ['shownOnBlocks', traces.shownOnBlocks],
+  ] as const) {
+    for (const blockId of blockIds) {
+      const where = `tells.mineralTraces.${listName}`;
+      const block = Object.hasOwn(data.blocks, blockId) ? data.blocks[blockId] : undefined;
+      if (block === undefined) {
+        problems.push(`${where} names an unknown block "${blockId}"`);
+      } else if (!block.solid) {
+        problems.push(`${where} names "${blockId}", which is not a solid block`);
+      }
+      // A block is a source of traces or shows them, never both, and is
+      // listed once.
+      if (traceBlocks.has(blockId)) {
+        problems.push(`tells.mineralTraces lists block "${blockId}" more than once`);
+      }
+      traceBlocks.add(blockId);
+    }
+  }
+
   // --- Shift ---
   const shift = data.shift;
   requireWholeAtLeast(shift.firstShiftNumber, 0, 'shift.firstShiftNumber');

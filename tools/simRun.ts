@@ -3,7 +3,7 @@
 //
 // Everything here goes through the engine's public surface.
 
-import { FIELD_RECIPES, ITEMS, SHIFT, STRUCTURES } from '../src/data';
+import { BLOCKS, FIELD_RECIPES, ITEMS, SHIFT, STRUCTURES, TELLS } from '../src/data';
 import {
   ENGINE_VERSION,
   actionKey,
@@ -15,6 +15,7 @@ import {
   inventoryEntries,
   isRunActive,
   legalActions,
+  visibleMineralTraces,
 } from '../src/engine';
 import type { GameEvent, GameState } from '../src/engine';
 import { decisionKey } from './policies';
@@ -53,6 +54,14 @@ export interface RunMetrics {
   blocksMined: number;
   /** `blocksMined` divided by the number of cells in the cube (0.02 is 2%). */
   shareOfCubeMined: number;
+  /** How many of the mined blocks were ore that gives mineral traces (iron, copper, crystal). */
+  oreBlocksMined: number;
+  /**
+   * Did the player see mineral traces (decision note 0012) on any block before
+   * the first such ore block was mined? In a run that mined none, whether
+   * traces were seen at all.
+   */
+  tracesSeenBeforeFirstOre: boolean;
   /** The number of legal actions at the start of each player phase (full AP). */
   legalActionsPerPhase: Spread;
   /** The number of legal actions each time the policy was asked to choose. */
@@ -151,6 +160,19 @@ function recipeOutputId(recipeId: string): { id: string; amount: number } {
     : { id: recipe.output.gauge, amount: recipe.output.amount };
 }
 
+/** The codes of the ore blocks that give mineral traces. */
+function traceSourceCodes(): Set<number> {
+  const table: Record<string, { code: number } | undefined> = BLOCKS;
+  const codes = new Set<number>();
+  for (const blockId of TELLS.mineralTraces.sourceBlocks) {
+    const def = table[blockId];
+    if (def !== undefined) {
+      codes.add(def.code);
+    }
+  }
+  return codes;
+}
+
 function structureIdByCode(code: number): string {
   for (const [id, def] of Object.entries(STRUCTURES)) {
     if (def.code === code) {
@@ -177,6 +199,11 @@ export function playRun(options: PlayOptions): RunResult {
   const legalAtPhaseStart: number[] = [];
   const legalAtDecision: number[] = [];
   let blocksMined = 0;
+  const oreCodes = traceSourceCodes();
+  let oreBlocksMined = 0;
+  // `createRun` gives no events, so look once at what the start shows. After
+  // that the `mineralTracesSeen` events say when traces are first seen.
+  let tracesSeenBeforeFirstOre = visibleMineralTraces(state).length > 0;
   let damageTaken = 0;
   let actionsTaken = 0;
   let shiftsAtZeroFuel = 0;
@@ -189,6 +216,15 @@ export function playRun(options: PlayOptions): RunResult {
     for (const event of events) {
       if (event.type === 'blockMined') {
         blocksMined += 1;
+        if (oreCodes.has(event.block)) {
+          oreBlocksMined += 1;
+        }
+      } else if (event.type === 'mineralTracesSeen') {
+        // Events come in the order things happened, so traces seen in the
+        // same step as the first ore was mined, but after it, do not count.
+        if (oreBlocksMined === 0) {
+          tracesSeenBeforeFirstOre = true;
+        }
       } else if (event.type === 'crafted') {
         addCount(recipesUsed, event.recipe, 1);
         const output = recipeOutputId(event.recipe);
@@ -271,6 +307,8 @@ export function playRun(options: PlayOptions): RunResult {
     deepestLayer,
     blocksMined,
     shareOfCubeMined: blocksMined / cubeCells,
+    oreBlocksMined,
+    tracesSeenBeforeFirstOre,
     legalActionsPerPhase: spreadOf(legalAtPhaseStart),
     legalActionsPerDecision: spreadOf(legalAtDecision),
     recipesUsed,
@@ -302,6 +340,12 @@ export interface AggregateMetrics {
   deepestLayer: SpreadWithMedian;
   blocksMined: SpreadWithMedian;
   shareOfCubeMined: SpreadWithMedian;
+  /** Runs that mined at least one ore block that gives mineral traces. */
+  runsThatMinedOre: number;
+  /** Runs in which traces were seen before the first ore was mined (or at all, if none was). */
+  runsWithTracesSeenBeforeFirstOre: number;
+  /** Runs counted in both of the two lines above: ore was mined, and traces were seen first. */
+  runsThatMinedOreAfterSeeingTraces: number;
   /** Mean of the runs' means, smallest of their minimums, largest of their maximums. */
   legalActionsPerPhase: Spread;
   legalActionsPerDecision: Spread;
@@ -389,6 +433,11 @@ export function aggregate(runs: RunMetrics[]): AggregateMetrics {
     deepestLayer: spreadWithMedianOf(runs.map((run) => run.deepestLayer)),
     blocksMined: spreadWithMedianOf(runs.map((run) => run.blocksMined)),
     shareOfCubeMined: spreadWithMedianOf(runs.map((run) => run.shareOfCubeMined)),
+    runsThatMinedOre: runs.filter((run) => run.oreBlocksMined > 0).length,
+    runsWithTracesSeenBeforeFirstOre: runs.filter((run) => run.tracesSeenBeforeFirstOre).length,
+    runsThatMinedOreAfterSeeingTraces: runs.filter(
+      (run) => run.oreBlocksMined > 0 && run.tracesSeenBeforeFirstOre,
+    ).length,
     legalActionsPerPhase: combineSpreads(runs.map((run) => run.legalActionsPerPhase)),
     legalActionsPerDecision: combineSpreads(runs.map((run) => run.legalActionsPerDecision)),
     recipesUsed,
@@ -475,6 +524,7 @@ export function formatSummary(report: SimReport): string {
     `deepest layer:      ${spreadLine(a.deepestLayer, 1)}   (-1 is the surface)`,
     `blocks mined:       ${spreadLine(a.blocksMined, 1)}`,
     `share of cube (%):  mean ${fixed(percent(share.mean), 3)}, median ${fixed(percent(share.median), 3)}, min ${fixed(percent(share.min), 3)}, max ${fixed(percent(share.max), 3)}`,
+    `mineral traces:     seen before the first ore was mined (or at all, if none was) in ${a.runsWithTracesSeenBeforeFirstOre} runs; ore mined in ${a.runsThatMinedOre} runs, ${a.runsThatMinedOreAfterSeeingTraces} of them after seeing traces`,
     `legal actions at the start of a player phase: mean ${fixed(a.legalActionsPerPhase.mean, 1)}, min ${a.legalActionsPerPhase.min}, max ${a.legalActionsPerPhase.max}`,
     `legal actions per decision:                   mean ${fixed(a.legalActionsPerDecision.mean, 1)}, min ${a.legalActionsPerDecision.min}, max ${a.legalActionsPerDecision.max}`,
     `recipes used (crafts / runs that used it): ${Object.entries(a.recipesUsed)

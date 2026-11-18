@@ -17,7 +17,7 @@ import {
 import type { GameState, LooseItems, RunStatus } from './state';
 
 /**
- * A GameState with nothing in it that JSON cannot hold. The five cube arrays
+ * A GameState with nothing in it that JSON cannot hold. The six cube arrays
  * are run-length encoded: `[value, runLength, value, runLength, ...]`. A cube
  * that is all stone becomes just `[2, 32768]`.
  */
@@ -33,6 +33,7 @@ export interface SerialisedState {
   fluid: number[];
   gas: number[];
   structures: number[];
+  tracesSeen: number[];
   avatar: { pos: Vec3; health: number };
   ap: number;
   fuel: number;
@@ -104,6 +105,7 @@ export function serialise(state: GameState): SerialisedState {
     fluid: runLengthEncode(state.fluid),
     gas: runLengthEncode(state.gas),
     structures: runLengthEncode(state.structures),
+    tracesSeen: runLengthEncode(state.tracesSeen),
     avatar: {
       pos: { x: state.avatar.pos.x, y: state.avatar.pos.y, z: state.avatar.pos.z },
       health: state.avatar.health,
@@ -159,6 +161,7 @@ export function deserialise(saved: SerialisedState): GameState {
     fluid: runLengthDecode(saved.fluid, cells, 'fluid'),
     gas: runLengthDecode(saved.gas, cells, 'gas'),
     structures: runLengthDecode(saved.structures, cells, 'structures'),
+    tracesSeen: runLengthDecode(saved.tracesSeen, cells, 'tracesSeen'),
     avatar: { pos: avatarPos, health: saved.avatar.health },
     ap: saved.ap,
     fuel: saved.fuel,

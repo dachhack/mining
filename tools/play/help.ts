@@ -5,7 +5,7 @@
 // states rules, in the order a player meets them. Every number in it is read
 // from src/data, so the text cannot drift from the game when one is tuned.
 
-import { ACTION_COSTS, AVATAR, FIELD_RECIPES, SHIFT, WORLD } from '../../src/data';
+import { ACTION_COSTS, AVATAR, FIELD_RECIPES, SHIFT, TELLS, WORLD } from '../../src/data';
 import { stackListText } from './describe';
 import { DEFAULT_LAYERS, DEFAULT_RADIUS } from './view';
 
@@ -16,6 +16,7 @@ export function helpText(): string {
   const safeDrop = AVATAR.maxChosenDropBlocks;
   const uncontrolledPerBlock = AVATAR.uncontrolledFallDamagePerBlock;
   const bottomLayer = WORLD.size.z - 1;
+  const traceSteps = TELLS.mineralTraces.distance;
 
   return `Mining game: text play interface
 
@@ -116,6 +117,10 @@ THE GAME
   - What you have seen stays on the map. An unseen cell is "?" whether it is rock or open.
   - A torch lights the cells around it for good, the way your lamp does. Place it in your own
     cell or an open cell touching yours. A cell holds one thing: a ladder or a torch, not both.
+  - Mineral traces: rock that lies within ${traceSteps} steps of iron ore, copper ore or crystal shows
+    mineral traces, drawn as "%" on the map and named in the mine list ("Stone, mineral traces").
+    They say ore is near, not which ore or which way. You notice them only on rock your light
+    touches; once noticed they stay on the map. Coal and timber-root give no traces.
 
   Weight and loose items
   - Everything you carry has a weight, shown in brackets after it, and there is a carry limit

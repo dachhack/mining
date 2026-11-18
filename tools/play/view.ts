@@ -9,6 +9,11 @@
 // torch, loose items) are read only after `isRevealed` has said yes. Note that
 // open cells are hidden like blocks: an unrevealed cell prints as `?` whether
 // it is rock or a void (owner question 37).
+//
+// Mineral traces (decision note 0012) are the one thing shown that depends on
+// cells the player has not seen: rock the player has seen in light near ore
+// is drawn as `%`. That is the hint the rule intends. The engine's
+// `visibleMineralTraces` decides it, and only ever names revealed blocks.
 
 import {
   AVATAR,
@@ -34,6 +39,7 @@ import {
   looseItemsAt,
   previewCubePhase,
   structureAt,
+  visibleMineralTraces,
 } from '../../src/engine';
 import type { GameState } from '../../src/engine';
 import { describeChoice, layerName, runEndText, stackListText } from './describe';
@@ -62,6 +68,7 @@ const SYMBOL_ITEMS = '*';
 const SYMBOL_LADDER = '=';
 const SYMBOL_TORCH = '!';
 const SYMBOL_SUPPORT = 'T';
+const SYMBOL_TRACES = '%';
 
 // One character for each block that can be stored in the cube: the same
 // characters as tools/ascii.ts and the test helper.
@@ -145,7 +152,7 @@ interface CellView {
  * This is the only function that looks inside a cell, and it looks only
  * after checking that the cell is revealed.
  */
-function cellView(state: GameState, pos: Vec3): CellView {
+function cellView(state: GameState, pos: Vec3, traced: Set<string>): CellView {
   const here = state.avatar.pos;
   if (pos.x === here.x && pos.y === here.y && pos.z === here.z) {
     return { symbol: SYMBOL_AVATAR, meaning: 'you' };
@@ -159,6 +166,14 @@ function cellView(state: GameState, pos: Vec3): CellView {
   const code = blockAt(state, pos);
   const block = blockDefByCode(code);
   if (block.solid) {
+    if (traced.has(positionKey(pos))) {
+      // One character per cell, so the traces take the place of the rock's own
+      // character; the mine line for the block names the rock.
+      return {
+        symbol: SYMBOL_TRACES,
+        meaning: 'rock with mineral traces: ore is near',
+      };
+    }
     // Every solid block the cube can store has a character; `?? '?'` is only
     // there for a block added to the data without one.
     return { symbol: SYMBOL_BY_CODE.get(code) ?? SYMBOL_UNKNOWN, meaning: block.name };
@@ -177,6 +192,10 @@ function cellView(state: GameState, pos: Vec3): CellView {
     return { symbol: SYMBOL_SUPPORT, meaning: 'support' };
   }
   return { symbol: SYMBOL_OPEN, meaning: 'open space' };
+}
+
+function positionKey(pos: Vec3): string {
+  return `${pos.x},${pos.y},${pos.z}`;
 }
 
 /** The name of the structure in a revealed cell, or `null` if there is none. */
@@ -236,6 +255,9 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   const layers: LayerView[] = [];
   const legend = new Map<string, string>();
   const notes: string[] = [];
+  // The blocks the player has seen mineral traces on, as "x,y,z" strings.
+  // The engine lists only revealed blocks.
+  const traced = new Set<string>(visibleMineralTraces(state).map(positionKey));
   for (let z = here.z - options.layers; z <= here.z + options.layers; z += 1) {
     // There is nothing to draw above the surface or below the bottom layer.
     if (z < WORLD.surfaceZ || z >= state.size.z) {
@@ -246,7 +268,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       let row = '';
       for (let x = window.x0; x <= window.x1; x += 1) {
         const pos = { x, y, z };
-        const cell = cellView(state, pos);
+        const cell = cellView(state, pos, traced);
         row += cell.symbol;
         legend.set(cell.symbol, cell.meaning);
         if (cell.symbol === SYMBOL_ITEMS) {
