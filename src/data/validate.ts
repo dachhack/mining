@@ -138,6 +138,80 @@ export function validateData(data: GameData): string[] {
     problems.push('there must be a block "stone"');
   }
 
+  // --- Generation ---
+  const generation = data.generation;
+  requireWholeAtLeast(generation.veinPlacementTries, 1, 'generation.veinPlacementTries');
+  // A generated block must be one the avatar can dig through: solid and mineable.
+  function requireDiggableBlock(blockId: string, where: string): void {
+    const block = Object.hasOwn(data.blocks, blockId) ? data.blocks[blockId] : undefined;
+    if (block === undefined) {
+      problems.push(`${where} names an unknown block "${blockId}"`);
+    } else if (!block.solid || block.mineCost === null) {
+      problems.push(`${where} names "${blockId}", which is not a solid, mineable block`);
+    }
+  }
+  const generatedBandIds = new Set<string>();
+  for (const bandDef of generation.bands) {
+    const where = `generation for band "${bandDef.bandId}"`;
+    if (!bandIds.has(bandDef.bandId)) {
+      problems.push(`${where}: there is no depth band with that id`);
+    }
+    if (generatedBandIds.has(bandDef.bandId)) {
+      problems.push(`${where}: the band is listed more than once`);
+    }
+    generatedBandIds.add(bandDef.bandId);
+
+    const blocksInBand = new Set<string>();
+    let totalAtTop = 0;
+    let totalAtBottom = 0;
+    for (const rock of bandDef.rock) {
+      requireDiggableBlock(rock.block, `${where}: rock`);
+      if (blocksInBand.has(rock.block)) {
+        problems.push(`${where}: block "${rock.block}" is listed more than once`);
+      }
+      blocksInBand.add(rock.block);
+      for (const weight of [rock.weightAtTop, rock.weightAtBottom]) {
+        if (!Number.isFinite(weight) || weight < 0) {
+          problems.push(
+            `${where}: rock "${rock.block}" has a negative or invalid weight (${weight})`,
+          );
+        }
+      }
+      totalAtTop += rock.weightAtTop;
+      totalAtBottom += rock.weightAtBottom;
+    }
+    // `!(x > 0)` rather than `x <= 0`, so that NaN is caught as well.
+    if (!(totalAtTop > 0) || !(totalAtBottom > 0)) {
+      problems.push(
+        `${where}: the rock weights must add up to more than 0 at the top and at the bottom`,
+      );
+    }
+    for (const vein of bandDef.veins) {
+      const veinWhere = `${where}: vein of "${vein.block}"`;
+      requireDiggableBlock(vein.block, `${where}: vein`);
+      if (blocksInBand.has(vein.block)) {
+        problems.push(`${where}: block "${vein.block}" is listed more than once`);
+      }
+      blocksInBand.add(vein.block);
+      if (!Number.isFinite(vein.veinsPer1000Cells) || vein.veinsPer1000Cells <= 0) {
+        problems.push(
+          `${veinWhere}: veinsPer1000Cells must be more than 0, but is ${vein.veinsPer1000Cells}`,
+        );
+      }
+      requireWholeAtLeast(vein.minSize, 1, `${veinWhere}: minSize`);
+      requireWholeAtLeast(
+        vein.maxSize,
+        Math.max(1, vein.minSize),
+        `${veinWhere}: maxSize (at least minSize)`,
+      );
+    }
+  }
+  for (const band of world.depthBands) {
+    if (!generatedBandIds.has(band.id)) {
+      problems.push(`depth band "${band.id}" has no entry in generation.bands`);
+    }
+  }
+
   // --- Structures ---
   const structureCodes = new Map<number, string>();
   for (const [structureId, structure] of Object.entries(data.structures)) {

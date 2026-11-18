@@ -2,6 +2,7 @@
 
 import { AVATAR } from './avatar';
 import { BLOCKS } from './blocks';
+import { GENERATION } from './generation';
 import { ITEMS } from './items';
 import { CONTRACT_IDS, DEFAULT_LOADOUT_ID, LOADOUTS } from './loadouts';
 import { FIELD_RECIPES, GAUGES } from './recipes';
@@ -13,6 +14,7 @@ import { WORLD } from './world';
 export { AVATAR } from './avatar';
 export { BLOCKS } from './blocks';
 export type { BlockId } from './blocks';
+export { GENERATION } from './generation';
 export { ITEMS } from './items';
 export type { ItemId } from './items';
 export { CONTRACT_IDS, DEFAULT_LOADOUT_ID, LOADOUTS } from './loadouts';
@@ -29,6 +31,7 @@ export type * from './types';
 /** Every table, gathered for `validateData`. */
 export const GAME_DATA: GameData = {
   world: WORLD,
+  generation: GENERATION,
   blocks: BLOCKS,
   items: ITEMS,
   structures: STRUCTURES,
