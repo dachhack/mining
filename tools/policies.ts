@@ -4,7 +4,7 @@
 // actions, or "end the shift". It sees the state only through the engine's
 // public surface, as any other player would.
 //
-// Three policies:
+// Four policies:
 // - `random`: every legal action and "end the shift" are equally likely.
 // - `wander`: the same, but it never chooses to leave. It exists because a
 //   `random` player starts on the surface, where leaving is always on offer,
@@ -13,10 +13,25 @@
 //   tests long, deep runs. Neither is how a person plays.
 // - `staircase`: cuts a staircase down to a target layer, walks back up it,
 //   and leaves. This is the M1 acceptance test's policy.
+// - `coal`: walks over the surface to the nearest coal it can see in the top
+//   layer, mines it, turns it into fuel, and leaves once the fuel gauge is
+//   back to what the run started with. If the top layer runs out first it
+//   follows a seam one block down. It measures whether the starting fuel is
+//   enough to get to coal (issue #51); see tools/coalSurvey.ts.
 
-import { SHIFT } from '../src/data';
+import { BLOCKS, SHIFT } from '../src/data';
 import type { Vec3 } from '../src/data';
-import { actionKey, createRng, isSolid, isSurface, legalActions, nextInt } from '../src/engine';
+import {
+  actionKey,
+  blockAt,
+  countItem,
+  createRng,
+  isRevealed,
+  isSolid,
+  isSurface,
+  legalActions,
+  nextInt,
+} from '../src/engine';
 import type { Action, GameState } from '../src/engine';
 
 /** What a policy chooses: a legal action, or the string 'endShift'. */
@@ -33,7 +48,7 @@ export interface Policy {
 }
 
 /** The names `makePolicy` accepts. */
-export const POLICY_NAMES = ['random', 'wander', 'staircase'];
+export const POLICY_NAMES = ['random', 'wander', 'staircase', 'coal'];
 
 /** The layer the staircase policy digs to unless told otherwise (M1 acceptance). */
 export const DEFAULT_STAIRCASE_TARGET_LAYER = 8;
@@ -215,6 +230,259 @@ export function makeStaircasePolicy(targetLayer: number): Policy {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Coal policy
+// ---------------------------------------------------------------------------
+
+/** The id of the field recipe that turns coal into fuel (src/data/recipes.ts). */
+const FUEL_RECIPE_ID = 'fuel';
+
+/** The eight cells around a cell on the same level, as (x, y) steps, in a fixed order. */
+const AROUND: Vec3[] = [
+  { x: 0, y: -1, z: 0 },
+  { x: 1, y: 0, z: 0 },
+  { x: 0, y: 1, z: 0 },
+  { x: -1, y: 0, z: 0 },
+  { x: 1, y: -1, z: 0 },
+  { x: 1, y: 1, z: 0 },
+  { x: -1, y: 1, z: 0 },
+  { x: -1, y: -1, z: 0 },
+];
+
+/** The top-layer block under the surface cell `surfaceCell`. */
+function floorUnder(surfaceCell: Vec3): Vec3 {
+  return { x: surfaceCell.x, y: surfaceCell.y, z: 0 };
+}
+
+/** True if the cell holds a coal seam the player has seen. */
+function isKnownCoal(state: GameState, pos: Vec3): boolean {
+  return isRevealed(state, pos) && blockAt(state, pos) === BLOCKS.coalSeam.code;
+}
+
+/**
+ * The first known coal block the pick can reach from the cell `stand` without
+ * taking the miner's own floor away, or `undefined` if there is none.
+ *
+ * The pick reaches the eight cells around the miner and, one level down, the
+ * block underfoot and the eight around that one (decision note 0005 item 10).
+ * The block underfoot is left out: mining it would drop the miner into the
+ * hole. From the surface only the level below can hold a block.
+ */
+function coalInReach(state: GameState, stand: Vec3): Vec3 | undefined {
+  for (const levelsDown of [0, 1]) {
+    for (const step of AROUND) {
+      const target = { x: stand.x + step.x, y: stand.y + step.y, z: stand.z + levelsDown };
+      if (isKnownCoal(state, target)) {
+        return target;
+      }
+    }
+  }
+  return undefined;
+}
+
+/** Where the coal policy should walk next: see `routeOverSurface`. */
+interface SurfaceRoute {
+  /** How many steps away the nearest goal cell is; 0 if the miner is on it. */
+  steps: number;
+  /** The first cell to walk into; `undefined` when `steps` is 0. */
+  firstStep: Vec3 | undefined;
+}
+
+/**
+ * The shortest walk over the surface from the miner's cell to a surface cell
+ * for which `isGoal` is true, or `undefined` if there is no such cell.
+ *
+ * The walk only crosses surface cells whose floor is still there, so it goes
+ * round the holes left by coal already mined. This is a breadth-first search:
+ * `frontier` holds the cells reached in exactly `steps` steps.
+ *
+ * `isGoal` is a function passed in as a value, as in Python.
+ */
+function routeOverSurface(
+  state: GameState,
+  isGoal: (surfaceCell: Vec3) => boolean,
+): SurfaceRoute | undefined {
+  const start = state.avatar.pos;
+  if (isGoal(start)) {
+    return { steps: 0, firstStep: undefined };
+  }
+  // For each cell reached, the first step of the walk that reached it.
+  // Keyed by "x,y"; every cell here is on the surface.
+  const firstStepTo = new Map<string, Vec3>();
+  const seen = new Set<string>([`${start.x},${start.y}`]);
+  let frontier: Vec3[] = [start];
+  let steps = 0;
+  while (frontier.length > 0) {
+    steps += 1;
+    const next: Vec3[] = [];
+    for (const from of frontier) {
+      for (const step of HEADINGS) {
+        const to = { x: from.x + step.x, y: from.y + step.y, z: from.z };
+        const key = `${to.x},${to.y}`;
+        const inFootprint = to.x >= 0 && to.x < state.size.x && to.y >= 0 && to.y < state.size.y;
+        if (!inFootprint || seen.has(key) || !isSolid(state, floorUnder(to))) {
+          continue;
+        }
+        seen.add(key);
+        // The first step is `to` itself when leaving the start cell, and
+        // otherwise whatever first step led to `from`.
+        const firstStep = firstStepTo.get(`${from.x},${from.y}`) ?? to;
+        firstStepTo.set(key, firstStep);
+        if (isGoal(to)) {
+          return { steps, firstStep };
+        }
+        next.push(to);
+      }
+    }
+    frontier = next;
+  }
+  return undefined;
+}
+
+/**
+ * A policy that fetches coal from the top of the cube and leaves as soon as
+ * the trip has paid for itself in fuel.
+ *
+ * Each time it is asked, the first of these that applies:
+ * 1. It has crafted fuel and the gauge is back to at least what the run
+ *    started with: go home (step up out of a hole if it is in one, and leave).
+ * 2. It carries coal: craft fuel from it.
+ * 3. Standing in a hole: mine coal in reach, and step back up when none is.
+ * 4. On the surface:
+ *    a. top-layer coal is in reach beside it: mine it;
+ *    b. top-layer coal can be walked to: take one step towards the nearest;
+ *    c. no top-layer coal is left, but a hole it has not been down shows coal
+ *       at the bottom: walk to it and step in (a drop of one block);
+ *    d. otherwise give up and leave.
+ *
+ * It uses only what a player sees: the whole top layer is in daylight from
+ * the first shift, and the bottom of a hole is seen from above. It never
+ * mines the block underfoot and digs through no rock, so it takes no damage
+ * and uses no ladders. It goes no deeper than one block; that makes it a
+ * careful player, not the best one.
+ *
+ * When the action it wants costs more AP than are left it ends the shift; if
+ * the action is missing even with full AP it throws, as the staircase does.
+ */
+export function makeCoalPolicy(): Policy {
+  // The policy's notes between calls.
+  let fuelAtStart: number | null = null;
+  let hasCraftedFuel = false;
+  // The holes it has stepped into, as "x,y" strings, so it tries each once.
+  const holesTried = new Set<string>();
+
+  function takeOrWait(state: GameState, wanted: Action | undefined, what: string): Decision {
+    if (wanted !== undefined) {
+      return wanted;
+    }
+    if (state.ap >= SHIFT.apPerShift) {
+      const here = state.avatar.pos;
+      throw new Error(
+        `coal policy is stuck at (${here.x}, ${here.y}, ${here.z}) in shift ${state.shift}: cannot ${what} even with full AP`,
+      );
+    }
+    return 'endShift';
+  }
+
+  /** Is the top-layer cell under `surfaceCell` a hole worth stepping into? */
+  function isHoleWithCoal(state: GameState, surfaceCell: Vec3): boolean {
+    const hole = floorUnder(surfaceCell);
+    const bottom = { x: hole.x, y: hole.y, z: hole.z + 1 };
+    return (
+      !holesTried.has(`${hole.x},${hole.y}`) && !isSolid(state, hole) && isKnownCoal(state, bottom)
+    );
+  }
+
+  /** The surface cell beside `surfaceCell` that is over a hole worth stepping into, if any. */
+  function holeBeside(state: GameState, surfaceCell: Vec3): Vec3 | undefined {
+    for (const step of HEADINGS) {
+      const beside = { x: surfaceCell.x + step.x, y: surfaceCell.y + step.y, z: surfaceCell.z };
+      if (isHoleWithCoal(state, beside)) {
+        return beside;
+      }
+    }
+    return undefined;
+  }
+
+  return {
+    name: 'coal',
+    decide: (state: GameState): Decision => {
+      if (fuelAtStart === null) {
+        fuelAtStart = state.fuel;
+      }
+      const here = state.avatar.pos;
+      const onSurface = isSurface(state.size, here);
+      const legal = legalActions(state);
+      const leave = legal.find((action) => action.type === 'leave');
+      const stepUp = legal.find((action) => action.type === 'move' && action.to.z === here.z - 1);
+      const mineCoal = (coal: Vec3 | undefined): Action | undefined =>
+        legal.find(
+          (action) => action.type === 'mine' && coal !== undefined && sameCell(action.target, coal),
+        );
+
+      // 1. The trip has paid for itself.
+      if (hasCraftedFuel && state.fuel >= fuelAtStart) {
+        return onSurface
+          ? takeOrWait(state, leave, 'leave from the surface')
+          : takeOrWait(state, stepUp, 'step up out of the hole');
+      }
+      // 2. Turn coal into fuel as soon as it is in the pack.
+      if (countItem(state, 'coal') > 0) {
+        const craft = legal.find(
+          (action) => action.type === 'craft' && action.recipe === FUEL_RECIPE_ID,
+        );
+        if (craft !== undefined) {
+          hasCraftedFuel = true;
+        }
+        return takeOrWait(state, craft, 'craft fuel from coal');
+      }
+      // 3. In a hole: take the coal in reach, then climb out.
+      if (!onSurface) {
+        const coal = coalInReach(state, here);
+        return coal !== undefined
+          ? takeOrWait(state, mineCoal(coal), 'mine the coal in reach')
+          : takeOrWait(state, stepUp, 'step up out of the hole');
+      }
+      // 4a and 4b. Top-layer coal, worked from the surface.
+      const toCoal = routeOverSurface(
+        state,
+        (cell: Vec3): boolean => coalInReach(state, cell) !== undefined,
+      );
+      if (toCoal !== undefined && toCoal.firstStep === undefined) {
+        return takeOrWait(state, mineCoal(coalInReach(state, here)), 'mine the coal in reach');
+      }
+      // 4c. A hole with coal at the bottom.
+      const route =
+        toCoal ??
+        routeOverSurface(state, (cell: Vec3): boolean => holeBeside(state, cell) !== undefined);
+      if (route === undefined) {
+        // 4d. No coal in sight that can be got at: give up.
+        return takeOrWait(state, leave, 'leave from the surface');
+      }
+      if (route.firstStep === undefined) {
+        const hole = holeBeside(state, here);
+        const stepIn = legal.find(
+          (action) =>
+            action.type === 'move' &&
+            hole !== undefined &&
+            sameCell(action.to, hole) &&
+            action.drop === 1,
+        );
+        if (stepIn !== undefined && hole !== undefined) {
+          holesTried.add(`${hole.x},${hole.y}`);
+        }
+        return takeOrWait(state, stepIn, 'step into the hole');
+      }
+      // Walk one step along the route (to coal, or to a hole).
+      const nextCell = route.firstStep;
+      const walk = legal.find(
+        (action) => action.type === 'move' && sameCell(action.to, nextCell) && action.drop === 0,
+      );
+      return takeOrWait(state, walk, 'walk over the surface');
+    },
+  };
+}
+
 function sameCell(a: Vec3, b: Vec3): boolean {
   return a.x === b.x && a.y === b.y && a.z === b.z;
 }
@@ -232,6 +500,9 @@ export function makePolicy(name: string, seed: number): Policy {
   }
   if (name === 'staircase') {
     return makeStaircasePolicy(DEFAULT_STAIRCASE_TARGET_LAYER);
+  }
+  if (name === 'coal') {
+    return makeCoalPolicy();
   }
   throw new Error(`Unknown policy "${name}"; the policies are ${POLICY_NAMES.join(', ')}`);
 }
