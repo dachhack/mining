@@ -1,8 +1,9 @@
 // Light and reveal (design doc 3 and 5.1; 0005 items 10, 13, 14 and 15).
 //
-// Two things reveal a cell:
+// Three things reveal a cell:
 // - light: the cell is lit, or shares a face with a lit cell;
-// - reach: the cell is one the avatar's pick can reach, or the one overhead.
+// - reach: the cell is one the avatar's pick can reach, or the one overhead;
+// - looking over an edge: the cell is one a drop is judged by (question 40).
 //
 // Which cells are lit is worked out afresh each time and never stored. Only
 // the result, `state.revealed`, is kept, and a revealed cell stays revealed.
@@ -10,6 +11,7 @@
 import { AVATAR, STRUCTURES } from '../data';
 import type { Vec3 } from '../data';
 import type { GameEvent } from './events';
+import { cellBelow, hasLadder } from './footing';
 import { FACE_OFFSETS, MINE_REACH_OFFSETS, offsetPosition } from './neighbours';
 import {
   blockAt,
@@ -19,6 +21,7 @@ import {
   inGrid,
   isOpen,
   isRevealed,
+  isSolid,
   setRevealed,
 } from './state';
 import type { GameState } from './state';
@@ -82,6 +85,60 @@ function positionKey(pos: Vec3): string {
 }
 
 /**
+ * The cells the avatar sees by looking over an edge (owner question 40, an
+ * extension of "reach reveals", 0005 item 10). These are the cells a drop is
+ * judged by in actions/move.ts, so that the move list never depends on a
+ * cell the player has not seen, whatever the light (issue #15).
+ *
+ * The avatar looks down two kinds of column:
+ * - the one under each open sideways neighbour (a walk off an edge);
+ * - the one under its own cell, when that cell holds a ladder (a climb down
+ *   off the bottom of the ladder).
+ *
+ * In each column the cells are taken in turn going down, starting one level
+ * below the avatar's, until the first solid block (which is included) or
+ * until one cell past the longest drop a move may choose
+ * (`AVATAR.maxChosenDropBlocks`), whichever comes first. One cell past is
+ * enough: if that cell is open too, the drop is too long to be offered,
+ * however much further it goes.
+ *
+ * Does not change `state`. The order is fixed: sideways neighbours in
+ * `FACE_OFFSETS` order, then the avatar's own column; each column top down.
+ * Cells outside the grid may be among them; `updateReveal` skips those.
+ */
+export function edgeLookCells(state: GameState): Vec3[] {
+  const here = state.avatar.pos;
+
+  // The cell at the top of each column. All are on the avatar's level.
+  const columnTops: Vec3[] = [];
+  for (const offset of FACE_OFFSETS) {
+    // The four face offsets with z = 0 are the sideways ones.
+    if (offset.z === 0) {
+      const beside = offsetPosition(here, offset);
+      if (isOpen(state, beside)) {
+        columnTops.push(beside);
+      }
+    }
+  }
+  if (hasLadder(state, here)) {
+    columnTops.push(here);
+  }
+
+  const cells: Vec3[] = [];
+  for (const top of columnTops) {
+    let current = top;
+    for (let depth = 1; depth <= AVATAR.maxChosenDropBlocks + 1; depth += 1) {
+      current = cellBelow(current);
+      cells.push(current);
+      if (isSolid(state, current)) {
+        break;
+      }
+    }
+  }
+  return cells;
+}
+
+/**
  * Work out which cells are lit and reveal the blocks the light shows. The
  * dispatcher in index.ts calls this when a run is created, after every action
  * and at the end of every shift, which covers everything that can change the
@@ -99,6 +156,8 @@ function positionKey(pos: Vec3): string {
  *   player sees that the tunnel goes on one cell past the edge of the light.
  * - The cells within the avatar's reach, and the one overhead, are always
  *   revealed (0005 item 10).
+ * - So are the cells the avatar sees by looking over an edge (question 40;
+ *   see `edgeLookCells`).
  * - Only cells inside the grid have a revealed flag; the rest are skipped.
  * - Once revealed, a cell stays revealed.
  */
@@ -138,6 +197,11 @@ export function updateReveal(state: GameState, events: GameEvent[]): void {
     reveal(offsetPosition(state.avatar.pos, offset));
   }
   reveal(offsetPosition(state.avatar.pos, { x: 0, y: 0, z: -1 }));
+
+  // Looking over an edge: the cells a drop is judged by.
+  for (const pos of edgeLookCells(state)) {
+    reveal(pos);
+  }
 
   // Plain numeric sort; without the function, JavaScript sorts numbers as text.
   newlyRevealed.sort((a, b) => a - b);
