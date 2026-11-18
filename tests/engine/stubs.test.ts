@@ -4,37 +4,15 @@
 // tested one at a time in any order.
 //
 // Each task deletes the lines about the module it fills in.
+//
+// M1 task 5 filled in shift, craft and leave. With craft and leave real, a new
+// run has legal actions, and with shift real an end of shift changes the
+// state, so the three stub tests that pinned the opposite are gone; the real
+// rules are tested in shift.test.ts, craft.test.ts and leave.test.ts.
 
 import { describe, expect, it } from 'vitest';
-import {
-  actionKey,
-  createRun,
-  endShift,
-  hashState,
-  previewCubePhase,
-  sameAction,
-} from '../../src/engine';
+import { actionKey, sameAction } from '../../src/engine';
 import type { Action } from '../../src/engine';
-
-describe('rule-module stubs', () => {
-  it('let a shift end without throwing', () => {
-    const state = createRun(1, 'none', 'standard');
-    const before = hashState(state);
-    const { state: after, events } = endShift(state);
-    expect(events).toEqual([]);
-    expect(hashState(state)).toBe(before);
-    expect(after).not.toBe(state);
-  });
-
-  it('forecast an end of shift that changes nothing', () => {
-    const state = createRun(1, 'none', 'standard');
-    const forecast = previewCubePhase(state);
-    expect(forecast.hazards).toEqual([]);
-    expect(forecast.upkeep.fuelAfter).toBe(state.fuel);
-    expect(forecast.upkeep.lampOilAfter).toBe(state.lampOil);
-    expect(forecast.upkeep.runEnds).toBeNull();
-  });
-});
 
 describe('actionKey and sameAction', () => {
   // One of each kind of action.

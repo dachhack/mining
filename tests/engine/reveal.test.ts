@@ -6,9 +6,9 @@
 // `updateReveal`, which is what the dispatcher does after every action.
 
 import { describe, expect, it } from 'vitest';
-import { AVATAR, BLOCKS } from '../../src/data';
+import { AVATAR, BLOCKS, SHIFT } from '../../src/data';
 import type { Vec3 } from '../../src/data';
-import { createRun, isRevealed } from '../../src/engine';
+import { createRun, endShift, isRevealed } from '../../src/engine';
 import type { GameEvent, GameState } from '../../src/engine';
 import { updateReveal } from '../../src/engine/reveal';
 import { buildState } from './helpers';
@@ -142,6 +142,41 @@ describe('light from the lamp', () => {
     updateReveal(state, []);
     // The wall at the end of the far arm touches the lit cell (2, 2, 2).
     expect(isRevealed(state, { x: 2, y: 3, z: 2 })).toBe(true);
+  });
+});
+
+describe('lamp oil running out at upkeep (0005 item 15)', () => {
+  it('shrinks the light radius from the next shift on', () => {
+    // The last of the oil, on a shift whose upkeep burns oil.
+    const length = 2 * WITH_OIL + 6;
+    const state = buildState({
+      layers: tunnelLayers(length),
+      avatar: inTunnel(0),
+      lampOil: SHIFT.lampOilPerBurn,
+      shift: SHIFT.firstShiftNumber + SHIFT.lampOilBurnEveryShifts - 1,
+    });
+    updateReveal(state, []);
+    // With oil, the wall `WITH_OIL` steps along is seen.
+    expect(isRevealed(state, wallBeside(WITH_OIL))).toBe(true);
+
+    const { state: after, events } = endShift(state);
+    expect(after.lampOil).toBe(0);
+    // What was seen stays seen, and the dimmer lamp shows nothing new.
+    expect(isRevealed(after, wallBeside(WITH_OIL))).toBe(true);
+    expect(events.filter((event) => event.type === 'blockRevealed')).toEqual([]);
+
+    // Further along the tunnel (placed by hand), the lamp now reaches only
+    // the smaller radius.
+    const here = WITH_OIL + 3;
+    arriveAt(after, inTunnel(here));
+    expect(isRevealed(after, { x: here + WITHOUT_OIL, y: TUNNEL_Y, z: TUNNEL_Z - 1 })).toBe(true);
+    expect(isRevealed(after, wallBeside(here + WITHOUT_OIL + 1))).toBe(false);
+
+    // The same walk with oil left shows that wall.
+    const withOil = buildState({ layers: tunnelLayers(length), avatar: inTunnel(0), lampOil: 5 });
+    updateReveal(withOil, []);
+    arriveAt(withOil, inTunnel(here));
+    expect(isRevealed(withOil, wallBeside(here + WITHOUT_OIL + 1))).toBe(true);
   });
 });
 
