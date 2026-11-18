@@ -58,6 +58,9 @@ describe('the view hides what the avatar cannot know', () => {
     const state = dugInState();
     expect(state.avatar.pos.z).toBeGreaterThan(0);
     const before = viewText(state);
+    // The view after one more step (an end of shift), which is when the
+    // engine notes any mineral traces the avatar's light falls on.
+    const beforeNextStep = viewText(endShift(state).state);
     // The view really does have both known and unknown cells in it.
     expect(before).toContain('?');
     expect(before).toContain('d');
@@ -89,12 +92,16 @@ describe('the view hides what the avatar cannot know', () => {
     }
     expect(changed).toBeGreaterThan(1000);
     expect(viewText(state)).toBe(before);
+    expect(viewText(endShift(state).state)).toBe(beforeNextStep);
   });
 
   // A shaft down the middle of a 5 x 5 x 4 cube of stone, the avatar at its
   // bottom in layer 2, lamp lit. Only what the engine's reveal rules show is
   // revealed, so layer 3 is seen under the avatar and unseen at its corners.
-  function shaftState(): GameState {
+  //
+  // `hiddenOre`, if given, is turned into iron ore first; the tests pass a
+  // cell the avatar does not see.
+  function shaftState(hiddenOre?: Vec3): GameState {
     const solid = ['#####', '#####', '#####', '#####', '#####'];
     const holed = ['#####', '#####', '##.##', '#####', '#####'];
     const state = buildState({
@@ -106,8 +113,16 @@ describe('the view hides what the avatar cannot know', () => {
         { x: 2, y: 2, z: 2 },
       ],
     });
-    // Ending a shift runs the engine's reveal for the state as it stands.
-    return endShift(state).state;
+    if (hiddenOre !== undefined) {
+      state.blocks[cellIndex(state.size, hiddenOre)] = BLOCKS.ironOre.code;
+    }
+    // Ending a shift runs the engine's reveal for the state as it stands, and
+    // notes the mineral traces the light falls on.
+    const ready = endShift(state).state;
+    if (hiddenOre !== undefined) {
+      expect(isRevealed(ready, hiddenOre)).toBe(false);
+    }
+    return ready;
   }
 
   /**
@@ -127,8 +142,7 @@ describe('the view hides what the avatar cannot know', () => {
   }
 
   it('shows mineral traces only on revealed blocks, when unseen ore is put near them', () => {
-    const state = shaftState();
-    const before = viewText(state);
+    const before = viewText(shaftState());
     expect(before).not.toContain('%');
     expect(before).not.toContain('mineral traces');
 
@@ -136,8 +150,7 @@ describe('the view hides what the avatar cannot know', () => {
     // steps from the shaft wall west of the avatar, (1, 2, 2), and 2 steps
     // from the floor under it, (2, 2, 3). Both touch the avatar's lit cell.
     const hidden: Vec3 = { x: 0, y: 2, z: 3 };
-    expect(isRevealed(state, hidden)).toBe(false);
-    state.blocks[cellIndex(state.size, hidden)] = BLOCKS.ironOre.code;
+    const state = shaftState(hidden);
     const after = viewText(state);
     expect(after).not.toBe(before);
 
@@ -196,13 +209,15 @@ describe('the view hides what the avatar cannot know', () => {
   it('prints traces for a block exactly when the engine says the player sees them', () => {
     // Fill every unrevealed cell with crystal, so that every block the
     // avatar sees is near ore. What the view then marks must be the engine's
-    // answer for each cell: revealed, in light, and plain rock.
-    const state = dugInState();
-    for (let index = 0; index < state.blocks.length; index += 1) {
-      if (!isRevealed(state, cellPosition(state.size, index))) {
-        state.blocks[index] = BLOCKS.crystal.code;
+    // answer for each cell: revealed, seen in light, and plain rock.
+    const dug = dugInState();
+    for (let index = 0; index < dug.blocks.length; index += 1) {
+      if (!isRevealed(dug, cellPosition(dug.size, index))) {
+        dug.blocks[index] = BLOCKS.crystal.code;
       }
     }
+    // One more step, so that the engine notes the traces now in the light.
+    const state = endShift(dug).state;
     const charAt = mapReader(state);
     // The blocks the engine says show traces, as cell indexes.
     const shown = new Set(visibleMineralTraces(state).map((pos) => cellIndex(state.size, pos)));
@@ -227,11 +242,8 @@ describe('the view hides what the avatar cannot know', () => {
   });
 
   it('names traces in the mine list only for a block in light', () => {
-    const state = shaftState();
     // Iron ore at the edge of layer 3, outside the pick's reach and unseen.
-    const hidden: Vec3 = { x: 0, y: 2, z: 3 };
-    expect(isRevealed(state, hidden)).toBe(false);
-    state.blocks[cellIndex(state.size, hidden)] = BLOCKS.ironOre.code;
+    const state = shaftState({ x: 0, y: 2, z: 3 });
     const text = viewText(state);
     // (1, 2, 2), the wall west of the avatar: the ore is 1 west and 1 down
     // from it, 2 steps. Its face touches the avatar's lit cell.
@@ -240,6 +252,27 @@ describe('the view hides what the avatar cannot know', () => {
     // (the pick reaches it), but no face of it touches a lit cell.
     expect(isRevealed(state, { x: 1, y: 2, z: 3 })).toBe(true);
     expect(text).toContain('Mine west, one layer down: Stone, gives 1 Stone');
+  });
+
+  it('keeps traces on the map when the light has gone, and says when they are first seen', () => {
+    const state = shaftState({ x: 0, y: 2, z: 3 });
+    expect(viewText(state)).toContain('%');
+    // The lamp runs dry: the traced blocks are no longer lit.
+    state.lampOil = 0;
+    const dark = endShift(state);
+    expect(viewText(dark.state)).toContain('%');
+    expect(viewText(dark.state)).toContain('Mine west: Stone, mineral traces, gives 1 Stone');
+    // Nothing new was seen in that step, so nothing is said about traces.
+    expect(describeEvents(dark.state, dark.events).join(' ')).not.toContain('mineral traces');
+
+    // The step in which they are first seen says so, once.
+    const said = describeEvents(state, [
+      { type: 'mineralTracesSeen', pos: { x: 1, y: 2, z: 2 } },
+      { type: 'mineralTracesSeen', pos: { x: 2, y: 2, z: 3 } },
+    ]);
+    expect(said).toEqual([
+      'You notice mineral traces in the rock: ore is near. The map marks them "%".',
+    ]);
   });
 
   // A 5 x 5 x 2 cube with a pit at (2, 2, 0) where the avatar stands, and one

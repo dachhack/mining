@@ -201,7 +201,9 @@ export function playRun(options: PlayOptions): RunResult {
   let blocksMined = 0;
   const oreCodes = traceSourceCodes();
   let oreBlocksMined = 0;
-  let tracesSeenBeforeFirstOre = false;
+  // `createRun` gives no events, so look once at what the start shows. After
+  // that the `mineralTracesSeen` events say when traces are first seen.
+  let tracesSeenBeforeFirstOre = visibleMineralTraces(state).length > 0;
   let damageTaken = 0;
   let actionsTaken = 0;
   let shiftsAtZeroFuel = 0;
@@ -217,6 +219,12 @@ export function playRun(options: PlayOptions): RunResult {
         if (oreCodes.has(event.block)) {
           oreBlocksMined += 1;
         }
+      } else if (event.type === 'mineralTracesSeen') {
+        // Events come in the order things happened, so traces seen in the
+        // same step as the first ore was mined, but after it, do not count.
+        if (oreBlocksMined === 0) {
+          tracesSeenBeforeFirstOre = true;
+        }
       } else if (event.type === 'crafted') {
         addCount(recipesUsed, event.recipe, 1);
         const output = recipeOutputId(event.recipe);
@@ -229,18 +237,6 @@ export function playRun(options: PlayOptions): RunResult {
     }
   }
 
-  /**
-   * Note whether the player sees mineral traces in the state as it stands.
-   * Called on every state the run passes through until traces are seen or
-   * ore is mined, whichever comes first; after that the answer is settled.
-   */
-  function lookForTraces(): void {
-    if (!tracesSeenBeforeFirstOre && oreBlocksMined === 0) {
-      tracesSeenBeforeFirstOre = visibleMineralTraces(state).length > 0;
-    }
-  }
-
-  lookForTraces();
   while (isRunActive(state)) {
     const shiftsStarted = state.shift - SHIFT.firstShiftNumber + 1;
     if (shiftsStarted > options.maxShifts) {
@@ -280,7 +276,6 @@ export function playRun(options: PlayOptions): RunResult {
       actionsTaken += 1;
     }
     deepestLayer = Math.max(deepestLayer, state.avatar.pos.z);
-    lookForTraces();
   }
 
   // The run ended by itself, hit the shift cap, or was cut short on purpose.

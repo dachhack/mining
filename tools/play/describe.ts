@@ -150,7 +150,7 @@ function describeAction(state: GameState, action: Action): string {
         action.target.x === here.x && action.target.y === here.y
           ? ` (you are standing on it: ${knownFallText(state)})`
           : '';
-      // Shown only for a revealed block in light; the engine checks both.
+      // Shown only for a block the player has seen traces on; the engine decides.
       const traces = showsMineralTraces(state, action.target) ? ', mineral traces' : '';
       return (
         `Mine ${whereFrom(here, action.target)}: ${block.name}${traces}${underfoot}` +
@@ -219,6 +219,8 @@ const DAMAGE_CAUSES: Record<string, string> = { fall: 'the fall' };
  */
 export function describeEvents(after: GameState, events: GameEvent[]): string[] {
   const lines: string[] = [];
+  // Said once for a step, however many blocks it was seen on.
+  let tracesSaid = false;
   for (const event of events) {
     switch (event.type) {
       case 'moved':
@@ -237,6 +239,12 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
         break;
       case 'blockRevealed':
         // The map shows what is newly known.
+        break;
+      case 'mineralTracesSeen':
+        if (!tracesSaid) {
+          lines.push('You notice mineral traces in the rock: ore is near. The map marks them "%".');
+          tracesSaid = true;
+        }
         break;
       case 'itemGained':
         lines.push(`Got ${event.count} ${itemDef(event.item).name}.`);

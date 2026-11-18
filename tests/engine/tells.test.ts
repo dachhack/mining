@@ -1,5 +1,6 @@
-// Mineral traces (decision note 0010): rock near ore shows a tell, seen only
-// on a revealed block in light.
+// Mineral traces (decision note 0010): rock near ore shows a tell. The
+// player first sees it on a revealed block in light, and it then stays on
+// the map.
 
 import { describe, expect, it } from 'vitest';
 
@@ -8,13 +9,18 @@ import type { Vec3 } from '../../src/data';
 import {
   cellIndex,
   cellPosition,
+  createRun,
+  deserialise,
+  endShift,
   hashState,
+  serialise,
   showsMineralTraces,
   visibleMineralTraces,
 } from '../../src/engine';
-import type { GameState } from '../../src/engine';
-import { carriesMineralTraces } from '../../src/engine/tells';
-import { act, buildState } from './helpers';
+import { cloneState } from '../../src/engine/state';
+import type { GameEvent, GameState } from '../../src/engine';
+import { carriesMineralTraces, updateMineralTraces } from '../../src/engine/tells';
+import { act, buildState, findActions } from './helpers';
 import { surveyShaft } from './shaftSurvey';
 
 // A tunnel one cell high along the middle row of layer 1, from x = 1 to
@@ -47,7 +53,22 @@ interface TunnelOptions {
   torches?: Vec3[];
 }
 
+/**
+ * The tunnel cube, after the engine has noted the traces the player sees in
+ * it (as the dispatcher does after every step).
+ */
 function tunnelState(options: TunnelOptions = {}): GameState {
+  return looked(bareTunnelState(options));
+}
+
+/** Run `updateMineralTraces` on `state` and give the same state back. */
+function looked(state: GameState): GameState {
+  updateMineralTraces(state, []);
+  return state;
+}
+
+/** The tunnel cube with no traces noted yet. */
+function bareTunnelState(options: TunnelOptions = {}): GameState {
   const r = options.rock ?? '#';
   const solidRow = r.repeat(9);
   const solidLayer = [solidRow, solidRow, solidRow];
@@ -90,15 +111,17 @@ describe('mineral traces', () => {
 
   it('counts steps through the grid, not straight lines', () => {
     // An ore block at (4, 1, 2), in the floor under the middle of the tunnel.
-    const state = buildState({
-      layers: [
-        ['#########', '#########', '#########'],
-        ['#########', '#.......#', '#########'],
-        ['#########', '####i####', '#########'],
-      ],
-      avatar: { x: 4, y: 1, z: 1 },
-      revealAll: true,
-    });
+    const state = looked(
+      buildState({
+        layers: [
+          ['#########', '#########', '#########'],
+          ['#########', '#.......#', '#########'],
+          ['#########', '####i####', '#########'],
+        ],
+        avatar: { x: 4, y: 1, z: 1 },
+        revealAll: true,
+      }),
+    );
     // The top layer is always in light. (4, 1, 0) is 2 steps up from the ore;
     // (3, 1, 0) is 1 across and 2 up, which is 3 steps, although it touches
     // the first one.
@@ -120,13 +143,17 @@ describe('mineral traces', () => {
     expect(showsMineralTraces(state, FLOOR_2_STEPS)).toBe(false);
     expect(visibleMineralTraces(state)).toEqual([]);
 
+    // No flag was stored for the hidden blocks either.
+    expect(Array.from(state.tracesSeen).every((flag) => flag === 0)).toBe(true);
+
     // Revealing one block shows the traces on that block only.
     state.revealed[cellIndex(state.size, FLOOR_2_STEPS)] = 1;
+    updateMineralTraces(state, []);
     expect(showsMineralTraces(state, FLOOR_2_STEPS)).toBe(true);
     expect(visibleMineralTraces(state)).toEqual([FLOOR_2_STEPS]);
   });
 
-  it('does not show on a revealed block that is not in light', () => {
+  it('is not noticed on a revealed block that is not in light', () => {
     // The avatar is at the east end: its lamp reaches 3 steps, to x = 4.
     const state = tunnelState({ avatar: EAST_END });
     expect(showsMineralTraces(state, FLOOR_1_STEP)).toBe(false);
@@ -159,13 +186,15 @@ describe('mineral traces', () => {
   });
 
   it('shows on the top layer by daylight, with the avatar anywhere', () => {
-    const state = buildState({
-      layers: [
-        ['###', '###', '###'],
-        ['###', '#u#', '###'],
-      ],
-      revealAll: true,
-    });
+    const state = looked(
+      buildState({
+        layers: [
+          ['###', '###', '###'],
+          ['###', '#u#', '###'],
+        ],
+        revealAll: true,
+      }),
+    );
     // (1, 1, 0) is 1 step above the copper; the 4 blocks beside it are 2 steps.
     expect(visibleMineralTraces(state)).toEqual([
       { x: 1, y: 0, z: 0 },
@@ -199,11 +228,13 @@ describe('mineral traces', () => {
   });
 
   it('does not show on ore itself, on coal or timber-root, or on open space', () => {
-    const state = buildState({
-      layers: [['.ict#']],
-      avatar: { x: 0, y: 0, z: 0 },
-      revealAll: true,
-    });
+    const state = looked(
+      buildState({
+        layers: [['.ict#']],
+        avatar: { x: 0, y: 0, z: 0 },
+        revealAll: true,
+      }),
+    );
     // All four are within 2 steps of the iron (or are it) and in daylight.
     expect(showsMineralTraces(state, { x: 0, y: 0, z: 0 })).toBe(false); // open space
     expect(showsMineralTraces(state, { x: 1, y: 0, z: 0 })).toBe(false); // the ore
@@ -211,33 +242,118 @@ describe('mineral traces', () => {
     expect(showsMineralTraces(state, { x: 3, y: 0, z: 0 })).toBe(false); // timber-root
     // The stone at x = 4 is 3 steps away. Move the ore's neighbours aside to
     // check the stone does show when near enough.
-    const near = buildState({ layers: [['.i#']], avatar: { x: 0, y: 0, z: 0 }, revealAll: true });
+    const near = looked(
+      buildState({ layers: [['.i#']], avatar: { x: 0, y: 0, z: 0 }, revealAll: true }),
+    );
     expect(showsMineralTraces(near, { x: 2, y: 0, z: 0 })).toBe(true);
   });
 
   it('says ore is near even when the ore itself has not been seen', () => {
-    const state = tunnelState({ revealAll: false });
+    const state = bareTunnelState({ revealAll: false });
     for (const pos of [FLOOR_1_STEP, FLOOR_2_STEPS, FLOOR_3_STEPS]) {
       state.revealed[cellIndex(state.size, pos)] = 1;
     }
+    updateMineralTraces(state, []);
     expect(state.revealed[cellIndex(state.size, ORE)]).toBe(0);
     expect(visibleMineralTraces(state)).toEqual([FLOOR_1_STEP, FLOOR_2_STEPS]);
   });
 
-  it('goes when the ore is mined, because nothing is stored', () => {
-    // The avatar stands beside the ore and mines it.
-    const state = buildState({
-      layers: [
-        ['###', '#.#', '###'],
-        ['###', '#i#', '###'],
-      ],
-      avatar: { x: 1, y: 1, z: 0 },
-      revealAll: true,
-      ladders: [{ x: 1, y: 1, z: 0 }],
-    });
-    expect(visibleMineralTraces(state).length).toBeGreaterThan(0);
-    const { state: after } = act(state, { type: 'mine', target: { x: 1, y: 1, z: 1 } });
-    expect(visibleMineralTraces(after)).toEqual([]);
+  it('stays on the map when the light moves on', () => {
+    // Walk the tunnel from the west end to the east end. At the east end the
+    // lamp reaches only x = 4, so the traced floor blocks are in the dark.
+    let state = tunnelState();
+    expect(visibleMineralTraces(state)).toEqual([FLOOR_1_STEP, FLOOR_2_STEPS]);
+    for (let x = 2; x <= 7; x += 1) {
+      if (findActions(state, { type: 'move', to: { x, y: 1, z: 1 } }).length === 0) {
+        state = endShift(state).state;
+      }
+      state = act(state, { type: 'move', to: { x, y: 1, z: 1 } }).state;
+    }
+    expect(state.avatar.pos).toEqual(EAST_END);
+    expect(visibleMineralTraces(state)).toEqual([FLOOR_1_STEP, FLOOR_2_STEPS]);
+    // And when the lamp goes out altogether.
+    state.lampOil = 0;
+    updateMineralTraces(state, []);
+    expect(visibleMineralTraces(state)).toEqual([FLOOR_1_STEP, FLOOR_2_STEPS]);
+  });
+
+  it('sends one event for each block, the first time its traces are seen', () => {
+    // Start at the east end, with the traced blocks out of the light.
+    let state = tunnelState({ avatar: EAST_END });
+    const seen: GameEvent[] = [];
+    for (let x = 6; x >= 1; x -= 1) {
+      if (findActions(state, { type: 'move', to: { x, y: 1, z: 1 } }).length === 0) {
+        state = endShift(state).state;
+      }
+      const step = act(state, { type: 'move', to: { x, y: 1, z: 1 } });
+      state = step.state;
+      seen.push(...step.events.filter((event) => event.type === 'mineralTracesSeen'));
+    }
+    // The lamp reaches 3 steps: from x = 5 it first lights the tunnel cell
+    // over the floor block at x = 2, and from x = 4 the one at x = 1.
+    expect(seen).toEqual([
+      { type: 'mineralTracesSeen', pos: FLOOR_2_STEPS },
+      { type: 'mineralTracesSeen', pos: FLOOR_1_STEP },
+    ]);
+    // Looking again sends nothing.
+    const again: GameEvent[] = [];
+    updateMineralTraces(state, again);
+    expect(again).toEqual([]);
+  });
+
+  it('lists newly seen blocks in storage order, after the reveal events of the step', () => {
+    const state = bareTunnelState({ revealAll: false });
+    // A full step: the dispatcher reveals, then notes the traces.
+    const { events } = endShift(state);
+    const types = events.map((event) => event.type);
+    expect(types.filter((type) => type === 'mineralTracesSeen')).toHaveLength(2);
+    expect(types.lastIndexOf('blockRevealed')).toBeLessThan(types.indexOf('mineralTracesSeen'));
+    expect(events.filter((event) => event.type === 'mineralTracesSeen')).toEqual([
+      { type: 'mineralTracesSeen', pos: FLOOR_1_STEP },
+      { type: 'mineralTracesSeen', pos: FLOOR_2_STEPS },
+    ]);
+  });
+
+  it('is noted when a run is created, with nothing to see on the top layer of a real cube', () => {
+    const state = createRun(7, 'none', 'standard');
+    expect(visibleMineralTraces(state)).toEqual([]);
+  });
+
+  // The avatar stands on a ladder in a pit; the ore is the pit's floor.
+  function pitOverOre(): GameState {
+    return looked(
+      buildState({
+        layers: [
+          ['###', '#.#', '###'],
+          ['###', '#i#', '###'],
+        ],
+        avatar: { x: 1, y: 1, z: 0 },
+        revealAll: true,
+        ladders: [{ x: 1, y: 1, z: 0 }],
+      }),
+    );
+  }
+
+  it('stays on the map after the ore is mined: the map shows what was seen', () => {
+    const state = pitOverOre();
+    const before = visibleMineralTraces(state);
+    expect(before.length).toBeGreaterThan(0);
+    const { state: after, events } = act(state, { type: 'mine', target: { x: 1, y: 1, z: 1 } });
+    expect(visibleMineralTraces(after)).toEqual(before);
+    // But rock first lit after the ore has gone carries none, so none is noted.
+    expect(events.filter((event) => event.type === 'mineralTracesSeen')).toEqual([]);
+    for (const pos of allCells(after)) {
+      expect(carriesMineralTraces(after, pos)).toBe(false);
+    }
+  });
+
+  it('goes from the map when the traced block itself is mined', () => {
+    const state = pitOverOre();
+    const wall: Vec3 = { x: 1, y: 0, z: 0 };
+    expect(showsMineralTraces(state, wall)).toBe(true);
+    const { state: after } = act(state, { type: 'mine', target: wall });
+    expect(showsMineralTraces(after, wall)).toBe(false);
+    expect(visibleMineralTraces(after)).not.toContainEqual(wall);
   });
 
   it('gives false outside the cube', () => {
@@ -260,12 +376,26 @@ describe('mineral traces', () => {
     }
   });
 
-  it('changes nothing in the state', () => {
+  it('asking changes nothing in the state; noting changes only the traces seen', () => {
     const state = tunnelState();
     const before = hashState(state);
     visibleMineralTraces(state);
     showsMineralTraces(state, FLOOR_1_STEP);
     expect(hashState(state)).toBe(before);
+
+    const bare = bareTunnelState();
+    const copy = cloneState(bare);
+    updateMineralTraces(bare, []);
+    expect(hashState(bare)).not.toBe(hashState(copy));
+    copy.tracesSeen.set(bare.tracesSeen);
+    expect(bare).toEqual(copy);
+  });
+
+  it('is kept by a save and load', () => {
+    const state = tunnelState();
+    const loaded = deserialise(JSON.parse(JSON.stringify(serialise(state))));
+    expect(visibleMineralTraces(loaded)).toEqual([FLOOR_1_STEP, FLOOR_2_STEPS]);
+    expect(hashState(loaded)).toBe(hashState(state));
   });
 
   it('lists the blocks of the data tables', () => {

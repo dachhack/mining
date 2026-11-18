@@ -11,9 +11,9 @@
 // it is rock or a void (owner question 37).
 //
 // Mineral traces (decision note 0010) are the one thing shown that depends on
-// cells the player has not seen: rock in light near ore is drawn as `%`. That
-// is the hint the rule intends. The engine's `visibleMineralTraces` decides
-// it, and only ever names revealed blocks.
+// cells the player has not seen: rock the player has seen in light near ore
+// is drawn as `%`. That is the hint the rule intends. The engine's
+// `visibleMineralTraces` decides it, and only ever names revealed blocks.
 
 import {
   AVATAR,
@@ -171,7 +171,7 @@ function cellView(state: GameState, pos: Vec3, traced: Set<string>): CellView {
       // character; the mine line for the block names the rock.
       return {
         symbol: SYMBOL_TRACES,
-        meaning: 'rock with mineral traces: ore is near (seen only on rock in light)',
+        meaning: 'rock with mineral traces: ore is near',
       };
     }
     // Every solid block the cube can store has a character; `?? '?'` is only
@@ -255,8 +255,8 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   const layers: LayerView[] = [];
   const legend = new Map<string, string>();
   const notes: string[] = [];
-  // The blocks the player sees mineral traces on, as "x,y,z" strings. The
-  // engine lists only revealed blocks that are in light.
+  // The blocks the player has seen mineral traces on, as "x,y,z" strings.
+  // The engine lists only revealed blocks.
   const traced = new Set<string>(visibleMineralTraces(state).map(positionKey));
   for (let z = here.z - options.layers; z <= here.z + options.layers; z += 1) {
     // There is nothing to draw above the surface or below the bottom layer.

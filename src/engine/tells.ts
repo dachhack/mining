@@ -5,25 +5,28 @@
 // in this file. The first tell is for ore (decision note 0010):
 //
 //   MINERAL TRACES. Plain rock that lies within `TELLS.mineralTraces.distance`
-//   steps of an ore block carries mineral traces. The player sees them on a
-//   block only while that block is revealed AND in light. They say that ore is
-//   near; not which ore, and not which way.
+//   steps of an ore block carries mineral traces. The player first sees them
+//   on a block when that block is revealed AND in light. Once seen they stay
+//   on the map, like everything else the player has seen. They say that ore
+//   is near; not which ore, and not which way.
 //
-// Nothing here is stored. Whether a block carries traces is worked out from
-// the blocks around it each time it is asked, so the state, its hash and the
-// save format are unchanged, and the answer can never go stale when a block
-// is mined.
+// This file is the one place that decides. Whether a block CARRIES traces is
+// worked out from the blocks around it and never stored. Which blocks the
+// player has SEEN traces on is stored, in `state.tracesSeen`:
+// `updateMineralTraces` sets it, and the dispatcher in index.ts calls that
+// after every `updateReveal`.
 //
 // What the player may know: `showsMineralTraces` and `visibleMineralTraces`.
-// They answer only for revealed blocks. `carriesMineralTraces` reads the cube
-// itself, hidden cells included; it is for generation checks and debugging
-// tools, and is deliberately left out of the public surface in index.ts.
+// `carriesMineralTraces` reads the cube itself, hidden cells included; it is
+// for generation checks and debugging tools, and is deliberately left out of
+// the public surface in index.ts.
 
-import { AVATAR, BLOCKS, TELLS } from '../data';
+import { AVATAR, BLOCKS, STRUCTURES, TELLS } from '../data';
 import type { Vec3 } from '../data';
+import type { GameEvent } from './events';
 import { FACE_OFFSETS, offsetPosition } from './neighbours';
 import { avatarLightRadius, litCellsFrom, torchPositions } from './reveal';
-import { blockAt, cellIndex, cellPosition, inGrid, isRevealed } from './state';
+import { blockAt, cellCount, cellIndex, cellPosition, inGrid, isRevealed } from './state';
 import type { GameState } from './state';
 
 /** The block codes (the numbers stored in the cube) of the blocks with these ids. */
@@ -81,68 +84,31 @@ export function carriesMineralTraces(state: GameState, pos: Vec3): boolean {
 
 /**
  * The open cells the avatar's lamp and the placed torches light now (a cell
- * both light is listed twice). The same sources and radii as `updateReveal` in reveal.ts
- * (0005 item 13), built from the functions that file exports. The surface is
- * always lit as well; `inLight` handles it, so it is not listed here.
+ * both light is listed twice). The same sources and radii as `updateReveal`
+ * in reveal.ts (0005 item 13), built from the functions that file exports.
+ *
+ * Light travels through open cells only, so a solid block is never itself a
+ * lit cell. A block is "in light" when one of its faces touches a lit open
+ * cell: exactly the blocks light reveals (0005 item 14). The surface is
+ * always lit too, so every block of the top layer is in light;
+ * `updateMineralTraces` adds those itself.
  */
 function lampAndTorchLight(state: GameState): Vec3[] {
   const lit: Vec3[] = litCellsFrom(state, state.avatar.pos, avatarLightRadius(state));
-  for (const torch of torchPositions(state)) {
-    lit.push(...litCellsFrom(state, torch, AVATAR.torchLightRadius));
+  // `includes` is a fast built-in search of the whole array. Most of the
+  // time no torch is placed, and the slower cell-by-cell `torchPositions`
+  // can be skipped. This runs after every action, so it is worth it.
+  if (state.structures.includes(STRUCTURES.torch.code)) {
+    for (const torch of torchPositions(state)) {
+      lit.push(...litCellsFrom(state, torch, AVATAR.torchLightRadius));
+    }
   }
   return lit;
 }
 
 /**
- * Is the block at `pos` in light? Light travels through open cells only
- * (0005 item 13), so a solid block is never itself a lit cell. It is in light
- * when one of its faces touches a lit open cell: exactly the blocks light
- * reveals (0005 item 14). Every block of the top layer touches the surface,
- * which is always lit.
- *
- * `lit` is the result of `lampAndTorchLight(state)`.
- */
-function inLight(pos: Vec3, lit: Vec3[]): boolean {
-  if (pos.z === 0) {
-    return true;
-  }
-  for (const litCell of lit) {
-    // Two cells share a face when they are exactly one step apart.
-    const steps =
-      Math.abs(litCell.x - pos.x) + Math.abs(litCell.y - pos.y) + Math.abs(litCell.z - pos.z);
-    if (steps === 1) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Does the player see mineral traces on the block at `pos`? True only when
- * the block is revealed, in light, and carries traces.
- *
- * - An unrevealed cell always gives false, whatever it holds.
- * - A revealed block that is not in light gives false: traces need light, so
- *   a miner whose lamp is out sees them only on blocks touching its own cell,
- *   and a block seen earlier stops showing them when the light moves on.
- * - Ore itself gives false: where the ore is revealed it is simply visible.
- * - The answer says ore is within reach of the tell, which may be an ore
- *   block the player has not seen. That is the hint, and all of it: not which
- *   ore, how many, or in which direction.
- *
- * Does not change `state`. To ask about many blocks, use
- * `visibleMineralTraces`, which works the light out once.
- */
-export function showsMineralTraces(state: GameState, pos: Vec3): boolean {
-  if (!inGrid(state.size, pos) || !isRevealed(state, pos)) {
-    return false;
-  }
-  return inLight(pos, lampAndTorchLight(state)) && carriesMineralTraces(state, pos);
-}
-
-/**
  * Is there any ore in the layers near enough to the top layer to give one of
- * its blocks traces? Only a shortcut for `visibleMineralTraces`: when the
+ * its blocks traces? Only a shortcut for `updateMineralTraces`: when the
  * answer is no (the usual case, since ore lies deeper), the whole top layer
  * can be skipped without looking at each of its blocks in turn.
  */
@@ -152,9 +118,11 @@ function oreNearTopLayer(state: GameState): boolean {
   // are the cells from index 0 to the last cell of that layer.
   const lastCell = { x: state.size.x - 1, y: state.size.y - 1, z: deepestLayer };
   const lastIndex = cellIndex(state.size, lastCell);
-  for (let index = 0; index <= lastIndex; index += 1) {
-    // `as number`: an index inside the array always holds a number.
-    if (TRACE_SOURCE_CODES.has(state.blocks[index] as number)) {
+  // `subarray` is a view of part of the array (no copy), and `includes` a
+  // fast built-in search. This runs after every action, so it is worth it.
+  const layers = state.blocks.subarray(0, lastIndex + 1);
+  for (const code of TRACE_SOURCE_CODES) {
+    if (layers.includes(code)) {
       return true;
     }
   }
@@ -162,14 +130,22 @@ function oreNearTopLayer(state: GameState): boolean {
 }
 
 /**
- * Every block the player sees mineral traces on now: all the positions for
- * which `showsMineralTraces` is true, in the order the cube stores cells (top
- * layer first, then row by row). Does not change `state`.
+ * Note the mineral traces the player sees now. The dispatcher in index.ts
+ * calls this straight after `updateReveal`: when a run is created, after
+ * every action and at the end of every shift.
  *
- * A renderer or view calls this after each step, because what it returns
- * changes with the light as well as with what is revealed and mined.
+ * - A block's traces are seen when the block is revealed, in light, and
+ *   carries traces (see `carriesMineralTraces`). Its flag in
+ *   `state.tracesSeen` is then set, and is never cleared.
+ * - Appends a `mineralTracesSeen` event for each block whose flag was not set
+ *   before, in the order the cube stores cells (top layer first), so the same
+ *   state always gives the same events.
+ * - A block that is revealed but not in light is left alone: traces need
+ *   light to be noticed. So a miner whose lamp is out notices none on blocks
+ *   the light does not touch, even those within the pick's reach.
+ * - Nothing else in `state` is changed, and no block is revealed.
  */
-export function visibleMineralTraces(state: GameState): Vec3[] {
+export function updateMineralTraces(state: GameState, events: GameEvent[]): void {
   // Only blocks in light can show traces, so only those are looked at: the
   // top layer, and the cells touching a cell the lamp or a torch lights.
   // `candidates` holds their cell indexes (see `cellIndex`); a Set, because
@@ -191,14 +167,65 @@ export function visibleMineralTraces(state: GameState): Vec3[] {
     }
   }
 
-  const traced: number[] = [];
+  const newlySeen: number[] = [];
   for (const index of candidates) {
+    if (state.tracesSeen[index] === 1) {
+      continue;
+    }
     const pos = cellPosition(state.size, index);
     if (isRevealed(state, pos) && carriesMineralTraces(state, pos)) {
-      traced.push(index);
+      state.tracesSeen[index] = 1;
+      newlySeen.push(index);
     }
   }
   // Plain numeric sort; without the function, JavaScript sorts numbers as text.
-  traced.sort((first, second) => first - second);
-  return traced.map((index) => cellPosition(state.size, index));
+  newlySeen.sort((first, second) => first - second);
+  for (const index of newlySeen) {
+    events.push({ type: 'mineralTracesSeen', pos: cellPosition(state.size, index) });
+  }
+}
+
+/**
+ * Does the map show mineral traces on the block at `pos`? True when the
+ * player has seen traces on it (see `updateMineralTraces`) and the rock is
+ * still there.
+ *
+ * - An unrevealed cell always gives false, whatever it holds.
+ * - A block whose traces were seen keeps showing them when the light moves
+ *   on, and also when the ore that caused them is mined later: the map shows
+ *   what the player saw. Only mining the block itself removes them.
+ * - Ore itself gives false: where the ore is revealed it is simply visible.
+ * - The answer says ore was within reach of the tell when the block was lit,
+ *   which may be an ore block the player has not seen. That is the hint, and
+ *   all of it: not which ore, how many, or in which direction.
+ *
+ * Does not change `state`.
+ */
+export function showsMineralTraces(state: GameState, pos: Vec3): boolean {
+  if (!inGrid(state.size, pos) || !isRevealed(state, pos)) {
+    return false;
+  }
+  return (
+    state.tracesSeen[cellIndex(state.size, pos)] === 1 &&
+    TRACE_SHOWN_ON_CODES.has(blockAt(state, pos))
+  );
+}
+
+/**
+ * Every block the map shows mineral traces on: all the positions for which
+ * `showsMineralTraces` is true, in the order the cube stores cells (top layer
+ * first, then row by row). Does not change `state`.
+ */
+export function visibleMineralTraces(state: GameState): Vec3[] {
+  const traced: Vec3[] = [];
+  const cells = cellCount(state.size);
+  for (let index = 0; index < cells; index += 1) {
+    if (state.tracesSeen[index] === 1) {
+      const pos = cellPosition(state.size, index);
+      if (showsMineralTraces(state, pos)) {
+        traced.push(pos);
+      }
+    }
+  }
+  return traced;
 }

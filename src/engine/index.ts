@@ -26,6 +26,7 @@ import { isValidSeed } from './rng';
 import { forecastShift, runCubePhase, runUpkeep } from './shift';
 import type { ShiftForecast } from './shift';
 import { addItem, blankState, cloneState, isRunActive } from './state';
+import { updateMineralTraces } from './tells';
 import type { GameState } from './state';
 
 /**
@@ -77,6 +78,7 @@ export function createRun(seed: number, contractId: string, loadoutId: string): 
   // Reveal what can be seen from the start. Nobody is watching yet, so the
   // events are dropped.
   updateReveal(state, []);
+  updateMineralTraces(state, []);
   return state;
 }
 
@@ -153,9 +155,11 @@ export function applyAction(state: GameState, action: Action): StepResult {
       break;
   }
 
-  // After any action: things fall, then light shows what is newly visible.
+  // After any action: things fall, then light shows what is newly visible,
+  // and any mineral traces on the blocks it falls on.
   settle(next, events);
   updateReveal(next, events);
+  updateMineralTraces(next, events);
   return { state: next, events };
 }
 
@@ -178,6 +182,7 @@ export function endShift(state: GameState): StepResult {
   }
   // The light radius can change at upkeep (lamp oil running out).
   updateReveal(next, events);
+  updateMineralTraces(next, events);
   return { state: next, events };
 }
 
@@ -230,7 +235,7 @@ export {
   structureAt,
 } from './state';
 export type { Avatar, GameState, LooseItems, RunStatus } from './state';
-// Tells: what the player sees on a revealed, lit block about ore near it.
+// Tells: the mineral traces the player has seen on rock near ore.
 export { showsMineralTraces, visibleMineralTraces } from './tells';
 // The seeded generator, for tools and tests that need random numbers of their
 // own (a simulator policy, say). They make their own state with `createRng`;

@@ -109,9 +109,8 @@ THE GAME
     cell or an open cell touching yours. A cell holds one thing: a ladder or a torch, not both.
   - Mineral traces: rock that lies within ${traceSteps} steps of iron ore, copper ore or crystal shows
     mineral traces, drawn as "%" on the map and named in the mine list ("Stone, mineral traces").
-    They say ore is near, not which ore or which way. You see them only on rock that is in
-    light now, so a block stops showing them when your light moves on. Coal and timber-root
-    give no traces.
+    They say ore is near, not which ore or which way. You notice them only on rock your light
+    touches; once noticed they stay on the map. Coal and timber-root give no traces.
 
   Weight and loose items
   - Everything you carry has a weight, shown in brackets after it, and there is a carry limit
