@@ -48,6 +48,12 @@ export type GameEvent =
   /** The block at `pos` became known to the player. `block` is its code. */
   | { type: 'blockRevealed'; pos: Vec3; block: number }
   /**
+   * The player saw mineral traces on the block at `pos` for the first time
+   * (decision note 0012). Sent once for a block; the traces then stay on the
+   * map. It follows the `blockRevealed` events of the same step.
+   */
+  | { type: 'mineralTracesSeen'; pos: Vec3 }
+  /**
    * Items appeared in the inventory from nowhere on the board: a mining yield
    * (it follows the `blockMined` of the same action) or a crafted item (it
    * follows `crafted`). A pick-up is `itemPickedUp` instead.

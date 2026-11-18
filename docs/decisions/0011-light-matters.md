@@ -14,6 +14,7 @@ Under 0005 item 10 the 17 cells in reach, the cell overhead, and the cells a dro
 - **Lamp out: the miner works by touch.** Reach reveals only the six cells that share a face with the miner's cell. The four diagonals and the eight cells around the one below are not revealed by reach, and looking over an edge reveals nothing.
 - **The light radius without oil is 0**: only the miner's own cell is lit. A cell touching a lit cell is revealed (0005 item 14), which gives the same six cells.
 - **Torches and daylight are unchanged.** Cells they light, and the cells touching those, are revealed with the lamp out too. This is now the reason to place a torch.
+- **No mineral traces are noticed by touch.** Knowing a block by touch is not seeing it in light. With the lamp out, the lamp gives no light for mineral traces (0012) at all, so none are noticed on the six touched blocks. Torches and daylight still show traces, and traces already seen stay on the map.
 - **Only revealed blocks can be mined** (unchanged). In the dark the diagonals and the ring below cannot be mined unless something else revealed them.
 - **A move is offered only when every cell it is judged by is revealed.** The cells are:
   - walk: the neighbour; then, unless it holds a ladder, the cells under it in turn down to the first solid one, at most `maxChosenDropBlocks + 1` cells;

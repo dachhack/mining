@@ -5,7 +5,7 @@
 // states rules, in the order a player meets them. Every number in it is read
 // from src/data, so the text cannot drift from the game when one is tuned.
 
-import { ACTION_COSTS, AVATAR, FIELD_RECIPES, SHIFT, WORLD } from '../../src/data';
+import { ACTION_COSTS, AVATAR, FIELD_RECIPES, SHIFT, TELLS, WORLD } from '../../src/data';
 import { stackListText } from './describe';
 import { DEFAULT_LAYERS, DEFAULT_RADIUS } from './view';
 
@@ -16,6 +16,7 @@ export function helpText(): string {
   const safeDrop = AVATAR.maxChosenDropBlocks;
   const uncontrolledPerBlock = AVATAR.uncontrolledFallDamagePerBlock;
   const bottomLayer = WORLD.size.z - 1;
+  const traceSteps = TELLS.mineralTraces.distance;
 
   return `Mining game: text play interface
 
@@ -118,6 +119,11 @@ THE GAME
   - A torch lights the cells around it for good, the way your lamp does, and it needs no oil.
     Place it in your own cell or an open cell touching yours. A cell holds one thing: a ladder
     or a torch, not both.
+  - Mineral traces: rock that lies within ${traceSteps} steps of iron ore, copper ore or crystal shows
+    mineral traces, drawn as "%" on the map and named in the mine list ("Stone, mineral traces").
+    They say ore is near, not which ore or which way. You notice them only on rock your light
+    touches; once noticed they stay on the map. Coal and timber-root give no traces. With the
+    lamp out you notice none by touch: only a torch's light or daylight shows new ones.
 
   In the dark (lamp oil 0)
   - You know only the six cells touching yours: north, east, south, west, above and below.
@@ -133,6 +139,9 @@ THE GAME
     you stand on: the list says "N blocks or more; below that is unseen" and the least health it
     will cost. The fall may be longer and cost more. A ladder in your own cell holds you while
     you mine below, and from it you can feel the cell underneath.
+  - You notice no mineral traces in the dark, even on the rock you touch: feeling a block is
+    not seeing it. Traces you noticed earlier stay on the map, and a torch's light still shows
+    new ones.
   - What you saw while the lamp was lit stays known, and a torch keeps showing the cells round
     it. A torch placed where you are working, before the oil runs out, lets you carry on there.
 

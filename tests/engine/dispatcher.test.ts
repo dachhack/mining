@@ -80,6 +80,12 @@ vi.mock('../../src/engine/reveal', () => ({
   },
 }));
 
+vi.mock('../../src/engine/tells', () => ({
+  updateMineralTraces: (): void => {
+    calls.push('updateMineralTraces');
+  },
+}));
+
 vi.mock('../../src/engine/shift', () => ({
   runCubePhase: (state: GameState, events: GameEvent[]): void => {
     calls.push('runCubePhase');
@@ -144,7 +150,7 @@ describe('applyAction', () => {
 
   it('applies the action, then gravity, then reveal, in that order (0006)', () => {
     applyAction(startState(5), LEAVE);
-    expect(calls).toEqual(['applyLeave', 'settle', 'updateReveal']);
+    expect(calls).toEqual(['applyLeave', 'settle', 'updateReveal', 'updateMineralTraces']);
   });
 
   it('tells gravity a fall after a move is a chosen drop, and after anything else is not (0010)', () => {
@@ -219,7 +225,13 @@ describe('legalActions', () => {
 describe('endShift', () => {
   it('runs the cube phase, gravity, upkeep, then reveal, in that order (0006)', () => {
     endShift(startState(5));
-    expect(calls).toEqual(['runCubePhase', 'settle', 'runUpkeep', 'updateReveal']);
+    expect(calls).toEqual([
+      'runCubePhase',
+      'settle',
+      'runUpkeep',
+      'updateReveal',
+      'updateMineralTraces',
+    ]);
     // Whatever the cube phase does to the avatar's footing, the player did not choose it.
     expect(settleKinds).toEqual(['uncontrolled']);
   });
@@ -228,7 +240,7 @@ describe('endShift', () => {
     cubePhaseEndsRun = true;
     const state = startState(5);
     const { state: after, events } = endShift(state);
-    expect(calls).toEqual(['runCubePhase', 'settle', 'updateReveal']);
+    expect(calls).toEqual(['runCubePhase', 'settle', 'updateReveal', 'updateMineralTraces']);
     expect(after.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'fell' });
     // No fuel taken and no new shift: the fake upkeep never ran.
     expect(after.fuel).toBe(state.fuel);
@@ -278,7 +290,7 @@ describe('previewCubePhase', () => {
 describe('createRun', () => {
   it('reveals what can be seen from the start', () => {
     createRun(1, 'none', 'standard');
-    expect(calls).toEqual(['updateReveal']);
+    expect(calls).toEqual(['updateReveal', 'updateMineralTraces']);
   });
 });
 

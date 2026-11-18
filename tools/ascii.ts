@@ -6,6 +6,8 @@
 //   npm run ascii -- --seed 7 --layer 12      one layer
 //   npm run ascii -- --seed 7 --layers 8-11   a range of layers, inclusive
 //   npm run ascii -- --seed 7 --all           every layer
+//   npm run ascii -- --seed 7 --layers 8-11 --traces
+//                                             also mark rock that carries mineral traces
 //
 // Each layer is drawn from above: one character per block, x across (x = 0 on
 // the left) and y down (y = 0 at the top). Layer 0 is the top of the cube.
@@ -20,6 +22,9 @@ import {
 } from '../src/data';
 import type { BlockId } from '../src/data';
 import { blockAt, createRun } from '../src/engine';
+// Not on the engine's public surface: it reads hidden blocks, which only a
+// debugging tool like this one may do.
+import { carriesMineralTraces } from '../src/engine/tells';
 
 // One character for each block that can be stored in the cube. These are the
 // same characters the test helper uses (tests/engine/helpers.ts).
@@ -53,11 +58,16 @@ interface Options {
   firstLayer: number;
   /** `null` means "the bottom layer of the cube". */
   lastLayer: number | null;
+  /** Draw rock that carries mineral traces (decision note 0012) as `%`. */
+  traces: boolean;
 }
+
+/** The character for rock that carries mineral traces, with `--traces`. */
+const TRACES_CHAR = '%';
 
 function fail(message: string): never {
   console.error(`ascii: ${message}`);
-  console.error('Usage: npm run ascii -- --seed N [--layer Z | --layers A-B | --all]');
+  console.error('Usage: npm run ascii -- --seed N [--layer Z | --layers A-B | --all] [--traces]');
   process.exit(1);
 }
 
@@ -70,7 +80,7 @@ function wholeNumber(text: string | undefined, what: string): number {
 }
 
 function parseArgs(args: string[]): Options {
-  const options: Options = { seed: 1, firstLayer: 0, lastLayer: 0 };
+  const options: Options = { seed: 1, firstLayer: 0, lastLayer: 0, traces: false };
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (arg === '--seed') {
@@ -91,6 +101,8 @@ function parseArgs(args: string[]): Options {
     } else if (arg === '--all') {
       options.firstLayer = 0;
       options.lastLayer = null;
+    } else if (arg === '--traces') {
+      options.traces = true;
     } else {
       fail(`unknown argument ${arg ?? ''}`);
     }
@@ -129,12 +141,19 @@ function main(): void {
   ];
   // How many of each block the printed layers hold, for the legend.
   const counts = new Map<number, number>();
+  let tracedCount = 0;
   for (let z = options.firstLayer; z <= lastLayer; z += 1) {
     lines.push('', `layer z=${z}`);
     for (let y = 0; y < state.size.y; y += 1) {
       let row = '';
       for (let x = 0; x < state.size.x; x += 1) {
         const code = blockAt(state, { x, y, z });
+        if (options.traces && carriesMineralTraces(state, { x, y, z })) {
+          // Counted apart from the rock it is drawn over.
+          tracedCount += 1;
+          row += TRACES_CHAR;
+          continue;
+        }
         counts.set(code, (counts.get(code) ?? 0) + 1);
         row += CHAR_BY_CODE.get(code) ?? '?';
       }
@@ -148,6 +167,11 @@ function main(): void {
     if (count > 0) {
       lines.push(`  ${char}  ${blockDefByCode(code).name} (${count})`);
     }
+  }
+  if (options.traces) {
+    lines.push(
+      `  ${TRACES_CHAR}  rock with mineral traces: dirt, stone or hard rock near ore (${tracedCount})`,
+    );
   }
   console.log(lines.join('\n'));
 }
