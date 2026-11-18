@@ -4,6 +4,8 @@ A turn-based roguelike for Android and iOS: mine a 32×32×32 cube from the top 
 
 - Game rules: [docs/game-design-doc.md](docs/game-design-doc.md)
 - Stack, layout, and milestones: [docs/repo-plan.md](docs/repo-plan.md)
+- How agents build, playtest, and evaluate it: [docs/agent-plan.md](docs/agent-plan.md)
+- Design questions waiting for the owner: [docs/owner-questions.md](docs/owner-questions.md)
 - Conventions for contributors and Claude Code: [CLAUDE.md](CLAUDE.md)
 
 ## Getting started

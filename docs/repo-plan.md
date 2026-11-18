@@ -1,6 +1,6 @@
 # Mining Game — Repo and Build Plan (v0.1)
 
-This is the handoff document for Claude Code. Read `game-design-doc.md` first; it is the source of truth for game rules. This document covers the stack, repo layout, conventions, CI, and the order of work.
+This is the handoff document for Claude Code. Read `game-design-doc.md` first; it is the source of truth for game rules. This document covers the stack, repo layout, conventions, CI, and the order of work. `agent-plan.md` covers how the work is divided among agents, and adds a playtest round to the end of M1–M3.
 
 ---
 
@@ -71,6 +71,10 @@ Three layers, with a one-way dependency: `app → render → engine`. The engine
 ├─ docs/
 │  ├─ game-design-doc.md     # copy of the design doc; keep in sync
 │  ├─ repo-plan.md           # this file
+│  ├─ agent-plan.md          # roles and loop for agent development
+│  ├─ agents/                # one brief per agent role
+│  ├─ playtests/             # playtest reports, play logs, evaluations
+│  ├─ owner-questions.md     # design questions waiting for the owner
 │  └─ decisions/             # short ADRs, one per significant decision
 ├─ src/
 │  ├─ engine/
@@ -91,6 +95,7 @@ Three layers, with a one-way dependency: `app → render → engine`. The engine
 │  └─ e2e/                   # Playwright
 ├─ tools/
 │  ├─ sim.ts                 # headless CLI: play a seed with a scripted or random policy
+│  ├─ play.ts                # text play interface: shows only what a player could know
 │  └─ ascii.ts               # print a layer as text for debugging
 ├─ android/                  # Capacitor (added in M4)
 ├─ ios/                      # Capacitor (added in M5)
@@ -146,7 +151,7 @@ Each milestone is one or more PRs. Do not start a milestone until the previous o
 
 ### M1 — Engine core (no graphics)
 - State model, seeded RNG, cube generation (blocks and veins only), movement, gravity, mining, reveal rules, AP and shifts, fuel upkeep, field crafting, inventory and weight.
-- `tools/ascii.ts` and `tools/sim.ts`.
+- `tools/ascii.ts`, `tools/sim.ts` (with `--json` metrics output), and `tools/play.ts` (the text play interface for playtest agents; see `agent-plan.md` section 3.1).
 - **Accept:** A scripted test digs from the surface to layer 8 on a fixed seed. Determinism and property tests pass.
 
 ### M2 — Hazards and camps

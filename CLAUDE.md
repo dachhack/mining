@@ -5,6 +5,11 @@
 - Game rules: docs/game-design-doc.md. Items marked [Decided] must not change without the owner's approval. Items marked [Default] may be tuned, but only in src/data.
 - If the code and the design doc disagree, stop and ask; then update whichever is wrong in the same PR.
 
+## Agent roles
+
+- Work is divided among a coordinator, developers, reviewers, playtesters, and evaluators: see docs/agent-plan.md. If you were started in one of these roles, your brief is in docs/agents/.
+- Design questions go in docs/owner-questions.md, not into code as a silent choice.
+
 ## Architecture rules
 
 - src/engine imports nothing from src/render, src/app, three, or the DOM.
@@ -29,6 +34,7 @@
 npm run dev       # local web build
 npm test          # unit, scenario, determinism tests
 npm run sim       # headless simulation (stub until M1)
+npm run play      # text play interface for playtesting (added in M1)
 npm run e2e       # Playwright
 npm run build     # production web build
 npm run format    # apply Prettier
