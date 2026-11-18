@@ -118,13 +118,27 @@ describe('the view hides what the avatar cannot know', () => {
 
   it('draws an unrevealed cell as "?" whether it is rock or open', () => {
     const state = pitState();
+    // Reveal a cell beyond `far` in another row, so that its column is drawn.
+    state.revealed[cellIndex(state.size, { x: 4, y: 0, z: 0 })] = 1;
     const view = buildView(state, { radius: 2, layers: 0, deepestZ: 0 });
-    // Row y = 2 of the avatar's layer: x = 0 and x = 4 are unrevealed.
     expect(view.layers).toHaveLength(1);
-    expect(view.layers[0]?.rows[2]).toBe('?#@#?');
+    // Row y = 2 of the avatar's layer; x = 4 is `far`, unrevealed.
+    expect(view.layers[0]?.rows[2]).toBe('#@#?');
     state.blocks[cellIndex(state.size, far)] = BLOCKS.air.code;
     const hollow = buildView(state, { radius: 2, layers: 0, deepestZ: 0 });
-    expect(hollow.layers[0]?.rows[2]).toBe('?#@#?');
+    expect(hollow.layers[0]?.rows[2]).toBe('#@#?');
+  });
+
+  it('trims rows and columns of the map that are unseen in every layer', () => {
+    const state = pitState();
+    const view = buildView(state, { radius: 2, layers: 1, deepestZ: 0 });
+    // Only the 3 x 3 ring around the avatar is revealed, on both cube layers;
+    // the surface above is always known, inside the cube's footprint.
+    expect(view.window).toEqual({ x0: 0, x1: 4, y0: 0, y1: 4 });
+    const below = buildView(state, { radius: 2, layers: 0, deepestZ: 0 });
+    expect(below.window).toEqual({ x0: 1, x1: 3, y0: 1, y1: 3 });
+    expect(below.layers[0]?.rows).toEqual(['###', '#@#', '###']);
+    expect(renderView(below)).toContain('Map: x 1..3');
   });
 
   it('does not say where a dropped item landed if that cell is not revealed', () => {

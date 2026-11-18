@@ -122,7 +122,7 @@ export interface PlayerView {
   /** `null` while the run is going. */
   ended: EndedView | null;
   hud: string[];
-  /** The map window: first and last x and y drawn. */
+  /** The first and last x and y drawn, after trimming unseen edges. */
   window: { x0: number; x1: number; y0: number; y1: number };
   layers: LayerView[];
   legend: string[];
@@ -264,6 +264,37 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     layers.push({ z, label: z === WORLD.surfaceZ ? 'surface' : `layer ${z}`, relation, rows });
   }
 
+  // Trim the map to what has something in it: rows and columns at the edge of
+  // the window that are unseen in every drawn layer are left out. Underground
+  // that is most of the window, and an agent reads hundreds of these. Nothing
+  // is lost: every cell left out would have printed as `?`.
+  let firstColumn = options.radius;
+  let lastColumn = options.radius;
+  let firstRow = options.radius;
+  let lastRow = options.radius;
+  for (const layer of layers) {
+    layer.rows.forEach((row, rowIndex) => {
+      for (let column = 0; column < row.length; column += 1) {
+        if (row.charAt(column) !== SYMBOL_UNKNOWN) {
+          firstColumn = Math.min(firstColumn, column);
+          lastColumn = Math.max(lastColumn, column);
+          firstRow = Math.min(firstRow, rowIndex);
+          lastRow = Math.max(lastRow, rowIndex);
+        }
+      }
+    });
+  }
+  for (const layer of layers) {
+    layer.rows = layer.rows
+      .slice(firstRow, lastRow + 1)
+      .map((row) => row.slice(firstColumn, lastColumn + 1));
+  }
+  // The avatar's cell is never unseen, so the trimmed window is never empty.
+  window.x1 = window.x0 + lastColumn;
+  window.x0 += firstColumn;
+  window.y1 = window.y0 + lastRow;
+  window.y0 += firstRow;
+
   // The avatar's own cell shows `@`, so say in words what else is in it.
   const ownItems = looseItemsAt(state, here);
   if (ownItems.length > 0) {
@@ -377,17 +408,18 @@ export function renderView(view: PlayerView): string {
 
   // The map: the layers side by side, one text row per y.
   const width = view.window.x1 - view.window.x0 + 1;
+  const height = view.window.y1 - view.window.y0 + 1;
   const gap = '  ';
   const margin = '     ';
   lines.push(
     `Map: x ${view.window.x0}..${view.window.x1} left to right (east is right), ` +
-      `y ${view.window.y0}..${view.window.y1} top to bottom (north is up)`,
+      `y ${view.window.y0}..${view.window.y1} top to bottom (north is up); nearby cells off the map are unseen`,
   );
   const labels = view.layers.map((layer) => pad(layer.label, width)).join(gap);
   const relations = view.layers.map((layer) => pad(`(${layer.relation})`, width)).join(gap);
   lines.push((margin + labels).trimEnd());
   lines.push((margin + relations).trimEnd());
-  for (let row = 0; row < width; row += 1) {
+  for (let row = 0; row < height; row += 1) {
     const y = String(view.window.y0 + row).padStart(3, ' ');
     lines.push(`y${y} ` + view.layers.map((layer) => layer.rows[row] ?? '').join(gap));
   }

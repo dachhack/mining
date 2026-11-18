@@ -41,7 +41,8 @@ READING A VIEW
   and what came of it (a fall, lost health, what you got). Read them; nothing else reports it.
   Then come your gauges. The map shows your layer with the layers above and below it
   beside it, each seen from above: x grows to the east (right), y grows to the south (down the
-  page). "@" is you; "?" is a cell you have not seen, which may be rock or open space. The legend
+  page). "@" is you; "?" is a cell you have not seen, which may be rock or open space. The map is
+  trimmed: rows and columns near you that are missing from it are all unseen. The legend
   under the map names every other character in it. Then come known hazards, what ending the
   shift now would do, and the numbered list of everything you may do, each with its cost in AP.
 
@@ -98,7 +99,8 @@ THE GAME
   - You know the whole top layer from the start. Below it you know what your lamp has shown.
     Light spreads from you a few steps through open cells: round corners, never through rock.
     You see every lit cell and every cell touching one.
-  - You also always know the cells your pick can reach and the cell over your head.
+  - You also always know the cells your pick can reach and the cell over your head, and you can
+    look over an edge: beside a drop, or on a ladder, you see far enough down to judge the drop.
   - Daylight does not shine down a hole: from the surface you see that a hole is there, not
     what is at its bottom.
   - What you have seen stays on the map. An unseen cell is "?" whether it is rock or open.
