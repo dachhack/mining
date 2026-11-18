@@ -23,30 +23,60 @@ export function helpText(): string {
 USAGE (one command per step)
   npm run play -- --seed 7 --log run.json       start a run, save it in run.json, print the first view
   npm run play -- --log run.json                print the current view again (changes nothing)
-  npm run play -- --log run.json --do 3         take choice 3 from the action list, print the new view
-  npm run play -- --log run.json --do 3,1,end   several choices in a row. Each number is read against
-                                                the list as it stands at that moment, and the list
-                                                changes after every action, so only chain choices
-                                                whose numbers you are sure of. It stops at the first
+  npm run play -- --log run.json --do e         take the choice named "e" (go east), print the new view
+  npm run play -- --log run.json --do 3         the same by number: choice 3 of the action list
+  npm run play -- --log run.json --do mine-e,e,end
+                                                several choices in a row. It stops at the first
                                                 choice that is not on the list and says which.
   npm run play -- --seed 7 --interactive        type choices at a prompt (add --log to save the run)
   npm run play -- --replay run.json             replay a log; print the final state hash and outcome
   npm run play -- --help                        this text
 
-  --do takes the numbers from the action list; 0 or "end" ends the shift.
-  --radius N   how far the map reaches sideways from you (default ${DEFAULT_RADIUS})
+  --radius N   how far the map reaches sideways from you (default: the whole cube while you
+               stand on the surface, ${DEFAULT_RADIUS} underground)
   --layers N   how many layers above and below yours are drawn (default ${DEFAULT_LAYERS})
   --loadout ID the starting kit (default: standard)
+
+CHOICES: NAMES AND NUMBERS
+  Every line of the action list has a number and a name. --do and the prompt take either.
+  - A NUMBER is the line's place in the list. The list changes after every action, so the same
+    number can mean something else one step later. In a chain, each number is read against the
+    list as it stands at that moment. Use numbers one at a time.
+  - A NAME says what the choice does, seen from where you stand, and means the same at every
+    step. In a chain, use names. If a name is not on the list at that moment (say "e" with rock
+    to the east), the chain stops there and nothing else is done: a name is never read as some
+    other action.
+  The names:
+    n e s w                  go north, east, south, west (a walk, a step up or a walk off a ledge:
+                             the list says which)
+    up, down                 climb a ladder
+    mine-n, mine-ne, ...     mine the block that way on your layer (n ne e se s sw w nw)
+    mine-down                mine the block you stand on
+    mine-n-down, ...         mine the block that way, one layer down
+    ladder-here, ladder-n, ladder-up, ladder-down, ...     place a ladder; torch-... the same
+    craft-ladder, craft-torch, craft-fuel, ...             craft; the list shows each name
+    take-here-stone, take-n-coal, ...                      pick up: where from, then what
+    drop-stone, drop-all-stone                             drop one, or the whole stack
+    leave                    leave the cube (on the surface only)
+    end (or 0)               end the shift
+  Mine choices that differ only in direction share one line of the list, for example
+    [2] Mine Stone, gives 1 Stone: 7. mine-e  11. mine-se-down  13. mine-nw-down
+  Each of them is still a choice of its own, with its own number and name.
 
 READING A VIEW
   After you act, the view opens with one line starting ">" for each choice taken: what you did
   and what came of it (a fall, lost health, what you got). Read them; nothing else reports it.
   Then come your gauges. The map shows your layer with the layers above and below it
   beside it, each seen from above: x grows to the east (right), y grows to the south (down the
-  page). "@" is you; "?" is a cell you have not seen, which may be rock or open space. The map is
-  trimmed: rows and columns near you that are missing from it are all unseen. The legend
-  under the map names every other character in it. Then come known hazards, what ending the
-  shift now would do, and the numbered list of everything you may do, each with its cost in AP.
+  page). "@" is you; "?" is a cell you have not seen, which may be rock or open space. While you
+  stand on the surface the map is the whole cube, so all of the top layer is on it. Underground
+  it reaches ${DEFAULT_RADIUS} cells each way, and is then trimmed: rows and columns at its edge that are unseen
+  are left out. The "Map:" line says whether you have seen more of the drawn layers than
+  is on the map, and which --radius shows it all. The legend
+  under the map names every other character in it. Then come known hazards and what ending the
+  shift now would do. A line starting "Not on the list:" says why a move you might look for is
+  not offered: the drop is too long, or you have not seen what is under the cell. Last comes the
+  list of everything you may do, each with its number, its name and its cost in AP.
 
 THE GAME
   You are a miner on top of a cube of rock ${WORLD.size.x} by ${WORLD.size.y} wide and ${WORLD.size.z} layers deep. Layer 0 is the top

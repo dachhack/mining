@@ -42,14 +42,27 @@ import {
   visibleMineralTraces,
 } from '../../src/engine';
 import type { GameState } from '../../src/engine';
-import { describeChoice, layerName, runEndText, stackListText } from './describe';
+import {
+  choiceName,
+  describeChoice,
+  layerName,
+  mineGroupText,
+  runEndText,
+  stackListText,
+} from './describe';
 import { END_SHIFT, menuChoices } from './log';
 import type { LogEntry } from './log';
+import { missingMoveNotes } from './missing';
 
 /** How much of the map to draw. These change the picture only, never the game. */
 export interface ViewOptions {
-  /** How many cells the map reaches sideways from the avatar. */
-  radius: number;
+  /**
+   * How many cells the map reaches sideways from the avatar. `null` means
+   * "not asked for": then the map is the whole cube while the avatar stands
+   * on the surface (so that the whole top layer, which the player knows from
+   * the start, is on it: issue #30), and `DEFAULT_RADIUS` underground.
+   */
+  radius: number | null;
   /** How many layers above and below the avatar's own are drawn. */
   layers: number;
   /** The deepest `z` the avatar has stood on in this run (the session tracks it). */
@@ -107,9 +120,21 @@ export interface LayerView {
 export interface ChoiceView {
   /** What the player types: 1, 2, ... for an action, 0 for "end shift". */
   number: number;
+  /**
+   * What the player may type instead of the number: "e", "mine-down",
+   * "drop-all-stone", "end". Unlike the number it means the same at every
+   * step (see `choiceName` in describe.ts).
+   */
+  name: string;
   /** AP cost, or `null` for "end shift", which has none. */
   ap: number | null;
   text: string;
+  /**
+   * For a mine action that differs from others only in direction: what they
+   * share ("Stone, gives 1 Stone"). `renderView` prints choices with the same
+   * `group` and AP cost as one line. `null` for a choice printed on its own.
+   */
+  group: string | null;
   /** What goes into the play log if this is chosen. */
   entry: LogEntry;
 }
@@ -131,11 +156,21 @@ export interface PlayerView {
   hud: string[];
   /** The first and last x and y drawn, after trimming unseen edges. */
   window: { x0: number; x1: number; y0: number; y1: number };
+  /**
+   * `null` if every cell the player has seen in the drawn layers is on the
+   * map. Otherwise the `--radius` that would show them all.
+   */
+  radiusForAllSeen: number | null;
   layers: LayerView[];
   legend: string[];
   /** Things the map cannot show with one character per cell. */
   notes: string[];
   hazards: string[];
+  /**
+   * Moves the player might look for that are not on the list, and why: one
+   * line each (see missing.ts). Worked out from revealed cells only.
+   */
+  notOffered: string[];
   /** What ending the shift now would do; `null` once the run is over. */
   forecast: string | null;
   choices: ChoiceView[];
@@ -247,12 +282,20 @@ function hudLines(state: GameState, options: ViewOptions): string[] {
  */
 export function buildView(state: GameState, options: ViewOptions): PlayerView {
   const here = state.avatar.pos;
-  const window = {
-    x0: here.x - options.radius,
-    x1: here.x + options.radius,
-    y0: here.y - options.radius,
-    y1: here.y + options.radius,
-  };
+  let window: { x0: number; x1: number; y0: number; y1: number };
+  if (options.radius === null && here.z === WORLD.surfaceZ) {
+    // On the surface, with no --radius: the whole cube and one cell round it,
+    // so the whole top layer is drawn and its edge shows as the edge.
+    window = { x0: -1, x1: state.size.x, y0: -1, y1: state.size.y };
+  } else {
+    const radius = options.radius ?? DEFAULT_RADIUS;
+    window = {
+      x0: here.x - radius,
+      x1: here.x + radius,
+      y0: here.y - radius,
+      y1: here.y + radius,
+    };
+  }
 
   // The map, and the legend of the characters it actually uses.
   const layers: LayerView[] = [];
@@ -288,14 +331,34 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     layers.push({ z, label: z === WORLD.surfaceZ ? 'surface' : `layer ${z}`, relation, rows });
   }
 
+  // Has the player seen cells of the drawn layers that lie outside the map?
+  // If so the view says which --radius shows them. Only the "revealed" flag
+  // of each cell is read here, not what the cell holds.
+  let furthestSeen = 0;
+  for (const layer of layers) {
+    if (layer.z === WORLD.surfaceZ) {
+      continue; // the surface is open air everywhere: nothing to miss
+    }
+    for (let y = 0; y < state.size.y; y += 1) {
+      for (let x = 0; x < state.size.x; x += 1) {
+        const outside = x < window.x0 || x > window.x1 || y < window.y0 || y > window.y1;
+        if (outside && isRevealed(state, { x, y, z: layer.z })) {
+          furthestSeen = Math.max(furthestSeen, Math.abs(x - here.x), Math.abs(y - here.y));
+        }
+      }
+    }
+  }
+  const radiusForAllSeen = furthestSeen === 0 ? null : furthestSeen;
+
   // Trim the map to what has something in it: rows and columns at the edge of
   // the window that are unseen in every drawn layer are left out. Underground
   // that is most of the window, and an agent reads hundreds of these. Nothing
   // is lost: every cell left out would have printed as `?`.
-  let firstColumn = options.radius;
-  let lastColumn = options.radius;
-  let firstRow = options.radius;
-  let lastRow = options.radius;
+  // Start from the avatar's own column and row (as indexes into the rows).
+  let firstColumn = here.x - window.x0;
+  let lastColumn = firstColumn;
+  let firstRow = here.y - window.y0;
+  let lastRow = firstRow;
   for (const layer of layers) {
     layer.rows.forEach((row, rowIndex) => {
       for (let column = 0; column < row.length; column += 1) {
@@ -353,10 +416,12 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       ended,
       hud: hudLines(state, options),
       window,
+      radiusForAllSeen,
       layers,
       legend: legendLines,
       notes,
       hazards: [],
+      notOffered: [],
       forecast: null,
       choices: [],
     };
@@ -383,7 +448,8 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   }
 
   // The menu: the engine's legal actions in the engine's order, numbered from
-  // 1, then "end shift" as number 0 (so its number never changes).
+  // 1, then "end shift" as number 0 (so its number never changes). Each also
+  // has a name, which unlike the number means the same at every step.
   const choices: ChoiceView[] = [];
   const actions = legalActions(state);
   menuChoices(state).forEach((entry, index) => {
@@ -391,10 +457,17 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     choices.push({
       number: isEndShift ? 0 : index + 1,
       ap: entry.type === 'endShift' ? null : entry.ap,
-      text: describeChoice(state, entry) + (isEndShift ? ' (or type: end)' : ''),
+      name: choiceName(state, entry),
+      text: describeChoice(state, entry),
+      group: mineGroupText(state, entry),
       entry,
     });
   });
+  // A guard for the developer: a name must stand for one choice only.
+  const names = new Set(choices.map((choice) => choice.name));
+  if (names.size !== choices.length) {
+    throw new Error('play: two choices on the menu have the same name');
+  }
   // A guard for the developer: the menu must be the legal actions plus one.
   if (choices.length !== actions.length + 1) {
     throw new Error('play: the menu does not match legalActions');
@@ -404,14 +477,20 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     ended: null,
     hud: hudLines(state, options),
     window,
+    radiusForAllSeen,
     layers,
     legend: legendLines,
     notes,
     hazards,
+    notOffered: missingMoveNotes(state),
     forecast,
     choices,
   };
 }
+
+/** The line that opens the action list. */
+export const ACTIONS_HEADING =
+  'Actions: type the number or the name (names mean the same at every step). [AP cost]';
 
 /** Pad `text` on the right with spaces to `width` characters. */
 function pad(text: string, width: number): string {
@@ -436,17 +515,31 @@ export function renderView(view: PlayerView): string {
   const height = view.window.y1 - view.window.y0 + 1;
   const gap = '  ';
   const margin = '     ';
+  const beyond =
+    view.radiusForAllSeen === null
+      ? 'everything you have seen of these layers is on the map'
+      : `you have seen more of these layers than is drawn: --radius ${view.radiusForAllSeen} shows it all`;
   lines.push(
     `Map: x ${view.window.x0}..${view.window.x1} left to right (east is right), ` +
-      `y ${view.window.y0}..${view.window.y1} top to bottom (north is up); nearby cells off the map are unseen`,
+      `y ${view.window.y0}..${view.window.y1} top to bottom (north is up); ${beyond}`,
   );
-  const labels = view.layers.map((layer) => pad(layer.label, width)).join(gap);
-  const relations = view.layers.map((layer) => pad(`(${layer.relation})`, width)).join(gap);
-  lines.push((margin + labels).trimEnd());
-  lines.push((margin + relations).trimEnd());
+  // Each layer gets a column as wide as its map or its labels, whichever is
+  // wider, so the labels stay over their maps on a narrow map (issue #20).
+  const columnWidths = view.layers.map((layer) =>
+    Math.max(width, layer.label.length, layer.relation.length + 2),
+  );
+  /** Put one piece of text per layer side by side, each padded to its column. */
+  function sideBySide(texts: string[]): string {
+    return texts
+      .map((text, index) => pad(text, columnWidths[index] ?? 0))
+      .join(gap)
+      .trimEnd();
+  }
+  lines.push(margin + sideBySide(view.layers.map((layer) => layer.label)));
+  lines.push(margin + sideBySide(view.layers.map((layer) => `(${layer.relation})`)));
   for (let row = 0; row < height; row += 1) {
     const y = String(view.window.y0 + row).padStart(3, ' ');
-    lines.push(`y${y} ` + view.layers.map((layer) => layer.rows[row] ?? '').join(gap));
+    lines.push(`y${y} ` + sideBySide(view.layers.map((layer) => layer.rows[row] ?? '')));
   }
   lines.push(`Legend: ${view.legend.join(' | ')}`);
   lines.push(...view.notes);
@@ -457,11 +550,36 @@ export function renderView(view: PlayerView): string {
 
   lines.push(`Hazards: ${view.hazards.length === 0 ? 'none known' : view.hazards.join(' | ')}`);
   lines.push(`If you end the shift now: ${view.forecast ?? ''}`);
-  lines.push('Actions [AP cost]:');
+  for (const note of view.notOffered) {
+    lines.push(`Not on the list: ${note}`);
+  }
+  lines.push(ACTIONS_HEADING);
+  // Every choice is printed once, with its number and its name. Choices with
+  // the same `group` and cost share one line, printed where the first of
+  // them stands in the list; a choice alone in its group has its own line.
+  const nameWidth = Math.max(...view.choices.map((choice) => choice.name.length));
+  const printedGroups = new Set<string>();
   for (const choice of view.choices) {
-    const number = String(choice.number).padStart(2, ' ');
     const cost = choice.ap === null ? '-' : String(choice.ap);
-    lines.push(`${number}. [${cost}] ${choice.text}`);
+    // The choices that share this one's line: itself only, unless it is in a group.
+    const sharing =
+      choice.group === null
+        ? [choice]
+        : view.choices.filter((other) => other.group === choice.group && other.ap === choice.ap);
+    if (sharing.length === 1) {
+      const number = String(choice.number).padStart(2, ' ');
+      lines.push(`${number}. ${pad(choice.name, nameWidth)} [${cost}] ${choice.text}`);
+      continue;
+    }
+    const groupKey = `${cost} ${choice.group ?? ''}`;
+    if (printedGroups.has(groupKey)) {
+      continue;
+    }
+    printedGroups.add(groupKey);
+    const members = sharing.map((other) => `${other.number}. ${other.name}`);
+    lines.push(
+      `    ${pad('', nameWidth)} [${cost}] Mine ${choice.group ?? ''}: ${members.join('  ')}`,
+    );
   }
   return lines.join('\n');
 }
