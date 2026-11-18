@@ -5,9 +5,17 @@
 // is described from the action itself (which the engine offers only for cells
 // in reach, all of them revealed) and from the data tables.
 
-import { AVATAR, STRUCTURES, WORLD, blockDefByCode, findRecipe, itemDef } from '../../src/data';
+import { STRUCTURES, WORLD, blockDefByCode, findRecipe, itemDef } from '../../src/data';
 import type { ItemStack, Vec3 } from '../../src/data';
-import { blockDefAt, canCarry, isRevealed, isSolid, structureAt } from '../../src/engine';
+import {
+  blockDefAt,
+  canCarry,
+  fallDamage,
+  isFatalFall,
+  isRevealed,
+  isSolid,
+  structureAt,
+} from '../../src/engine';
 import type { Action, GameEvent, GameState } from '../../src/engine';
 import type { LogEntry } from './log';
 
@@ -58,7 +66,8 @@ function blocksText(count: number): string {
 /**
  * What the player knows about the fall that follows mining the block the
  * avatar stands on, for the action list. This is the one lethal choice in
- * M1, so the list must say it.
+ * M1, and it costs health from the first block (an uncontrolled fall,
+ * decision note 0010), so the list must say what it costs.
  *
  * It is worked out from revealed cells only. The column under the avatar is
  * walked downwards, and at the first cell the player has not seen the answer
@@ -92,14 +101,17 @@ function knownFallText(state: GameState): string {
     }
   }
 
-  const harm =
-    fall >= AVATAR.fatalFallBlocks
-      ? ', FATAL'
-      : fall > AVATAR.freeFallBlocks
-        ? ', it will cost health'
-        : known
-          ? ', no harm'
-          : '';
+  // The cost of the fall as far as it is known. If the bottom is unseen the
+  // real fall may be longer, so the real cost may be higher, never lower.
+  const cost = fallDamage('uncontrolled', fall);
+  let harm: string;
+  if (isFatalFall(fall) || cost >= state.avatar.health) {
+    harm = ', FATAL';
+  } else if (cost > 0) {
+    harm = known ? ` and lose ${cost} health` : ` and lose at least ${cost} health`;
+  } else {
+    harm = known ? ', no harm' : '';
+  }
   return known
     ? `you will fall ${blocksText(fall)}${harm}`
     : `you will fall ${blocksText(fall)} or more${harm}; below that is unseen`;
@@ -217,7 +229,11 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
         // The new position is in the view; no need to say it twice.
         break;
       case 'fell':
-        lines.push(`You fell ${blocksText(event.distance)}.`);
+        lines.push(
+          event.kind === 'chosenDrop'
+            ? `You dropped ${blocksText(event.distance)}.`
+            : `You lost your footing and fell ${blocksText(event.distance)}.`,
+        );
         break;
       case 'damageTaken':
         lines.push(

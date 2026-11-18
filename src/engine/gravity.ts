@@ -1,9 +1,9 @@
 // Gravity: footing, falling, fall damage, and loose items dropping
-// (design doc 5.2; decision note 0005 items 5, 7, 9 and 17).
+// (design doc 5.2; decision notes 0005 items 5, 7, 9 and 17, and 0010).
 
 import { AVATAR } from '../data';
 import type { Vec3 } from '../data';
-import type { GameEvent } from './events';
+import type { FallKind, GameEvent } from './events';
 import { avatarFallDistance, cellBelow } from './footing';
 import { addLooseItems, endRun, isOpen, removeLooseItems } from './state';
 import type { GameState } from './state';
@@ -23,24 +23,36 @@ function itemFallDistance(state: GameState, pos: Vec3): number {
 }
 
 /**
- * The health a fall of `distance` blocks takes from an avatar with `health`
- * (design doc 5.2, numbers in `AVATAR`): nothing for a short fall, a fixed
- * amount for each block beyond the free ones, and all of it for a fatal fall.
- * Never more than the avatar has.
+ * The health a fall of `distance` blocks costs, before the cap of "never more
+ * than the avatar has" (design doc 5.2 and decision note 0010; the numbers
+ * are in `AVATAR`). It is exported so that the play tool can tell the player
+ * the cost of mining the block underfoot with the same arithmetic.
+ *
+ * - Each block beyond the first `freeFallBlocks` costs `fallDamagePerBlock`,
+ *   whatever the kind of fall.
+ * - The first `freeFallBlocks` blocks are free in a chosen drop, and cost
+ *   `uncontrolledFallDamagePerBlock` each in an uncontrolled fall.
+ *
+ * With today's numbers: a chosen drop of 1 or 2 costs 0; an uncontrolled
+ * fall of 1, 2, 3, 4, 5 blocks costs 1, 2, 4, 6, 8.
+ *
+ * A fall of `fatalFallBlocks` or more kills whatever this returns; see
+ * `isFatalFall`.
  */
-function fallDamage(distance: number, health: number): number {
-  if (distance >= AVATAR.fatalFallBlocks) {
-    return health;
-  }
-  if (distance <= AVATAR.freeFallBlocks) {
-    return 0;
-  }
-  const damage = (distance - AVATAR.freeFallBlocks) * AVATAR.fallDamagePerBlock;
-  return Math.min(damage, health);
+export function fallDamage(kind: FallKind, distance: number): number {
+  const earlyBlocks = Math.min(distance, AVATAR.freeFallBlocks);
+  const laterBlocks = distance - earlyBlocks;
+  const earlyCost = kind === 'uncontrolled' ? AVATAR.uncontrolledFallDamagePerBlock : 0;
+  return earlyBlocks * earlyCost + laterBlocks * AVATAR.fallDamagePerBlock;
+}
+
+/** True if a fall of `distance` blocks kills whatever the avatar's health. */
+export function isFatalFall(distance: number): boolean {
+  return distance >= AVATAR.fatalFallBlocks;
 }
 
 /** Let the avatar fall if it has no footing, and apply the damage. */
-function settleAvatar(state: GameState, events: GameEvent[]): void {
+function settleAvatar(state: GameState, events: GameEvent[], fallKind: FallKind): void {
   const from = state.avatar.pos;
   const distance = avatarFallDistance(state, from);
   if (distance === 0) {
@@ -48,9 +60,12 @@ function settleAvatar(state: GameState, events: GameEvent[]): void {
   }
   const to = { x: from.x, y: from.y, z: from.z + distance };
   state.avatar.pos = to;
-  events.push({ type: 'fell', from: { ...from }, to: { ...to }, distance });
+  events.push({ type: 'fell', from: { ...from }, to: { ...to }, distance, kind: fallKind });
 
-  const damage = fallDamage(distance, state.avatar.health);
+  // A fatal fall takes all the health that is left; no other fall can take
+  // more than that.
+  const health = state.avatar.health;
+  const damage = isFatalFall(distance) ? health : Math.min(fallDamage(fallKind, distance), health);
   if (damage > 0) {
     state.avatar.health -= damage;
     events.push({
@@ -60,7 +75,7 @@ function settleAvatar(state: GameState, events: GameEvent[]): void {
       health: state.avatar.health,
     });
   }
-  if (distance >= AVATAR.fatalFallBlocks || state.avatar.health <= 0) {
+  if (isFatalFall(distance) || state.avatar.health <= 0) {
     endRun(state, 'death', 'fell', events);
   }
 }
@@ -88,12 +103,18 @@ function settleLooseItems(state: GameState, events: GameEvent[]): void {
  * Let everything that has nothing under it fall. The dispatcher in index.ts
  * calls this after every action and after the cube phase.
  *
+ * `fallKind` is the dispatcher telling gravity why the avatar would be
+ * falling, which gravity cannot see from the state alone: `'chosenDrop'`
+ * after a move (the player walked off a ledge or climbed off the bottom of a
+ * ladder), `'uncontrolled'` after anything else (decision note 0010). It only
+ * matters when the avatar does fall.
+ *
  * Contract:
  * - Changes `state` in place and appends to `events`.
  * - The avatar: if it has no footing (0005 item 5: a solid block below it, or
  *   a ladder in its own cell), it falls until it has. Emits `fell`, and for a
- *   fall long enough to hurt (design doc 5.2, numbers in `AVATAR`) emits
- *   `damageTaken`. A fatal fall, or health reaching 0, ends the run with
+ *   fall that hurts (`fallDamage` above: design doc 5.2, numbers in `AVATAR`)
+ *   emits `damageTaken`. A fatal fall, or health reaching 0, ends the run with
  *   `endRun(state, 'death', 'fell', events)`. A fatal fall takes all the
  *   health that is left, so a dead avatar has 0 health.
  * - Loose items: each falls straight down until it rests on a solid block
@@ -104,7 +125,7 @@ function settleLooseItems(state: GameState, events: GameEvent[]): void {
  *   nothing.
  * - No block falls in M1 (0005 item 9).
  */
-export function settle(state: GameState, events: GameEvent[]): void {
-  settleAvatar(state, events);
+export function settle(state: GameState, events: GameEvent[], fallKind: FallKind): void {
+  settleAvatar(state, events, fallKind);
   settleLooseItems(state, events);
 }

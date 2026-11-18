@@ -14,6 +14,7 @@ export function helpText(): string {
     (recipe) => `    ${recipe.name}: from ${stackListText(recipe.inputs)}`,
   ).join('\n');
   const safeDrop = AVATAR.maxChosenDropBlocks;
+  const uncontrolledPerBlock = AVATAR.uncontrolledFallDamagePerBlock;
   const bottomLayer = WORLD.size.z - 1;
 
   return `Mining game: text play interface
@@ -68,8 +69,8 @@ THE GAME
   - Walk north, east, south or west into an open cell. There are no diagonal moves.
   - Step up one block onto the rock beside you, if the cell on top of it and the cell over your
     head are both open.
-  - You may walk off a ledge only where the drop is at most ${safeDrop} blocks, which does not hurt. The
-    list shows the drop. A longer drop is never offered as a move.
+  - You may walk off a ledge only where the drop is at most ${safeDrop} blocks. A drop you choose this
+    way does not hurt. The list shows the drop. A longer drop is never offered as a move.
   - Ladders: to climb up, there must be a ladder in your own cell and in the cell above. To climb
     down, there must be a ladder in your own cell, and below it either a ladder or a short drop.
     So a shaft needs a ladder in every cell you want to climb through. You can place a ladder in
@@ -80,9 +81,18 @@ THE GAME
   - You are held up by solid rock under you or by a ladder in your own cell. After any action,
     if nothing holds you, you fall until something does. A ladder further down the shaft catches
     you, but the fall still counts.
-  - A fall of up to ${AVATAR.freeFallBlocks} blocks is free. Each block beyond that costs health, and a fall of ${AVATAR.fatalFallBlocks} or
-    more kills. The usual way to fall far is to mine the block you stand on over a hole: the
-    action list says how far you will fall, as far as you have seen the cells below.
+  - There are two kinds of descent. A drop you choose as a move (walking off a ledge, or climbing
+    down off the bottom of a ladder) is free. A fall you did not choose as a move is not: if you
+    mine the block you stand on and no ladder holds you, you lose your footing and it costs
+    health from the first block.
+  - What a fall of that kind costs: ${uncontrolledPerBlock} health for each of the first ${AVATAR.freeFallBlocks} blocks, ${AVATAR.fallDamagePerBlock} health for each
+    block beyond that, and a fall of ${AVATAR.fatalFallBlocks} or more kills. So digging straight down under your own
+    feet costs ${uncontrolledPerBlock} health a layer. Nothing in this version of the game gives health back.
+  - A ladder in your own cell holds you: place a ladder in your cell, then mine below, and you do
+    not fall. That, or cutting steps sideways, is the safe way down.
+  - The action list says what mining the block you stand on will cost: how far you will fall and
+    the health you will lose, as far as you have seen the cells below. "FATAL" means it will
+    kill you.
 
   Mining
   - Your pick reaches the 8 cells around you on your own layer (diagonals too) and the 9 cells
