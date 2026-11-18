@@ -58,7 +58,7 @@ interface Options {
   firstLayer: number;
   /** `null` means "the bottom layer of the cube". */
   lastLayer: number | null;
-  /** Draw rock that carries mineral traces (decision note 0011) as `%`. */
+  /** Draw rock that carries mineral traces (decision note 0012) as `%`. */
   traces: boolean;
 }
 

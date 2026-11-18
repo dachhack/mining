@@ -1,4 +1,4 @@
-# 0011 — Mineral traces: rock near ore shows a tell
+# 0012 — Mineral traces: rock near ore shows a tell
 
 Date: 2026-11-18. Status: the direction is the owner's ("ore hints are good", answer to question 41); the form below is the coordinator's assumed default from issue #35, for the owner to confirm. Every number and block list is a [Default] in `src/data/tells.ts`.
 

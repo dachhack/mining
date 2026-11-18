@@ -49,7 +49,7 @@ export type GameEvent =
   | { type: 'blockRevealed'; pos: Vec3; block: number }
   /**
    * The player saw mineral traces on the block at `pos` for the first time
-   * (decision note 0011). Sent once for a block; the traces then stay on the
+   * (decision note 0012). Sent once for a block; the traces then stay on the
    * map. It follows the `blockRevealed` events of the same step.
    */
   | { type: 'mineralTracesSeen'; pos: Vec3 }

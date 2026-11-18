@@ -10,7 +10,7 @@ Every gameplay number and recipe from the design doc lives here, as plain TypeSc
 | `structures.ts` | Things placed in a cell (ladder, torch, support)             | Design doc 4.1          |
 | `recipes.ts`    | Field recipes                                                | Design doc 7.1          |
 | `avatar.ts`     | Health, carry capacity, light radii, fall damage             | Design doc 5.1, 5.2     |
-| `tells.ts`      | Tells: how near ore must be for rock to show mineral traces  | Design doc 6; 0011      |
+| `tells.ts`      | Tells: how near ore must be for rock to show mineral traces  | Design doc 6; 0012      |
 | `shift.ts`      | AP per shift, fuel upkeep, lamp-oil burn, fixed action costs | Design doc 4, 4.1; 0005 |
 | `loadouts.ts`   | Starting kits; the placeholder contract id                   | 0005 items 22, 23       |
 | `types.ts`      | The shape of each table                                      |                         |

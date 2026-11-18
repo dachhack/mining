@@ -1,5 +1,5 @@
 // A measurement used by tells.test.ts, and by hand for the figures in
-// decision note 0011: dig a one-cell shaft straight down from the start cell
+// decision note 0012: dig a one-cell shaft straight down from the start cell
 // with the real engine, and note when the player first sees mineral traces
 // and when they first see ore.
 //

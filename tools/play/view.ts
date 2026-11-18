@@ -10,7 +10,7 @@
 // open cells are hidden like blocks: an unrevealed cell prints as `?` whether
 // it is rock or a void (owner question 37).
 //
-// Mineral traces (decision note 0011) are the one thing shown that depends on
+// Mineral traces (decision note 0012) are the one thing shown that depends on
 // cells the player has not seen: rock the player has seen in light near ore
 // is drawn as `%`. That is the hint the rule intends. The engine's
 // `visibleMineralTraces` decides it, and only ever names revealed blocks.

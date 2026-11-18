@@ -190,7 +190,7 @@ export interface GenerationData {
   veinPlacementTries: number;
 }
 
-/** The mineral-traces tell: rock near ore shows it (decision note 0011). */
+/** The mineral-traces tell: rock near ore shows it (decision note 0012). */
 export interface MineralTracesDef {
   /**
    * A rock block carries traces when an ore block lies within this many steps
