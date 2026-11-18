@@ -89,6 +89,9 @@ export function missingMoveNotes(state: GameState): string[] {
   const notes: string[] = [];
 
   const overhead = { x: here.x, y: here.y, z: here.z - 1 };
+  // The directions with rock whose top has not been seen. They share one
+  // line: in a pit in the dark it can be all four.
+  const unseenTops: string[] = [];
   for (const step of SIDEWAYS) {
     const beside = { x: here.x + step.x, y: here.y + step.y, z: here.z };
     // A move this way is on the list (a walk, or a step up to the cell on
@@ -120,9 +123,15 @@ export function missingMoveNotes(state: GameState): string[] {
       // line; with rock in either place it is just a wall.
       const onTop = { x: beside.x, y: beside.y, z: beside.z - 1 };
       if (isRevealed(state, overhead) && isOpen(state, overhead) && !isRevealed(state, onTop)) {
-        notes.push(`No step up ${side}: you have not seen the cell on top of that rock.`);
+        unseenTops.push(side);
       }
     }
+  }
+
+  if (unseenTops.length > 0) {
+    notes.push(
+      `No step up ${unseenTops.join(', ')}: you have not seen what is on top of the rock there.`,
+    );
   }
 
   if (hasLadder(state, here)) {

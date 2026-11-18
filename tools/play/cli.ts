@@ -117,7 +117,8 @@ export function splitChoices(text: string): string[] {
  * - a name ("e", "mine-down", "drop-all-stone", "end") is the choice on the
  *   list now that has that name. If the list has no such choice (the move
  *   is not possible here, say), the answer is `null`: a name never stands
- *   for some other action.
+ *   for some other action. One name is also taken when it is not printed:
+ *   "drop-all-X" while exactly one X is carried means "drop-X".
  */
 export function resolveChoice(state: GameState, choice: string): LogEntry | null {
   if (!isRunActive(state)) {
@@ -131,7 +132,19 @@ export function resolveChoice(state: GameState, choice: string): LogEntry | null
     return legalActions(state)[Number(choice) - 1] ?? null;
   }
   // `find` gives `undefined` when nothing matches.
-  return menuChoices(state).find((entry) => choiceName(state, entry) === choice) ?? null;
+  const named = menuChoices(state).find((entry) => choiceName(state, entry) === choice);
+  if (named !== undefined) {
+    return named;
+  }
+  // "drop-all-stone" with exactly one stone carried: the list then has only
+  // "drop-stone" (the engine offers "drop all" from two up), and dropping
+  // that one is dropping them all. So the name is read as that choice.
+  const dropAll = 'drop-all-';
+  if (choice.startsWith(dropAll)) {
+    const dropOne = `drop-${choice.slice(dropAll.length)}`;
+    return menuChoices(state).find((entry) => choiceName(state, entry) === dropOne) ?? null;
+  }
+  return null;
 }
 
 /** What `takeChoices` did. */

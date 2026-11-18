@@ -1128,8 +1128,16 @@ describe('names for choices (issue #30)', () => {
     ]) {
       expect(names).toContain(name);
     }
-    // One torch is carried, so there is no "drop all" for it.
+    // One torch is carried, so there is no "drop all" for it on the list.
+    // Typed all the same, it means the one choice that drops them all.
     expect(names).not.toContain('drop-all-torch');
+    expect(resolveChoice(state, 'drop-all-torch')).toEqual(resolveChoice(state, 'drop-torch'));
+    expect(resolveChoice(state, 'drop-all-torch')).toMatchObject({ type: 'drop', item: 'torch' });
+    // With three stone carried the two names stay two different choices,
+    // and "drop all" of something not carried is not a choice.
+    expect(resolveChoice(state, 'drop-all-stone')).toMatchObject({ item: 'stone', count: 3 });
+    expect(resolveChoice(state, 'drop-stone')).toMatchObject({ item: 'stone', count: 1 });
+    expect(resolveChoice(state, 'drop-all-relic')).toBeNull();
   });
 
   describe('with --do', () => {
@@ -1444,9 +1452,9 @@ describe('why a move is not on the list (issue #30)', () => {
     // Ending a shift runs the engine's reveal: in the dark, the six cells touched.
     const dark = endShift(state).state;
     expect(isRevealed(dark, { x: 2, y: 0, z: 1 })).toBe(false);
+    // One line for both directions.
     expect(notOffered(dark)).toEqual([
-      'No step up east: you have not seen the cell on top of that rock.',
-      'No step up west: you have not seen the cell on top of that rock.',
+      'No step up east, west: you have not seen what is on top of the rock there.',
     ]);
     const before = defaultViewText(dark);
     dark.blocks[cellIndex(dark.size, { x: 2, y: 0, z: 1 })] = BLOCKS.air.code;
@@ -1490,8 +1498,10 @@ describe('why a move is not on the list (issue #30)', () => {
     for (const state of statesAlongARun(150)) {
       for (const note of notOffered(state)) {
         notes += 1;
+        // The directions a note is about stand before its colon.
+        const about = note.slice(0, note.indexOf(':'));
         words.forEach((word, index) => {
-          if (note.includes(` ${word}:`)) {
+          if (about.includes(word)) {
             expect(resolveChoice(state, names[index] ?? '')).toBeNull();
           }
         });

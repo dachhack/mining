@@ -56,7 +56,9 @@ CHOICES: NAMES AND NUMBERS
     ladder-here, ladder-n, ladder-up, ladder-down, ...     place a ladder; torch-... the same
     craft-ladder, craft-torch, craft-fuel, ...             craft; the list shows each name
     take-here-stone, take-n-coal, ...                      pick up: where from, then what
-    drop-stone, drop-all-stone                             drop one, or the whole stack
+    drop-stone, drop-all-stone                             drop one, or the whole stack. With one
+                                                           carried only drop-stone is listed;
+                                                           drop-all-stone then does the same
     leave                    leave the cube (on the surface only)
     end (or 0)               end the shift
   Mine choices that differ only in direction share one line of the list, for example
