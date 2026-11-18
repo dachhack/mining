@@ -5,13 +5,21 @@
 // Usage:
 //   npm run sim -- --seed 123 --policy random --runs 1000
 //   npm run sim -- --policy staircase --runs 20 --json
+//   npm run sim -- --survey coal --runs 1000
 //
 //   --seed N         seed of the first run (default 1); run i uses seed N + i
-//   --policy NAME    random | wander | staircase (default random); see tools/policies.ts
+//   --policy NAME    random | wander | staircase | coal (default random); see tools/policies.ts
 //   --runs N         how many runs (default 1)
 //   --max-shifts N   stop a run that has not ended after N shifts (default 300);
 //                    such a run is reported as outcome "unfinished", cause "shiftCap"
 //   --json           print one JSON document instead of the summary
+//   --survey coal    instead of the report below, print the coal survey (issue #51):
+//                    for each of the --runs seeds, how far the nearest coal is, and
+//                    whether a trip to fetch it pays for itself in fuel. --policy is
+//                    not used. See tools/coalSurvey.ts for what is measured and for
+//                    the shape of its --json document.
+//   --margin N       coal survey only: the fuel a player should still have at the
+//                    worst moment of the trip (default 3)
 //
 // The same arguments always print the same output: nothing here depends on
 // the clock. (The time taken is printed to stderr, apart from the report.)
@@ -48,6 +56,9 @@
 //       "shiftsAtZeroFuel": spread+,   shifts that began with 0 fuel (fuel was 0
 //                                      after the upkeep before them), per run
 //       "runsWithAShiftAtZeroFuel": n,
+//       "shiftsInTheDark":  spread+,   shifts that began with the lamp out (lamp oil
+//                                      was 0 after the upkeep before them), per run
+//       "runsWithAShiftInTheDark": n,
 //       "finalInventoryMean": { "<item id>": mean count, ... }   every item
 //     },
 //     "runs": [                     one entry per run, in seed order
@@ -67,7 +78,7 @@
 //         "itemsCrafted": { "<item or gauge id>": amount, ... },
 //         "structuresPlaced": { "ladder": n, "torch": n, "support": n },
 //         "damageTaken": n, "healthAtEnd": n, "fuelAtEnd": n, "lampOilAtEnd": n,
-//         "shiftsAtZeroFuel": n,
+//         "shiftsAtZeroFuel": n, "shiftsInTheDark": n,
 //         "finalInventory": { "<item id>": count, ... },   every item
 //         "finalHash": "16 hex digits"                      hashState of the final state
 //       }, ...
@@ -75,6 +86,7 @@
 //   }
 
 import { CONTRACT_IDS, DEFAULT_LOADOUT_ID, GAME_DATA, validateData } from '../src/data';
+import { DEFAULT_MARGIN_SHIFTS, formatCoalSurvey, surveyCoal } from './coalSurvey';
 import { POLICY_NAMES, makePolicy } from './policies';
 import { formatSummary, simulate } from './simRun';
 
@@ -84,7 +96,13 @@ interface Options {
   runs: number;
   maxShifts: number;
   json: boolean;
+  /** The survey to print instead of the usual report; `null` for the usual report. */
+  survey: string | null;
+  margin: number;
 }
+
+/** The names `--survey` accepts. */
+const SURVEY_NAMES = ['coal'];
 
 /** A run that has not ended after this many shifts is stopped (0005, Consequences). */
 const DEFAULT_MAX_SHIFTS = 300;
@@ -93,7 +111,8 @@ const LARGEST_SEED = 0xffffffff;
 function fail(message: string): never {
   console.error(`sim: ${message}`);
   console.error(
-    `Usage: npm run sim -- [--seed N] [--policy ${POLICY_NAMES.join('|')}] [--runs N] [--max-shifts N] [--json]`,
+    `Usage: npm run sim -- [--seed N] [--policy ${POLICY_NAMES.join('|')}] [--runs N] [--max-shifts N] [--json]\n` +
+      `       npm run sim -- --survey ${SURVEY_NAMES.join('|')} [--seed N] [--runs N] [--max-shifts N] [--margin N] [--json]`,
   );
   process.exit(1);
 }
@@ -113,6 +132,8 @@ function parseArgs(args: string[]): Options {
     runs: 1,
     maxShifts: DEFAULT_MAX_SHIFTS,
     json: false,
+    survey: null,
+    margin: DEFAULT_MARGIN_SHIFTS,
   };
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -130,12 +151,21 @@ function parseArgs(args: string[]): Options {
       options.maxShifts = wholeNumber(args[i], '--max-shifts');
     } else if (arg === '--json') {
       options.json = true;
+    } else if (arg === '--survey') {
+      i += 1;
+      options.survey = args[i] ?? '';
+    } else if (arg === '--margin') {
+      i += 1;
+      options.margin = wholeNumber(args[i], '--margin');
     } else {
       fail(`unknown argument ${arg ?? ''}`);
     }
   }
   if (!POLICY_NAMES.includes(options.policy)) {
     fail(`--policy must be one of ${POLICY_NAMES.join(', ')}, but is "${options.policy}"`);
+  }
+  if (options.survey !== null && !SURVEY_NAMES.includes(options.survey)) {
+    fail(`--survey must be one of ${SURVEY_NAMES.join(', ')}, but is "${options.survey}"`);
   }
   if (options.runs < 1) {
     fail('--runs must be at least 1');
@@ -164,6 +194,22 @@ function main(): void {
   // Wall-clock time is fine here: this is a tool, not the engine, and the
   // time goes to stderr only, so the report itself stays reproducible.
   const startedAt = performance.now();
+
+  if (options.survey === 'coal') {
+    const survey = surveyCoal({
+      firstSeed: options.seed,
+      seeds: options.runs,
+      contractId,
+      loadoutId: DEFAULT_LOADOUT_ID,
+      marginShifts: options.margin,
+      maxShifts: options.maxShifts,
+    });
+    console.log(options.json ? JSON.stringify(survey, null, 2) : formatCoalSurvey(survey));
+    const surveySeconds = (performance.now() - startedAt) / 1000;
+    console.error(`sim: coal survey of ${options.runs} seeds in ${surveySeconds.toFixed(1)} s`);
+    return;
+  }
+
   const report = simulate({
     policyName: options.policy,
     firstSeed: options.seed,

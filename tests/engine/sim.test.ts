@@ -98,6 +98,8 @@ describe('playRun', () => {
     // 24 fuel at the start, 1 used at each of the 9 ends of shift.
     expect(metrics.fuelAtEnd).toBe(15);
     expect(metrics.shiftsAtZeroFuel).toBe(0);
+    // 3 lamp oil lasts 12 shifts; the run is over before then.
+    expect(metrics.shiftsInTheDark).toBe(0);
     expect(metrics.legalActionsPerPhase.min).toBeGreaterThan(0);
   });
 
@@ -169,6 +171,27 @@ describe('playRun', () => {
     expect(metrics.cause).toBe('outOfFuel');
     expect(metrics.fuelAtEnd).toBe(0);
     expect(metrics.shiftsAtZeroFuel).toBeGreaterThanOrEqual(1);
+  });
+
+  it('counts the shifts that begin with the lamp out', () => {
+    // The same run. It crafts no lamp oil, so the 3 it starts with burn at the
+    // ends of shifts 4, 8 and 12, and every shift from 13 on begins in the
+    // dark. (It crafts some fuel, which is why it lasts 28 shifts and not 25.)
+    const { metrics } = playRun({
+      seed: 9,
+      contractId: CONTRACT,
+      loadoutId: DEFAULT_LOADOUT_ID,
+      policy: makePolicy('wander', 9),
+      maxShifts: 300,
+    });
+    expect(metrics.recipesUsed['lampOil']).toBe(0);
+    expect(metrics.shiftsPlayed).toBe(28);
+    expect(metrics.shiftsInTheDark).toBe(28 - 12);
+    const report = simulate(options('wander', 3));
+    expect(report.aggregate.runsWithAShiftInTheDark).toBe(
+      report.runs.filter((run) => run.shiftsInTheDark > 0).length,
+    );
+    expect(formatSummary(report)).toContain('shifts in the dark:');
   });
 
   it('knows each policy name, and refuses any other', () => {
