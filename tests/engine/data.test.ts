@@ -230,4 +230,110 @@ describe('data lookups', () => {
     expect(() => itemDef('constructor')).toThrow('Unknown item id');
     expect(() => itemDef('toString')).toThrow('Unknown item id');
   });
+
+  // --- Generation (src/data/generation.ts) ---
+
+  it('reports generation data that names an unknown band or misses one', () => {
+    const problems = problemsAfter((data) => {
+      const first = data.generation.bands[0];
+      if (first !== undefined) {
+        first.bandId = 'attic';
+      }
+    });
+    expect(problems).toHaveLength(2);
+    expect(problems[0]).toContain('"attic"');
+    expect(problems[1]).toContain('depth band "upper" has no entry');
+  });
+
+  it('reports a band listed twice in the generation data', () => {
+    const problems = problemsAfter((data) => {
+      const first = data.generation.bands[0];
+      if (first !== undefined) {
+        data.generation.bands.push(structuredClone(first));
+      }
+    });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('listed more than once');
+  });
+
+  it('reports generated blocks that are unknown or cannot be dug', () => {
+    const problems = problemsAfter((data) => {
+      const upper = data.generation.bands[0];
+      upper?.rock.push({ block: 'air', weightAtTop: 1, weightAtBottom: 1 });
+      upper?.veins.push({ block: 'bedrock', veinsPer1000Cells: 1, minSize: 2, maxSize: 3 });
+      upper?.veins.push({ block: 'cheese', veinsPer1000Cells: 1, minSize: 2, maxSize: 3 });
+    });
+    expect(problems).toHaveLength(3);
+    expect(problems[0]).toContain('"air"');
+    expect(problems[1]).toContain('"bedrock"');
+    expect(problems[2]).toContain('unknown block "cheese"');
+  });
+
+  it('reports a block listed twice in one band', () => {
+    const problems = problemsAfter((data) => {
+      data.generation.bands[0]?.veins.push({
+        block: 'dirt',
+        veinsPer1000Cells: 1,
+        minSize: 2,
+        maxSize: 3,
+      });
+    });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('"dirt" is listed more than once');
+  });
+
+  it('reports bad rock weights', () => {
+    const negative = problemsAfter((data) => {
+      const rock = data.generation.bands[0]?.rock[0];
+      if (rock !== undefined) {
+        rock.weightAtTop = -1;
+      }
+    });
+    expect(negative).toHaveLength(1);
+    expect(negative[0]).toContain('negative or invalid weight');
+
+    const allZero = problemsAfter((data) => {
+      for (const rock of data.generation.bands[0]?.rock ?? []) {
+        rock.weightAtBottom = 0;
+      }
+    });
+    expect(allZero).toHaveLength(1);
+    expect(allZero[0]).toContain('add up to more than 0');
+
+    const noRock = problemsAfter((data) => {
+      const upper = data.generation.bands[0];
+      if (upper !== undefined) {
+        upper.rock = [];
+      }
+    });
+    expect(noRock).toHaveLength(1);
+    expect(noRock[0]).toContain('add up to more than 0');
+  });
+
+  it('reports bad vein numbers', () => {
+    const problems = problemsAfter((data) => {
+      const vein = data.generation.bands[0]?.veins[0];
+      if (vein !== undefined) {
+        vein.veinsPer1000Cells = 0;
+        vein.minSize = 0;
+        vein.maxSize = 2.5;
+      }
+      data.generation.veinPlacementTries = 0;
+    });
+    expect(problems).toHaveLength(4);
+    expect(problems[0]).toContain('veinPlacementTries');
+    expect(problems[1]).toContain('veinsPer1000Cells');
+    expect(problems[2]).toContain('minSize');
+    expect(problems[3]).toContain('maxSize');
+
+    const upsideDown = problemsAfter((data) => {
+      const vein = data.generation.bands[0]?.veins[0];
+      if (vein !== undefined) {
+        vein.minSize = 6;
+        vein.maxSize = 5;
+      }
+    });
+    expect(upsideDown).toHaveLength(1);
+    expect(upsideDown[0]).toContain('maxSize');
+  });
 });

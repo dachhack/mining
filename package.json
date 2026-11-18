@@ -16,6 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "sim": "tsx tools/sim.ts",
+    "ascii": "tsx tools/ascii.ts",
     "e2e": "playwright test"
   },
   "devDependencies": {
