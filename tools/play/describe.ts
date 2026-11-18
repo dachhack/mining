@@ -5,9 +5,9 @@
 // is described from the action itself (which the engine offers only for cells
 // in reach, all of them revealed) and from the data tables.
 
-import { STRUCTURES, WORLD, blockDefByCode, findRecipe, itemDef } from '../../src/data';
+import { AVATAR, STRUCTURES, WORLD, blockDefByCode, findRecipe, itemDef } from '../../src/data';
 import type { ItemStack, Vec3 } from '../../src/data';
-import { blockDefAt, canCarry, isRevealed } from '../../src/engine';
+import { blockDefAt, canCarry, isRevealed, isSolid, structureAt } from '../../src/engine';
 import type { Action, GameEvent, GameState } from '../../src/engine';
 import type { LogEntry } from './log';
 
@@ -55,6 +55,68 @@ function blocksText(count: number): string {
   return count === 1 ? '1 block' : `${count} blocks`;
 }
 
+/**
+ * What the player knows about the fall that follows mining the block the
+ * avatar stands on, for the action list. This is the one lethal choice in
+ * M1, so the list must say it.
+ *
+ * It is worked out from revealed cells only. The column under the avatar is
+ * walked downwards, and at the first cell the player has not seen the answer
+ * stops at "at least so far": what lies beyond is not looked at, so the text
+ * cannot give it away. (The engine's own fall, in gravity.ts, uses the real
+ * cube; the two agree whenever the whole column is revealed.)
+ */
+function knownFallText(state: GameState): string {
+  const here = state.avatar.pos;
+  // A ladder in the avatar's own cell is footing: it holds whatever is mined.
+  if (structureAt(state, here) === STRUCTURES.ladder.code) {
+    return 'your ladder holds you, you will not fall';
+  }
+  // With the block gone the avatar drops into its cell: a fall of 1. It
+  // falls on from a cell while that cell has no ladder and the cell below it
+  // is open.
+  let fall = 1;
+  let known = true;
+  for (;;) {
+    const below = { x: here.x, y: here.y, z: here.z + fall + 1 };
+    if (!isRevealed(state, below)) {
+      known = false;
+      break;
+    }
+    if (isSolid(state, below)) {
+      break;
+    }
+    fall += 1;
+    if (structureAt(state, below) === STRUCTURES.ladder.code) {
+      break; // a ladder further down catches the fall
+    }
+  }
+
+  const harm =
+    fall >= AVATAR.fatalFallBlocks
+      ? ', FATAL'
+      : fall > AVATAR.freeFallBlocks
+        ? ', it will cost health'
+        : known
+          ? ', no harm'
+          : '';
+  return known
+    ? `you will fall ${blocksText(fall)}${harm}`
+    : `you will fall ${blocksText(fall)} or more${harm}: below that is unseen`;
+}
+
+/** What the player is told when the run is over, in words (the engine's ids are not shown). */
+const RUN_END_TEXT: Record<string, string> = {
+  left: 'you left the cube alive with what you carried (a "salvage" run)',
+  fell: 'you died of a fall',
+  outOfFuel: 'you ran out of fuel and died',
+};
+
+/** How a run ended, in words. `cause` is the engine's `RunEndCause`. */
+export function runEndText(cause: string): string {
+  return RUN_END_TEXT[cause] ?? cause;
+}
+
 function describeAction(state: GameState, action: Action): string {
   const here = state.avatar.pos;
   switch (action.type) {
@@ -77,10 +139,12 @@ function describeAction(state: GameState, action: Action): string {
       // A yield that does not fit the carry limit is left in the hole.
       const fits = block.yields.every((stack) => canCarry(state, stack.item, stack.count));
       const tooHeavy = fits ? '' : ' (too heavy to carry: it will be left lying there)';
-      const under =
-        action.target.x === here.x && action.target.y === here.y ? ' (you are standing on it)' : '';
+      const underfoot =
+        action.target.x === here.x && action.target.y === here.y
+          ? ` (you are standing on it: ${knownFallText(state)})`
+          : '';
       return (
-        `Mine ${whereFrom(here, action.target)}: ${block.name}${under}` +
+        `Mine ${whereFrom(here, action.target)}: ${block.name}${underfoot}` +
         `, gives ${stackListText(block.yields)}${tooHeavy}`
       );
     }

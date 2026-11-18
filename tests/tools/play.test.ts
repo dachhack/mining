@@ -28,7 +28,7 @@ import { helpText } from '../../tools/play/help';
 import { replayLog } from '../../tools/play/log';
 import type { LogEntry } from '../../tools/play/log';
 import { buildView, renderView } from '../../tools/play/view';
-import { buildState } from '../engine/helpers';
+import { act, buildState } from '../engine/helpers';
 
 /** The text one step prints for `state`. */
 function viewText(state: GameState): string {
@@ -193,11 +193,81 @@ describe('the action list', () => {
     const text = viewText(state);
     expect(text).toContain('[1] Move west, then drop 2 blocks to layer 1');
     expect(text).toContain('[1] Move east');
-    expect(text).toContain('Mine below you: Stone (you are standing on it), gives 1 Stone');
+    expect(text).toContain(
+      'Mine below you: Stone (you are standing on it: you will fall 1 block, no harm), gives 1 Stone',
+    );
     // 10 stone weigh 20, the carry limit, so one more does not fit.
     expect(text).toContain('(too heavy to carry: it will be left lying there)');
     expect(text).toContain('[0] Drop all 10 Stone');
     expect(text).toContain('Leave the cube');
+  });
+
+  // A 3 x 1 column cube. The avatar stands on the surface over (1, 0); the
+  // cells under the block it stands on are open down to `depth` layers.
+  function overVoid(openLayers: number, totalLayers: number): GameState {
+    const layers: string[][] = [];
+    for (let z = 0; z < totalLayers; z += 1) {
+      layers.push([z >= 1 && z <= openLayers ? '#.#' : '###']);
+    }
+    return buildState({ layers, avatar: { x: 1, y: 0, z: -1 }, revealAll: true });
+  }
+  /** The action-list line for mining the block underfoot. */
+  function mineBelowLine(state: GameState): string {
+    const line = viewText(state)
+      .split('\n')
+      .find((text) => text.includes('Mine below you'));
+    return line ?? '';
+  }
+
+  it('says how far the avatar will fall when it mines the block it stands on', () => {
+    // Each case is checked against what the engine then does.
+    const cases = [
+      { open: 0, text: 'you will fall 1 block, no harm' },
+      { open: 1, text: 'you will fall 2 blocks, no harm' },
+      { open: 3, text: 'you will fall 4 blocks, it will cost health' },
+      { open: 5, text: 'you will fall 6 blocks, FATAL' },
+    ];
+    for (const { open, text } of cases) {
+      const state = overVoid(open, 8);
+      expect(mineBelowLine(state)).toContain(`(you are standing on it: ${text})`);
+      const { events } = act(state, { type: 'mine', target: { x: 1, y: 0, z: 0 } });
+      const fell = events.find((event) => event.type === 'fell');
+      expect(fell).toMatchObject({ distance: open + 1 });
+    }
+  });
+
+  it('says so when a ladder holds the avatar, or one further down will catch it', () => {
+    const onLadder = buildState({
+      layers: [['#.#'], ['###'], ['###']],
+      avatar: { x: 1, y: 0, z: 0 },
+      ladders: [{ x: 1, y: 0, z: 0 }],
+      revealAll: true,
+    });
+    expect(mineBelowLine(onLadder)).toContain('your ladder holds you, you will not fall');
+
+    const caught = overVoid(5, 8);
+    caught.structures[cellIndex(caught.size, { x: 1, y: 0, z: 2 })] = STRUCTURES.ladder.code;
+    expect(mineBelowLine(caught)).toContain('you will fall 3 blocks, it will cost health)');
+    const { events } = act(caught, { type: 'mine', target: { x: 1, y: 0, z: 0 } });
+    expect(events.find((event) => event.type === 'fell')).toMatchObject({ distance: 3 });
+  });
+
+  it('judges the fall by revealed cells only, and says when it cannot see the bottom', () => {
+    const state = overVoid(5, 8);
+    // The player has seen the void down to layer 2 only.
+    for (let z = 3; z < 8; z += 1) {
+      state.revealed[cellIndex(state.size, { x: 1, y: 0, z })] = 0;
+    }
+    const before = viewText(state);
+    expect(mineBelowLine(state)).toContain(
+      'you will fall 3 blocks or more, it will cost health: below that is unseen',
+    );
+    // Whatever the unseen cells hold, the text is the same.
+    state.blocks[cellIndex(state.size, { x: 1, y: 0, z: 3 })] = BLOCKS.stone.code;
+    expect(viewText(state)).toBe(before);
+    state.blocks[cellIndex(state.size, { x: 1, y: 0, z: 3 })] = BLOCKS.air.code;
+    state.structures[cellIndex(state.size, { x: 1, y: 0, z: 4 })] = STRUCTURES.ladder.code;
+    expect(viewText(state)).toBe(before);
   });
 
   it('shows no actions, and the outcome, once the run has ended', () => {
@@ -210,7 +280,7 @@ describe('the action list', () => {
     const view = buildView(ended, { radius: 4, layers: 1, deepestZ: -1 });
     expect(view.choices).toEqual([]);
     const text = renderView(view);
-    expect(text).toContain('RUN ENDED: salvage (left)');
+    expect(text).toContain('RUN ENDED: you left the cube alive');
     expect(text).toContain('Shifts played: 1 | Deepest: the surface');
     expect(text).toContain('Carrying (weight): 6 Ladder (0), 2 Timber (2)');
     expect(text).not.toContain('Actions');
@@ -319,7 +389,7 @@ describe('one-shot mode and the play log', () => {
     const leave = numberOf((entry) => entry.type === 'leave');
     const result = runCli(['--log', logPath, '--do', leave]);
     expect(result.exitCode).toBe(0);
-    expect(result.output).toContain('RUN ENDED: salvage (left)');
+    expect(result.output).toContain('RUN ENDED: you left the cube alive');
 
     const log = loadLog(logPath);
     const finalState = replayLog(log).state;
@@ -387,6 +457,26 @@ describe('one-shot mode and the play log', () => {
     expect(result.exitCode).toBe(1);
     expect(result.output).toContain('entry 1 of 1 does not replay');
     expect(readFileSync(logPath, 'utf8')).toBe(JSON.stringify(log));
+  });
+
+  it('creates the folder of the log if it does not exist yet', () => {
+    const nested = join(folder, 'm1-r1', 'deep', 'run.json');
+    const started = runCli(['--seed', '7', '--log', nested]);
+    expect(started.exitCode).toBe(0);
+    expect(started.output).toContain('Actions [AP cost]:');
+    expect(loadLog(nested).seed).toBe(7);
+  });
+
+  it('names the ways a run ends in words', () => {
+    const state = buildState({
+      layers: [['###'], ['###']],
+      avatar: { x: 1, y: 0, z: -1 },
+      fuel: 0,
+      ap: 0,
+      revealAll: true,
+    });
+    expect(viewText(state)).toContain('THE RUN ENDS: you ran out of fuel and died.');
+    expect(viewText(endShift(state).state)).toContain('RUN ENDED: you ran out of fuel and died');
   });
 
   it('reports bad arguments', () => {

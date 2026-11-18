@@ -37,7 +37,9 @@ USAGE (one command per step)
   --loadout ID the starting kit (default: standard)
 
 READING A VIEW
-  The first line is your gauges. The map shows your layer with the layers above and below it
+  After you act, the view opens with one line starting ">" for each choice taken: what you did
+  and what came of it (a fall, lost health, what you got). Read them; nothing else reports it.
+  Then come your gauges. The map shows your layer with the layers above and below it
   beside it, each seen from above: x grows to the east (right), y grows to the south (down the
   page). "@" is you; "?" is a cell you have not seen, which may be rock or open space. The legend
   under the map names every other character in it. Then come known hazards, what ending the
@@ -78,7 +80,8 @@ THE GAME
     if nothing holds you, you fall until something does. A ladder further down the shaft catches
     you, but the fall still counts.
   - A fall of up to ${AVATAR.freeFallBlocks} blocks is free. Each block beyond that costs health, and a fall of ${AVATAR.fatalFallBlocks} or
-    more kills. The usual way to fall far is to mine the block you stand on over a hole.
+    more kills. The usual way to fall far is to mine the block you stand on over a hole: the
+    action list says how far you will fall, as far as you have seen the cells below.
 
   Mining
   - Your pick reaches the 8 cells around you on your own layer (diagonals too) and the 9 cells
@@ -116,6 +119,7 @@ ${recipes}
 
   Leaving
   - While you stand on the surface, "Leave the cube" is on the list and costs nothing. It ends
-    the run alive, with whatever you carry. There is no other way to finish alive.
+    the run alive, with whatever you carry (the game calls this a "salvage" run). There is no
+    other way to finish alive.
 `;
 }

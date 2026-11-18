@@ -3,7 +3,8 @@
 // except the interactive prompt (that is in ../play.ts), and returns the text
 // to print instead of printing it, so the tests can call it directly.
 
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 import { CONTRACT_IDS, DEFAULT_LOADOUT_ID, GAME_DATA, validateData } from '../../src/data';
 import { ENGINE_VERSION, hashState, isRunActive, legalActions } from '../../src/engine';
@@ -179,10 +180,12 @@ export function sessionView(session: Session, options: CliOptions): string {
 }
 
 /**
- * Save the log. It is written to a second file which then replaces the
+ * Save the log, creating its folder if need be. It is written to a second file which then replaces the
  * first, so a crash part-way cannot leave half a log behind.
  */
 export function saveLog(path: string, log: PlayLog): void {
+  // The playtest brief saves logs in a round folder that may not exist yet.
+  mkdirSync(dirname(path), { recursive: true });
   const temporary = `${path}.tmp`;
   writeFileSync(temporary, logToText(log));
   renameSync(temporary, path);

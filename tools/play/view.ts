@@ -36,7 +36,7 @@ import {
   structureAt,
 } from '../../src/engine';
 import type { GameState } from '../../src/engine';
-import { describeChoice, layerName, stackListText } from './describe';
+import { describeChoice, layerName, runEndText, stackListText } from './describe';
 import { END_SHIFT, menuChoices } from './log';
 import type { LogEntry } from './log';
 
@@ -109,8 +109,8 @@ export interface ChoiceView {
 
 /** The summary printed once the run is over. */
 export interface EndedView {
-  outcome: string;
-  cause: string;
+  /** How the run ended, in words. */
+  headline: string;
   shiftsPlayed: number;
   deepest: string;
   health: number;
@@ -288,8 +288,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     // `status.kind` is 'ended' here; the check lets TypeScript see the fields.
     const status = state.status;
     const ended: EndedView = {
-      outcome: status.kind === 'ended' ? status.outcome : '',
-      cause: status.kind === 'ended' ? status.cause : '',
+      headline: status.kind === 'ended' ? runEndText(status.cause) : '',
       shiftsPlayed: state.shift - SHIFT.firstShiftNumber + 1,
       deepest: layerName(options.deepestZ),
       health: state.avatar.health,
@@ -318,7 +317,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   const upkeep = preview.upkeep;
   let forecast: string;
   if (upkeep.runEnds !== null) {
-    forecast = `THE RUN ENDS (${upkeep.runEnds}): no fuel left even after banking ${upkeep.apBanked} AP.`;
+    forecast = `THE RUN ENDS: ${runEndText(upkeep.runEnds)}. No fuel is left even after banking ${upkeep.apBanked} AP.`;
   } else {
     const refund = upkeep.fuelRefunded > 0 ? ` +${upkeep.fuelRefunded} refund` : '';
     forecast =
@@ -369,7 +368,7 @@ export function renderView(view: PlayerView): string {
 
   if (view.ended !== null) {
     const e = view.ended;
-    lines.push(`=== RUN ENDED: ${e.outcome} (${e.cause}) ===`);
+    lines.push(`=== RUN ENDED: ${e.headline} ===`);
     lines.push(
       `Shifts played: ${e.shiftsPlayed} | Deepest: ${e.deepest} | Health ${e.health} | Fuel ${e.fuel}`,
     );
