@@ -181,6 +181,7 @@ function playAndCheck(seed: number, policyName: string, maxDecisions: number): s
 describe('property tests: random legal play', () => {
   /** How each run below ended, for the last test. */
   const endings = new Set<string>();
+  let runsPlayed = 0;
 
   // `wander` never leaves, so these runs go deep and long: most end out of
   // fuel between 180 and 320 decisions in.
@@ -188,6 +189,7 @@ describe('property tests: random legal play', () => {
     'wander policy, seed %i: the state stays valid for 350 decisions',
     (seed) => {
       endings.add(playAndCheck(seed, 'wander', 350));
+      runsPlayed += 1;
     },
   );
 
@@ -196,12 +198,18 @@ describe('property tests: random legal play', () => {
     'random policy, seed %i: the state stays valid for 150 decisions',
     (seed) => {
       endings.add(playAndCheck(seed, 'random', 150));
+      runsPlayed += 1;
     },
   );
 
-  it('the runs above ended in more than one way', () => {
+  it('the runs above ended in more than one way', (context) => {
     // A check on the tests themselves: if every run ended the same way, part
-    // of the engine would not be exercised. (Tests in a file run in order.)
+    // of the engine would not be exercised. It needs all 14 runs above (tests
+    // in a file run in order), so when a filter such as `vitest -t` has left
+    // some out, it is reported as skipped, not as a failure.
+    if (runsPlayed < 14) {
+      context.skip();
+    }
     expect([...endings]).toEqual(expect.arrayContaining(['left', 'outOfFuel', 'active']));
   });
 });

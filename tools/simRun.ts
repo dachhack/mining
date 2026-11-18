@@ -38,7 +38,11 @@ export interface RunMetrics {
   policy: string;
   /** 'salvage' or 'death' as the engine reports them, or 'unfinished' at the shift cap. */
   outcome: string;
-  /** 'left', 'fell' or 'outOfFuel' as the engine reports them, or 'shiftCap'. */
+  /**
+   * 'left', 'fell' or 'outOfFuel' as the engine reports them; 'shiftCap' for a
+   * run stopped at `maxShifts`; or 'cutShort' for one stopped at
+   * `maxDecisions` (which `npm run sim` never sets, so it never prints it).
+   */
   cause: string;
   /** Shifts started, counting the one the run ended in. */
   shiftsPlayed: number;

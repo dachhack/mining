@@ -1,10 +1,10 @@
 // The simulator's run driver and report (tools/simRun.ts, tools/policies.ts).
 
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { CONTRACT_IDS, DEFAULT_LOADOUT_ID, FIELD_RECIPES, ITEMS } from '../../src/data';
 import { POLICY_NAMES, makePolicy } from '../../tools/policies';
 import { formatSummary, playRun, simulate } from '../../tools/simRun';
-import type { SimOptions } from '../../tools/simRun';
+import type { SimOptions, SimReport } from '../../tools/simRun';
 
 const CONTRACT = CONTRACT_IDS[0] as string;
 
@@ -21,7 +21,12 @@ function options(policyName: string, runs: number): SimOptions {
 }
 
 describe('simulate', () => {
-  const report = simulate(options('random', 12));
+  // Run in `beforeAll`, not while the file is loaded, so that a crash in the
+  // simulator is reported under this name.
+  let report: SimReport;
+  beforeAll(() => {
+    report = simulate(options('random', 12));
+  });
 
   it('gives the same report for the same options', () => {
     expect(simulate(options('random', 12))).toEqual(report);

@@ -5,7 +5,7 @@
 // down, walk back up it, leave. It uses only actions from `legalActions` and
 // `endShift`; `applyAction` would throw on anything else.
 
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { CONTRACT_IDS, DEFAULT_LOADOUT_ID, WORLD } from '../../src/data';
 import {
   applyAction,
@@ -72,8 +72,14 @@ function newRun(seed: number): GameState {
 }
 
 describe('M1 acceptance: dig from the surface to layer 8 and come back', () => {
-  const start = newRun(8);
-  const result = dig(start, TARGET_LAYER);
+  // The dig runs in `beforeAll`, not while the file is loaded, so that if the
+  // policy or the engine throws, the failure is reported under this name.
+  let start: GameState;
+  let result: DigResult;
+  beforeAll(() => {
+    start = newRun(8);
+    result = dig(start, TARGET_LAYER);
+  });
 
   it('starts on the surface', () => {
     expect(start.avatar.pos).toEqual(WORLD.startPosition);
