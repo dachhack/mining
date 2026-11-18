@@ -144,6 +144,7 @@ describe('the view hides what the avatar cannot know', () => {
         toOre += 1;
       }
     }
+    // 1000 is not a rule number: it only means a large part of the cube was flipped.
     expect(toOre).toBeGreaterThan(1000);
     expect(toRock).toBeGreaterThan(0);
     expect(viewText(state)).toBe(before);

@@ -52,6 +52,7 @@ describe('golden runs', () => {
     expect(visibleMineralTraces(state).length).toBeGreaterThan(0);
     // It mined an ore block on the way. The pack was full of stone by then,
     // so the raw ore lies where it was mined; count the pack and the floor.
+    // Crystal is not counted: this run mines iron ore, and one kind is enough here.
     const ores = ['rawIronOre', 'rawCopperOre'];
     let rawOre = 0;
     for (const item of ores) {
