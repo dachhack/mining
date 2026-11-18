@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { BLOCKS, STRUCTURES } from '../../src/data';
 import type { Vec3 } from '../../src/data';
 import {
+  ENGINE_VERSION,
   applyAction,
   cellIndex,
   cellPosition,
@@ -347,7 +348,7 @@ describe('one-shot mode and the play log', () => {
     expect(log.seed).toBe(7);
     expect(log.contractId).toBe('none');
     expect(log.loadoutId).toBe('standard');
-    expect(log.engineVersion).toBe('0.1.0');
+    expect(log.engineVersion).toBe(ENGINE_VERSION);
     expect(log.actions).toHaveLength(7);
     expect(log.outcome).toBeNull();
     // The log holds actions, not menu numbers.
@@ -471,6 +472,35 @@ describe('one-shot mode and the play log', () => {
     expect(result.exitCode).toBe(1);
     expect(result.output).toContain('entry 1 of 1 does not replay');
     expect(readFileSync(logPath, 'utf8')).toBe(JSON.stringify(log));
+  });
+
+  it('--replay says plainly when a mismatch comes with a log from another engine version', () => {
+    runCli(['--seed', '7', '--log', logPath, '--do', '1']);
+    const leave = numberOf((entry) => entry.type === 'leave');
+    runCli(['--log', logPath, '--do', leave]);
+    const log = loadLog(logPath);
+    if (log.outcome === null) {
+      throw new Error('Test setup: the run should have ended');
+    }
+
+    // The same engine version with a wrong hash: a mismatch, and no excuse.
+    const wrongHash = { ...log, outcome: { ...log.outcome, stateHash: '0000000000000000' } };
+    writeFileSync(logPath, JSON.stringify(wrongHash));
+    const sameEngine = runCli(['--replay', logPath]);
+    expect(sameEngine.exitCode).toBe(1);
+    expect(sameEngine.output).toContain('MISMATCH');
+    expect(sameEngine.output).not.toContain('This is expected');
+
+    // A log that names another engine version: still a mismatch (exit code
+    // 1), with the reason spelled out.
+    writeFileSync(logPath, JSON.stringify({ ...wrongHash, engineVersion: '0.1.0' }));
+    const otherEngine = runCli(['--replay', logPath]);
+    expect(otherEngine.exitCode).toBe(1);
+    expect(otherEngine.output).toContain('MISMATCH');
+    expect(otherEngine.output).toContain(
+      `This is expected: the log was played on engine 0.1.0 and this is engine ${ENGINE_VERSION}. ` +
+        'A play log replays to its recorded hash only on the engine version it names.',
+    );
   });
 
   it('creates the folder of the log if it does not exist yet', () => {
