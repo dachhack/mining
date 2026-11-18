@@ -268,7 +268,7 @@ describe('the act and findActions test helpers', () => {
   it('find a legal action from a partial description and apply it', () => {
     const state = startState(5);
     expect(findActions(state, { type: 'leave' })).toEqual([LEAVE]);
-    expect(findActions(state, { type: 'move' })).toEqual([]);
+    expect(findActions(state, { type: 'move', to: { x: 9, y: 9, z: 9 } })).toEqual([]);
     expect(act(state, { type: 'leave' }).state.ap).toBe(5 - FAKE_LEAVE_COST);
     expect(() => act(state, { type: 'mine' })).toThrow('found 0');
   });
