@@ -5,20 +5,31 @@
 // is described from the action itself (which the engine offers only for cells
 // in reach, all of them revealed) and from the data tables.
 
-import { STRUCTURES, WORLD, blockDefByCode, findRecipe, itemDef } from '../../src/data';
+import {
+  BLOCKS,
+  STRUCTURES,
+  TELLS,
+  WORLD,
+  blockDefByCode,
+  findRecipe,
+  itemDef,
+} from '../../src/data';
 import type { ItemStack, Vec3 } from '../../src/data';
 import {
   blockDefAt,
   canCarry,
+  countItem,
   fallDamage,
   isFatalFall,
   isRevealed,
   isSolid,
+  looseItemsAt,
   showsMineralTraces,
   structureAt,
 } from '../../src/engine';
 import type { Action, GameEvent, GameState } from '../../src/engine';
 import type { LogEntry } from './log';
+import { tracedSymbolsText } from './symbols';
 
 /** "2 Stone, 1 Coal", or "nothing". */
 export function stackListText(stacks: ItemStack[]): string {
@@ -75,6 +86,12 @@ function blocksText(count: number): string {
  * stops at "at least so far": what lies beyond is not looked at, so the text
  * cannot give it away. (The engine's own fall, in gravity.ts, uses the real
  * cube; the two agree whenever the whole column is revealed.)
+ *
+ * "N blocks or more" is said only when that first unseen cell is met, and the
+ * text names its layer; with the bottom of the fall seen it is "N blocks"
+ * exactly (issue #47 item 5). In a bare one-cell shaft the cell under the
+ * block underfoot is not seen (the lamp shows the floor, not what is under
+ * it), so there the honest answer stays "1 block or more".
  */
 function knownFallText(state: GameState): string {
   const here = state.avatar.pos;
@@ -87,10 +104,13 @@ function knownFallText(state: GameState): string {
   // is open.
   let fall = 1;
   let known = true;
+  // The layer of the first unseen cell, if the walk meets one.
+  let unseenLayer = 0;
   for (;;) {
     const below = { x: here.x, y: here.y, z: here.z + fall + 1 };
     if (!isRevealed(state, below)) {
       known = false;
+      unseenLayer = below.z;
       break;
     }
     if (isSolid(state, below)) {
@@ -115,7 +135,7 @@ function knownFallText(state: GameState): string {
   }
   return known
     ? `you will fall ${blocksText(fall)}${harm}`
-    : `you will fall ${blocksText(fall)} or more${harm}; below that is unseen`;
+    : `you will fall ${blocksText(fall)} or more${harm}; the cell under that (${layerName(unseenLayer)}) is unseen`;
 }
 
 /** What the player is told when the run is over, in words (the engine's ids are not shown). */
@@ -182,7 +202,25 @@ function describeAction(state: GameState, action: Action): string {
     }
     case 'pickUp': {
       const stack = [{ item: action.item, count: action.count }];
-      return `Pick up ${stackListText(stack)} from ${placeWhere(here, action.from)}`;
+      const from = placeWhere(here, action.from);
+      // The engine offers as much of a pile as fits the carry limit. When that
+      // is not the whole pile, say so, or "Pick up 4 Stone" beside "Loose in
+      // your cell: 5 Stone" looks like a mistake (issue #47 item 6). The pile
+      // is in a cell touching the avatar's, which is always revealed; the
+      // check is there so that this function can never read an unseen cell.
+      let pile = action.count;
+      if (isRevealed(state, action.from)) {
+        for (const loose of looseItemsAt(state, action.from)) {
+          if (loose.item === action.item) {
+            pile = loose.count;
+          }
+        }
+      }
+      if (pile > action.count) {
+        const name = itemDef(action.item).name;
+        return `Pick up ${action.count} of the ${pile} ${name} from ${from} (only ${action.count} fit your carry limit)`;
+      }
+      return `Pick up ${stackListText(stack)} from ${from}`;
     }
     case 'drop': {
       const name = itemDef(action.item).name;
@@ -275,13 +313,21 @@ export function choiceName(state: GameState, entry: LogEntry): string {
 }
 
 /**
- * For a mine action, what it does apart from where the block is: "Stone,
- * gives 1 Stone". Mine actions with the same words here and the same AP cost
- * differ only in direction, and the list prints them as one line (issue #30).
- * `null` for the block underfoot, whose line says what the fall will cost
- * and so always stands alone, and for every other kind of choice.
+ * What a choice has in common with others that may share its line of the
+ * list, or `null` for a choice that always has a line of its own.
+ *
+ * - A mine action: "Mine Stone, gives 1 Stone". Mine actions with the same
+ *   words here and the same AP cost differ only in direction (issue #30).
+ *   `null` for the block underfoot, whose line says what the fall will cost.
+ * - A drop: "Drop Ladder (one, or all 6)". The two drops of an item, one and
+ *   the whole stack, share a line (issue #46 item 3). With one carried there
+ *   is a single drop, which then has a line of its own.
  */
-export function mineGroupText(state: GameState, entry: LogEntry): string | null {
+export function choiceGroupText(state: GameState, entry: LogEntry): string | null {
+  if (entry.type === 'drop') {
+    const carried = countItem(state, entry.item);
+    return `Drop ${itemDef(entry.item).name} (one, or all ${carried})`;
+  }
   if (entry.type !== 'mine') {
     return null;
   }
@@ -289,7 +335,7 @@ export function mineGroupText(state: GameState, entry: LogEntry): string | null 
   if (entry.target.x === here.x && entry.target.y === here.y) {
     return null;
   }
-  return mineOutcomeText(state, entry.target, '');
+  return `Mine ${mineOutcomeText(state, entry.target, '')}`;
 }
 
 /** The text of one line of the action list. */
@@ -326,6 +372,7 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
   const lines: string[] = [];
   // Said once for a step, however many blocks it was seen on.
   let tracesSaid = false;
+  const tracesLine = tracesSeenText(events);
   for (const event of events) {
     switch (event.type) {
       case 'moved':
@@ -351,7 +398,7 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
         break;
       case 'mineralTracesSeen':
         if (!tracesSaid) {
-          lines.push('You notice mineral traces in the rock: ore is near. The map marks them "%".');
+          lines.push(tracesLine);
           tracesSaid = true;
         }
         break;
@@ -374,7 +421,9 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
         const where = isRevealed(after, event.to)
           ? `${blocksText(event.to.z - event.from.z)} to ${layerName(event.to.z)}`
           : 'out of sight';
-        lines.push(`${event.count} ${itemDef(event.item).name} fell ${where}.`);
+        // "A loose pile of": so that "Got 1 Stone. 1 Stone fell ..." is not
+        // read as the stone just got falling (issue #47 item 6).
+        lines.push(`A loose pile of ${event.count} ${itemDef(event.item).name} fell ${where}.`);
         break;
       }
       case 'structurePlaced':
@@ -403,6 +452,42 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
     }
   }
   return lines;
+}
+
+/**
+ * The sentence for a step in which mineral traces were first seen.
+ *
+ * The engine notes traces after the action is done (`applyAction`: the mine,
+ * then gravity, reveal, traces). So when a step mines an ore and traces are
+ * then noticed on rock it uncovered, the mined ore is already gone from the
+ * cube: those traces come from OTHER ore, still in the rock. The sentence
+ * says so, because a player may otherwise take them for traces of the ore
+ * now in the pack (issue #47 item 6; review of PR #48). Only the step's
+ * events are read: which block was mined, and that traces were seen.
+ */
+function tracesSeenText(events: GameEvent[]): string {
+  const onMap = `(On the map: ${tracedSymbolsText()}.)`;
+  const oreNames: string[] = TELLS.mineralTraces.sourceBlocks;
+  const minedOre = events.some(
+    (event) => event.type === 'blockMined' && oreNames.includes(blockIdByCode(event.block)),
+  );
+  if (minedOre) {
+    return (
+      'You notice mineral traces in the rock this uncovered: other ore is near ' +
+      `(the ore you just mined no longer counts). ${onMap}`
+    );
+  }
+  return `You notice mineral traces in the rock: ore is near. ${onMap}`;
+}
+
+/** The id in src/data of the block with this code ("ironOre"), or '' if there is none. */
+function blockIdByCode(code: number): string {
+  for (const [blockId, def] of Object.entries(BLOCKS)) {
+    if (def.code === code) {
+      return blockId;
+    }
+  }
+  return '';
 }
 
 /** "+3" or "-1". */
