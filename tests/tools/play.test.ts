@@ -293,8 +293,9 @@ describe('the action list', () => {
     const caught = overVoid(5, 8);
     caught.structures[cellIndex(caught.size, { x: 1, y: 0, z: 2 })] = STRUCTURES.ladder.code;
     expect(mineBelowLine(caught)).toContain('you will fall 3 blocks and lose 4 health)');
-    const { events } = act(caught, { type: 'mine', target: { x: 1, y: 0, z: 0 } });
+    const { state: after, events } = act(caught, { type: 'mine', target: { x: 1, y: 0, z: 0 } });
     expect(events.find((event) => event.type === 'fell')).toMatchObject({ distance: 3 });
+    expect(caught.avatar.health - after.avatar.health).toBe(4);
   });
 
   it('judges the fall by revealed cells only, and says when it cannot see the bottom', () => {

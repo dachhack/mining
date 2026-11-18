@@ -140,6 +140,38 @@ describe('mining the block underfoot with nothing to hold the miner', () => {
   });
 });
 
+describe('a ladder further down the shaft', () => {
+  // Only a ladder in the miner's own cell prevents the fall. One further
+  // down catches the miner, and the fall costs the same as landing on rock
+  // (note 0010; owner question 35). The nearest it can be is 2 cells down:
+  // the cell 1 down is the block being mined.
+  it.each([
+    { distance: 2, lost: 2 },
+    { distance: 3, lost: 4 },
+  ])('catches the miner $distance blocks down, and the fall costs $lost health', (c) => {
+    const ladderCell: Vec3 = { x: 1, y: 1, z: c.distance };
+    const state = buildState({
+      layers: [HOLE, SOLID, HOLE, HOLE, HOLE, HOLE, HOLE, SOLID],
+      avatar: { x: 1, y: 1, z: 0 },
+      ladders: [ladderCell],
+    });
+    updateReveal(state, []);
+
+    const { state: after, events } = mineUnderfoot(state);
+
+    expect(after.avatar.pos).toEqual(ladderCell);
+    expect(AVATAR.startHealth - after.avatar.health).toBe(c.lost);
+    expect(after.status).toEqual({ kind: 'active' });
+    expect(events).toContainEqual({
+      type: 'fell',
+      from: { x: 1, y: 1, z: 0 },
+      to: ladderCell,
+      distance: c.distance,
+      kind: 'uncontrolled',
+    });
+  });
+});
+
 describe('mining the block underfoot while a ladder holds the miner', () => {
   it.each([0, 1, 4, 5])('does not fall or lose health over %i open cell(s)', (open) => {
     const state = overVoid(open, { ladder: true });
