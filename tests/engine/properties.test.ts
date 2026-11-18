@@ -182,10 +182,14 @@ describe('property tests: random legal play', () => {
   /** How each run below ended, for the last test. */
   const endings = new Set<string>();
   let runsPlayed = 0;
+  // The seeds of the runs below. The last test counts on every one of them
+  // having run, and takes that number from these two lists.
+  const WANDER_SEEDS = [1, 2, 3, 4, 5, 6];
+  const RANDOM_SEEDS = [101, 102, 103, 104, 105, 106, 107, 108];
 
   // `wander` never leaves, so these runs go deep and long: most end out of
   // fuel between 180 and 320 decisions in.
-  it.each([1, 2, 3, 4, 5, 6])(
+  it.each(WANDER_SEEDS)(
     'wander policy, seed %i: the state stays valid for 350 decisions',
     (seed) => {
       endings.add(playAndCheck(seed, 'wander', 350));
@@ -194,7 +198,7 @@ describe('property tests: random legal play', () => {
   );
 
   // `random` may also leave, which covers the run ending by choice.
-  it.each([101, 102, 103, 104, 105, 106, 107, 108])(
+  it.each(RANDOM_SEEDS)(
     'random policy, seed %i: the state stays valid for 150 decisions',
     (seed) => {
       endings.add(playAndCheck(seed, 'random', 150));
@@ -204,10 +208,13 @@ describe('property tests: random legal play', () => {
 
   it('the runs above ended in more than one way', (context) => {
     // A check on the tests themselves: if every run ended the same way, part
-    // of the engine would not be exercised. It needs all 14 runs above (tests
-    // in a file run in order), so when a filter such as `vitest -t` has left
-    // some out, it is reported as skipped, not as a failure.
-    if (runsPlayed < 14) {
+    // of the engine would not be exercised. It needs every run above (tests
+    // in a file run in order). The number expected comes from the seed lists,
+    // so in a full run of this file it is always met and this test runs; only
+    // a filter such as `vitest -t`, which leaves runs out, makes it report
+    // itself as skipped. (A run that fails is not counted either, but then
+    // that run's own failure is already red.)
+    if (runsPlayed < WANDER_SEEDS.length + RANDOM_SEEDS.length) {
       context.skip();
     }
     expect([...endings]).toEqual(expect.arrayContaining(['left', 'outOfFuel', 'active']));
@@ -219,11 +226,14 @@ describe('property tests: random legal play', () => {
 // ---------------------------------------------------------------------------
 
 // How far around the avatar to look for cells that matter. No rule looks
-// further than this: reach is 1 cell, and a drop is judged at most
-// `maxChosenDropBlocks` + 1 cells below a neighbour.
+// further than this. Sideways and up, reach is 1 cell. Down, the furthest
+// cell any rule reads is the floor that ends the longest drop a move may
+// choose, taken from a ladder: 1 cell climbed, `maxChosenDropBlocks` fallen,
+// and the floor below that. The window goes 2 cells beyond it, and follows
+// the data value if that is ever raised.
 const NEAR_SIDEWAYS = 3;
 const NEAR_ABOVE = 2;
-const NEAR_BELOW = 6;
+const NEAR_BELOW = AVATAR.maxChosenDropBlocks + 4;
 
 /**
  * The unrevealed cells near the avatar whose content changes `legalActions`.
