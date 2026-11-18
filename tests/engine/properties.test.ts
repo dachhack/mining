@@ -329,8 +329,10 @@ const UNSEEN_CELLS_TIMEOUT_MS = 30000;
 describe('property tests: unrevealed cells do not change the action list (issues #15, #33)', () => {
   // The seeds are ones whose wander run lasts long enough to make the number
   // of checks asked for below. Without a fuel refill (issue #32) a wander run
-  // ends out of fuel after about 130 to 250 decisions.
-  it.each([11, 16, 20])(
+  // ends out of fuel after about 120 to 250 decisions. (Issue #41 halved the
+  // starting lamp oil, which shortened the runs of seeds 16 and 20 to just
+  // under the number needed, so seeds 19 and 37 took their place.)
+  it.each([11, 19, 37])(
     'with the lamp lit at the start, seed %i',
     (seed) => {
       const { checks } = playAndCheckUnseenCells(seed, null, 300, 4);

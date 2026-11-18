@@ -48,7 +48,7 @@ Section numbers refer to `docs/game-design-doc.md`.
 
 20. **Banked AP (Q3). Superseded by the owner's decision in issue #32 (no fuel refill):** unspent AP is lost when the shift ends, it does not become fuel, and there is no banked counter. The reading assumed before that decision was: Unspent AP does not carry into the next shift as AP. It adds to a banked counter that persists across shifts; each time the counter reaches 3, it drops by 3 and 1 fuel is refunded.
 21. **Upkeep order (Q19). The banked-AP step is superseded by issue #32;** the rest stands: at upkeep, if fuel is 0 the run ends ("out of fuel"), otherwise the shift's fuel is consumed, then lamp oil burns, and a player may finish a shift on 0 fuel and survive only by crafting fuel before the next upkeep. The reading assumed before that decision was: At upkeep: apply the banked-AP refund; then, if fuel is 0, the run ends ("out of fuel"); otherwise 1 fuel is consumed; then lamp oil burns. So a player may finish a shift on 0 fuel and survive if they craft or bank fuel before the next upkeep.
-22. **Starting kit (Q2).** Loadout `standard`: 24 fuel, 6 lamp oil, 6 ladders, 2 timber.
+22. **Starting kit (Q2).** Loadout `standard`: 24 fuel, 6 lamp oil, 6 ladders, 2 timber. (Since issue #41: 3 lamp oil, so that with no crafting the lamp goes out after shift 12, half-way through the fuel. The half-way target is the coordinator's assumption, awaiting the owner.)
 23. **Leaving (Q20).** While on the surface the avatar may leave, which ends the run with the outcome "salvage" (9.4). In M1 this is the only way to end a run alive, because contracts arrive in M4. `createRun` takes a placeholder contract id `none`.
 
 ### Code
