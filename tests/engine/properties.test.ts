@@ -7,7 +7,15 @@
 // and a step that can be replayed.
 
 import { describe, expect, it } from 'vitest';
-import { AVATAR, CONTRACT_IDS, DEFAULT_LOADOUT_ID, ITEMS, SHIFT, STRUCTURES } from '../../src/data';
+import {
+  AVATAR,
+  BLOCKS,
+  CONTRACT_IDS,
+  DEFAULT_LOADOUT_ID,
+  ITEMS,
+  SHIFT,
+  STRUCTURES,
+} from '../../src/data';
 import {
   applyAction,
   carriedWeight,
@@ -17,6 +25,7 @@ import {
   inGrid,
   inventoryEntries,
   isOpen,
+  isRevealed,
   isRunActive,
   isSolid,
   isSurface,
@@ -26,6 +35,8 @@ import {
   structureAt,
 } from '../../src/engine';
 import type { GameState } from '../../src/engine';
+import type { Vec3 } from '../../src/data';
+import { cloneState, setBlock } from '../../src/engine/state';
 import { decisionKey, makePolicy } from '../../tools/policies';
 
 const CONTRACT = CONTRACT_IDS[0] as string;
@@ -192,5 +203,97 @@ describe('property tests: random legal play', () => {
     // A check on the tests themselves: if every run ended the same way, part
     // of the engine would not be exercised. (Tests in a file run in order.)
     expect([...endings]).toEqual(expect.arrayContaining(['left', 'outOfFuel', 'active']));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The action list shows only what the player can see (issue #15)
+// ---------------------------------------------------------------------------
+
+// How far around the avatar to look for cells that matter. No rule looks
+// further than this: reach is 1 cell, and a drop is judged at most
+// `maxChosenDropBlocks` + 1 cells below a neighbour.
+const NEAR_SIDEWAYS = 3;
+const NEAR_ABOVE = 2;
+const NEAR_BELOW = 6;
+
+/**
+ * The unrevealed cells near the avatar whose content changes `legalActions`.
+ * Each one in turn is swapped (open becomes stone, solid becomes air) in a
+ * copy of the state, and the copy's action list is compared with the
+ * original's. If the list changed, the player could learn what an unseen
+ * cell holds by reading the list, so the result must be empty.
+ *
+ * This is the check the review of issue #15 used, kept small enough for CI
+ * by trying only unrevealed cells close to the avatar.
+ */
+function unseenCellsThatChangeTheActionList(state: GameState): Vec3[] {
+  const before = JSON.stringify(legalActions(state));
+  const here = state.avatar.pos;
+  const found: Vec3[] = [];
+  for (let z = here.z - NEAR_ABOVE; z <= here.z + NEAR_BELOW; z += 1) {
+    for (let y = here.y - NEAR_SIDEWAYS; y <= here.y + NEAR_SIDEWAYS; y += 1) {
+      for (let x = here.x - NEAR_SIDEWAYS; x <= here.x + NEAR_SIDEWAYS; x += 1) {
+        const pos = { x, y, z };
+        if (!inGrid(state.size, pos) || isRevealed(state, pos)) {
+          continue;
+        }
+        const changed = cloneState(state);
+        setBlock(changed, pos, isOpen(state, pos) ? BLOCKS.stone.code : BLOCKS.air.code);
+        if (JSON.stringify(legalActions(changed)) !== before) {
+          found.push(pos);
+        }
+      }
+    }
+  }
+  return found;
+}
+
+/**
+ * Play one run with the wander policy and make the check above after every
+ * `every`-th decision. With `lampOut`, the lamp is empty from the first
+ * shift on, so nearly everything the avatar digs into is unlit.
+ */
+function playAndCheckUnseenCells(
+  seed: number,
+  lampOut: boolean,
+  maxDecisions: number,
+  every: number,
+): { checks: number; checksWithLampOut: number } {
+  const policy = makePolicy('wander', seed);
+  let state = createRun(seed, CONTRACT, DEFAULT_LOADOUT_ID);
+  if (lampOut) {
+    // Not reachable through the public surface: empty the lamp by hand, as a
+    // scenario test would, then end a shift so that the engine has run with it.
+    state = cloneState(state);
+    state.lampOil = 0;
+    state = endShift(state).state;
+  }
+  let checks = 0;
+  let checksWithLampOut = 0;
+  for (let step = 1; step <= maxDecisions && isRunActive(state); step += 1) {
+    const decision = policy.decide(state);
+    state = decision === 'endShift' ? endShift(state).state : applyAction(state, decision).state;
+    if (step % every === 0 && isRunActive(state)) {
+      const label = `seed ${seed}, decision ${step} (${decisionKey(decision)}), lamp oil ${state.lampOil}`;
+      expect(unseenCellsThatChangeTheActionList(state), label).toEqual([]);
+      checks += 1;
+      checksWithLampOut += state.lampOil === 0 ? 1 : 0;
+    }
+  }
+  return { checks, checksWithLampOut };
+}
+
+describe('property tests: unrevealed cells do not change the action list (issue #15)', () => {
+  it.each([11, 12, 13])('with the lamp lit at the start, seed %i', (seed) => {
+    const { checks } = playAndCheckUnseenCells(seed, false, 300, 4);
+    expect(checks).toBeGreaterThan(40);
+  });
+
+  it.each([21, 22, 23])('with the lamp out from the start, seed %i', (seed) => {
+    const { checks, checksWithLampOut } = playAndCheckUnseenCells(seed, true, 300, 2);
+    // Most checks are in the dark; the wander policy may craft a little oil.
+    expect(checks).toBeGreaterThan(80);
+    expect(checksWithLampOut).toBeGreaterThan(checks / 2);
   });
 });
