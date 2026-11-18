@@ -1,4 +1,4 @@
-# 0015 — Starting fuel reaches coal: 24 stays
+# 0016 — Starting fuel reaches coal: 24 stays
 
 Date: 2026-11-18. Issue #51; decision note 0014 item 33; owner question 53.
 
