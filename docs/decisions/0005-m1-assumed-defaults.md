@@ -1,6 +1,6 @@
 # 0005 — M1 assumed defaults and rule readings
 
-Date: 2026-11-18. Status: assumed by the coordinator under agent plan section 6; every item is a [Default] the owner can change. None touches a [Decided] item.
+Date: 2026-11-18. Status: assumed by the coordinator under agent plan section 6; every item is an assumed reading of a [Default] or of a point the design doc leaves unspecified, and the owner can change any of them. No [Decided] item is changed. Item 23 applies a [Decided] section (9.4, salvage) as written to the milestones before contracts exist; the owner should look at that one in particular (question 20).
 
 ## Context
 
@@ -19,18 +19,19 @@ Section numbers refer to `docs/game-design-doc.md`.
 
 ### Avatar, movement, gravity
 
-5. **Size and footing.** The avatar fills one cell. It is held up by a solid block below it, by a ladder in its own cell, or by the surface.
-6. **Moves (1 AP each).** Walk to one of the 4 orthogonal neighbours on the same level if that cell is open. Step up 1: to an orthogonal neighbour one level up, if that cell is open, the block under it is solid, and the cell above the avatar's head is open. On a ladder: climb to the cell above if it is open and has a ladder; climb down to the cell below if it is open. No diagonal moves.
-7. **Falling.** After any action, if the avatar has no footing it falls until it has. Walking into a cell with no floor is legal (that is the "drop down" action); the action list shows the known drop. Damage follows 5.2: 1–2 blocks free, 3–5 blocks 2 damage per block beyond 2, 6 or more fatal.
+5. **Size and footing.** The avatar fills one cell. It is held up by a solid block below it or by a ladder in its own cell. On the surface it stands on the `z = 0` blocks like anywhere else, so it falls if the block under it is mined.
+6. **Moves (1 AP each).** Walk to one of the 4 orthogonal neighbours on the same level if that cell is open. Step up 1: to an orthogonal neighbour one level up, if that cell is open, the block under it is solid, and the cell above the avatar's head is open. On a ladder: climb to the cell above if it is open and has a ladder; climb down to the cell below if it is open and either has a ladder or is a drop of at most 2 (item 7). No diagonal moves.
+7. **Falling.** After any action, if the avatar has no footing it falls until it has. Walking into a cell with no floor is the "drop down 1–2 blocks" action of 4.1: it is legal only when the drop is 1 or 2 blocks, and the action list shows the depth. A longer fall is never offered as a move; it can only happen when the avatar mines the block it stands on above a void. Damage follows 5.2: 1–2 blocks free, 3–5 blocks 2 damage per block beyond 2, 6 or more fatal.
 8. **Health in M1.** Only falls hurt in M1. Air, and every other hazard, arrives in M2.
-9. **Nothing else falls in M1.** Cave-ins, including dirt falling when unsupported, are M2.
+9. **No block falls in M1.** Cave-ins, including dirt falling when unsupported, are M2.
 
 ### Mining and reveal
 
 10. **Diagonal mining (Q5).** Mineable cells are the 4 orthogonal neighbours, the cell below, the 4 diagonals on the avatar's level, and the 8 cells around the one below: 17 in all. No line-of-sight test: a diagonal can be mined even if both cells it shares an edge with are solid, as 4.1 is written.
+    - **Reach reveals (Q22).** The 17 mineable cells and the cell overhead are always revealed, whatever the light: the miner can inspect what the pick can reach. Without this, the diagonal cells would usually be unknown rock (none of their faces touches a lit open cell), and their AP cost in the action list would leak their type. Only revealed blocks can be mined, which with this rule is every block in reach.
 11. **Mining overhead (Q4).** Not a legal action in M1, because supports cannot be placed until M2. Proposed for M2: a support in the avatar's own cell allows it.
 12. **A block is mined in one action.** If the avatar has fewer AP than the block costs, mining it is not legal this shift.
-13. **Light (Q6).** A cell is lit if it is on the surface, or can be reached from the avatar through open cells in at most `lightRadius` steps (6-connected flood fill, so light does not pass through rock). A placed torch lights cells the same way from its own cell.
+13. **Light (Q6).** A cell is lit if it is on the surface, or can be reached from the avatar through open cells in at most `lightRadius` steps (6-connected flood fill, so light does not pass through rock). A placed torch lights cells the same way from its own cell, out to `torchLightRadius` (3, the same as the lamp).
 14. **Reveal (Q6).** A block is revealed when any of its faces touches a lit open cell. Once revealed it stays revealed. So the top layer is revealed at the start.
 15. **Lamp oil (Q11).** The lamp burns 1 oil every 4 shifts at upkeep. With oil the light radius is 3; with none it is 1.
 
@@ -57,4 +58,6 @@ Section numbers refer to `docs/game-design-doc.md`.
 
 - M1's ways for a run to end are: fell, out of fuel, and leaving from the surface.
 - Timber is the only source of ladders and exists only in layers 0–7 (question 13). With weightless ladders, timber rather than carry weight is what limits how deep a ladder shaft can go; cut steps need no ladders. The M1 playtest round should show whether that is a real choice.
+- **Banking can outrun upkeep (Q23).** With the design doc's own numbers (5 AP per shift, 3 banked AP → 1 fuel, 1 fuel per shift), a shift spent doing nothing gains about two-thirds of a fuel. So fuel can be built up without limit by waiting, and "out of fuel" is not a clock for a player who idles. The numbers are left as the design doc gives them; the M1 playtest brief asks the Speed-runner and Cautious personas to watch for it, and the question is with the owner.
+- **A stuck avatar has no way to end the run in M1.** An avatar in a pit with no ladders and no timber can still end shifts, so the engine never soft-locks, but because of the point above the run need not end either. Entombment detection, which offers to end the run, is M2 (5.3). The sim tool caps the number of shifts.
 - If the owner answers a question differently, the coordinator opens a task to change the data or rule, with its test.
