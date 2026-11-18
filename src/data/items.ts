@@ -1,0 +1,37 @@
+import type { ItemDef } from './types';
+
+export type ItemId =
+  | 'stone'
+  | 'coal'
+  | 'timber'
+  | 'rawIronOre'
+  | 'rawCopperOre'
+  | 'crystal'
+  | 'rareOre'
+  | 'relic'
+  | 'keystone'
+  | 'ladder'
+  | 'support'
+  | 'torch';
+
+// Weights: decision note 0005 item 18. Fuel and lamp oil are gauges, not
+// items, so they are not here.
+//
+// "Raw ore" (design doc 3.2) is two items, iron and copper, because the camp
+// recipes in 7.2 need to tell them apart; each has the raw-ore weight of 2.
+// The weights of rare ore, relic and keystone are not given anywhere yet
+// (owner question 26); they are placeholders until M2 and M4.
+export const ITEMS: Record<ItemId, ItemDef> = {
+  stone: { name: 'Stone', weight: 2 },
+  coal: { name: 'Coal', weight: 1 },
+  timber: { name: 'Timber', weight: 1 },
+  rawIronOre: { name: 'Raw iron ore', weight: 2 },
+  rawCopperOre: { name: 'Raw copper ore', weight: 2 },
+  crystal: { name: 'Crystal', weight: 1 },
+  rareOre: { name: 'Rare ore', weight: 2 },
+  relic: { name: 'Relic', weight: 2 },
+  keystone: { name: 'Keystone', weight: 2 },
+  ladder: { name: 'Ladder', weight: 0 },
+  support: { name: 'Support', weight: 2 },
+  torch: { name: 'Torch', weight: 1 },
+};

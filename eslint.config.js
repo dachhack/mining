@@ -14,6 +14,16 @@ export default defineConfig(
       globals: { ...globals.browser, ...globals.node },
     },
   },
+  // A parameter or variable whose name starts with an underscore is unused on
+  // purpose (for example in a stub that has to keep a fixed signature).
+  {
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+    },
+  },
   // Architecture rule: the engine is pure. It must not reach into the
   // renderer, the app, Three.js, or any source of non-determinism.
   {
