@@ -281,7 +281,8 @@ export type {
   StashPutAction,
   StashTakeAction,
 } from './actionTypes';
-export { campAirLineIntact, campCells, campsAt } from './camps';
+export { campAirLineIntact } from './airLine';
+export { campCells, campsAt } from './camps';
 export type {
   AirChangeReason,
   DamageCause,

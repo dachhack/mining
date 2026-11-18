@@ -113,7 +113,7 @@ describe('the M2 action modules are stubs (decision note 0015)', () => {
   });
 
   it('no camp has an air line (until M2-7)', async () => {
-    const { campAirLineIntact } = await import('../../src/engine/camps');
+    const { campAirLineIntact } = await import('../../src/engine/airLine');
     const camp = { pos: { x: 1, y: 0, z: 0 }, foundedShift: 1, stash: {} };
     expect(campAirLineIntact(state, camp)).toBe(false);
   });

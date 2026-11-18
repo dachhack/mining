@@ -90,7 +90,7 @@ All M2 events are defined: `blockCracked`, `blockFell`, `blockDestroyed`, `fluid
 | M2-4 (#54) water, lava, air | `cube/fluids.ts`, `air.ts`                                                             | `actions/move.ts` (+1 AP into a flooded cell)                                                       |
 | M2-5 (#55) gas, explosions  | `cube/gas.ts`, new `explosions.ts`, `actions/placeExplosive.ts`                        | `actions/mine.ts` (arming: `armCharge(state, pos, 'unstableOre')`)                                  |
 | M2-6 (#56) tells, forecast  | `tells.ts`, `forecast.ts`, `tools/play/`                                               | none                                                                                                |
-| M2-7 (#57) camps            | `camps.ts`, `actions/camp.ts` (or `camp*.ts`)                                          | `actions/craft.ts` (camp recipes), `computeUpkeep` in `shift.ts` (camp fuel)                        |
+| M2-7 (#57) camps            | `camps.ts`, `airLine.ts`, `actions/camp.ts` (or `camp*.ts`)                            | `actions/craft.ts` (camp recipes), `computeUpkeep` in `shift.ts` (camp fuel)                        |
 | M2-8 (#58) camp tools       | `actions/campTools.ts`                                                                 | `actions/mine.ts` (drill), `cube/fluids.ts` (pump), `reveal.ts` (safety lamp as a light)            |
 | M2-9 (#59) entombment, sim  | `actions/giveUp.ts`, new `entombment.ts`, `tests/engine/deaths.test.ts`, the sim tools | none in the engine                                                                                  |
 
@@ -107,10 +107,10 @@ Notes for particular tasks:
 
 - **M2-2.** Pockets are written with `setWater`, `setLava(state, pos, units, true)` for sources, and `setGas`.
 - **M2-3.** `stepTimers` is yours as well as `stepCaveIns`, because "running" is your rule. A falling block calls `recordDamage`, `destroyStructure` (not for a support), `destroyLooseItems`, and `destroyCampsAt` for each cell it passes through or rests in.
-- **M2-4.** For the camp half of item 20, call `campAirLineIntact(state, camp)` in `camps.ts`; it answers `false` until M2-7 fills it in, so neither task waits for the other. You do not need to edit `cube/avatarEffects.ts`: fill in `updateAir` in `air.ts` (it must not end the run; step (e) checks for air at 0), and record lava's damage to the avatar at the end of `stepFluids` (see Readings). Gas is already in the state, so "not breathable" needs no stub: read `gasAt`.
+- **M2-4.** For the camp half of item 20, call `campAirLineIntact(state, camp)` in `airLine.ts` and do not edit that file; it answers `false` until M2-7 fills it in, so neither task waits for the other. You do not need to edit `cube/avatarEffects.ts`: fill in `updateAir` in `air.ts` (it must not end the run; step (e) checks for air at 0), and record lava's damage to the avatar at the end of `stepFluids` (see Readings). Gas is already in the state, so "not breathable" needs no stub: read `gasAt`.
 - **M2-5.** `stepGas` goes through `state.armed` and empties it. Placing an explosive sets the structure and calls `armCharge(state, pos, 'explosive')`.
 - **M2-6.** `forecastShift` in `shift.ts` already calls `forecastCountdowns` and `forecastFlows`; fill those in. Extend the property test with `knownCube`: the forecast of a state must equal the forecast of any state that differs only in unrevealed cells.
-- **M2-7.** Resting sets `state.avatar.resting`; fill in `applyRest` in `camps.ts`. Step (e) clears the flag.
+- **M2-7.** `airLine.ts` is yours to fill in (0014 item 29); M2-4 only calls it. Resting sets `state.avatar.resting`; fill in `applyRest` in `camps.ts`. Step (e) clears the flag.
 
 ### Versions
 
