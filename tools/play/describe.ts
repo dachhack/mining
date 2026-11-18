@@ -7,7 +7,14 @@
 
 import { AVATAR, STRUCTURES, WORLD, blockDefByCode, findRecipe, itemDef } from '../../src/data';
 import type { ItemStack, Vec3 } from '../../src/data';
-import { blockDefAt, canCarry, isRevealed, isSolid, structureAt } from '../../src/engine';
+import {
+  blockDefAt,
+  canCarry,
+  isRevealed,
+  isSolid,
+  showsMineralTraces,
+  structureAt,
+} from '../../src/engine';
 import type { Action, GameEvent, GameState } from '../../src/engine';
 import type { LogEntry } from './log';
 
@@ -143,8 +150,10 @@ function describeAction(state: GameState, action: Action): string {
         action.target.x === here.x && action.target.y === here.y
           ? ` (you are standing on it: ${knownFallText(state)})`
           : '';
+      // Shown only for a revealed block in light; the engine checks both.
+      const traces = showsMineralTraces(state, action.target) ? ', mineral traces' : '';
       return (
-        `Mine ${whereFrom(here, action.target)}: ${block.name}${underfoot}` +
+        `Mine ${whereFrom(here, action.target)}: ${block.name}${traces}${underfoot}` +
         `, gives ${stackListText(block.yields)}${tooHeavy}`
       );
     }

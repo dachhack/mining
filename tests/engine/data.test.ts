@@ -200,6 +200,27 @@ describe('validateData', () => {
     expect(problems.some((p) => p.includes('actionCosts.move'))).toBe(true);
   });
 
+  it('reports bad mineral-trace data', () => {
+    const problems = problemsAfter((data) => {
+      data.tells.mineralTraces.distance = 0;
+      data.tells.mineralTraces.sourceBlocks = ['ironOre', 'mithril', 'air', 'ironOre'];
+      data.tells.mineralTraces.shownOnBlocks = [];
+    });
+    expect(problems.some((p) => p.includes('tells.mineralTraces.distance'))).toBe(true);
+    expect(problems.some((p) => p.includes('unknown block "mithril"'))).toBe(true);
+    expect(problems.some((p) => p.includes('"air", which is not a solid block'))).toBe(true);
+    expect(problems.some((p) => p.includes('lists block "ironOre" more than once'))).toBe(true);
+    expect(problems.some((p) => p.includes('shownOnBlocks is empty'))).toBe(true);
+  });
+
+  it('reports a block that both gives mineral traces and shows them', () => {
+    const problems = problemsAfter((data) => {
+      data.tells.mineralTraces.shownOnBlocks.push('crystal');
+    });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('lists block "crystal" more than once');
+  });
+
   it('reports a loadout with an unknown item, too much weight, or a missing default', () => {
     const problems = problemsAfter((data) => {
       const standard = entry(data.loadouts, 'standard');

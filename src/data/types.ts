@@ -187,6 +187,24 @@ export interface GenerationData {
   veinPlacementTries: number;
 }
 
+/** The mineral-traces tell: rock near ore shows it (decision note 0010). */
+export interface MineralTracesDef {
+  /**
+   * A rock block carries traces when an ore block lies within this many steps
+   * through the grid (Manhattan distance). At least 1.
+   */
+  distance: number;
+  /** Block ids: the ores that give traces to the rock around them. */
+  sourceBlocks: string[];
+  /** Block ids: the plain rock that traces show on. */
+  shownOnBlocks: string[];
+}
+
+/** What blocks show about things hidden near them (design doc 6). */
+export interface TellsData {
+  mineralTraces: MineralTracesDef;
+}
+
 /** Everything in `src/data`, gathered so that it can be validated in one go. */
 export interface GameData {
   world: WorldData;
@@ -198,6 +216,7 @@ export interface GameData {
   gauges: string[];
   recipes: RecipeDef[];
   avatar: AvatarData;
+  tells: TellsData;
   shift: ShiftData;
   actionCosts: ActionCostData;
   loadouts: Record<string, LoadoutDef>;

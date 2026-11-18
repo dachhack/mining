@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { CONTRACT_IDS, DEFAULT_LOADOUT_ID, FIELD_RECIPES, ITEMS } from '../../src/data';
 import { POLICY_NAMES, makePolicy } from '../../tools/policies';
 import { formatSummary, playRun, simulate } from '../../tools/simRun';
-import type { SimOptions, SimReport } from '../../tools/simRun';
+import type { PlayOptions, RunMetrics, SimOptions, SimReport } from '../../tools/simRun';
 
 const CONTRACT = CONTRACT_IDS[0] as string;
 
@@ -100,6 +100,47 @@ describe('playRun', () => {
     expect(metrics.fuelAtEnd).toBe(15);
     expect(metrics.shiftsAtZeroFuel).toBe(0);
     expect(metrics.legalActionsPerPhase.min).toBeGreaterThan(0);
+  });
+
+  it('says whether mineral traces were seen before the first ore was mined', () => {
+    function staircase(seed: number, maxDecisions?: number): RunMetrics {
+      const playOptions: PlayOptions = {
+        seed,
+        contractId: CONTRACT,
+        loadoutId: DEFAULT_LOADOUT_ID,
+        policy: makePolicy('staircase', seed),
+        maxShifts: 300,
+      };
+      // Set only when given: an optional field may be left out, not set to `undefined`.
+      if (maxDecisions !== undefined) {
+        playOptions.maxDecisions = maxDecisions;
+      }
+      return playRun(playOptions).metrics;
+    }
+    // The staircase stops in layer 8, the first layer that can hold ore.
+    // Seed 8: no rock with traces along the way, and no ore mined.
+    expect(staircase(8).oreBlocksMined).toBe(0);
+    expect(staircase(8).tracesSeenBeforeFirstOre).toBe(false);
+    // Seed 7: traces seen, though the staircase mined no ore.
+    expect(staircase(7).oreBlocksMined).toBe(0);
+    expect(staircase(7).tracesSeenBeforeFirstOre).toBe(true);
+    // Seed 11: traces seen, and then an ore block mined.
+    expect(staircase(11).oreBlocksMined).toBe(1);
+    expect(staircase(11).tracesSeenBeforeFirstOre).toBe(true);
+    // A run stopped before its first decision has seen only the top layer,
+    // which is too far above the ore to show any traces.
+    expect(staircase(11, 0).tracesSeenBeforeFirstOre).toBe(false);
+  });
+
+  it('counts the runs that saw traces and the runs that mined ore', () => {
+    const report = simulate(options('staircase', 6));
+    const a = report.aggregate;
+    expect(a.runsWithTracesSeenBeforeFirstOre).toBe(
+      report.runs.filter((run) => run.tracesSeenBeforeFirstOre).length,
+    );
+    expect(a.runsThatMinedOre).toBe(report.runs.filter((run) => run.oreBlocksMined > 0).length);
+    expect(a.runsThatMinedOreAfterSeeingTraces).toBeLessThanOrEqual(a.runsThatMinedOre);
+    expect(formatSummary(report)).toContain('mineral traces:');
   });
 
   it('stops a run at the shift cap and says so', () => {

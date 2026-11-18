@@ -226,6 +226,8 @@ export {
   structureAt,
 } from './state';
 export type { Avatar, GameState, LooseItems, RunStatus } from './state';
+// Tells: what the player sees on a revealed, lit block about ore near it.
+export { showsMineralTraces, visibleMineralTraces } from './tells';
 // The seeded generator, for tools and tests that need random numbers of their
 // own (a simulator policy, say). They make their own state with `createRng`;
 // `state.rng` belongs to the rules.

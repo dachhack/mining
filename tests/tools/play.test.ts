@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { BLOCKS, STRUCTURES } from '../../src/data';
+import { BLOCKS, STRUCTURES, TELLS } from '../../src/data';
 import type { Vec3 } from '../../src/data';
 import {
   applyAction,
@@ -20,6 +20,7 @@ import {
   hashState,
   isRevealed,
   legalActions,
+  visibleMineralTraces,
 } from '../../src/engine';
 import type { GameState } from '../../src/engine';
 import { loadLog, runCli } from '../../tools/play/cli';
@@ -63,16 +64,181 @@ describe('the view hides what the avatar cannot know', () => {
     // Turn every unrevealed block into a different solid block. (Solid stays
     // solid, so what the avatar can do is the same; only what it would see,
     // if the view leaked, is different.)
+    //
+    // Ore stays ore of another kind, and everything else becomes a block that
+    // is not ore. That leaves one thing alone: whether ore is near a block
+    // the player sees, which mineral traces are meant to show (the next two
+    // tests are about those).
+    const oreCodes = TELLS.mineralTraces.sourceBlocks.map(
+      (blockId) => BLOCKS[blockId as keyof typeof BLOCKS].code,
+    );
     let changed = 0;
     for (let index = 0; index < state.blocks.length; index += 1) {
       if (!isRevealed(state, cellPosition(state.size, index))) {
-        const wasCrystal = state.blocks[index] === BLOCKS.crystal.code;
-        state.blocks[index] = wasCrystal ? BLOCKS.keystone.code : BLOCKS.crystal.code;
+        const was = state.blocks[index] as number;
+        if (oreCodes.includes(was)) {
+          state.blocks[index] =
+            was === BLOCKS.crystal.code ? BLOCKS.ironOre.code : BLOCKS.crystal.code;
+        } else {
+          state.blocks[index] =
+            was === BLOCKS.keystone.code ? BLOCKS.relic.code : BLOCKS.keystone.code;
+        }
         changed += 1;
       }
     }
     expect(changed).toBeGreaterThan(1000);
     expect(viewText(state)).toBe(before);
+  });
+
+  // A shaft down the middle of a 5 x 5 x 4 cube of stone, the avatar at its
+  // bottom in layer 2, lamp lit. Only what the engine's reveal rules show is
+  // revealed, so layer 3 is seen under the avatar and unseen at its corners.
+  function shaftState(): GameState {
+    const solid = ['#####', '#####', '#####', '#####', '#####'];
+    const holed = ['#####', '#####', '##.##', '#####', '#####'];
+    const state = buildState({
+      layers: [holed, holed, holed, solid],
+      avatar: { x: 2, y: 2, z: 2 },
+      ladders: [
+        { x: 2, y: 2, z: 0 },
+        { x: 2, y: 2, z: 1 },
+        { x: 2, y: 2, z: 2 },
+      ],
+    });
+    // Ending a shift runs the engine's reveal for the state as it stands.
+    return endShift(state).state;
+  }
+
+  /**
+   * A function giving the map character the view draws for a cell, or `null`
+   * if the cell is off the map. The view is built once, here.
+   */
+  function mapReader(state: GameState): (pos: Vec3) => string | null {
+    const view = buildView(state, { radius: 4, layers: 1, deepestZ: state.avatar.pos.z });
+    return (pos: Vec3): string | null => {
+      const layer = view.layers.find((candidate) => candidate.z === pos.z);
+      const row = layer?.rows[pos.y - view.window.y0];
+      if (row === undefined || pos.x < view.window.x0 || pos.x > view.window.x1) {
+        return null;
+      }
+      return row.charAt(pos.x - view.window.x0);
+    };
+  }
+
+  it('shows mineral traces only on revealed blocks, when unseen ore is put near them', () => {
+    const state = shaftState();
+    const before = viewText(state);
+    expect(before).not.toContain('%');
+    expect(before).not.toContain('mineral traces');
+
+    // Put iron ore in an unrevealed cell at the edge of layer 3. It is 2
+    // steps from the shaft wall west of the avatar, (1, 2, 2), and 2 steps
+    // from the floor under it, (2, 2, 3). Both touch the avatar's lit cell.
+    const hidden: Vec3 = { x: 0, y: 2, z: 3 };
+    expect(isRevealed(state, hidden)).toBe(false);
+    state.blocks[cellIndex(state.size, hidden)] = BLOCKS.ironOre.code;
+    const after = viewText(state);
+    expect(after).not.toBe(before);
+
+    // The engine names the traced blocks, every one of them revealed.
+    const traced = visibleMineralTraces(state);
+    expect(traced.length).toBeGreaterThan(0);
+    for (const pos of traced) {
+      expect(isRevealed(state, pos)).toBe(true);
+    }
+
+    // On the map, the cells that changed are exactly those blocks: each was
+    // stone and is now "%". No other cell changed, and an unrevealed cell is
+    // still "?": neither the ore nor anything else out of sight is drawn.
+    const charAt = mapReader(state);
+    const plainCharAt = mapReader(shaftState());
+    for (let index = 0; index < state.blocks.length; index += 1) {
+      const pos = cellPosition(state.size, index);
+      const isTraced = traced.some((t) => cellIndex(state.size, t) === index);
+      const char = charAt(pos);
+      if (isTraced && char !== null) {
+        expect(char).toBe('%');
+        expect(plainCharAt(pos)).toBe('#');
+      } else {
+        expect(char).toBe(plainCharAt(pos));
+      }
+      if (!isRevealed(state, pos) && char !== null) {
+        expect(char).toBe('?');
+      }
+    }
+    expect(charAt(hidden)).toBe('?');
+
+    // Off the map, the only lines that changed are mine lines, and only by
+    // the words ", mineral traces"; and the legend gained the "%" entry.
+    const beforeLines = before.split('\n');
+    const afterLines = after.split('\n');
+    expect(afterLines).toHaveLength(beforeLines.length);
+    let mineLinesChanged = 0;
+    afterLines.forEach((line, lineNumber) => {
+      const old = beforeLines[lineNumber] ?? '';
+      if (line === old || /^y +\d+ /.test(line)) {
+        return; // unchanged, or a map row (checked cell by cell above)
+      }
+      if (line.startsWith('Legend:')) {
+        const entries = line.split(' | ').filter((entry) => !entry.startsWith('% '));
+        expect(entries.join(' | ')).toBe(old);
+        return;
+      }
+      expect(line).toContain('Mine ');
+      expect(line.replace(', mineral traces', '')).toBe(old);
+      mineLinesChanged += 1;
+    });
+    expect(mineLinesChanged).toBeGreaterThan(0);
+    expect(after).toContain('% rock with mineral traces');
+  });
+
+  it('prints traces for a block exactly when the engine says the player sees them', () => {
+    // Fill every unrevealed cell with crystal, so that every block the
+    // avatar sees is near ore. What the view then marks must be the engine's
+    // answer for each cell: revealed, in light, and plain rock.
+    const state = dugInState();
+    for (let index = 0; index < state.blocks.length; index += 1) {
+      if (!isRevealed(state, cellPosition(state.size, index))) {
+        state.blocks[index] = BLOCKS.crystal.code;
+      }
+    }
+    const charAt = mapReader(state);
+    // The blocks the engine says show traces, as cell indexes.
+    const shown = new Set(visibleMineralTraces(state).map((pos) => cellIndex(state.size, pos)));
+    let marked = 0;
+    for (let index = 0; index < state.blocks.length; index += 1) {
+      const pos = cellPosition(state.size, index);
+      const char = charAt(pos);
+      if (char === null) {
+        continue;
+      }
+      expect(char === '%').toBe(shown.has(index));
+      if (char === '%') {
+        expect(isRevealed(state, pos)).toBe(true);
+        marked += 1;
+      }
+    }
+    expect(marked).toBeGreaterThan(0);
+    // Revealed blocks out of the light are near the crystal too, and are not marked.
+    expect(viewText(state)).toContain('d');
+    // The crystal itself is nowhere in the view.
+    expect(viewText(state)).not.toContain('Crystal');
+  });
+
+  it('names traces in the mine list only for a block in light', () => {
+    const state = shaftState();
+    // Iron ore at the edge of layer 3, outside the pick's reach and unseen.
+    const hidden: Vec3 = { x: 0, y: 2, z: 3 };
+    expect(isRevealed(state, hidden)).toBe(false);
+    state.blocks[cellIndex(state.size, hidden)] = BLOCKS.ironOre.code;
+    const text = viewText(state);
+    // (1, 2, 2), the wall west of the avatar: the ore is 1 west and 1 down
+    // from it, 2 steps. Its face touches the avatar's lit cell.
+    expect(text).toContain('Mine west: Stone, mineral traces, gives 1 Stone');
+    // (1, 2, 3), west and one layer down: 1 step from the ore and revealed
+    // (the pick reaches it), but no face of it touches a lit cell.
+    expect(isRevealed(state, { x: 1, y: 2, z: 3 })).toBe(true);
+    expect(text).toContain('Mine west, one layer down: Stone, gives 1 Stone');
   });
 
   // A 5 x 5 x 2 cube with a pit at (2, 2, 0) where the avatar stands, and one
@@ -517,6 +683,7 @@ describe('--help', () => {
       'Falling',
       'Mining',
       'What you can see',
+      'Mineral traces',
       'Weight and loose items',
       'Crafting',
       'Leaving',
