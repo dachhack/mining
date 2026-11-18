@@ -19,7 +19,7 @@ In playtest round m1-r1 (finding 3, issue #23) the fastest way down was a bare o
 ## Consequences
 
 - Sinking a bare one-cell shaft costs 1 health a layer: ten layers kill from full health, and nothing in M1–M2 gives health back except resting at a camp.
-- The staircase policy is not affected (it walks off 1-block ledges, which are chosen drops): 1000 of 1000 runs still reach layer 8 unharmed. The `random` and `wander` policies now die of falls (33 and 142 runs in 1000), where no run did before.
+- The staircase policy is not affected (it walks off 1-block ledges, which are chosen drops): 1000 of 1000 runs still reach layer 8 unharmed. The `random` and `wander` policies now die of falls (8 and 36 runs in 1000, measured after issue #32 shortened runs), where no run did before.
 - Golden runs `wander-seed-9` and `random-seed-25-cut-short` have new hashes: both mine underfoot and now lose health. Every recorded decision is still legal, so they were re-hashed, not re-recorded.
 - When M2 adds cave-ins, a fall caused by the cube phase taking the miner's floor is uncontrolled too, with no further change.
 - Open points for the owner are in the pull request for issue #34.
