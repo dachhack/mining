@@ -1,6 +1,6 @@
 # 0007 — Cube generation: rock by weight, ore by grown veins
 
-Date: 2026-11-18. Status: accepted with M1 task 2 (issue #4). The numbers are [Default] values, assumed under owner question 31.
+Date: 2026-11-18. Status: accepted with M1 task 2 (issue #4). The numbers are [Default] values, assumed under owner question 33.
 
 ## Context
 
