@@ -85,12 +85,13 @@ READING A VIEW
   beside layer 0). Underground
   the map reaches ${DEFAULT_RADIUS} cells each way, and is then trimmed: rows and columns at its edge that are
   unseen are left out. If you have seen cells below the top layer that are off the map, the
-  "Map:" line says which --radius shows it all. It says nothing about the top layer, which you
+  "Map:" line says which --radius shows them. It says nothing about the top layer, which you
   know all of from the start and which always goes on beyond a small map. The legend
   under the map names every other character in it. Then come known hazards and what ending the
   shift now would do. A line starting "Not on the list:" says why something you might look for
   is not offered: the drop is too long; you have not seen what is under the cell; you are in a
-  pit with nothing to step up onto; there is no rock where a step up would be; or it costs more
+  pit with nothing to step up onto; there is no rock where a step up would be (said only when
+  no move up is on the list); or it costs more
   AP than you have left (those are named, with their cost). Last comes the
   list of everything you may do, each with its number, its name and its cost in AP.
 
@@ -177,8 +178,9 @@ THE GAME
     see what it is and what it costs: "D" is dirt, "%" is stone and "h" is hard rock with traces
     (plain: "d", "#", "H"). The mine list names them too ("Stone, mineral traces").
     They say ore is near, not which ore or which way. You notice them only on rock your light
-    touches; once noticed they stay on the map, also after the ore is mined: rock uncovered
-    by mining ore can show traces of the ore you have just taken. Coal and timber-root give no
+    touches; once noticed they stay on the map, also after the ore is mined, so an old mark can
+    point at ore that is gone. Traces you first notice are always from ore still in the rock:
+    if you notice some just after mining ore, other ore is near. Coal and timber-root give no
     traces. With the lamp out you notice none by touch: only a torch's light or daylight shows
     new ones.
 

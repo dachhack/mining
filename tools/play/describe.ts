@@ -457,48 +457,27 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
 /**
  * The sentence for a step in which mineral traces were first seen.
  *
- * Usually: "ore is near". But rock uncovered by mining ore shows traces of
- * that very ore, which is now in the pack, and the old sentence read as news
- * of more ore (issue #47 item 6; whether such traces should show at all is
- * owner question 54). So if this step mined an ore that gives traces, and
- * every block the traces were seen on is within the traces distance of it,
- * the sentence says the traces may be from that ore. Both the distance and
- * the list of ores are the rule's own, from src/data. Only the step's events
- * are read: where a block was mined and where traces were seen, both of
- * which the player has just watched.
+ * The engine notes traces after the action is done (`applyAction`: the mine,
+ * then gravity, reveal, traces). So when a step mines an ore and traces are
+ * then noticed on rock it uncovered, the mined ore is already gone from the
+ * cube: those traces come from OTHER ore, still in the rock. The sentence
+ * says so, because a player may otherwise take them for traces of the ore
+ * now in the pack (issue #47 item 6; review of PR #48). Only the step's
+ * events are read: which block was mined, and that traces were seen.
  */
 function tracesSeenText(events: GameEvent[]): string {
   const onMap = `(On the map: ${tracedSymbolsText()}.)`;
-  const usual = `You notice mineral traces in the rock: ore is near. ${onMap}`;
-
   const oreNames: string[] = TELLS.mineralTraces.sourceBlocks;
-  const minedOre: Vec3[] = [];
-  const seenAt: Vec3[] = [];
-  for (const event of events) {
-    if (event.type === 'blockMined' && oreNames.includes(blockIdByCode(event.block))) {
-      minedOre.push(event.pos);
-    }
-    if (event.type === 'mineralTracesSeen') {
-      seenAt.push(event.pos);
-    }
-  }
-  if (minedOre.length === 0) {
-    return usual;
-  }
-  const reach = TELLS.mineralTraces.distance;
-  for (const seen of seenAt) {
-    const nearMinedOre = minedOre.some(
-      (ore) =>
-        Math.abs(ore.x - seen.x) + Math.abs(ore.y - seen.y) + Math.abs(ore.z - seen.z) <= reach,
-    );
-    if (!nearMinedOre) {
-      return usual; // too far to come from the ore just mined: other ore is near
-    }
-  }
-  return (
-    'You notice mineral traces in the rock this uncovered. They may come from the ore ' +
-    `you just mined, so they do not show that more ore is near. ${onMap}`
+  const minedOre = events.some(
+    (event) => event.type === 'blockMined' && oreNames.includes(blockIdByCode(event.block)),
   );
+  if (minedOre) {
+    return (
+      'You notice mineral traces in the rock this uncovered: other ore is near ' +
+      `(the ore you just mined no longer counts). ${onMap}`
+    );
+  }
+  return `You notice mineral traces in the rock: ore is near. ${onMap}`;
 }
 
 /** The id in src/data of the block with this code ("ironOre"), or '' if there is none. */

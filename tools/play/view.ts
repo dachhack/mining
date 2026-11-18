@@ -139,11 +139,12 @@ export interface PlayerView {
   /** The first and last x and y drawn, after trimming unseen edges. */
   window: { x0: number; x1: number; y0: number; y1: number };
   /**
-   * The `--radius` that would show every cell the player has seen in the
-   * drawn layers, when the player has seen cells BELOW THE TOP LAYER that
-   * are off the map. `null` otherwise. The top layer does not count: the
-   * player knows all of it from the start, so near the top the hint was on
-   * almost every view (issue #46 item 5).
+   * The `--radius` that would show every cell the player has seen BELOW THE
+   * TOP LAYER in the drawn layers, when some of those are off the map.
+   * `null` otherwise. The top layer does not count, for whether there is a
+   * hint or for its number: the player knows all of it from the start, so
+   * near the top the hint was on almost every view, and its number was the
+   * far corner of the cube (issue #46 item 5).
    */
   radiusForAllSeen: number | null;
   /** True if every cell the player has seen in the drawn layers is on the map. */
@@ -374,10 +375,11 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
 
   // Has the player seen cells of the drawn layers that lie outside the map?
   // Only the "revealed" flag of each cell is read here, not what the cell
-  // holds. `furthestSeen` is how far the furthest such cell is; `seenBelowTop`
-  // says whether any of them is below the top layer (see `radiusForAllSeen`).
-  let furthestSeen = 0;
-  let seenBelowTop = false;
+  // holds. `anySeenOffMap` says whether there is such a cell in any drawn
+  // layer; `furthestBelowTop` is how far the furthest one below the top layer
+  // is (see `radiusForAllSeen`).
+  let anySeenOffMap = false;
+  let furthestBelowTop = 0;
   for (const layer of layers) {
     if (layer.z === WORLD.surfaceZ) {
       continue; // the surface is open air everywhere: nothing to miss
@@ -386,16 +388,20 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       for (let x = 0; x < state.size.x; x += 1) {
         const outside = x < window.x0 || x > window.x1 || y < window.y0 || y > window.y1;
         if (outside && isRevealed(state, { x, y, z: layer.z })) {
-          furthestSeen = Math.max(furthestSeen, Math.abs(x - here.x), Math.abs(y - here.y));
+          anySeenOffMap = true;
           if (layer.z > 0) {
-            seenBelowTop = true;
+            furthestBelowTop = Math.max(
+              furthestBelowTop,
+              Math.abs(x - here.x),
+              Math.abs(y - here.y),
+            );
           }
         }
       }
     }
   }
-  const allSeenOnMap = furthestSeen === 0;
-  const radiusForAllSeen = seenBelowTop ? furthestSeen : null;
+  const allSeenOnMap = !anySeenOffMap;
+  const radiusForAllSeen = furthestBelowTop > 0 ? furthestBelowTop : null;
 
   // Trim the map to what has something in it: rows and columns at the edge of
   // the window that are unseen in every drawn layer are left out. Underground
@@ -584,7 +590,7 @@ export function renderView(view: PlayerView): string {
   // on every view near the top was noise (issue #46 item 5).
   let beyond = '';
   if (view.radiusForAllSeen !== null) {
-    beyond = `; you have seen more of these layers than is drawn: --radius ${view.radiusForAllSeen} shows it all`;
+    beyond = `; you have seen more below the top layer than is drawn: --radius ${view.radiusForAllSeen} shows it`;
   } else if (view.allSeenOnMap) {
     beyond = '; everything you have seen of these layers is on the map';
   }

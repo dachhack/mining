@@ -16,7 +16,8 @@
 // `legalActions` and nothing else. A direction gets a note only when the
 // engine offers no move that way, with one exception: "No step up north:
 // there is no rock there to step onto" is about the step up, and is given
-// where the move north on the list is a walk that drops.
+// where the move north on the list is a walk that drops and no move up of
+// any kind is on the list.
 //
 // Added for issue #47 (playtest round m1-r2, finding 8): a cell with no move
 // at all (a pit after a fall), the step up that is not there, and
@@ -177,7 +178,13 @@ export function missingMoveNotes(state: GameState): string[] {
     );
   }
 
-  if (noStep.length > 0) {
+  // Said only when the list has no move up at all (no step up any way and no
+  // climb). Beside a hole in layer 0, with a step up to the surface on the
+  // list in other directions, the line was noise: 29 of the 33 times it
+  // printed on the logs of round m1-r2 (review of PR #48). This is a test on
+  // the move list; it reads no cell.
+  const hasMoveUp = moves.some((move) => move.to.z < here.z);
+  if (noStep.length > 0 && !hasMoveUp) {
     notes.push(
       `No step up ${noStep.join(', ')}: there is no rock there to step onto ` +
         '(the cell beside you is open). The move that way on the list walks off an edge and drops.',

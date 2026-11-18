@@ -1141,14 +1141,18 @@ function noteStates(): NoteState[] {
     prints: ['Not on the list: everything that costs AP: you have 0 AP left.'],
   });
 
-  // A step that is gone: from the first pit, open the cell north and the
-  // cell under it. A walk north then drops 1 block, and there is nothing
-  // north to step up onto.
-  const stepGone = takeAll(createRun(7, 'none', 'standard'), [
-    'mine-down',
-    'mine-n',
-    'mine-n-down',
-  ]);
+  // A step that is gone, with no move up on the list. From the surface the
+  // miner opens the block north of the one underfoot, falls two blocks down
+  // its own shaft to layer 1, then opens the cell north and the cell under
+  // that. North is now open at layers 0, 1 and 2: a walk north drops 1
+  // block, and there is nothing north to step up onto. (AP is topped up by
+  // hand between steps; the cube is the engine's.)
+  let stepGone = createRun(7, 'none', 'standard');
+  for (const name of ['mine-n-down', 'mine-down', 'mine-down', 'mine-n', 'mine-n-down']) {
+    stepGone.ap = SHIFT.apPerShift;
+    stepGone = takeNamed(stepGone, name);
+  }
+  stepGone.ap = SHIFT.apPerShift;
   made.push({
     name: 'step gone',
     state: stepGone,
@@ -1425,14 +1429,16 @@ describe('the map on the surface (issue #30)', () => {
     expect(renderView(view)).not.toContain('--radius');
 
     // The hint is for cells seen below the top layer that are off the map.
-    // Here the player has seen a cell of layer 1 that is 9 away; the top
-    // layer, also drawn, reaches 16 away, and "shows it all" must be true.
+    // Here the player has seen a cell of layer 1 that is 9 away. The number
+    // is the radius that shows that cell, not the 16 the top layer reaches.
     state.revealed[cellIndex(state.size, { x: 25, y: 16, z: 1 })] = 1;
     const further = buildView(state, { ...DEFAULT_VIEW, deepestZ: 0 });
-    expect(further.radiusForAllSeen).toBe(16);
+    expect(further.radiusForAllSeen).toBe(9);
     expect(renderView(further)).toContain(
-      'you have seen more of these layers than is drawn: --radius 16 shows it all',
+      'you have seen more below the top layer than is drawn: --radius 9 shows it',
     );
+    // And it does: with that radius the hint is gone.
+    expect(buildView(state, { radius: 9, layers: 1, deepestZ: 0 }).radiusForAllSeen).toBeNull();
 
     // A pocket the player has seen all of: nothing more to show.
     const pocket = buildState({
@@ -1511,11 +1517,10 @@ describe('why a move is not on the list (issue #30)', () => {
     const longest = AVATAR.maxChosenDropBlocks;
     const shallow = besidePit(longest);
     expect(resolveChoice(shallow, 'e')).toMatchObject({ type: 'move', drop: longest });
-    // Nothing about the move east, which is on the list. (The one line is
-    // about the step up that is not there: issue #47 item 2.)
-    expect(notOffered(shallow).join(' ')).not.toContain('No move');
-    expect(notOffered(shallow)).toHaveLength(1);
-    expect(notOffered(shallow)[0]).toContain('No step up east: there is no rock there');
+    // Nothing at all: the move east is on the list, and so is a step up west
+    // to the surface, so the step that is not there east needs no line.
+    expect(resolveChoice(shallow, 'w')).toMatchObject({ type: 'move', to: { z: -1 } });
+    expect(notOffered(shallow)).toEqual([]);
 
     const deep = besidePit(longest + 1);
     expect(resolveChoice(deep, 'e')).toBeNull();
@@ -1884,6 +1889,18 @@ describe('more "Not on the list" notes (issue #47 item 2)', () => {
         'The move that way on the list walks off an edge and drops.',
     ]);
 
+    // Not said while some move up is on the list: here a ladder to climb.
+    // (Beside a hole in layer 0, with a step up to the surface the other
+    // way, the line was noise: review of PR #48.)
+    const withLadder = structuredClone(state);
+    withLadder.structures[cellIndex(withLadder.size, { x: 0, y: 1, z: 1 })] =
+      STRUCTURES.ladder.code;
+    withLadder.structures[cellIndex(withLadder.size, { x: 0, y: 1, z: 0 })] =
+      STRUCTURES.ladder.code;
+    expect(resolveChoice(withLadder, 'up')).toMatchObject({ type: 'move' });
+    expect(resolveChoice(withLadder, 'n')).toMatchObject({ type: 'move', drop: 1 });
+    expect(notOffered(withLadder).join(' ')).not.toContain('No step up');
+
     // Not said for a walk on the flat, or where there is rock on top of the open cell.
     const flat = structuredClone(state);
     flat.blocks[cellIndex(flat.size, { x: 0, y: 0, z: 2 })] = BLOCKS.stone.code;
@@ -2077,28 +2094,50 @@ describe('small wording (issue #47 item 6)', () => {
     expect(lines).toContain('A loose pile of 1 Stone fell 1 block to layer 1.');
   });
 
-  it('traces uncovered by mining ore are not announced as new ore', () => {
-    const state = buildState({ layers: [['#i#']], revealAll: true });
-    const orePos = { x: 1, y: 0, z: 0 };
-    const mined = { type: 'blockMined' as const, pos: orePos, block: BLOCKS.ironOre.code };
-    const near = { type: 'mineralTracesSeen' as const, pos: { x: 2, y: 0, z: 0 } };
-    expect(describeEvents(state, [mined, near])).toContain(
-      'You notice mineral traces in the rock this uncovered. They may come from the ore ' +
-        'you just mined, so they do not show that more ore is near. (On the map: D, % or h.)',
-    );
+  // A lit tunnel in layer 1: the miner at (1, 0), iron ore east of it at
+  // (2, 0), and `row` is what lies beyond. Ending a shift first runs the
+  // engine's reveal, so the mine that follows is an ordinary step.
+  function minedOreEast(row: string): string[] {
+    const built = buildState({
+      layers: [['#######'], [row], ['#######']],
+      avatar: { x: 1, y: 0, z: 1 },
+      ap: 0,
+    });
+    const lit = endShift(built).state;
+    const { state: after, events } = act(lit, { type: 'mine', target: { x: 2, y: 0, z: 1 } });
+    return describeEvents(after, events);
+  }
 
-    // Traces too far from the mined ore to come from it do mean other ore.
-    const distance = TELLS.mineralTraces.distance;
-    const far = {
-      type: 'mineralTracesSeen' as const,
-      pos: { x: orePos.x + distance + 1, y: 0, z: 0 },
-    };
-    expect(describeEvents(state, [mined, near, far])).toContain(
-      'You notice mineral traces in the rock: ore is near. (On the map: D, % or h.)',
+  it('mining a lone ore uncovers no traces, and nothing is said about any', () => {
+    // The engine notes traces after the ore has gone, so there are none.
+    const lines = minedOreEast('#.i####');
+    expect(lines).toContain('Mined Iron ore.');
+    expect(lines.join(' ')).not.toContain('mineral traces');
+  });
+
+  it('traces noticed in the step that mined ore are said to be from other ore', () => {
+    // A second ore two cells behind the first: the rock between them shows
+    // traces once the first ore is mined, and they are the second ore's.
+    const lines = minedOreEast('#.i#i##');
+    expect(lines).toContain(
+      'You notice mineral traces in the rock this uncovered: other ore is near ' +
+        '(the ore you just mined no longer counts). (On the map: D, % or h.)',
     );
-    // Mining plain rock, or coal, changes nothing.
-    const stone = { type: 'blockMined' as const, pos: orePos, block: BLOCKS.stone.code };
-    expect(describeEvents(state, [stone, near])).toContain(
+    // It never tells the player to discount the hint.
+    expect(lines.join(' ')).not.toContain('may come from');
+    expect(lines.join(' ')).not.toContain('do not show');
+  });
+
+  it('traces noticed after mining plain rock read as before', () => {
+    // The same tunnel with stone in place of the first ore.
+    const built = buildState({
+      layers: [['#######'], ['#.##i##'], ['#######']],
+      avatar: { x: 1, y: 0, z: 1 },
+      ap: 0,
+    });
+    const lit = endShift(built).state;
+    const { state: after, events } = act(lit, { type: 'mine', target: { x: 2, y: 0, z: 1 } });
+    expect(describeEvents(after, events)).toContain(
       'You notice mineral traces in the rock: ore is near. (On the map: D, % or h.)',
     );
   });
