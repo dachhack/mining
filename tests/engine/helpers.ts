@@ -19,6 +19,7 @@ import {
   HAZARDS,
   SHIFT,
   STRUCTURES,
+  SURFACE,
   WORLD,
   blockDefByCode,
 } from '../../src/data';
@@ -62,6 +63,15 @@ export const BLOCK_CHARS: Record<string, BlockId> = {
   k: 'keystone',
   R: 'rubble',
   S: 'sealed',
+};
+
+/** The character that stands for each kind of surface cell in `surface` rows. */
+export const SURFACE_CHARS: Record<string, keyof typeof SURFACE.kinds> = {
+  '.': 'meadow',
+  T: 'tree',
+  s: 'stump',
+  p: 'path',
+  o: 'outcrop',
 };
 
 // A field marked `?` may be left out; it then reads as `undefined`, and
@@ -112,6 +122,14 @@ export interface BuildStateOptions {
   armed?: ArmedCharge[];
   /** Active camps. */
   camps?: Camp[];
+  /**
+   * The surface (issue #70), one string per row (y = 0 first), one character
+   * per cell: see `SURFACE_CHARS`. Default: meadow everywhere, the open
+   * ground of a blank state.
+   */
+  surface?: string[];
+  /** How far each stump's regrowth count has gone. Default: 0. */
+  stumpAges?: { pos: Vec3; age: number }[];
   /** Mark every cell as revealed. Default: false (nothing revealed). */
   revealAll?: boolean;
   seed?: number;
@@ -174,6 +192,21 @@ export function buildState(options: BuildStateOptions): GameState {
   }
   for (const entry of options.cracks ?? []) {
     setCrackTimer(state, entry.pos, entry.timer);
+  }
+  (options.surface ?? []).forEach((row, y) => {
+    if (row.length !== size.x) {
+      throw new Error(`Surface row y=${y} has ${row.length} cells, expected ${size.x}`);
+    }
+    for (let x = 0; x < size.x; x += 1) {
+      const kind = SURFACE_CHARS[row.charAt(x)];
+      if (kind === undefined) {
+        throw new Error(`Unknown surface character "${row.charAt(x)}" at (${x}, ${y})`);
+      }
+      state.surface[x + size.x * y] = SURFACE.kinds[kind].code;
+    }
+  });
+  for (const entry of options.stumpAges ?? []) {
+    state.stumpAge[entry.pos.x + size.x * entry.pos.y] = entry.age;
   }
   // Sorted, as the engine keeps the lists.
   state.armed = canonicalArmed(options.armed ?? []);

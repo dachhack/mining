@@ -21,6 +21,7 @@ import {
   NO_STRUCTURE,
   SHIFT,
   STRUCTURES,
+  SURFACE,
   WORLD,
   blockDefByCode,
   itemDef,
@@ -38,7 +39,9 @@ import {
   legalActions,
   looseItemsAt,
   previewCubePhase,
+  shiftsUntilRegrowth,
   structureAt,
+  surfaceKindAt,
   visibleMineralTraces,
 } from '../../engine';
 import type { GameState } from '../../engine';
@@ -58,8 +61,13 @@ import {
   SYMBOL_EDGE,
   SYMBOL_ITEMS,
   SYMBOL_LADDER,
+  SYMBOL_MEADOW,
   SYMBOL_OPEN,
+  SYMBOL_OUTCROP,
+  SYMBOL_PATH,
+  SYMBOL_STUMP,
   SYMBOL_SUPPORT,
+  SYMBOL_TREE,
   SYMBOL_TORCH,
   SYMBOL_TRACES,
   SYMBOL_UNKNOWN,
@@ -232,7 +240,38 @@ function cellView(
   if (structure === STRUCTURES.support.code) {
     return { symbol: SYMBOL_SUPPORT, meaning: 'support' };
   }
+  if (isSurface(state.size, pos)) {
+    return surfaceCellView(state, pos);
+  }
   return { symbol: SYMBOL_OPEN, meaning: 'open space' };
+}
+
+/**
+ * The map character of a surface cell (issue #70): what grows or lies there.
+ * The surface is always seen, so this reads nothing hidden.
+ */
+function surfaceCellView(state: GameState, pos: Vec3): CellView {
+  const kinds = SURFACE.kinds;
+  const kind = surfaceKindAt(state, pos);
+  if (kind === kinds.tree.code) {
+    return {
+      symbol: SYMBOL_TREE,
+      meaning: 'tree (blocks the way and hides the ground under it; cut it for timber)',
+    };
+  }
+  if (kind === kinds.stump.code) {
+    return {
+      symbol: SYMBOL_STUMP,
+      meaning: `stump (open; a tree grows back ${SURFACE.regrowShifts} shifts after the cut if nothing stands on it and its ground is not dug)`,
+    };
+  }
+  if (kind === kinds.path.code) {
+    return { symbol: SYMBOL_PATH, meaning: 'dirt path (open)' };
+  }
+  if (kind === kinds.outcrop.code) {
+    return { symbol: SYMBOL_OUTCROP, meaning: 'stone outcrop (open, over stone)' };
+  }
+  return { symbol: SYMBOL_MEADOW, meaning: 'meadow (open)' };
 }
 
 function positionKey(pos: Vec3): string {
@@ -298,10 +337,11 @@ function hudLines(state: GameState, options: ViewOptions): string[] {
  */
 export function buildView(state: GameState, options: ViewOptions): PlayerView {
   const here = state.avatar.pos;
-  // On the surface, with no --radius, layer 0 is drawn alone and the avatar
-  // is drawn on the block it stands on (issue #46 item 2). The surface is
-  // open air everywhere, so drawing it beside layer 0 doubled the width of
-  // the map and made the block under "@" hard to find.
+  // On the surface, with no --radius, the whole surface and layer 0 are drawn,
+  // and on layer 0 the avatar is drawn on the block it stands on (issue #46
+  // item 2). Issue #46 left the surface out because it was open air
+  // everywhere; since the forest (issue #70) it shows where the trees,
+  // paths, meadows, outcrops and stumps are, so it is drawn again.
   const surfaceMode = options.radius === null && here.z === WORLD.surfaceZ;
   let window: { x0: number; x1: number; y0: number; y1: number };
   if (surfaceMode) {
@@ -328,24 +368,6 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   for (let z = here.z - options.layers; z <= here.z + options.layers; z += 1) {
     // There is nothing to draw above the surface or below the bottom layer.
     if (z < WORLD.surfaceZ || z >= state.size.z) {
-      continue;
-    }
-    if (surfaceMode && z === WORLD.surfaceZ) {
-      // Not drawn. The one thing a surface cell can hold is loose items, so
-      // those are still listed. (Surface cells are always known.)
-      for (let y = window.y0; y <= window.y1; y += 1) {
-        for (let x = window.x0; x <= window.x1; x += 1) {
-          const pos = { x, y, z };
-          const isOwnCell = x === here.x && y === here.y;
-          if (isOwnCell || !isSurface(state.size, pos)) {
-            continue; // the avatar's own cell has its own line further down
-          }
-          const loose = looseItemsAt(state, pos);
-          if (loose.length > 0) {
-            notes.push(`Loose at x${x} y${y}, ${layerName(z)}: ${stackListText(loose)}`);
-          }
-        }
-      }
       continue;
     }
     const rows: string[] = [];
@@ -445,6 +467,24 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     notes.unshift(`In your cell: a ${ownStructure}`);
   }
 
+  // A stump beside the avatar: say when its tree grows back, which the map
+  // cannot show (issue #70). Stumps further off are on the map and the legend.
+  for (const step of [
+    { x: 0, y: -1 },
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+    { x: -1, y: 0 },
+  ]) {
+    const pos = { x: here.x + step.x, y: here.y + step.y, z: here.z };
+    const shifts = shiftsUntilRegrowth(state, pos);
+    if (shifts !== null) {
+      const when = shifts === 1 ? 'at the end of this shift' : `in ${shifts} shifts`;
+      notes.push(
+        `Stump at x${pos.x} y${pos.y}: a tree grows back ${when} if nothing stands on it then.`,
+      );
+    }
+  }
+
   const legendOrder = [SYMBOL_AVATAR, SYMBOL_UNKNOWN, SYMBOL_OPEN, SYMBOL_EDGE];
   const legendLines: string[] = [];
   for (const symbol of [...legendOrder, ...[...legend.keys()].sort()]) {
@@ -501,6 +541,10 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     forecast =
       `${unspent}fuel ${state.fuel} -> ${upkeep.fuelAfter} (-${upkeep.fuelConsumed} shift)` +
       `, lamp oil ${state.lampOil} -> ${upkeep.lampOilAfter}.`;
+    if (preview.regrowth.length > 0) {
+      const cells = preview.regrowth.map((cell) => `x${cell.x} y${cell.y}`).join(', ');
+      forecast += ` A tree grows back on the stump at ${cells}.`;
+    }
     if (upkeep.fuelAfter <= 0) {
       // The run does not end at this end of shift, but it will at the next
       // one unless fuel is crafted first (decision note 0005 item 21;

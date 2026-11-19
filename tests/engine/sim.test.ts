@@ -176,7 +176,8 @@ describe('playRun', () => {
   it('counts the shifts that begin with the lamp out', () => {
     // The same run. It crafts no lamp oil, so the 3 it starts with burn at the
     // ends of shifts 4, 8 and 12, and every shift from 13 on begins in the
-    // dark. (It crafts some fuel, which is why it lasts 28 shifts and not 25.)
+    // dark. It lasts 25 shifts: 24 fuel, and the last shift at 0. (Before the
+    // forest of issue #70 changed the start, it crafted some fuel and lasted 28.)
     const { metrics } = playRun({
       seed: 9,
       contractId: CONTRACT,
@@ -185,8 +186,8 @@ describe('playRun', () => {
       maxShifts: 300,
     });
     expect(metrics.recipesUsed['lampOil']).toBe(0);
-    expect(metrics.shiftsPlayed).toBe(28);
-    expect(metrics.shiftsInTheDark).toBe(28 - 12);
+    expect(metrics.shiftsPlayed).toBe(25);
+    expect(metrics.shiftsInTheDark).toBe(25 - 12);
     const report = simulate(options('wander', 3));
     expect(report.aggregate.runsWithAShiftInTheDark).toBe(
       report.runs.filter((run) => run.shiftsInTheDark > 0).length,

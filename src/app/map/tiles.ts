@@ -13,10 +13,17 @@
 // works (light spreads through open cells, round corners, never through
 // rock; reveal.ts), so it can never be told by an unseen cell either.
 
-import { AVATAR, BLOCKS, STRUCTURES, WORLD, blockDefByCode } from '../../data';
+import { AVATAR, BLOCKS, STRUCTURES, SURFACE, WORLD, blockDefByCode } from '../../data';
 import type { BlockId, Vec3 } from '../../data';
-import { cellPosition, knownCell, visibleMineralTraces } from '../../engine';
+import {
+  cellPosition,
+  hasTree,
+  knownCell,
+  surfaceKindAt,
+  visibleMineralTraces,
+} from '../../engine';
 import type { GameState } from '../../engine';
+import type { SurfaceMark } from './palette';
 
 /** What a tile shows. */
 export type TileKind = 'unknown' | 'open' | 'block';
@@ -42,12 +49,28 @@ export interface Tile {
   miner: boolean;
   /**
    * For a surface cell: the block of the top layer under it (the ground the
-   * miner walks on), drawn pale under the open air; `null` elsewhere. The top
-   * layer is always seen, so this is known to the player.
+   * miner walks on), drawn pale under the open air; `null` elsewhere, and
+   * under a tree (issue #70). Read through `knownCell`, so only seen ground.
    */
   ground: BlockId | null;
   /** True if the miner is in this column on another layer (drawn as a faint ring). */
   minerColumn: boolean;
+  /**
+   * For a surface cell: what grows or lies there (issue #70); `null`
+   * elsewhere. The surface is always seen.
+   */
+  surface: SurfaceMark | null;
+}
+
+/** The kind of the surface cell `pos`, as the tiles name it. */
+function surfaceMark(state: GameState, pos: Vec3): SurfaceMark {
+  const code = surfaceKindAt(state, pos);
+  const kinds = SURFACE.kinds;
+  if (code === kinds.tree.code) return 'tree';
+  if (code === kinds.stump.code) return 'stump';
+  if (code === kinds.path.code) return 'path';
+  if (code === kinds.outcrop.code) return 'outcrop';
+  return 'meadow';
 }
 
 /** A square window of a layer: the cells x0..x0+size-1 and y0..y0+size-1. */
@@ -174,7 +197,8 @@ export function layerContext(state: GameState): LayerContext {
  * keeps the window inside it).
  *
  * The surface is a layer of its own (where the miner walks at the start);
- * its cells show the ground under them.
+ * its cells show what grows there (issue #70) and, where no tree stands, the
+ * ground under them.
  * `context` may be passed in when it was already worked out for this state.
  */
 export function buildLayer(
@@ -209,6 +233,7 @@ export function buildLayer(
           miner,
           minerColumn,
           ground: null,
+          surface: null,
         });
         continue;
       }
@@ -233,7 +258,11 @@ export function buildLayer(
         items: cell.looseItems.length > 0,
         miner,
         minerColumn,
-        ground: z === WORLD.surfaceZ ? groundUnder(state, x, y) : null,
+        // A tree hides the ground (the engine has not revealed it, so
+        // `groundUnder` would find nothing anyway; a regrown tree stands over
+        // ground the player remembers, which the layer-0 view shows).
+        ground: z === WORLD.surfaceZ && !hasTree(state, pos) ? groundUnder(state, x, y) : null,
+        surface: z === WORLD.surfaceZ ? surfaceMark(state, pos) : null,
       });
     }
     rows.push(row);

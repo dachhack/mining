@@ -15,6 +15,7 @@ import {
   ITEMS,
   SHIFT,
   STRUCTURES,
+  WORLD,
 } from '../../src/data';
 import {
   applyAction,
@@ -29,6 +30,7 @@ import {
   isRunActive,
   isSolid,
   isSurface,
+  isUnderTree,
   legalActions,
   previewCubePhase,
   serialise,
@@ -39,6 +41,8 @@ import type { Vec3 } from '../../src/data';
 import { cloneState, setBlock, setStructure } from '../../src/engine/state';
 import { decisionKey, makePolicy } from '../../tools/policies';
 import { playRun } from '../../tools/simRun';
+import { buildView, renderView } from '../../src/app/text/view';
+import { buildLayer } from '../../src/app/map/tiles';
 
 const CONTRACT = CONTRACT_IDS[0] as string;
 
@@ -174,7 +178,9 @@ describe('property tests: random legal play', () => {
   // The seeds and lengths of the runs below.
   const WANDER_SEEDS = [1, 2, 3, 4, 5, 6];
   const WANDER_DECISIONS = 350;
-  const RANDOM_SEEDS = [101, 102, 103, 104, 105, 106, 107, 108];
+  // Seed 110 was added with the forest (issue #70): seed 107, whose run was
+  // the one still going after 150 decisions, now runs out of fuel at 147.
+  const RANDOM_SEEDS = [101, 102, 103, 104, 105, 106, 107, 108, 110];
   const RANDOM_DECISIONS = 150;
 
   // `wander` never leaves, so these runs go deep and long: most end out of
@@ -341,7 +347,9 @@ describe('property tests: unrevealed cells do not change the action list (issues
     UNSEEN_CELLS_TIMEOUT_MS,
   );
 
-  it.each([27, 34, 47])(
+  // Seed 23 took the place of seed 27 with the forest (issue #70), which
+  // shortened seed 27's run in the dark to 57 checks.
+  it.each([23, 34, 47])(
     'with the lamp out from the start, seed %i',
     (seed) => {
       const { checks, checksWithLampOut } = playAndCheckUnseenCells(seed, 0, 300, 2);
@@ -361,6 +369,88 @@ describe('property tests: unrevealed cells do not change the action list (issues
       const { checks, checksWithLampOut } = playAndCheckUnseenCells(seed, 1, 120, 1);
       expect(checksWithLampOut).toBeGreaterThan(20);
       expect(checks - checksWithLampOut).toBeGreaterThan(5);
+    },
+    UNSEEN_CELLS_TIMEOUT_MS,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// The ground under a tree (issue #70 item 7)
+// ---------------------------------------------------------------------------
+//
+// "The ground under a tree is unrevealed until the tree is cut; nothing
+// offered, shown, forecast, or costed may depend on it." So after each
+// decision of a run, every unrevealed layer-0 block under a tree is changed,
+// all at once, in two ways (to coal; to open space), and the action list,
+// the forecast, the text view and the tap map's tiles of the surface and
+// layer 0 must come out the same as before.
+
+/** Everything the player is offered and shown, as one string. */
+function whatThePlayerGets(state: GameState): string {
+  const view = renderView(buildView(state, { radius: null, layers: 1, deepestZ: 0 }));
+  const window = { x0: 0, y0: 0, size: state.size.x };
+  const tiles = [WORLD.surfaceZ, 0].map((z) => buildLayer(state, z, window));
+  return JSON.stringify({
+    actions: legalActions(state),
+    forecast: isRunActive(state) ? previewCubePhase(state) : null,
+    view,
+    tiles,
+  });
+}
+
+/** A copy of `state` with every unseen block under a tree set to `blockCode`. */
+function withGroundUnderTrees(state: GameState, blockCode: number): GameState {
+  const copy = cloneState(state);
+  for (let y = 0; y < state.size.y; y += 1) {
+    for (let x = 0; x < state.size.x; x += 1) {
+      const ground = { x, y, z: 0 };
+      if (isUnderTree(state, ground) && !isRevealed(state, ground)) {
+        setBlock(copy, ground, blockCode);
+      }
+    }
+  }
+  return copy;
+}
+
+/** Play a run, checking after every `every`-th decision. Returns the number of checks. */
+function playAndCheckGroundUnderTrees(
+  seed: number,
+  policyName: string,
+  maxDecisions: number,
+  every: number,
+): number {
+  const policy = makePolicy(policyName, seed);
+  let state = createRun(seed, CONTRACT, DEFAULT_LOADOUT_ID);
+  let checks = 0;
+  for (let step = 0; step <= maxDecisions && isRunActive(state); step += 1) {
+    if (step % every === 0) {
+      const before = whatThePlayerGets(state);
+      for (const code of [BLOCKS.coalSeam.code, BLOCKS.air.code]) {
+        const label = `seed ${seed}, ${policyName}, decision ${step}, ground set to ${code}`;
+        expect(whatThePlayerGets(withGroundUnderTrees(state, code)) === before, label).toBe(true);
+      }
+      checks += 1;
+    }
+    const decision = policy.decide(state);
+    state = decision === 'endShift' ? endShift(state).state : applyAction(state, decision).state;
+  }
+  return checks;
+}
+
+describe('property tests: the ground under a tree changes nothing the player gets (issue #70)', () => {
+  // The coal policy walks the surface, cuts trees and digs look-holes beside
+  // the forest; wander and random dig down near the start. Seed 59's coal
+  // run cuts 20 trees and sees two grow back (tests/golden).
+  it.each([
+    [59, 'coal'],
+    [15, 'coal'],
+    [3, 'wander'],
+    [110, 'random'],
+  ])(
+    'seed %i, %s policy',
+    (seed, policyName) => {
+      const checks = playAndCheckGroundUnderTrees(seed, policyName, 120, 3);
+      expect(checks).toBeGreaterThan(10);
     },
     UNSEEN_CELLS_TIMEOUT_MS,
   );

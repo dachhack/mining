@@ -25,7 +25,15 @@
 
 import { ACTION_COSTS, AVATAR, NO_STRUCTURE, SHIFT, STRUCTURES } from '../../data';
 import type { Vec3 } from '../../data';
-import { inGrid, isOpen, isRevealed, isSolid, legalActions, structureAt } from '../../engine';
+import {
+  hasTree,
+  inGrid,
+  isOpen,
+  isRevealed,
+  isSolid,
+  legalActions,
+  structureAt,
+} from '../../engine';
 import type { GameState } from '../../engine';
 import { choiceName, compass } from './describe';
 
@@ -36,6 +44,11 @@ const SIDEWAYS = [
   { x: 0, y: 1 },
   { x: -1, y: 0 },
 ];
+
+/** "n", "e", "s" or "w" for a sideways step: the end of the name of a cut choice. */
+function choiceSide(step: { x: number; y: number }): string {
+  return step.y < 0 ? 'n' : step.y > 0 ? 's' : step.x > 0 ? 'e' : 'w';
+}
 
 function hasLadder(state: GameState, pos: Vec3): boolean {
   return structureAt(state, pos) === STRUCTURES.ladder.code;
@@ -146,6 +159,11 @@ export function missingMoveNotes(state: GameState): string[] {
       }
       continue;
     }
+    if (hasTree(state, beside)) {
+      // A tree blocks the way (issue #70). The surface is always seen.
+      notes.push(`No move ${side}: a tree stands there (cut-${choiceSide(step)} cuts it down).`);
+      continue;
+    }
     if (isOpen(state, beside)) {
       const drop = dropUnder(state, beside, longest);
       // The advice is given only where it can be followed: nothing can be
@@ -168,6 +186,9 @@ export function missingMoveNotes(state: GameState): string[] {
       rockSides += 1;
       if (isRevealed(state, overhead) && isOpen(state, overhead) && !isRevealed(state, onTop)) {
         unseenTops.push(side);
+      } else if (isRevealed(state, overhead) && isOpen(state, overhead) && hasTree(state, onTop)) {
+        // Out of a hole in layer 0 onto the surface, where a tree stands.
+        notes.push(`No step up ${side}: a tree stands on top of the rock there.`);
       }
     }
   }

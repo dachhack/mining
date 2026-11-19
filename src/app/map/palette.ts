@@ -31,7 +31,13 @@ export type Pattern =
   | 'cross'
   | 'star'
   | 'grid'
-  | 'bars';
+  | 'bars'
+  // The surface forest (issue #70).
+  | 'tree'
+  | 'stump'
+  | 'grass'
+  | 'track'
+  | 'peak';
 
 export interface BlockLook {
   /** Fill colour of the tile in light (CSS colour). */
@@ -73,6 +79,28 @@ export const BLOCK_LOOKS: Record<BlockId, BlockLook> = {
   rubble: { colour: '#6f6359', ink: '#c9bcae', pattern: 'dots' },
   // Sealed rock: slate with horizontal bars.
   sealed: { colour: '#4b5170', ink: '#262a3e', pattern: 'bars' },
+};
+
+/** The kinds of surface cell (issue #70), as the tiles name them. */
+export type SurfaceMark = 'tree' | 'stump' | 'path' | 'meadow' | 'outcrop';
+
+/**
+ * How each kind of surface cell looks. A tree hides the ground, so it is
+ * drawn solid. The open kinds let the ground under them show through a haze
+ * of their own colour, with their pattern on top, so each differs from the
+ * others by pattern as well as colour.
+ */
+export const SURFACE_LOOKS: Record<SurfaceMark, { haze: string; ink: string; pattern: Pattern }> = {
+  // Tree: dark green with a light green fir.
+  tree: { haze: '#1f4d24', ink: '#8fd27f', pattern: 'tree' },
+  // Stump: a pale-green haze with a brown ring of wood.
+  stump: { haze: 'rgba(200, 225, 180, 0.6)', ink: '#6b4423', pattern: 'stump' },
+  // Dirt path: a sandy haze with two wheel ruts.
+  path: { haze: 'rgba(235, 215, 170, 0.6)', ink: '#7a5a2e', pattern: 'track' },
+  // Meadow: a light green haze with tufts of grass.
+  meadow: { haze: 'rgba(190, 235, 170, 0.6)', ink: '#3f8f2f', pattern: 'grass' },
+  // Stone outcrop: a grey haze with a peak.
+  outcrop: { haze: 'rgba(225, 225, 225, 0.6)', ink: '#4a4a4a', pattern: 'peak' },
 };
 
 /** Cells the player has not seen: dark, with diagonal lines, never coloured by what is there. */

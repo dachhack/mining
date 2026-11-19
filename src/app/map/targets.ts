@@ -2,7 +2,8 @@
 //
 // A tap on cell (x, y) of the layer on screen picks, from the legal actions,
 // those that act on that cell:
-// - a move into it, a mine of it, a pick-up from it;
+// - a move into it, a mine of it, a pick-up from it, cutting the tree in it
+//   (issue #70: on the surface, a tap on a tree beside the miner);
 // - on the miner's own cell, on the miner's layer: also the ladder climbs
 //   (up and down the same column) and mining the block underfoot.
 // A move belongs to the layer it ends on, and a mine to the layer of its
@@ -27,6 +28,8 @@ function actionCell(action: Action): { x: number; y: number; z: number } | null 
       return action.target;
     case 'pickUp':
       return action.from;
+    case 'cutTree':
+      return action.target;
     default:
       return null;
   }

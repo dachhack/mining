@@ -1,0 +1,31 @@
+# 0020 — The surface forest: trees to cut, paths, meadows, outcrops; trees regrow
+
+Date: 2026-11-19. Status: accepted with issue #70. The owner asked for it directly; design doc section 3 (not marked [Decided]) is changed in the same PR. Numbers marked [Default] live in `src/data/surface.ts`.
+
+## Context
+
+Owner, 2026-11-19: "We need the surface to be mostly trees you can cut for timber then this exposes rock or dirt or other. Trees grow back if their spot isnt mined in a few turns." Asked by the coordinator: trees block walking, "but there are dirt paths and stone outcroppings and meadows"; the ground under a tree is "Hidden until cut"; regrowth takes "10 shifts". Issue #70 gives the coordinator's reading in eight items; this note records how it was built and the choices the issue left open.
+
+## Decision
+
+1. **Surface cells.** Each of the 32 × 32 surface cells (`z = -1`) is a tree, a dirt path, a meadow, a stone outcrop, or (once cut) a stump. They are kept in two new state arrays, `surface` (the kind) and `stumpAge` (a stump's regrowth count), one entry per column; `STATE_VERSION` is 5. Meadow is code 0, so a blank state (every hand-built test cube) is open ground everywhere, as the surface was before.
+2. **A tree is not a block.** `blockAt` still answers "open air" on the surface, so water, gas and air paths (M2 work in progress) treat the forest as open air, as they treated the bare surface. A tree matters only where a rule says so: walking and stepping up (`actions/move.ts`), light, reveal and looking over an edge (`reveal.ts`), mining from the surface (`actions/mine.ts`) and cutting (`actions/cutTree.ts`). The code is in `src/engine/surface/` (state helpers, generation, regrowth) and `src/engine/actions/cutTree.ts`.
+3. **Generation** (`surface/generation.ts`, drawn from `state.rng` right after the cube): forest everywhere; the start cell and its eight neighbours meadow; 4–6 round meadows of radius 2–4, at least 6 steps from the start and 2 cells in from the edges; a winding path from the start to the centre of each meadow and to a random cell on each of two different edges (each step goes nearer its end, except up to 6 random turns aside with chance 0.3, so every path ends); then each tree cell over stone becomes an outcrop with chance 0.3. On 300 seeds the surface is 66.7% trees on average (54% to 77%).
+4. **Hidden information.** Steps 1 to 4 of generation read nothing of the cube. Outcrops are the one rule that looks at layer 0, and an outcrop reveals the stone it stands on (issue #70 accepts that a tree is then a little less likely to stand over stone). A path wears plain stone under it to dirt; ore under a path is left, and shows. The ground under a tree is not revealed by daylight, the lamp's light (a tree stops light), reach from the surface, or looking over an edge; it cannot be mined from the surface. The property test in `tests/engine/properties.test.ts` sets every unseen block under a tree to coal and to open space and checks that the action list, the forecast, the text view and the tap map's tiles do not change.
+5. **Cutting.** `cutTree` (2 AP, gives 2 timber) is offered on the surface for a tree in one of the four cells beside the avatar. Timber that does not fit the carry limit is left on the stump, as a mining yield is left in the hole. The stump is open ground; the block under it is revealed by daylight at once.
+6. **Regrowth: where in the end of the shift.** After the cube phase and its `settle`, before upkeep, if the avatar is alive. So the end-shift forecast (`ShiftForecast.regrowth`, a new field) can say where a tree will grow, and a tree that grows is there at the start of the next shift.
+7. **Regrowth: the count.** For each stump in storage order: if its layer-0 block is not solid, the count goes back to 0; otherwise it goes up by one, to at most 10; at 10, if neither the avatar nor loose items are on the stump, a tree grows and the count is cleared, else it waits at 10. A tree cut in shift N therefore grows at the end of shift N + 9 (the shift of the cut counts as one of the ten). A surface cell never holds a structure (structures are placed only in the grid), so "a ladder or other structure on it" reduces to the ground being open, which the first rule covers.
+
+## Readings (the smallest reading where the issue, the design doc and 0014 left room)
+
+1. **Mining under a tree from underground is allowed.** Issue #70 item 4 says mining _down from the surface_ is not offered under a tree. From a hole beside it, the block under a tree is revealed by light from the side and mined like any other; the tree then stands over a hole, and the stump left by cutting it never regrows until the hole is filled.
+2. **"Mined in that time" is read as "its layer-0 block is not solid".** A block that is mined out and later filled again (rubble, sealant) starts the count again from 0.
+3. **The timber-root of 0014 item 32 is unchanged**; trees are a second source of timber.
+4. **The text map on the surface draws the surface again.** Issue #46 item 2 left it out because it was open air everywhere; now it shows the forest (`Y` tree, `,` stump, `:` path, `"` meadow, `^` outcrop), beside layer 0.
+
+## Consequences
+
+- **Starting fuel (0014 item 33).** Coal under trees is no longer seen for free. The coal policy was taught to dig look-holes and cut trees when no coal is in sight. With 24 fuel it gets the fuel back with 3 shifts to spare on 954 of 1,000 seeds (1,000 before); on 32 seeds it finds no coal and leaves alive; no trip runs out of fuel. The loadout is unchanged; this is a question for the coordinator (PR for issue #70).
+- Golden runs re-recorded (the start state changed, and recorded mines under trees became illegal), and a fifth added (`coal-seed-59-forest.json`) that cuts trees and sees two grow back.
+- Saves from state version 4 do not load. `ENGINE_VERSION` stays 0.3.0 (it covers the whole M2 batch).
+- The paused M2 tasks: `ShiftForecast` has a new `regrowth` field; `actions/move.ts`, `actions/mine.ts`, `reveal.ts`, `state.ts`, `serialise.ts`, `index.ts`, `actionTypes.ts` and `events.ts` have small local additions. Path cells wear stone to dirt only where layer 1 is solid, so a cube with upper-band voids (M2-2) stays at rest.

@@ -5,7 +5,16 @@
 // states rules, in the order a player meets them. Every number in it is read
 // from src/data, so the text cannot drift from the game when one is tuned.
 
-import { ACTION_COSTS, AVATAR, BLOCKS, FIELD_RECIPES, SHIFT, TELLS, WORLD } from '../../src/data';
+import {
+  ACTION_COSTS,
+  AVATAR,
+  BLOCKS,
+  FIELD_RECIPES,
+  SHIFT,
+  SURFACE,
+  TELLS,
+  WORLD,
+} from '../../src/data';
 import { stackListText } from '../../src/app/text/describe';
 import { DEFAULT_LAYERS, DEFAULT_RADIUS } from '../../src/app/text/view';
 
@@ -17,6 +26,7 @@ export function helpText(): string {
   const uncontrolledPerBlock = AVATAR.uncontrolledFallDamagePerBlock;
   const bottomLayer = WORLD.size.z - 1;
   const traceSteps = TELLS.mineralTraces.distance;
+  const cutYield = stackListText(SURFACE.cutTree.yields);
   // The lamp burns oil at the end of every Nth shift of the run, counted from
   // the first shift: with 4, at the end of shifts 4, 8, 12, ...
   const burnEvery = SHIFT.lampOilBurnEveryShifts;
@@ -66,6 +76,8 @@ CHOICES: NAMES AND NUMBERS
                                                            carried only drop-stone is listed;
                                                            drop-all-stone then does the same
                                                            (and nothing else is read that way)
+    cut-n, cut-e, cut-s, cut-w                             cut down the tree that way (on the
+                                                           surface only)
     leave                    leave the cube (on the surface only)
     end (or 0)               end the shift
   Mine choices that differ only in direction share one line of the list, for example
@@ -80,9 +92,9 @@ READING A VIEW
   Then come your gauges. The map shows your layer with the layers above and below it
   beside it, each seen from above: x grows to the east (right), y grows to the south (down the
   page). "@" is you; "?" is a cell you have not seen, which may be rock or open space. While you
-  stand on the surface the map is layer 0 alone, all of it, with "@" drawn on the block you
-  stand on (the surface itself is open air everywhere and is not drawn; --radius N draws it
-  beside layer 0). Underground
+  stand on the surface the map is the whole surface and, beside it, the whole of layer 0, with
+  "@" drawn on the block you stand on as well (--radius N draws less of both). On the surface
+  "Y" is a tree, "," a stump, ":" a dirt path, '"' a meadow and "^" a stone outcrop. Underground
   the map reaches ${DEFAULT_RADIUS} cells each way, and is then trimmed: rows and columns at its edge that are
   unseen are left out. If you have seen cells below the top layer that are off the map, the
   "Map:" line says which --radius shows them. It says nothing about the top layer, which you
@@ -157,11 +169,25 @@ THE GAME
     list, a "Not on the list:" line names it with its cost, and it waits for the next shift.
   - What the block gives goes into your pack. If that would put you over your carry limit, it
     is left lying in the hole instead.
-  - Harder rock and different ores lie deeper. Timber-root, the only source of timber, grows
-    only in the upper layers.
+  - Harder rock and different ores lie deeper. Timber-root grows only in the upper layers;
+    the trees on the surface are the other source of timber.
+
+  The forest
+  - Most of the surface is forest. A tree blocks the way: you cannot walk or step up into it.
+    Dirt paths, meadows and stone outcrops are open ground; an outcrop stands over stone.
+  - Cut a tree beside you (north, east, south or west; ${SURFACE.cutTree.ap} AP) for ${cutYield}. It leaves a
+    stump, which is open ground. Timber too heavy to carry is left lying on the stump.
+  - A tree hides the ground under it: from the surface you see that block only once the tree
+    is cut, and you cannot mine down into it from the surface while the tree stands. From
+    underground you see and mine it like any other block.
+  - A tree grows back on a stump ${SURFACE.regrowShifts} shifts after the cut (the shift of the cut counts), at the
+    end of a shift, if the block under the stump is still there; if you or loose items are on
+    the stump then, it grows once the stump is clear. The block under it stays on your map.
+    The "If you end the shift now" line says where a tree will grow back.
 
   What you can see
-  - You know the whole top layer from the start. Below it you know what your lamp has shown.
+  - You know the top layer from the start, except where a tree stands over it. Below it you
+    know what your lamp has shown.
     Light spreads from you a few steps through open cells: round corners, never through rock.
     You see every lit cell and every cell touching one.
   - While your lamp is lit you also know the cells your pick can reach and the cell over your
@@ -187,7 +213,7 @@ THE GAME
   In the dark (lamp oil 0)
   - You learn only the six cells touching yours: north, east, south, west, above and below.
     Nothing new diagonally, nothing new around the cell below you, and you cannot look down a
-    drop. On the surface daylight still shows you the top layer.
+    drop. On the surface daylight still shows you the top layer outside the forest.
   - You can mine any block you know. In the dark that is the walls beside you and the floor
     under you, plus anything you saw earlier or a torch shows: diagonal blocks you saw while
     the lamp was lit are still on the list.

@@ -28,6 +28,8 @@ import {
 import { actionsForCell } from '../../src/app/map/targets';
 import { buildLayer, layerContext } from '../../src/app/map/tiles';
 import { choiceName, choiceWarning } from '../../src/app/text/describe';
+import { updateReveal } from '../../src/engine/reveal';
+import { buildState } from '../engine/helpers';
 
 /** Take the choice with this play-tool name. */
 function takeNamed(state: GameState, name: string): GameState {
@@ -361,5 +363,56 @@ describe('the too-heavy warning (review of PR #67)', () => {
         'too heavy to carry: it will be left lying there',
       );
     }
+  });
+});
+
+describe('the forest on the tap map (issue #70)', () => {
+  /** A 3 x 3 cube, the miner on the surface in the middle, a tree east of it. */
+  function forest(): GameState {
+    const state = buildState({
+      layers: [
+        ['ddd', 'ddd', 'ddd'],
+        ['ddd', 'ddd', 'ddd'],
+      ],
+      surface: ['p.o', '..T', '...'],
+      avatar: { x: 1, y: 1, z: -1 },
+    });
+    updateReveal(state, []);
+    return state;
+  }
+
+  it('draws each kind of surface cell, and no ground under a tree', () => {
+    const tiles = buildLayer(forest(), WORLD.surfaceZ, { x0: 0, y0: 0, size: 3 });
+    expect(tiles[0]?.map((tile) => tile.surface)).toEqual(['path', 'meadow', 'outcrop']);
+    const tree = tiles[1]?.[2];
+    expect(tree?.surface).toBe('tree');
+    expect(tree?.ground).toBeNull();
+    // Open ground shows the block under it.
+    expect(tiles[1]?.[0]?.ground).toBe('dirt');
+    // Layer 0 under the tree is unseen.
+    const below = buildLayer(forest(), 0, { x0: 0, y0: 0, size: 3 });
+    expect(below[1]?.[2]?.kind).toBe('unknown');
+    expect(below[1]?.[2]?.surface).toBeNull();
+  });
+
+  it('a tap on a tree beside the miner cuts it, at once (no warning)', () => {
+    const state = forest();
+    expect(tapNames(state, WORLD.surfaceZ, 2, 1)).toEqual(['cut-e']);
+    const cut = actionsForCell(state, WORLD.surfaceZ, 2, 1)[0];
+    expect(cut?.type).toBe('cutTree');
+    expect(cut !== undefined && choiceWarning(state, cut)).toBeNull();
+    // After the cut: a stump, with the ground under it shown.
+    const after = applyAction(state, cut as Action).state;
+    const tile = buildLayer(after, WORLD.surfaceZ, { x0: 0, y0: 0, size: 3 })[1]?.[2];
+    expect(tile?.surface).toBe('stump');
+    expect(tile?.ground).toBe('dirt');
+    expect(tapNames(after, WORLD.surfaceZ, 2, 1)).toEqual(['e']);
+  });
+
+  it('a cut whose timber is too heavy to carry warns, so a tap opens the chooser', () => {
+    const state = forest();
+    state.inventory = { stone: 20 };
+    const cut = actionsForCell(state, WORLD.surfaceZ, 2, 1)[0];
+    expect(cut !== undefined && choiceWarning(state, cut)).toContain('too heavy');
   });
 });

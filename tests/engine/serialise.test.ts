@@ -197,10 +197,18 @@ describe('serialise and deserialise', () => {
 
   it('refuses a save from before the M2 skeleton with a clear error', () => {
     // State version 3 was the last M1 shape (decision note 0012).
-    expect(STATE_VERSION).toBe(4);
+    expect(STATE_VERSION).toBe(5);
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 3 })).toThrow(
-      'Saved state has version 3; this build reads version 4',
+      'Saved state has version 3; this build reads version 5',
+    );
+  });
+
+  it('refuses a save from before the surface forest with a clear error (issue #70)', () => {
+    // State version 4 was the M2 skeleton's shape, with no surface arrays.
+    const saved = serialise(busyState());
+    expect(() => deserialise({ ...saved, version: 4 })).toThrow(
+      'Saved state has version 4; this build reads version 5',
     );
   });
 });
@@ -228,6 +236,8 @@ describe('hashState', () => {
       'a crack timer': (s) => setCrackTimer(s, { x: 2, y: 0, z: 0 }, 1),
       structure: (s) => (s.structures[0] = 1),
       'traces seen': (s) => (s.tracesSeen[0] = 1),
+      'a surface cell': (s) => (s.surface[0] = 1),
+      "a stump's age": (s) => (s.stumpAge[1] = 3),
       rng: (s) => nextUint32(s.rng),
       seed: (s) => (s.seed += 1),
       'avatar position': (s) => (s.avatar.pos.x = 0),

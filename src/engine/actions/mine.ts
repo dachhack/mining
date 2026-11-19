@@ -12,9 +12,11 @@ import {
   blockDefAt,
   inGrid,
   isRevealed,
+  isSurface,
   setBlock,
 } from '../state';
 import type { GameState } from '../state';
+import { isUnderTree } from '../surface/state';
 
 /**
  * Every `MineAction` the player could take now.
@@ -36,13 +38,24 @@ import type { GameState } from '../state';
  *   the dispatcher in index.ts removes the ones that cost too much, which is
  *   what makes a block that costs more than the AP left not mineable this
  *   shift (0005 item 12).
+ * - From the surface, a layer-0 block with a tree over it is not mineable
+ *   (issue #70: "mining down from the surface is not offered under a tree").
+ *   From underground it is, like any other revealed block: it is revealed
+ *   only by light or reach from the side or below (decision note 0020).
  * - The drill (`mineCostWithDrill`) is not in M1, so the plain cost is used.
  */
 export function legalMineActions(state: GameState): MineAction[] {
   const actions: MineAction[] = [];
+  const onSurface = isSurface(state.size, state.avatar.pos);
   for (const offset of MINE_REACH_OFFSETS) {
     const target = offsetPosition(state.avatar.pos, offset);
     if (!inGrid(state.size, target) || !isRevealed(state, target)) {
+      continue;
+    }
+    // From the surface, the ground under a tree is not mined: cut the tree
+    // first (issue #70). A regrown tree stands over ground the player knows,
+    // so this is checked as well as "revealed".
+    if (onSurface && isUnderTree(state, target)) {
       continue;
     }
     const cost = blockDefAt(state, target).mineCost;

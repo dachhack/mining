@@ -1,11 +1,11 @@
 {
-  "description": "The staircase policy on seed 11, lamp lit throughout: on the way down to layer 8 it sees mineral traces on rock near iron ore, mines one ore block, climbs back and leaves (salvage). The traces seen stay in the state after the ore is mined.",
+  "description": "Policy staircase, seed 11: 45 decisions.",
   "seed": 11,
   "contractId": "none",
   "loadoutId": "standard",
   "recordedWith": "staircase",
   "expectedStatus": "ended: salvage, left",
-  "expectedHash": "32f8b68c59fcb3ab",
+  "expectedHash": "43967d578c7ef428",
   "decisions": [
     "mine 17,16,0 ap 1",
     "move to 17,16,-1 drop 1 ap 1",

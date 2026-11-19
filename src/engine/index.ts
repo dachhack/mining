@@ -16,6 +16,7 @@ import type { Action } from './actionTypes';
 import { legalCampActions, applyCampAction } from './actions/camp';
 import { legalCampToolActions, applyCampToolAction } from './actions/campTools';
 import { legalCraftActions, applyCraft } from './actions/craft';
+import { legalCutTreeActions, applyCutTree } from './actions/cutTree';
 import { legalGiveUpActions, applyGiveUp } from './actions/giveUp';
 import { legalDropActions, legalPickUpActions, applyDrop, applyPickUp } from './actions/items';
 import { legalLeaveActions, applyLeave } from './actions/leave';
@@ -33,6 +34,8 @@ import { isValidSeed } from './rng';
 import { forecastShift, runCubePhase, runUpkeep } from './shift';
 import type { ShiftForecast } from './shift';
 import { addItem, blankState, cloneState, isRunActive } from './state';
+import { generateSurface } from './surface/generation';
+import { regrowTrees } from './surface/regrowth';
 import { updateMineralTraces } from './tells';
 import type { GameState } from './state';
 
@@ -74,6 +77,8 @@ export function createRun(seed: number, contractId: string, loadoutId: string): 
   state.contractId = contractId;
   state.loadoutId = loadoutId;
   state.blocks = generateCube(state.size, state.rng);
+  // The forest on the surface (issue #70), drawn from the same generator.
+  generateSurface(state);
 
   state.avatar.pos = { ...WORLD.startPosition };
   state.avatar.health = AVATAR.startHealth;
@@ -106,6 +111,7 @@ export function legalActions(state: GameState): Action[] {
   }
   const all: Action[] = [
     ...legalMoveActions(state),
+    ...legalCutTreeActions(state),
     ...legalMineActions(state),
     ...legalPlaceLadderActions(state),
     ...legalPlaceTorchActions(state),
@@ -194,6 +200,9 @@ export function applyAction(state: GameState, action: Action): StepResult {
     case 'giveUp':
       applyGiveUp(next, action, events);
       break;
+    case 'cutTree':
+      applyCutTree(next, action, events);
+      break;
   }
 
   // After any action: things fall, then light shows what is newly visible,
@@ -215,8 +224,9 @@ export function applyAction(state: GameState, action: Action): StepResult {
  * changed. Throws if the run has already ended.
  *
  * The order: the cube phase's steps (a) to (e) (shift.ts); `settle` once (the
- * avatar and loose items fall if the phase took their floor); upkeep, if the
- * avatar is still alive; reveal. The forecast for the next shift is not
+ * avatar and loose items fall if the phase took their floor); if the avatar
+ * is still alive, trees grow back on stumps (surface/regrowth.ts) and then
+ * upkeep; reveal. The forecast for the next shift is not
  * stored: `previewCubePhase` works it out from the new state when asked.
  */
 export function endShift(state: GameState): StepResult {
@@ -232,6 +242,9 @@ export function endShift(state: GameState): StepResult {
   // avatar that step (e) already killed does not fall; loose items still do.
   settle(next, events, 'uncontrolled');
   if (isRunActive(next)) {
+    // Trees grow back on stumps left alone long enough (issue #70; decision
+    // note 0020): after the cube phase, before upkeep.
+    regrowTrees(next, events);
     runUpkeep(next, events);
   }
   // The light radius can change at upkeep (lamp oil running out).
@@ -260,6 +273,7 @@ export type {
   CampAction,
   CampToolAction,
   CraftAction,
+  CutTreeAction,
   DecommissionCampAction,
   DropAction,
   FoundCampAction,
@@ -339,4 +353,15 @@ export { showsMineralTraces, visibleMineralTraces } from './tells';
 // own (a simulator policy, say). They make their own state with `createRng`;
 // `state.rng` belongs to the rules.
 export { createRng, nextInt } from './rng';
+// The surface forest (issue #70): what each surface cell is, for the views
+// and tools. The surface is always seen, so these may be read freely.
+export {
+  hasStump,
+  hasTree,
+  isUnderTree,
+  stumpAgeAt,
+  surfaceCellAbove,
+  surfaceKindAt,
+} from './surface/state';
+export { shiftsUntilRegrowth } from './surface/regrowth';
 export type { RngState } from './rng';

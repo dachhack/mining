@@ -26,9 +26,11 @@ import {
   isOpen,
   isRevealed,
   isSolid,
+  isSurface,
   setRevealed,
 } from './state';
 import type { GameState } from './state';
+import { hasTree, isUnderTree } from './surface/state';
 
 /** True while the miner's lamp burns: there is lamp oil left (0011). */
 export function isLampLit(state: GameState): boolean {
@@ -76,8 +78,10 @@ export function litCellsFrom(state: GameState, source: Vec3, radius: number): Ve
         const neighbour = offsetPosition(pos, offset);
         const key = positionKey(neighbour);
         // Outside the cube everything but the surface layer is bedrock, which
-        // is not open, so the fill cannot wander off.
-        if (!seen.has(key) && isOpen(state, neighbour)) {
+        // is not open, so the fill cannot wander off. A tree on the surface
+        // stops light like rock (issue #70): the lamp does not show the
+        // ground under it.
+        if (!seen.has(key) && isOpen(state, neighbour) && !hasTree(state, neighbour)) {
           seen.add(key);
           lit.push(neighbour);
           next.push(neighbour);
@@ -128,7 +132,8 @@ export function edgeLookCells(state: GameState): Vec3[] {
     // The four face offsets with z = 0 are the sideways ones.
     if (offset.z === 0) {
       const beside = offsetPosition(here, offset);
-      if (isOpen(state, beside)) {
+      // Not past a tree: the miner cannot walk into one (issue #70).
+      if (isOpen(state, beside) && !hasTree(state, beside)) {
         columnTops.push(beside);
       }
     }
@@ -161,6 +166,10 @@ export function edgeLookCells(state: GameState): Vec3[] {
  * - Changes `state.revealed` in place and appends a `blockRevealed` event for
  *   each cell that was not revealed before, in the order the cube stores
  *   cells (top layer first), so the same state always gives the same events.
+ * - Trees (issue #70): the ground under a tree is not revealed by daylight,
+ *   light does not pass through a tree, and from the surface reach and
+ *   looking over an edge do not go under one. From underground, light and
+ *   reach reveal it as any other cell.
  * - Lit cells: the surface, plus open cells reachable from the avatar within
  *   its light radius, plus open cells reachable from each torch within the
  *   torch radius (0005 item 13).
@@ -189,10 +198,15 @@ export function updateReveal(state: GameState, events: GameEvent[]): void {
     }
   }
 
-  // The surface is always lit, and every cell of the top layer touches it.
+  // The surface is always lit, and every cell of the top layer touches it,
+  // except where a tree stands over it: a tree hides the ground under it
+  // until it is cut (issue #70).
   for (let y = 0; y < state.size.y; y += 1) {
     for (let x = 0; x < state.size.x; x += 1) {
-      reveal({ x, y, z: 0 });
+      const ground = { x, y, z: 0 };
+      if (!isUnderTree(state, ground)) {
+        reveal(ground);
+      }
     }
   }
 
@@ -208,10 +222,16 @@ export function updateReveal(state: GameState, events: GameEvent[]): void {
     }
   }
 
+  // From the surface the pick cannot reach under a tree (issue #70: mining
+  // down is not offered there), so reach does not reveal the ground under one.
+  const onSurface = isSurface(state.size, state.avatar.pos);
   if (isLampLit(state)) {
     // Reach: what the pick can touch, and the cell overhead.
     for (const offset of MINE_REACH_OFFSETS) {
-      reveal(offsetPosition(state.avatar.pos, offset));
+      const reached = offsetPosition(state.avatar.pos, offset);
+      if (!(onSurface && isUnderTree(state, reached))) {
+        reveal(reached);
+      }
     }
     reveal(offsetPosition(state.avatar.pos, { x: 0, y: 0, z: -1 }));
 
@@ -224,7 +244,12 @@ export function updateReveal(state: GameState, events: GameEvent[]): void {
     // is written out, not left to the light radius, so that it holds whatever
     // `AVATAR.lightRadiusWithoutOil` is.
     for (const offset of FACE_OFFSETS) {
-      reveal(offsetPosition(state.avatar.pos, offset));
+      // From the surface the only cell of the grid this touches is the one
+      // underfoot, which is never under a tree; the check is kept for clarity.
+      const touched = offsetPosition(state.avatar.pos, offset);
+      if (!(onSurface && isUnderTree(state, touched))) {
+        reveal(touched);
+      }
     }
   }
 
