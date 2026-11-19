@@ -10,7 +10,16 @@ import { BLOCKS, SHIFT, WORLD } from '../../data';
 import type { BlockId } from '../../data';
 import type { Action, GameState } from '../../engine';
 import { choiceName, choiceWarning, describeChoice, layerName } from '../text/describe';
-import { VIEW_CELLS, cellAt, centredOn, followMiner, isInView, panned } from './camera';
+import {
+  VIEW_CELLS,
+  cellAt,
+  centredOn,
+  clampCells,
+  followMiner,
+  isInView,
+  panned,
+  zoomedAbout,
+} from './camera';
 import type { Camera } from './camera';
 import {
   BLOCK_LOOKS,
@@ -304,7 +313,8 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
     // A small white diamond with a dark outline, in the bottom-right corner.
     const cx = x + 0.75 * c;
     const cy = y + 0.75 * c;
-    const r = c * 0.17;
+    // Never smaller than 2.5 px, so it stays visible zoomed right out.
+    const r = Math.max(c * 0.17, 2.5);
     ctx.beginPath();
     ctx.moveTo(cx, cy - r);
     ctx.lineTo(cx + r, cy);
@@ -333,8 +343,9 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
     ctx.fillStyle = MARK_COLOURS.miner;
     ctx.strokeStyle = MARK_COLOURS.minerOutline;
     ctx.lineWidth = Math.max(2, c / 9);
+    // At least 4 px across, so the miner is easy to find zoomed right out.
     ctx.beginPath();
-    ctx.arc(x + mid, y + mid, c * 0.33, 0, Math.PI * 2);
+    ctx.arc(x + mid, y + mid, Math.max(c * 0.33, 4), 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = MARK_COLOURS.minerOutline;
@@ -351,6 +362,7 @@ export function drawTile(
   x: number,
   y: number,
   c: number,
+  grid = true,
 ): void {
   if (tile.kind === 'unknown') {
     drawUnknown(ctx, x, y, c);
@@ -387,9 +399,11 @@ export function drawTile(
     }
   }
   drawMarks(ctx, tile, x, y, c);
-  ctx.strokeStyle = MARK_COLOURS.grid;
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + 0.5, y + 0.5, c - 1, c - 1);
+  if (grid) {
+    ctx.strokeStyle = MARK_COLOURS.grid;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, c - 1, c - 1);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -551,6 +565,29 @@ function emptyTapHint(state: GameState, viewZ: number, x: number, y: number): st
   return 'Nothing to do there';
 }
 
+/** The `localStorage` key the zoom level is kept under, per device (issue #69). */
+export const ZOOM_KEY = 'mining-game.preview.zoom';
+
+/** The zoom saved on this device (cells across), or `null` if none or storage cannot be read. */
+function loadZoom(): number | null {
+  try {
+    const text = window.localStorage.getItem(ZOOM_KEY);
+    const cells = text === null ? NaN : Number(text);
+    return Number.isFinite(cells) && cells > 0 ? cells : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Remember the zoom on this device. Storage that refuses is ignored: it is only a convenience. */
+function saveZoom(cells: number): void {
+  try {
+    window.localStorage.setItem(ZOOM_KEY, String(Math.round(cells * 100) / 100));
+  } catch {
+    // Nothing to do.
+  }
+}
+
 /**
  * Make the tap map. `onChoose` is called with the action the player picked;
  * the screen takes it (and then calls `show` again).
@@ -571,7 +608,10 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
   const downButton = button('small layer-button', '▼ Down');
   downButton.setAttribute('aria-label', 'Look one layer down');
   const centreButton = button('small', 'Centre on me');
-  bar.append(upButton, layerLabel, downButton, centreButton);
+  // Back to the default zoom (issue #69).
+  const zoomButton = button('small', `${VIEW_CELLS}×${VIEW_CELLS}`);
+  zoomButton.setAttribute('aria-label', `Zoom to ${VIEW_CELLS} by ${VIEW_CELLS}`);
+  bar.append(layerLabel, upButton, downButton, centreButton, zoomButton);
 
   // The canvas, with the chooser and the hint laid over it.
   const frame = document.createElement('div');
@@ -598,7 +638,8 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
   // ----- What the map is showing -----
   let state: GameState | null = null;
   let viewZ = 0;
-  let camera: Camera = { x: 0, y: 0 };
+  // The zoom starts where the player left it last time on this device.
+  let camera: Camera = { x: 0, y: 0, cells: loadZoom() ?? VIEW_CELLS };
   // The layer the miner was on when last shown, to follow it when it changes.
   let lastMinerLayer: number | null = null;
   let hintTimer: ReturnType<typeof setTimeout> | null = null;
@@ -611,7 +652,7 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
   }
 
   function cellPixels(): number {
-    return frame.clientWidth / VIEW_CELLS;
+    return frame.clientWidth / camera.cells;
   }
 
   function layerText(s: GameState): string {
@@ -631,7 +672,7 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
     const s = state;
     const c = cellPixels();
     const dpr = window.devicePixelRatio || 1;
-    const sidePx = Math.round(c * VIEW_CELLS);
+    const sidePx = Math.round(frame.clientWidth);
     if (canvas.width !== Math.round(sidePx * dpr)) {
       canvas.width = Math.round(sidePx * dpr);
       canvas.height = Math.round(sidePx * dpr);
@@ -646,18 +687,21 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
     // One cell more than the window, for the part-cells while dragging.
     const x0 = Math.floor(camera.x);
     const y0 = Math.floor(camera.y);
+    const span = Math.ceil(camera.cells) + 1;
+    // Grid lines only where the cells are big enough for them not to crowd the marks.
+    const grid = c >= PREVIEW_MAP.gridMinCellPx;
     // Light and traces are worked out once per state, not on every frame of a drag.
     if (context === null) {
       context = layerContext(s);
     }
-    const rows = buildLayer(s, viewZ, { x0, y0, size: VIEW_CELLS + 1 }, context);
+    const rows = buildLayer(s, viewZ, { x0, y0, size: span }, context);
     const drawn: Tile[] = [];
     for (const row of rows) {
       for (const tile of row) {
         if (tile.x >= s.size.x || tile.y >= s.size.y) {
           continue;
         }
-        drawTile(ctx, tile, (tile.x - camera.x) * c, (tile.y - camera.y) * c, c);
+        drawTile(ctx, tile, (tile.x - camera.x) * c, (tile.y - camera.y) * c, c, grid);
         if (isInView(camera, tile.x, tile.y)) {
           drawn.push(tile);
         }
@@ -676,6 +720,7 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
     canvas.dataset['camX'] = String(camera.x);
     canvas.dataset['camY'] = String(camera.y);
     canvas.dataset['cellPx'] = String(c);
+    canvas.dataset['cells'] = String(camera.cells);
     canvas.dataset['layer'] = String(viewZ);
   }
 
@@ -779,49 +824,171 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
     openChooser(state, actions, cell.x, cell.y);
   }
 
-  // ----- Touch and mouse: a drag pans, a tap acts -----
-  // Pointer events cover both touch and mouse. A press that moves more than
-  // `dragThresholdPx` is a drag from then on, and its release is not a tap.
-  let press: { id: number; x: number; y: number; camera: Camera; dragging: boolean } | null = null;
+  // ----- Touch and mouse: a drag pans, a pinch zooms, a tap acts -----
+  // Pointer events cover both touch and mouse. Every finger (or the mouse)
+  // that is down is kept in `pointers`, by its pointer id. A gesture starts
+  // with the first finger down and ends when the last one lifts:
+  // - one finger that moves more than `dragThresholdPx` is a drag (it pans);
+  // - a second finger turns the gesture into a pinch (it zooms, and pans as
+  //   the fingers' midpoint moves);
+  // - only a single finger that never moved far counts as a tap. A gesture
+  //   that was ever a drag or a pinch never does, even when it ends with one
+  //   finger lifting on its own (issue #69).
+  const pointers = new Map<number, { x: number; y: number }>();
+  interface Gesture {
+    kind: 'press' | 'drag' | 'pinch';
+    /** The camera when the drag or pinch started. */
+    camera: Camera;
+    /** Where the first finger went down (page pixels). */
+    startX: number;
+    startY: number;
+    /** For a pinch: the distance between the fingers and their midpoint (map pixels) at its start. */
+    pinchDistance: number;
+    pinchMidX: number;
+    pinchMidY: number;
+  }
+  let gesture: Gesture | null = null;
+
+  /** The midpoint of the first two fingers, in pixels from the map's corner, and their distance apart. */
+  function twoFingers(): { midX: number; midY: number; distance: number } | null {
+    const [a, b] = [...pointers.values()];
+    if (a === undefined || b === undefined) {
+      return null;
+    }
+    const rect = canvas.getBoundingClientRect();
+    return {
+      midX: (a.x + b.x) / 2 - rect.left,
+      midY: (a.y + b.y) / 2 - rect.top,
+      distance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+    };
+  }
+
   canvas.addEventListener('pointerdown', (event) => {
     canvas.setPointerCapture(event.pointerId);
-    press = {
-      id: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
-      camera: { ...camera },
-      dragging: false,
-    };
-  });
-  canvas.addEventListener('pointermove', (event) => {
-    if (press === null || event.pointerId !== press.id || state === null) {
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.size === 1) {
+      gesture = {
+        kind: 'press',
+        camera: { ...camera },
+        startX: event.clientX,
+        startY: event.clientY,
+        pinchDistance: 0,
+        pinchMidX: 0,
+        pinchMidY: 0,
+      };
       return;
     }
-    const dx = event.clientX - press.x;
-    const dy = event.clientY - press.y;
-    if (!press.dragging && Math.hypot(dx, dy) > PREVIEW_MAP.dragThresholdPx) {
-      press.dragging = true;
+    // A second finger: from now on this gesture is a pinch.
+    const fingers = twoFingers();
+    if (gesture !== null && fingers !== null) {
+      gesture.kind = 'pinch';
+      gesture.camera = { ...camera };
+      gesture.pinchDistance = fingers.distance;
+      gesture.pinchMidX = fingers.midX;
+      gesture.pinchMidY = fingers.midY;
       closeChooser();
     }
-    if (press.dragging) {
-      camera = panned(press.camera, dx, dy, cellPixels(), state.size);
+  });
+
+  canvas.addEventListener('pointermove', (event) => {
+    if (!pointers.has(event.pointerId) || gesture === null || state === null) {
+      return;
+    }
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (gesture.kind === 'pinch') {
+      const fingers = twoFingers();
+      if (fingers === null) {
+        return; // one finger already lifted: the pinch is over, wait for the other
+      }
+      // Fingers twice as far apart show half as many cells across.
+      const cells = (gesture.camera.cells * gesture.pinchDistance) / fingers.distance;
+      camera = zoomedAbout(
+        gesture.camera,
+        cells,
+        gesture.pinchMidX,
+        gesture.pinchMidY,
+        fingers.midX,
+        fingers.midY,
+        frame.clientWidth,
+        state.size,
+      );
+      draw();
+      return;
+    }
+    const dx = event.clientX - gesture.startX;
+    const dy = event.clientY - gesture.startY;
+    if (gesture.kind === 'press' && Math.hypot(dx, dy) > PREVIEW_MAP.dragThresholdPx) {
+      gesture.kind = 'drag';
+      closeChooser();
+    }
+    if (gesture.kind === 'drag') {
+      camera = panned(gesture.camera, dx, dy, cellPixels(), state.size);
       draw();
     }
   });
-  canvas.addEventListener('pointerup', (event) => {
-    if (press === null || event.pointerId !== press.id) {
+
+  /** A finger lifted, or the browser took it over (pointercancel: never a tap). */
+  function liftPointer(event: PointerEvent, cancelled: boolean): void {
+    if (!pointers.has(event.pointerId)) {
       return;
     }
-    const wasDrag = press.dragging;
-    press = null;
-    if (!wasDrag) {
+    pointers.delete(event.pointerId);
+    if (gesture === null) {
+      return;
+    }
+    if (pointers.size >= 2 && gesture.kind === 'pinch') {
+      // With three fingers down, lifting one of the first two makes a new
+      // pair: start the pinch afresh from where it is now, or the map would
+      // jump once (review of PR #71).
+      const fingers = twoFingers();
+      if (fingers !== null) {
+        gesture.camera = { ...camera };
+        gesture.pinchDistance = fingers.distance;
+        gesture.pinchMidX = fingers.midX;
+        gesture.pinchMidY = fingers.midY;
+      }
+    }
+    if (pointers.size > 0) {
+      return; // other fingers are still down: the gesture goes on
+    }
+    const ended = gesture;
+    gesture = null;
+    if (ended.kind === 'pinch') {
+      saveZoom(camera.cells);
+    } else if (ended.kind === 'press' && !cancelled) {
       const rect = canvas.getBoundingClientRect();
       tap(event.clientX - rect.left, event.clientY - rect.top);
     }
+  }
+  canvas.addEventListener('pointerup', (event) => {
+    liftPointer(event, false);
   });
-  canvas.addEventListener('pointercancel', () => {
-    press = null;
+  canvas.addEventListener('pointercancel', (event) => {
+    liftPointer(event, true);
   });
+
+  // The mouse wheel (and a trackpad pinch, which browsers send as a wheel
+  // with the ctrl key held) zooms about the pointer. `passive: false` lets
+  // `preventDefault` stop the page from scrolling or zooming instead.
+  canvas.addEventListener(
+    'wheel',
+    (event) => {
+      if (state === null) {
+        return;
+      }
+      event.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const px = event.clientX - rect.left;
+      const py = event.clientY - rect.top;
+      // Wheel down (positive deltaY) zooms out: more cells across.
+      const cells = camera.cells * Math.exp(event.deltaY * PREVIEW_MAP.wheelZoomRate);
+      camera = zoomedAbout(camera, cells, px, py, px, py, frame.clientWidth, state.size);
+      closeChooser();
+      draw();
+      saveZoom(camera.cells);
+    },
+    { passive: false },
+  );
 
   // ----- The buttons -----
   upButton.addEventListener('click', () => {
@@ -840,10 +1007,35 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
   });
   centreButton.addEventListener('click', () => {
     if (state !== null) {
-      camera = centredOn(state.avatar.pos.x, state.avatar.pos.y, state.size);
+      // Keeps the zoom; only the position changes.
+      camera = centredOn(state.avatar.pos.x, state.avatar.pos.y, state.size, camera.cells);
       viewZ = minersMapLayer(state);
       closeChooser();
       draw();
+    }
+  });
+  zoomButton.addEventListener('click', () => {
+    if (state !== null) {
+      // Back to the default zoom about the middle of the map, then make sure
+      // the miner's neighbours are still on screen.
+      const middle = frame.clientWidth / 2;
+      camera = zoomedAbout(
+        camera,
+        VIEW_CELLS,
+        middle,
+        middle,
+        middle,
+        middle,
+        frame.clientWidth,
+        state.size,
+      );
+      const here = state.avatar.pos;
+      if (viewZ === minersMapLayer(state)) {
+        camera = followMiner(camera, here.x, here.y, state.size);
+      }
+      closeChooser();
+      draw();
+      saveZoom(camera.cells);
     }
   });
   window.addEventListener('resize', () => {
@@ -861,7 +1053,7 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
       viewZ = layer;
     }
     if (fresh) {
-      camera = centredOn(here.x, here.y, next.size);
+      camera = centredOn(here.x, here.y, next.size, clampCells(camera.cells, next.size));
     } else {
       // Recentre if the miner, or a cell it could act on next, is off screen.
       camera = followMiner(camera, here.x, here.y, next.size);

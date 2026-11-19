@@ -21,9 +21,12 @@ import {
   cellAt,
   centredOn,
   clampCamera,
+  clampCells,
   followMiner,
   isInView,
   panned,
+  zoomRange,
+  zoomedAbout,
 } from '../../src/app/map/camera';
 import { actionsForCell } from '../../src/app/map/targets';
 import { buildLayer, layerContext } from '../../src/app/map/tiles';
@@ -301,24 +304,28 @@ describe('the map camera (issue #66)', () => {
 
   it('centres on a cell, kept inside the cube', () => {
     expect(VIEW_CELLS).toBe(16);
-    expect(centredOn(16, 16, size)).toEqual({ x: 8, y: 8 });
-    expect(centredOn(0, 0, size)).toEqual({ x: 0, y: 0 });
-    expect(centredOn(31, 31, size)).toEqual({ x: 16, y: 16 });
-    expect(clampCamera({ x: -3, y: 40 }, size)).toEqual({ x: 0, y: 16 });
+    expect(centredOn(16, 16, size)).toEqual({ x: 8, y: 8, cells: 16 });
+    expect(centredOn(0, 0, size)).toEqual({ x: 0, y: 0, cells: 16 });
+    expect(centredOn(31, 31, size)).toEqual({ x: 16, y: 16, cells: 16 });
+    expect(clampCamera({ x: -3, y: 40, cells: 16 }, size)).toEqual({ x: 0, y: 16, cells: 16 });
   });
 
   it('a drag moves the window the other way, by whole and part cells', () => {
     // Dragging the map 40 px right with 20 px cells shows 2 cells more to the west.
-    expect(panned({ x: 8, y: 8 }, 40, -10, 20, size)).toEqual({ x: 6, y: 8.5 });
-    expect(panned({ x: 1, y: 8 }, 100, 0, 20, size)).toEqual({ x: 0, y: 8 });
+    expect(panned({ x: 8, y: 8, cells: 16 }, 40, -10, 20, size)).toEqual({
+      x: 6,
+      y: 8.5,
+      cells: 16,
+    });
+    expect(panned({ x: 1, y: 8, cells: 16 }, 100, 0, 20, size)).toEqual({ x: 0, y: 8, cells: 16 });
   });
 
   it('finds the cell under a point, and says whether a cell is in view', () => {
-    expect(cellAt({ x: 8, y: 8 }, 25, 5, 20)).toEqual({ x: 9, y: 8 });
-    expect(cellAt({ x: 8.5, y: 8 }, 5, 5, 20)).toEqual({ x: 8, y: 8 });
-    expect(isInView({ x: 8, y: 8 }, 8, 23)).toBe(true);
-    expect(isInView({ x: 8, y: 8 }, 24, 8)).toBe(false);
-    expect(isInView({ x: 8.5, y: 8 }, 8, 8)).toBe(false);
+    expect(cellAt({ x: 8, y: 8, cells: 16 }, 25, 5, 20)).toEqual({ x: 9, y: 8 });
+    expect(cellAt({ x: 8.5, y: 8, cells: 16 }, 5, 5, 20)).toEqual({ x: 8, y: 8 });
+    expect(isInView({ x: 8, y: 8, cells: 16 }, 8, 23)).toBe(true);
+    expect(isInView({ x: 8, y: 8, cells: 16 }, 24, 8)).toBe(false);
+    expect(isInView({ x: 8.5, y: 8, cells: 16 }, 8, 8)).toBe(false);
   });
 });
 
@@ -328,18 +335,30 @@ describe('the map follows the miner (review of PR #67)', () => {
   it('recentres when a neighbour of the miner is off screen, so the next tap can reach it', () => {
     // The miner at x8 in the left-hand column of a window starting at x8: the
     // cell to its west (x7) is in the cube but not drawn.
-    expect(followMiner({ x: 8, y: 8 }, 8, 16, size)).toEqual({ x: 0, y: 8 });
+    expect(followMiner({ x: 8, y: 8, cells: 16 }, 8, 16, size)).toEqual({ x: 0, y: 8, cells: 16 });
     // The same on the right, top and bottom edges.
-    expect(followMiner({ x: 8, y: 8 }, 23, 16, size)).toEqual({ x: 15, y: 8 });
-    expect(followMiner({ x: 8, y: 8 }, 16, 8, size)).toEqual({ x: 8, y: 0 });
-    expect(followMiner({ x: 8, y: 8 }, 16, 23, size)).toEqual({ x: 8, y: 15 });
+    expect(followMiner({ x: 8, y: 8, cells: 16 }, 23, 16, size)).toEqual({
+      x: 15,
+      y: 8,
+      cells: 16,
+    });
+    expect(followMiner({ x: 8, y: 8, cells: 16 }, 16, 8, size)).toEqual({ x: 8, y: 0, cells: 16 });
+    expect(followMiner({ x: 8, y: 8, cells: 16 }, 16, 23, size)).toEqual({
+      x: 8,
+      y: 15,
+      cells: 16,
+    });
   });
 
   it('leaves the camera alone while every neighbour is on screen, or at the edge of the cube', () => {
-    expect(followMiner({ x: 8, y: 8 }, 9, 22, size)).toEqual({ x: 8, y: 8 });
+    expect(followMiner({ x: 8, y: 8, cells: 16 }, 9, 22, size)).toEqual({ x: 8, y: 8, cells: 16 });
     // At the cube's own edge there is no neighbour to reach beyond it.
-    expect(followMiner({ x: 0, y: 0 }, 0, 0, size)).toEqual({ x: 0, y: 0 });
-    expect(followMiner({ x: 16, y: 16 }, 31, 31, size)).toEqual({ x: 16, y: 16 });
+    expect(followMiner({ x: 0, y: 0, cells: 16 }, 0, 0, size)).toEqual({ x: 0, y: 0, cells: 16 });
+    expect(followMiner({ x: 16, y: 16, cells: 16 }, 31, 31, size)).toEqual({
+      x: 16,
+      y: 16,
+      cells: 16,
+    });
   });
 
   it('tap play never strands the miner: walking west from the middle keeps the next cell on screen', () => {
@@ -348,6 +367,74 @@ describe('the map follows the miner (review of PR #67)', () => {
       camera = followMiner(camera, x, 16, size);
       expect(isInView(camera, x - 1, 16)).toBe(true);
     }
+  });
+});
+
+describe('zoom (issue #69)', () => {
+  const size = { x: 32, y: 32 };
+
+  it('ranges from 8 cells across to the whole 32 x 32 layer, 16 by default', () => {
+    expect(zoomRange(size)).toEqual({ min: 8, max: 32 });
+    expect(clampCells(4, size)).toBe(8);
+    expect(clampCells(50, size)).toBe(32);
+    expect(centredOn(16, 16, size).cells).toBe(16);
+    // The whole layer: the window starts at the corner whatever the centre.
+    expect(centredOn(5, 27, size, 32)).toEqual({ x: 0, y: 0, cells: 32 });
+    expect(centredOn(16, 16, size, 8)).toEqual({ x: 12, y: 12, cells: 8 });
+  });
+
+  it('zooming about a point keeps the cell under that point where it was', () => {
+    // A 320 px map at 16 cells across: 20 px cells. The point (100, 60) is
+    // over cube position x 8 + 5 = 13, y 8 + 3 = 11.
+    const camera = { x: 8, y: 8, cells: 16 };
+    const zoomedIn = zoomedAbout(camera, 8, 100, 60, 100, 60, 320, size);
+    expect(zoomedIn.cells).toBe(8);
+    // At 8 across the cells are 40 px, so the point is 2.5 and 1.5 cells in.
+    expect(zoomedIn.x).toBeCloseTo(13 - 2.5);
+    expect(zoomedIn.y).toBeCloseTo(11 - 1.5);
+    expect(cellAt(zoomedIn, 100, 60, 40)).toEqual(cellAt(camera, 100, 60, 20));
+    // Zooming out past the whole layer stops there, at the corner.
+    expect(zoomedAbout(camera, 64, 100, 60, 100, 60, 320, size)).toEqual({
+      x: 0,
+      y: 0,
+      cells: 32,
+    });
+  });
+
+  it('a pinch whose midpoint moves also pans', () => {
+    const camera = { x: 8, y: 8, cells: 16 };
+    // Same zoom, midpoint moved 40 px right (2 cells at 20 px): like a drag.
+    expect(zoomedAbout(camera, 16, 100, 100, 140, 100, 320, size)).toEqual(
+      panned(camera, 40, 0, 20, size),
+    );
+  });
+
+  it('the follow rule holds at the smallest and the largest zoom', () => {
+    for (const cells of [8, 32]) {
+      let camera = centredOn(16, 16, size, cells);
+      // Walk west to the edge, then south to the bottom, one step at a time.
+      const path: { x: number; y: number }[] = [];
+      for (let x = 16; x >= 0; x -= 1) path.push({ x, y: 16 });
+      for (let y = 17; y < 32; y += 1) path.push({ x: 0, y });
+      for (const step of path) {
+        camera = followMiner(camera, step.x, step.y, size);
+        expect(camera.cells).toBe(cells);
+        for (const near of [
+          { x: step.x - 1, y: step.y },
+          { x: step.x + 1, y: step.y },
+          { x: step.x, y: step.y - 1 },
+          { x: step.x, y: step.y + 1 },
+        ]) {
+          const inCube = near.x >= 0 && near.y >= 0 && near.x < 32 && near.y < 32;
+          if (inCube) {
+            expect(isInView(camera, near.x, near.y)).toBe(true);
+          }
+        }
+      }
+    }
+    // At the whole layer the camera never needs to move.
+    const whole = centredOn(16, 16, size, 32);
+    expect(followMiner(whole, 0, 31, size)).toBe(whole);
   });
 });
 
