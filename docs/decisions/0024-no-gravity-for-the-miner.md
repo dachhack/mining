@@ -1,4 +1,4 @@
-# 0023 — No gravity for the miner; ladders removed
+# 0024 — No gravity for the miner; ladders removed
 
 Date: 2026-11-19. Status: accepted (owner, issue #80).
 

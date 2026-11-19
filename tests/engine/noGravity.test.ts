@@ -1,5 +1,5 @@
 // Scenario tests for digging down with no gravity (owner, issue #80;
-// decision note 0023), through `applyAction` with nothing faked.
+// decision note 0024), through `applyAction` with nothing faked.
 //
 // - Mining the block underfoot moves the miner down into the cell it dug, in
 //   the same action (issue #75: dig-down stays one action).

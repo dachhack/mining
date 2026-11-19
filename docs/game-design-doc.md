@@ -116,7 +116,7 @@ Lamp lit or not, the miner knows the six cells touching its own; light shows the
 
 ### 5.2 Movement [Decided]
 
-Owner, 2026-11-19 (issue #80; decision note 0023): the miner has no gravity.
+Owner, 2026-11-19 (issue #80; decision note 0024): the miner has no gravity.
 
 - The miner moves 1 block (1 AP) into any open face neighbour: north, east, south, west, up or down. No diagonal moves.
 - It never falls and takes no fall damage, whatever is under it. It needs nothing to stand on: it can stand over an open shaft, go straight up a shaft it dug, and climb out of any hole. There are no ladders or scaffolding.

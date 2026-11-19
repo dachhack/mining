@@ -1,5 +1,5 @@
 // Gravity for loose items (0005 item 17). The miner has no gravity (owner,
-// issue #80; decision note 0023): it never falls, so nothing here moves it.
+// issue #80; decision note 0024): it never falls, so nothing here moves it.
 // Blocks that fall (cave-ins) are the cube phase's (cube/caveIns.ts).
 
 import type { Vec3 } from '../data';

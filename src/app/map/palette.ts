@@ -27,6 +27,13 @@ export const PREVIEW_MAP = {
   dragThresholdPx: 8,
   /** How long the "nothing to do there" hint stays, in milliseconds. */
   hintMs: 1500,
+  /**
+   * How long a risky tap's mark waits for the second tap on the same cell,
+   * in milliseconds (issue #78). After that the mark clears.
+   */
+  doubleTapMs: 3000,
+  /** How strongly a surface kind's pattern is drawn over the block under it on the top view. */
+  surfaceMarkAlpha: 0.55,
 };
 
 /** A small shape drawn over a tile's colour (see `drawPattern` in mapView.ts). */
@@ -96,10 +103,12 @@ export const BLOCK_LOOKS: Record<BlockId, BlockLook> = {
 export type SurfaceMark = 'tree' | 'stump' | 'path' | 'meadow' | 'outcrop';
 
 /**
- * How each kind of surface cell looks. A tree hides the ground, so it is
- * drawn solid. The open kinds let the ground under them show through a haze
- * of their own colour, with their pattern on top, so each differs from the
- * others by pattern as well as colour.
+ * How each kind of surface cell looks on the top view (issue #78). A tree
+ * hides the block under it, so it is drawn solid in its `haze` colour with
+ * its pattern. The open kinds draw only their pattern, faintly
+ * (`PREVIEW_MAP.surfaceMarkAlpha`), over the block under them, so each still
+ * differs from the others by pattern as well as colour; their `haze` is used
+ * for nothing but the legend's look of the colour family.
  */
 export const SURFACE_LOOKS: Record<SurfaceMark, { haze: string; ink: string; pattern: Pattern }> = {
   // Tree: dark green with a light green fir.
@@ -117,9 +126,6 @@ export const SURFACE_LOOKS: Record<SurfaceMark, { haze: string; ink: string; pat
 /** Cells the player has not seen: dark, with diagonal lines, never coloured by what is there. */
 export const UNKNOWN_LOOK = { colour: '#1d1916', ink: '#3a332d' };
 
-/** The pale veil over a surface cell, through which the ground under it shows. */
-export const SURFACE_HAZE = 'rgba(232, 224, 210, 0.6)';
-
 /** How much darker a seen cell is drawn when it is not in light (0 = black, 1 = as lit). */
 export const UNLIT_BRIGHTNESS = 0.45;
 
@@ -134,5 +140,7 @@ export const MARK_COLOURS = {
   items: '#ffffff',
   itemsOutline: '#000000',
   traces: '#ffd84a',
+  /** The outline of a cell waiting for a second tap (issue #78). */
+  pending: '#ffe14d',
   grid: 'rgba(0, 0, 0, 0.35)',
 };

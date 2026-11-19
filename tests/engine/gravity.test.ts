@@ -1,5 +1,5 @@
 // Scenario tests for gravity (design doc 5.2; decision note 0005 item 17;
-// owner, issue #80, decision note 0023).
+// owner, issue #80, decision note 0024).
 //
 // The miner has no gravity: it never falls, whatever is under it. Loose items
 // still fall straight down until they rest on rock. `settle` is the function

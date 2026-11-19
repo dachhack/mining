@@ -94,7 +94,7 @@ export function legalMineActions(state: GameState): MineAction[] {
  *   moves into the cell it dug, and `moved` follows the yield's events. So
  *   digging down stays one action (owner, issue #75). The avatar has no
  *   gravity (owner, issue #80), so it goes no further: if the cell under the
- *   dug one is open, it stays where it now is (decision note 0023).
+ *   dug one is open, it stays where it now is (decision note 0024).
  * - Changes `state` in place (it is the dispatcher's private copy). Does not
  *   spend the AP, settle loose items or reveal: the dispatcher does those, in
  *   that order. So a yield left in a cell with no floor falls.

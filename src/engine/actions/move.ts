@@ -11,7 +11,7 @@ import { hasTree } from '../surface/state';
 /**
  * Every `MoveAction` the player could take now.
  *
- * The miner has no gravity (owner, issue #80; decision note 0023). The rules:
+ * The miner has no gravity (owner, issue #80; decision note 0024). The rules:
  * - Move 1 block into any open face neighbour: north, east, south, west, up
  *   or down. Nothing under or over the cell matters: the miner never falls,
  *   and needs no footing, ladder or step to climb.

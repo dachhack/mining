@@ -17,7 +17,6 @@ import { AVATAR, BLOCKS, STRUCTURES, SURFACE, WORLD, blockDefByCode } from '../.
 import type { BlockId, Vec3 } from '../../data';
 import {
   cellPosition,
-  hasTree,
   isSurface,
   knownCell,
   surfaceKindAt,
@@ -46,19 +45,17 @@ export interface Tile {
   structure: StructureMark | null;
   /** True if loose items lie in the cell. */
   items: boolean;
-  /** True if the miner is here. */
-  miner: boolean;
   /**
-   * For a surface cell: the block of the top layer under it (the ground the
-   * miner walks on), drawn pale under the open air; `null` elsewhere, and
-   * under a tree (issue #70). Read through `knownCell`, so only seen ground.
+   * True if the miner is here. On the top view (layer 0) that includes the
+   * miner standing on the surface over this cell (issue #78).
    */
-  ground: BlockId | null;
+  miner: boolean;
   /** True if the miner is in this column on another layer (drawn as a faint ring). */
   minerColumn: boolean;
   /**
-   * For a surface cell: what grows or lies there (issue #70); `null`
-   * elsewhere. The surface is always seen.
+   * On the top view (layer 0) and on the surface itself: what grows or lies
+   * on the surface over this cell (issue #70); `null` on deeper layers. The
+   * surface is always seen. A tree hides the cell under it when drawn.
    */
   surface: SurfaceMark | null;
 }
@@ -165,15 +162,6 @@ function structureMark(code: number): StructureMark | null {
   return code === 0 ? null : 'other';
 }
 
-/** The solid block of the top layer under the surface cell (x, y), as far as the player knows. */
-function groundUnder(state: GameState, x: number, y: number): BlockId | null {
-  const cell = knownCell(state, { x, y, z: WORLD.surfaceZ + 1 });
-  if (cell === null || !blockDefByCode(cell.block).solid) {
-    return null;
-  }
-  return BLOCK_ID_BY_CODE.get(cell.block) ?? null;
-}
-
 /**
  * What `buildLayer` works out once for the whole cube: the lit open cells and
  * the blocks with traces. Worth keeping while the state does not change (the
@@ -196,9 +184,10 @@ export function layerContext(state: GameState): LayerContext {
  * player knows of each cell. Cells outside the cube are left out (the camera
  * keeps the window inside it).
  *
- * The surface is a layer of its own (where the miner walks at the start);
- * its cells show what grows there (issue #70) and, where no tree stands, the
- * ground under them.
+ * Layer 0 is the top view (issue #78): each cell also carries what is on
+ * the surface over it (a tree, a stump, a path, a meadow or an outcrop), and
+ * the miner standing on the surface is drawn on the cell under it. There is
+ * no separate surface layer on the map.
  * `context` may be passed in when it was already worked out for this state.
  */
 export function buildLayer(
@@ -209,6 +198,8 @@ export function buildLayer(
 ): Tile[][] {
   const here = state.avatar.pos;
   const { lit, traced } = context;
+  const topView = z === WORLD.surfaceZ + 1;
+  const minerOnSurface = here.z === WORLD.surfaceZ;
   // Daylight: the surface, and every cell of the top layer, which touches it.
   const daylight = z <= WORLD.surfaceZ + 1;
 
@@ -217,8 +208,17 @@ export function buildLayer(
     const row: Tile[] = [];
     for (let x = window.x0; x < window.x0 + window.size; x += 1) {
       const pos = { x, y, z };
-      const miner = here.x === x && here.y === y && here.z === z;
-      const minerColumn = !miner && here.x === x && here.y === y;
+      const inMinersColumn = here.x === x && here.y === y;
+      const miner = inMinersColumn && (here.z === z || (topView && minerOnSurface));
+      // What stands on the surface over this cell, on the top view; the
+      // surface's own cells too (the cube's footprint only: a zoomed-out
+      // window can reach one column past the edge, PR #71).
+      const surfacePos = { x, y, z: WORLD.surfaceZ };
+      const surface =
+        (topView || z === WORLD.surfaceZ) && isSurface(state.size, surfacePos)
+          ? surfaceMark(state, surfacePos)
+          : null;
+      const minerColumn = !miner && inMinersColumn;
       const cell = knownCell(state, pos);
       if (cell === null) {
         row.push({
@@ -232,8 +232,7 @@ export function buildLayer(
           items: false,
           miner,
           minerColumn,
-          ground: null,
-          surface: null,
+          surface,
         });
         continue;
       }
@@ -258,13 +257,7 @@ export function buildLayer(
         items: cell.looseItems.length > 0,
         miner,
         minerColumn,
-        // A tree hides the ground (the engine has not revealed it, so
-        // `groundUnder` would find nothing anyway; a regrown tree stands over
-        // ground the player remembers, which the layer-0 view shows).
-        ground: z === WORLD.surfaceZ && !hasTree(state, pos) ? groundUnder(state, x, y) : null,
-        // Only inside the cube's footprint: a zoomed-out window can reach one
-        // column past the edge (PR #71), where there is no surface cell.
-        surface: isSurface(state.size, pos) ? surfaceMark(state, pos) : null,
+        surface,
       });
     }
     rows.push(row);
