@@ -133,3 +133,26 @@ export function tapAction(state: GameState, viewZ: number, x: number, y: number)
 export function tapIsRisky(state: GameState, action: Action): boolean {
   return !tapActsAtOnce(state, action);
 }
+
+/**
+ * What the "▲ Go up" or "▼ Go down" button does now (issue #80), or `null`
+ * if it can do nothing (it is then disabled). The map shows one layer, so
+ * moving up or down needs a control of its own:
+ * - the move into the cell above (or below), if that cell is open;
+ * - otherwise the mine of that block, if the engine offers it (below: the
+ *   block underfoot; above: only with a support in the miner's cell).
+ * Like a tap, it reads only the engine's legal actions.
+ */
+export function verticalAction(state: GameState, direction: 'up' | 'down'): Action | null {
+  const here = state.avatar.pos;
+  const z = direction === 'up' ? here.z - 1 : here.z + 1;
+  const isTarget = (cell: { x: number; y: number; z: number }): boolean =>
+    cell.x === here.x && cell.y === here.y && cell.z === z;
+  const legal = legalActions(state);
+  const move = legal.find((action) => action.type === 'move' && isTarget(action.to));
+  if (move !== undefined) {
+    return move;
+  }
+  const mine = legal.find((action) => action.type === 'mine' && isTarget(action.target));
+  return mine ?? null;
+}

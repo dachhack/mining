@@ -123,7 +123,7 @@ Owner, 2026-11-19 (issue #80; decision note 0024): the miner has no gravity.
 - It moves only through open cells. Rock must be mined before the miner can enter its cell, so the way out is the way it dug (pillar 2).
 - **Digging down (owner, issue #75):** mining the block the miner stands on moves it down into that block's cell, in the same action. It goes no further: if the cell under that is open, it stays where it now is.
 - A tree on the surface blocks the way (section 3): the miner cannot move into a tree's cell, from beside it or from a hole under it. Moving up from the top layer onto the surface is an ordinary move into an open cell.
-- Blocks and loose items still fall: cave-ins (section 6.1) and the rule that the block overhead is mined only with a support in the miner's cell (section 4.1) are unchanged. Loose items fall straight down until they rest on rock.
+- **Only the miner loses gravity.** Blocks and loose items still fall. Cave-ins, cracking, spans and supports (section 6.1) work exactly as before. Owner, on issue #80: "You still need to reinforce walls though to avoid cave ins." An unsupported ceiling still cracks and comes down on the miner, so supports matter as much as ever. The block overhead is still mined only with a support in the miner's cell (section 4.1). Loose items fall straight down until they rest on rock.
 
 ### 5.3 Ways a run ends in death
 

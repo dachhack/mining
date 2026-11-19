@@ -28,7 +28,7 @@ import {
   zoomRange,
   zoomedAbout,
 } from '../../src/app/map/camera';
-import { actionsForCell, tapAction, tapIsRisky } from '../../src/app/map/targets';
+import { actionsForCell, tapAction, tapIsRisky, verticalAction } from '../../src/app/map/targets';
 import { buildLayer, layerContext } from '../../src/app/map/tiles';
 import { choiceName, choiceWarning, tapActsAtOnce } from '../../src/app/text/describe';
 import { updateReveal } from '../../src/engine/reveal';
@@ -573,5 +573,51 @@ describe("a tap on the miner's own cell goes down, never up (issue #80)", () => 
     const { x, y, z } = state.avatar.pos;
     expect(z).toBe(1);
     expect(tapAction(state, 0, x, y)).toMatchObject({ type: 'move', to: { x, y, z: 0 } });
+  });
+});
+
+describe('the Go up and Go down buttons (issue #80)', () => {
+  it('on the surface: Go up does nothing, Go down digs the block underfoot', () => {
+    const state = seed7();
+    const { x, y } = state.avatar.pos;
+    expect(verticalAction(state, 'up')).toBeNull();
+    expect(verticalAction(state, 'down')).toMatchObject({ type: 'mine', target: { x, y, z: 0 } });
+  });
+
+  it('in a hole: Go up moves out onto the surface; Go down moves into an open cell below', () => {
+    const state = takeAll(seed7(), ['mine-down', 'mine-down', 'up']);
+    const { x, y } = state.avatar.pos;
+    expect(verticalAction(state, 'up')).toMatchObject({ type: 'move', to: { x, y, z: -1 } });
+    expect(verticalAction(state, 'down')).toMatchObject({ type: 'move', to: { x, y, z: 1 } });
+  });
+
+  it("Go up mines the block overhead only with a support in the miner's cell", () => {
+    const state = takeAll(seed7(), ['mine-down', 'mine-down']);
+    const { x, y, z } = state.avatar.pos;
+    // Rock overhead? Fill the shaft above by hand, as if it had been sealed.
+    state.blocks[cellIndex(state.size, { x, y, z: z - 1 })] = BLOCKS.stone.code;
+    expect(verticalAction(state, 'up')).toBeNull();
+    state.structures[cellIndex(state.size, state.avatar.pos)] = STRUCTURES.support.code;
+    expect(verticalAction(state, 'up')).toMatchObject({
+      type: 'mine',
+      target: { x, y, z: z - 1 },
+    });
+  });
+
+  it('a dig down whose yield is too heavy to carry is risky, so Go down needs a second press', () => {
+    // On the surface over stone, with the pack full of stone.
+    const full = buildState({
+      layers: [['###'], ['###']],
+      avatar: { x: 1, y: 0, z: -1 },
+      inventory: { stone: AVATAR.carryCapacity / 2 },
+    });
+    updateReveal(full, []);
+    const down = verticalAction(full, 'down');
+    expect(down).toMatchObject({ type: 'mine', target: { x: 1, y: 0, z: 0 } });
+    expect(down !== null && tapIsRisky(full, down)).toBe(true);
+    // With room in the pack it is one press.
+    full.inventory = {};
+    const light = verticalAction(full, 'down');
+    expect(light !== null && tapIsRisky(full, light)).toBe(false);
   });
 });

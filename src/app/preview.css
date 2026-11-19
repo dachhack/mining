@@ -133,6 +133,23 @@ button.small {
   white-space: nowrap;
 }
 
+/* Go up / Go down (issue #80): one row under the map, half the width each. */
+.move-bar {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.move-bar > button {
+  flex: 1 1 0;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.move-bar > button:disabled {
+  opacity: 0.4;
+}
+
 .layer-button {
   padding: 0 10px;
 }

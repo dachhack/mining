@@ -294,6 +294,47 @@ test('the layer buttons go down from the top view, where only the block underfoo
   await expect(page.getByTestId('gauges')).toContainText('layer 1');
 });
 
+test('Go down digs and moves down; Go up climbs out of the hole (issue #80)', async ({ page }) => {
+  const gauges = page.getByTestId('gauges');
+  const goUp = page.getByRole('button', { name: '▲ Go up' });
+  const goDown = page.getByRole('button', { name: '▼ Go down' });
+  // On the surface there is nothing above.
+  await expect(goUp).toBeDisabled();
+  // Go down digs the block underfoot and moves the miner into it.
+  await goDown.click();
+  await expect(page.getByTestId('outcome')).toContainText('> Mine below you: Dirt');
+  await expect(gauges).toContainText('x16 y16, layer 0');
+  // Go up moves back out onto the surface: no ladder, no fall.
+  await expect(goUp).toBeEnabled();
+  await goUp.click();
+  await expect(page.getByTestId('outcome')).toContainText('> Move up to the surface.');
+  await expect(gauges).toContainText('x16 y16, the surface');
+  // Go down again: the hole is open now, so it is a move, not a mine.
+  await goDown.click();
+  await expect(page.getByTestId('outcome')).toContainText('> Move down to layer 0.');
+  await expect(gauges).toContainText('Health 10/10');
+});
+
+test('at 390 px the map bars do not wrap badly: Look up/down on one row, Go up/down on one row', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const top = async (name: string) =>
+    (await page.getByRole('button', { name }).boundingBox())?.y ?? -1;
+  // The look buttons, Centre and the zoom share one row under the label.
+  const lookUp = await top('Look one layer up');
+  expect(await top('Look one layer down')).toBe(lookUp);
+  expect(await top('Centre on me')).toBe(lookUp);
+  // Go up and Go down share their own row, each half the width.
+  const goUp = page.getByRole('button', { name: '▲ Go up' });
+  const goDown = page.getByRole('button', { name: '▼ Go down' });
+  const upBox = await goUp.boundingBox();
+  const downBox = await goDown.boundingBox();
+  expect(upBox?.y).toBe(downBox?.y);
+  expect(upBox?.width ?? 0).toBeGreaterThanOrEqual(120);
+  expect(upBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+});
+
 test('at phone width: no sideways scroll, and every tap target is at least 44 px', async ({
   page,
 }) => {

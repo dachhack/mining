@@ -34,7 +34,7 @@ import {
   UNLIT_BRIGHTNESS,
 } from './palette';
 import type { Pattern, SurfaceMark } from './palette';
-import { actionsForCell, mapLayerOf, tapAction, tapIsRisky } from './targets';
+import { actionsForCell, mapLayerOf, tapAction, tapIsRisky, verticalAction } from './targets';
 import { buildLayer, layerContext } from './tiles';
 import type { LayerContext, Tile } from './tiles';
 
@@ -578,12 +578,14 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
   // The row of buttons over the map.
   const bar = document.createElement('div');
   bar.className = 'map-bar';
-  const upButton = button('small layer-button', '▲ Up');
+  // Look at another layer (the map shows one at a time). Words, not arrows:
+  // the arrows are on the buttons that move the miner (issue #80).
+  const upButton = button('small layer-button', 'Look up');
   upButton.setAttribute('aria-label', 'Look one layer up');
   const layerLabel = document.createElement('span');
   layerLabel.className = 'layer-label';
   layerLabel.dataset['testid'] = 'layer-label';
-  const downButton = button('small layer-button', '▼ Down');
+  const downButton = button('small layer-button', 'Look down');
   downButton.setAttribute('aria-label', 'Look one layer down');
   const centreButton = button('small', 'Centre on me');
   // Back to the default zoom (issue #69).
@@ -607,7 +609,18 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
   legend.className = 'map-legend';
   legend.dataset['testid'] = 'map-legend';
 
-  element.append(bar, frame, legend);
+  // Go up and go down (issue #80): the miner has no gravity, and the map
+  // shows one layer, so the move into the cell above or below (or the mine
+  // of that block) has buttons of its own, in a row under the map.
+  const moveBar = document.createElement('div');
+  moveBar.className = 'move-bar';
+  const goUpButton = button('small move-button', '▲ Go up');
+  goUpButton.dataset['testid'] = 'go-up';
+  const goDownButton = button('small move-button', '▼ Go down');
+  goDownButton.dataset['testid'] = 'go-down';
+  moveBar.append(goUpButton, goDownButton);
+
+  element.append(bar, frame, moveBar, legend);
 
   // ----- What the map is showing -----
   let state: GameState | null = null;
@@ -625,6 +638,8 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
    * taken). `null` when nothing is marked.
    */
   let pending: { x: number; y: number; z: number; key: string } | null = null;
+  // The same for a Go up / Go down press whose yield is too heavy to carry.
+  let pendingButton: { direction: 'up' | 'down'; key: string } | null = null;
   let pendingTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** The map layer the miner is shown on: the top view (layer 0) while on the surface. */
@@ -710,6 +725,8 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
     // Layer 0, the top view, is as high as the map goes (issue #78).
     upButton.disabled = viewZ <= WORLD.surfaceZ + 1;
     downButton.disabled = viewZ >= s.size.z - 1;
+    goUpButton.disabled = verticalAction(s, 'up') === null;
+    goDownButton.disabled = verticalAction(s, 'down') === null;
 
     // For the tests: where the camera is and how big a cell is.
     canvas.dataset['camX'] = String(camera.x);
@@ -747,10 +764,11 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
       clearTimeout(pendingTimer);
       pendingTimer = null;
     }
-    if (pending === null) {
+    if (pending === null && pendingButton === null) {
       return false;
     }
     pending = null;
+    pendingButton = null;
     hideHint();
     return true;
   }
@@ -760,7 +778,10 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
     const here = s.avatar.pos;
     switch (action.type) {
       case 'mine':
-        return action.target.x === here.x && action.target.y === here.y ? 'dig down' : 'mine';
+        if (action.target.x === here.x && action.target.y === here.y) {
+          return action.target.z > here.z ? 'dig down' : 'mine overhead';
+        }
+        return 'mine';
       case 'cutTree':
         return 'cut the tree';
       case 'move':
@@ -775,13 +796,19 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
   /**
    * A tap (not a drag) at (px, py) pixels from the map's top-left corner
    * (issue #78). The tap does the cell's one action (`tapAction`) at once,
-   * unless it is risky (`tapIsRisky`: a fall or drop that hurts or kills, a
-   * yield too heavy to carry; a free chosen drop is not risky). A risky tap marks the cell and says what the
+   * unless it is risky (`tapIsRisky`: since issue #80 only a yield too heavy
+   * to carry). A risky tap marks the cell and says what the
    * risk is; a second tap on the same cell within `doubleTapMs` does it. A
    * tap anywhere else while a cell is marked only clears the mark.
    */
   function tap(px: number, py: number): void {
     if (state === null) {
+      return;
+    }
+    // A tap on the map cancels a Go up / Go down press waiting for its second.
+    if (pendingButton !== null) {
+      clearPending();
+      draw();
       return;
     }
     const cell = cellAt(camera, px, py, cellPixels());
@@ -983,6 +1010,43 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
   );
 
   // ----- The buttons -----
+  /**
+   * Go up or go down (issue #80): the move into the cell above or below, or
+   * the mine of that block (`verticalAction`). Like a tap, a yield too heavy
+   * to carry needs a second press within `doubleTapMs`.
+   */
+  function goVertically(direction: 'up' | 'down'): void {
+    if (state === null) {
+      return;
+    }
+    const action = verticalAction(state, direction);
+    const waiting = pendingButton;
+    clearPending();
+    if (action === null) {
+      draw();
+      return;
+    }
+    const key = actionKey(action);
+    const confirmed = waiting !== null && waiting.direction === direction && waiting.key === key;
+    if (confirmed || !tapIsRisky(state, action)) {
+      onChoose(action);
+      return;
+    }
+    pendingButton = { direction, key };
+    const warning = choiceWarning(state, action) ?? 'it is risky';
+    showHint(`Press again to ${tapVerb(state, action)}: ${warning}`, PREVIEW_MAP.doubleTapMs);
+    pendingTimer = setTimeout(() => {
+      clearPending();
+      draw();
+    }, PREVIEW_MAP.doubleTapMs);
+    draw();
+  }
+  goUpButton.addEventListener('click', () => {
+    goVertically('up');
+  });
+  goDownButton.addEventListener('click', () => {
+    goVertically('down');
+  });
   upButton.addEventListener('click', () => {
     if (state !== null && viewZ > WORLD.surfaceZ + 1) {
       viewZ -= 1;
