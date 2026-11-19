@@ -40,6 +40,8 @@ export interface Tile {
   items: boolean;
   /** True if the miner is here (on the surface: the block under the miner, see `buildLayer`). */
   miner: boolean;
+  /** True if the miner is in this column on another layer (drawn as a faint ring). */
+  minerColumn: boolean;
 }
 
 /** A square window of a layer: the cells x0..x0+size-1 and y0..y0+size-1. */
@@ -180,6 +182,7 @@ export function buildLayer(
       const miner =
         (here.x === x && here.y === y && here.z === z) ||
         (minerOnSurfaceAbove && here.x === x && here.y === y);
+      const minerColumn = !miner && here.x === x && here.y === y;
       const cell = knownCell(state, pos);
       if (cell === null) {
         row.push({
@@ -192,6 +195,7 @@ export function buildLayer(
           structure: null,
           items: false,
           miner,
+          minerColumn,
         });
         continue;
       }
@@ -215,6 +219,7 @@ export function buildLayer(
         structure: structureMark(cell.structure),
         items: cell.looseItems.length > 0,
         miner,
+        minerColumn,
       });
     }
     rows.push(row);

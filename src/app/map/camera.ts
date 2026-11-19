@@ -69,3 +69,30 @@ export function cellAt(
 ): { x: number; y: number } {
   return { x: Math.floor(camera.x + px / cellPixels), y: Math.floor(camera.y + py / cellPixels) };
 }
+
+/**
+ * The camera after the miner has moved to (x, y). A tap can only reach a
+ * cell that is drawn, so the miner's four neighbours must all be on screen
+ * (those inside the cube; there is nothing to reach beyond its edge).
+ * If one is not, the map recentres on the miner; otherwise it stays put, so
+ * the map does not jump about on every step (review of PR #67).
+ */
+export function followMiner(
+  camera: Camera,
+  x: number,
+  y: number,
+  size: { x: number; y: number },
+): Camera {
+  const neighbours = [
+    { x: x - 1, y },
+    { x: x + 1, y },
+    { x, y: y - 1 },
+    { x, y: y + 1 },
+  ];
+  const insideCube = (cell: { x: number; y: number }) =>
+    cell.x >= 0 && cell.y >= 0 && cell.x < size.x && cell.y < size.y;
+  const allReachable =
+    isInView(camera, x, y) &&
+    neighbours.every((cell) => !insideCube(cell) || isInView(camera, cell.x, cell.y));
+  return allReachable ? camera : centredOn(x, y, size);
+}

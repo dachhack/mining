@@ -135,6 +135,15 @@ test('tapping a neighbouring block mines it, and tapping the open cell moves the
   await tapCell(page, canvas, 10, 10);
   await expect(page.getByTestId('map-hint')).toHaveText('Nothing to do there');
   await expect(gauges).toContainText('AP 2/5');
+
+  // Mine and walk west once more (x14 is dirt), spending the last AP; then
+  // the dirt at x13 cannot be mined, and the hint says why.
+  await tapCell(page, canvas, 14, 16);
+  await expect(gauges).toContainText('AP 1/5');
+  await tapCell(page, canvas, 14, 16);
+  await expect(gauges).toContainText('AP 0/5');
+  await tapCell(page, canvas, 13, 16);
+  await expect(page.getByTestId('map-hint')).toHaveText('Not enough AP (you have 0)');
 });
 
 test('the layer buttons show the layer below, and its blocks can be mined from there', async ({

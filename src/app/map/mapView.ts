@@ -6,11 +6,11 @@
 // legal actions to `onChoose` (the screen then calls `takeTurn`). It never
 // edits the state.
 
-import { BLOCKS, WORLD } from '../../data';
+import { BLOCKS, SHIFT, WORLD } from '../../data';
 import type { BlockId } from '../../data';
 import type { Action, GameState } from '../../engine';
 import { choiceName, choiceWarning, describeChoice, layerName } from '../text/describe';
-import { VIEW_CELLS, cellAt, centredOn, isInView, panned } from './camera';
+import { VIEW_CELLS, cellAt, centredOn, followMiner, isInView, panned } from './camera';
 import type { Camera } from './camera';
 import { BLOCK_LOOKS, MARK_COLOURS, PREVIEW_MAP, UNKNOWN_LOOK, UNLIT_BRIGHTNESS } from './palette';
 import type { Pattern } from './palette';
@@ -251,6 +251,17 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
     ctx.lineWidth = 1;
     ctx.stroke();
   }
+  if (tile.minerColumn) {
+    // On another layer: a dashed ring where the miner is, above or below.
+    ctx.save();
+    ctx.strokeStyle = MARK_COLOURS.miner;
+    ctx.lineWidth = Math.max(1.5, c / 12);
+    ctx.setLineDash([c / 6, c / 8]);
+    ctx.beginPath();
+    ctx.arc(x + mid, y + mid, c * 0.33, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
   if (tile.miner) {
     // The miner: a red-orange disc with a white ring and a white centre.
     ctx.fillStyle = MARK_COLOURS.miner;
@@ -310,6 +321,7 @@ function sampleTile(overrides: Partial<Tile>): Tile {
     structure: null,
     items: false,
     miner: false,
+    minerColumn: false,
     ...overrides,
   };
 }
@@ -352,9 +364,18 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
     if (tile.structure !== null) marks.add(tile.structure);
     if (tile.items) marks.add('items');
     if (tile.miner) marks.add('miner');
+    if (tile.minerColumn) marks.add('minerColumn');
   }
   if (marks.has('miner')) {
     entries.push(legendEntry(sampleTile({ kind: 'open', block: null, miner: true }), 'you'));
+  }
+  if (marks.has('minerColumn')) {
+    entries.push(
+      legendEntry(
+        sampleTile({ kind: 'open', block: null, minerColumn: true }),
+        'above or below you',
+      ),
+    );
   }
   if (open) {
     entries.push(legendEntry(sampleTile({ kind: 'open', block: null }), 'open'));
@@ -399,6 +420,24 @@ function button(className: string, text: string): HTMLButtonElement {
   made.className = className;
   made.textContent = text;
   return made;
+}
+
+/**
+ * What to say when a tap stands for no choice. If the cell would have a
+ * choice with a full shift of AP, the trouble is AP, and the hint says so.
+ * That is worked out on a copy of the state with the AP topped up: the same
+ * legal actions the player would see next shift, so it tells nothing new.
+ */
+function emptyTapHint(state: GameState, viewZ: number, x: number, y: number): string {
+  if (state.ap < SHIFT.apPerShift) {
+    // `structuredClone` makes a deep copy, so the real state is not touched.
+    const rested: GameState = structuredClone(state);
+    rested.ap = SHIFT.apPerShift;
+    if (actionsForCell(rested, viewZ, x, y).length > 0) {
+      return `Not enough AP (you have ${state.ap})`;
+    }
+  }
+  return 'Nothing to do there';
 }
 
 /**
@@ -511,7 +550,7 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
           continue;
         }
         drawTile(ctx, tile, (tile.x - camera.x) * c, (tile.y - camera.y) * c, c);
-        if (isInView(camera, tile.x, tile.y) || tile.miner) {
+        if (isInView(camera, tile.x, tile.y)) {
           drawn.push(tile);
         }
       }
@@ -622,7 +661,7 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
     const actions = actionsForCell(state, viewZ, cell.x, cell.y);
     const only = actions[0];
     if (actions.length === 0 || only === undefined) {
-      showHint('Nothing to do there');
+      showHint(emptyTapHint(state, viewZ, cell.x, cell.y));
       return;
     }
     if (actions.length === 1 && choiceWarning(state, only) === null) {
@@ -715,9 +754,9 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
     }
     if (fresh) {
       camera = centredOn(here.x, here.y, next.size);
-    } else if (!isInView(camera, here.x, here.y)) {
-      // The last move took the miner out of view: bring it back to the middle.
-      camera = centredOn(here.x, here.y, next.size);
+    } else {
+      // Recentre if the miner, or a cell it could act on next, is off screen.
+      camera = followMiner(camera, here.x, here.y, next.size);
     }
     lastMinerLayer = layer;
     draw();

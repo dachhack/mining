@@ -21,6 +21,7 @@ import {
   cellAt,
   centredOn,
   clampCamera,
+  followMiner,
   isInView,
   panned,
 } from '../../src/app/map/camera';
@@ -297,5 +298,49 @@ describe('the map camera (issue #66)', () => {
     expect(isInView({ x: 8, y: 8 }, 8, 23)).toBe(true);
     expect(isInView({ x: 8, y: 8 }, 24, 8)).toBe(false);
     expect(isInView({ x: 8.5, y: 8 }, 8, 8)).toBe(false);
+  });
+});
+
+describe('the map follows the miner (review of PR #67)', () => {
+  const size = { x: 32, y: 32 };
+
+  it('recentres when a neighbour of the miner is off screen, so the next tap can reach it', () => {
+    // The miner at x8 in the left-hand column of a window starting at x8: the
+    // cell to its west (x7) is in the cube but not drawn.
+    expect(followMiner({ x: 8, y: 8 }, 8, 16, size)).toEqual({ x: 0, y: 8 });
+    // The same on the right, top and bottom edges.
+    expect(followMiner({ x: 8, y: 8 }, 23, 16, size)).toEqual({ x: 15, y: 8 });
+    expect(followMiner({ x: 8, y: 8 }, 16, 8, size)).toEqual({ x: 8, y: 0 });
+    expect(followMiner({ x: 8, y: 8 }, 16, 23, size)).toEqual({ x: 8, y: 15 });
+  });
+
+  it('leaves the camera alone while every neighbour is on screen, or at the edge of the cube', () => {
+    expect(followMiner({ x: 8, y: 8 }, 9, 22, size)).toEqual({ x: 8, y: 8 });
+    // At the cube's own edge there is no neighbour to reach beyond it.
+    expect(followMiner({ x: 0, y: 0 }, 0, 0, size)).toEqual({ x: 0, y: 0 });
+    expect(followMiner({ x: 16, y: 16 }, 31, 31, size)).toEqual({ x: 16, y: 16 });
+  });
+
+  it('tap play never strands the miner: walking west from the middle keeps the next cell on screen', () => {
+    let camera = centredOn(16, 16, size);
+    for (let x = 16; x > 0; x -= 1) {
+      camera = followMiner(camera, x, 16, size);
+      expect(isInView(camera, x - 1, 16)).toBe(true);
+    }
+  });
+});
+
+describe('the too-heavy warning (review of PR #67)', () => {
+  it('a mine whose yield does not fit the carry limit warns, so a tap opens the chooser', () => {
+    // Seed 7 after mining down: stone to the east gives 1 Stone (weight 2).
+    const state: GameState = structuredClone(takeAll(seed7(), ['mine-down']));
+    state.inventory = { ...state.inventory, coal: AVATAR.carryCapacity - 3 };
+    const mineEast = legalActions(state).find((a) => choiceName(state, a) === 'mine-e');
+    expect(mineEast).toBeDefined();
+    if (mineEast !== undefined) {
+      expect(choiceWarning(state, mineEast)).toBe(
+        'too heavy to carry: it will be left lying there',
+      );
+    }
   });
 });
