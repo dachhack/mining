@@ -147,12 +147,11 @@ export interface PlayerView {
   /** The first and last x and y drawn, after trimming unseen edges. */
   window: { x0: number; x1: number; y0: number; y1: number };
   /**
-   * The `--radius` that would show every cell the player has seen BELOW THE
-   * TOP LAYER in the drawn layers, when some of those are off the map.
-   * `null` otherwise. The top layer does not count, for whether there is a
-   * hint or for its number: the player knows all of it from the start, so
-   * near the top the hint was on almost every view, and its number was the
-   * far corner of the cube (issue #46 item 5).
+   * The `--radius` that would show every cell the player has seen in the
+   * drawn layers, when some of those are off the map; `null` otherwise.
+   * (Issue #46 item 5 left the top layer out, because the player knew all of
+   * it from the start. Since the owner's change after PR #72 the top layer is
+   * known only where the miner has been, so it counts like any other.)
    */
   radiusForAllSeen: number | null;
   /** True if every cell the player has seen in the drawn layers is on the map. */
@@ -296,8 +295,8 @@ function hudLines(state: GameState, options: ViewOptions): string[] {
   const pos = state.avatar.pos;
   // The lamp-out banner says what the lamp no longer shows. It does not say
   // what may not be done: blocks seen earlier can still be mined, diagonals
-  // too (issue #47 item 1). On the surface daylight shows the top layer
-  // whatever the lamp does, so there the banner is only "lamp is out".
+  // too (issue #47 item 1). On the surface daylight does the lamp's work
+  // whatever the oil, so there the banner is only "lamp is out".
   // Both read the player's own state only: the oil gauge and where it stands.
   let lamp = '';
   if (state.lampOil <= 0) {
@@ -398,10 +397,10 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   // Has the player seen cells of the drawn layers that lie outside the map?
   // Only the "revealed" flag of each cell is read here, not what the cell
   // holds. `anySeenOffMap` says whether there is such a cell in any drawn
-  // layer; `furthestBelowTop` is how far the furthest one below the top layer
-  // is (see `radiusForAllSeen`).
+  // layer; `furthestSeen` is how far the furthest one is (see
+  // `radiusForAllSeen`).
   let anySeenOffMap = false;
-  let furthestBelowTop = 0;
+  let furthestSeen = 0;
   for (const layer of layers) {
     if (layer.z === WORLD.surfaceZ) {
       continue; // the surface is open air everywhere: nothing to miss
@@ -411,19 +410,13 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
         const outside = x < window.x0 || x > window.x1 || y < window.y0 || y > window.y1;
         if (outside && isRevealed(state, { x, y, z: layer.z })) {
           anySeenOffMap = true;
-          if (layer.z > 0) {
-            furthestBelowTop = Math.max(
-              furthestBelowTop,
-              Math.abs(x - here.x),
-              Math.abs(y - here.y),
-            );
-          }
+          furthestSeen = Math.max(furthestSeen, Math.abs(x - here.x), Math.abs(y - here.y));
         }
       }
     }
   }
   const allSeenOnMap = !anySeenOffMap;
-  const radiusForAllSeen = furthestBelowTop > 0 ? furthestBelowTop : null;
+  const radiusForAllSeen = furthestSeen > 0 ? furthestSeen : null;
 
   // Trim the map to what has something in it: rows and columns at the edge of
   // the window that are unseen in every drawn layer are left out. Underground
@@ -648,12 +641,10 @@ export function renderMap(view: PlayerView): MapText {
   const height = view.window.y1 - view.window.y0 + 1;
   const gap = '  ';
   const margin = '     ';
-  // What the map leaves out. Nothing is said when only the top layer goes on
-  // beyond the map: the player knows all of it from the start, and saying so
-  // on every view near the top was noise (issue #46 item 5).
+  // What the map leaves out.
   let beyond = '';
   if (view.radiusForAllSeen !== null) {
-    beyond = `; you have seen more below the top layer than is drawn: --radius ${view.radiusForAllSeen} shows it`;
+    beyond = `; you have seen more than is drawn: --radius ${view.radiusForAllSeen} shows it`;
   } else if (view.allSeenOnMap) {
     beyond = '; everything you have seen of these layers is on the map';
   }

@@ -96,9 +96,8 @@ READING A VIEW
   "@" drawn on the block you stand on as well (--radius N draws less of both). On the surface
   "Y" is a tree, "," a stump, ":" a dirt path, '"' a meadow and "^" a stone outcrop. Underground
   the map reaches ${DEFAULT_RADIUS} cells each way, and is then trimmed: rows and columns at its edge that are
-  unseen are left out. If you have seen cells below the top layer that are off the map, the
-  "Map:" line says which --radius shows them. It says nothing about the top layer, which you
-  know all of from the start and which always goes on beyond a small map. The legend
+  unseen are left out. If you have seen cells of the drawn layers that are off the map, the
+  "Map:" line says which --radius shows them. The legend
   under the map names every other character in it. Then come known hazards and what ending the
   shift now would do. A line starting "Not on the list:" says why something you might look for
   is not offered: the drop is too long; you have not seen what is under the cell; you are in a
@@ -175,7 +174,7 @@ THE GAME
   The forest
   - Most of the surface is forest. A tree blocks the way: you cannot walk or step up into it.
     Dirt paths, meadows and stone outcrops are open ground; an outcrop stands over stone.
-    Some coal always lies in sight under open ground within ${SURFACE.generation.coalInSightWithinSteps} steps' walk of where you start.
+    Some coal always lies in sight of where you start.
   - Cut a tree beside you (north, east, south or west; ${SURFACE.cutTree.ap} AP) for ${cutYield}. It leaves a
     stump, which is open ground. Timber too heavy to carry is left lying on the stump.
   - A tree hides the ground under it: from the surface you see that block only once the tree
@@ -187,11 +186,12 @@ THE GAME
     The "If you end the shift now" line says where a tree will grow back.
 
   What you can see
-  - You know the top layer from the start, except where a tree stands over it. Below it you
-    know what your lamp has shown.
+  - At the start you know only what is round you. Everywhere, top layer included, you know
+    what your light has shown: on the surface daylight does the lamp's work, lamp oil or not,
+    but never under a tree.
     Light spreads from you a few steps through open cells: round corners, never through rock.
     You see every lit cell and every cell touching one.
-  - While your lamp is lit you also know the cells your pick can reach and the cell over your
+  - While your lamp is lit (or you stand on the surface) you also know the cells your pick can reach and the cell over your
     head, and you can look over an edge: beside a drop, or on a ladder, you see far enough down
     to judge the drop.
   - Daylight does not shine down a hole: from the surface you see that a hole is there, not
@@ -214,7 +214,7 @@ THE GAME
   In the dark (lamp oil 0)
   - You learn only the six cells touching yours: north, east, south, west, above and below.
     Nothing new diagonally, nothing new around the cell below you, and you cannot look down a
-    drop. On the surface daylight still shows you the top layer outside the forest.
+    drop. On the surface daylight still lights what is round you, as a lit lamp would.
   - You can mine any block you know. In the dark that is the walls beside you and the floor
     under you, plus anything you saw earlier or a torch shows: diagonal blocks you saw while
     the lamp was lit are still on the list.

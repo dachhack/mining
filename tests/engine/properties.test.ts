@@ -348,8 +348,9 @@ describe('property tests: unrevealed cells do not change the action list (issues
   );
 
   // Seed 23 took the place of seed 27 with the forest (issue #70), which
-  // shortened seed 27's run in the dark to 57 checks.
-  it.each([23, 34, 47])(
+  // shortened seed 27's run in the dark to 57 checks; seed 38 took the place
+  // of seed 23 when the top layer stopped being known from the start (73).
+  it.each([38, 34, 47])(
     'with the lamp out from the start, seed %i',
     (seed) => {
       const { checks, checksWithLampOut } = playAndCheckUnseenCells(seed, 0, 300, 2);

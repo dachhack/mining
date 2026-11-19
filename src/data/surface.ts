@@ -75,15 +75,13 @@ export interface SurfaceGenerationData {
   outcropBlock: string;
   outcropChance: number;
   /**
-   * Coal in sight near the start (owner, PR #72: "Coal visible near start").
-   * Every new run has at least one `coalInSightBlock` in layer 0 under open
-   * ground (no tree) that is at most `coalInSightWithinSteps` steps from the
-   * start cell, walking over open ground only. If generation made none, one
-   * is put under a randomly chosen open cell within that walk; it replaces
-   * plain rock (`coalInSightReplaces`) and never an outcrop's stone.
+   * Coal in sight at the start (owner, PR #72: "Coal visible near start").
+   * Every new run shows at least one `coalInSightBlock` in the layer-0 ground
+   * the miner sees from its start cell. If generation made none there, one
+   * such block is picked at random and replaced: plain rock
+   * (`coalInSightReplaces`), never an outcrop's stone.
    */
   coalInSightBlock: string;
-  coalInSightWithinSteps: number;
   coalInSightReplaces: string[];
 }
 
@@ -132,9 +130,8 @@ export const SURFACE: SurfaceData = {
     pathWearsBlocks: ['stone'],
     outcropBlock: 'stone',
     outcropChance: 0.3,
-    // Owner's decision on PR #72; 8 steps is the coordinator's [Default].
+    // Owner's decision on PR #72.
     coalInSightBlock: 'coalSeam',
-    coalInSightWithinSteps: 8,
     coalInSightReplaces: ['dirt', 'stone'],
   },
 };
@@ -227,9 +224,6 @@ export function validateSurfaceData(
   knownBlock(gen.outcropBlock, 'generation.outcropBlock');
   chance(gen.outcropChance, 'generation.outcropChance');
   knownBlock(gen.coalInSightBlock, 'generation.coalInSightBlock');
-  // At least 2: the start cell's eight neighbours are open meadow, so a cell
-  // 2 steps away (beside the miner after one step) can always take the coal.
-  wholeAtLeast(gen.coalInSightWithinSteps, 2, 'generation.coalInSightWithinSteps');
   for (const id of gen.coalInSightReplaces) {
     knownBlock(id, 'generation.coalInSightReplaces');
   }

@@ -1388,7 +1388,7 @@ describe('a shorter action list (issue #30)', () => {
 });
 
 describe('the map on the surface (issue #30)', () => {
-  it('draws the whole top layer when no --radius is given', () => {
+  it('draws the whole surface and layer 0 when no --radius is given', () => {
     const state = createRun(7, 'none', 'standard');
     const view = buildView(state, { ...DEFAULT_VIEW, deepestZ: -1 });
     // The whole cube and one cell round it, which shows as the edge.
@@ -1396,15 +1396,19 @@ describe('the map on the surface (issue #30)', () => {
     expect(view.radiusForAllSeen).toBeNull();
     const top = view.layers.find((layer) => layer.z === 0);
     expect(top?.rows).toHaveLength(state.size.y + 2);
-    // Every cell of the top layer is drawn as what it is, except the ground
-    // under a tree, which is not seen until the tree is cut (issue #70).
+    // A cell of the top layer is drawn as what it is only where the player
+    // has seen it: round the start, never under a tree (owner, after PR #72;
+    // issue #70). Everything else is "?".
     for (let y = 0; y < state.size.y; y += 1) {
       const row = top?.rows[y + 1] ?? '';
       expect(row).toHaveLength(state.size.x + 2);
       expect(row.charAt(0)).toBe('X');
       for (let x = 0; x < state.size.x; x += 1) {
-        const underTree = isUnderTree(state, { x, y, z: 0 });
-        expect(row.charAt(x + 1) === '?', `x${x} y${y}`).toBe(underTree);
+        const seen = isRevealed(state, { x, y, z: 0 });
+        expect(row.charAt(x + 1) === '?', `x${x} y${y}`).toBe(!seen);
+        if (isUnderTree(state, { x, y, z: 0 })) {
+          expect(seen).toBe(false);
+        }
       }
     }
     // The whole surface is drawn too, and all of it is known.
@@ -1424,14 +1428,13 @@ describe('the map on the surface (issue #30)', () => {
     expect(view.window).toEqual({ x0: 12, x1: 20, y0: 12, y1: 20 });
     // With --radius the surface is drawn as before, beside layer 0.
     expect(view.layers.map((layer) => layer.label)).toEqual(['surface', 'layer 0']);
-    // Only the top layer goes on beyond the map. The player knows all of it
-    // from the start, so there is no hint (issue #46 item 5), and the line
-    // does not claim that everything seen is on the map either.
+    // At the start the player has seen only the ground round the start,
+    // all of it inside this map (owner, after PR #72).
     expect(view.radiusForAllSeen).toBeNull();
-    expect(view.allSeenOnMap).toBe(false);
+    expect(view.allSeenOnMap).toBe(true);
     const text = renderView(view);
     expect(text).not.toContain('--radius');
-    expect(text).not.toContain('everything you have seen');
+    expect(text).toContain('everything you have seen');
   });
 
   it('underground the default map is the small one, and says when more is known', () => {
@@ -1440,18 +1443,17 @@ describe('the map on the surface (issue #30)', () => {
     expect(state.avatar.pos.z).toBe(0);
     const view = buildView(state, { ...DEFAULT_VIEW, deepestZ: 0 });
     expect(view.window).toEqual({ x0: 12, x1: 20, y0: 12, y1: 20 });
-    // Only the top layer is cut off by the map: no hint (issue #46 item 5).
+    // The top layer is known only round the start (owner, after PR #72), all
+    // of it on this map: no hint.
     expect(renderView(view)).not.toContain('--radius');
 
-    // The hint is for cells seen below the top layer that are off the map.
-    // Here the player has seen a cell of layer 1 that is 9 away. The number
-    // is the radius that shows that cell, not the 16 the top layer reaches.
+    // The hint is for seen cells that are off the map. Here the player has
+    // seen a cell of layer 1 that is 9 away. The number is the radius that
+    // shows that cell.
     state.revealed[cellIndex(state.size, { x: 25, y: 16, z: 1 })] = 1;
     const further = buildView(state, { ...DEFAULT_VIEW, deepestZ: 0 });
     expect(further.radiusForAllSeen).toBe(9);
-    expect(renderView(further)).toContain(
-      'you have seen more below the top layer than is drawn: --radius 9 shows it',
-    );
+    expect(renderView(further)).toContain('you have seen more than is drawn: --radius 9 shows it');
     // And it does: with that radius the hint is gone.
     expect(buildView(state, { radius: 9, layers: 1, deepestZ: 0 }).radiusForAllSeen).toBeNull();
 
@@ -1505,7 +1507,7 @@ describe('layer labels on a narrow map (issue #20)', () => {
     expect(text).toContain(
       // The surface shows the forest (issue #70), and the ground under the
       // trees is not seen.
-      '     surface    layer 0\n     (yours)    (below)\ny 12 """""YY::  d#dtt??dd',
+      '     surface    layer 0\n     (yours)    (below)\ny 12 """""YY::  ?????????',
     );
   });
 });

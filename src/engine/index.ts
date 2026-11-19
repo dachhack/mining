@@ -34,7 +34,7 @@ import { isValidSeed } from './rng';
 import { forecastShift, runCubePhase, runUpkeep } from './shift';
 import type { ShiftForecast } from './shift';
 import { addItem, blankState, cloneState, isRunActive } from './state';
-import { generateSurface } from './surface/generation';
+import { ensureCoalInSight, generateSurface } from './surface/generation';
 import { regrowTrees } from './surface/regrowth';
 import { updateMineralTraces } from './tells';
 import type { GameState } from './state';
@@ -90,6 +90,9 @@ export function createRun(seed: number, contractId: string, loadoutId: string): 
   for (const stack of loadout.items) {
     addItem(state, stack.item, stack.count);
   }
+  // Coal in sight at the start (owner's decision on PR #72): needs the miner
+  // on its start cell with its lamp, so it comes after the surface.
+  ensureCoalInSight(state);
 
   // Reveal what can be seen from the start. Nobody is watching yet, so the
   // events are dropped.

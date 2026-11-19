@@ -232,51 +232,72 @@ describe('what stays revealed', () => {
   });
 });
 
-describe('the surface', () => {
-  it('reveals the whole top layer and nothing of layer 1 at the start', () => {
-    const state = buildState({
-      layers: [
-        ['####', '####', '####'],
-        ['####', '####', '####'],
-        ['####', '####', '####'],
-      ],
+describe('the surface (owner, after PR #72: only what has been discovered)', () => {
+  // Daylight no longer reveals the whole top layer. On the surface it does the
+  // lamp's work round the miner, lamp oil or not: light spreads over the
+  // surface cells as far as the lamp's radius and shows the blocks under
+  // them, and the pick's reach shows the rest of what it touches.
+  const width = WITH_OIL + 6;
+  function row(): GameState {
+    return buildState({
+      layers: [['#'.repeat(width)], ['#'.repeat(width)], ['#'.repeat(width)]],
       avatar: { x: 0, y: 0, z: -1 },
     });
+  }
+
+  it('reveals the top layer only as far as the light reaches, and nothing of layer 1', () => {
+    const state = row();
     updateReveal(state, []);
-    for (let y = 0; y < state.size.y; y += 1) {
-      for (let x = 0; x < state.size.x; x += 1) {
-        expect(isRevealed(state, { x, y, z: 0 })).toBe(true);
-        expect(isRevealed(state, { x, y, z: 1 })).toBe(false);
-        expect(isRevealed(state, { x, y, z: 2 })).toBe(false);
-      }
+    for (let x = 0; x < width; x += 1) {
+      expect(isRevealed(state, { x, y: 0, z: 0 }), `x${x}`).toBe(x <= WITH_OIL);
+      expect(isRevealed(state, { x, y: 0, z: 1 })).toBe(false);
     }
   });
 
-  it('does the same for a new run, except under the trees (issue #70)', () => {
-    // Since the forest, a new run's top layer is revealed except where a
-    // tree stands over it (and the cells round the start, which the lamp
-    // and the pick reach, are never under a tree: the start clearing).
+  it('does the same with the lamp out: on the surface daylight does its work', () => {
+    const state = row();
+    state.lampOil = 0;
+    updateReveal(state, []);
+    for (let x = 0; x < width; x += 1) {
+      expect(isRevealed(state, { x, y: 0, z: 0 }), `x${x}`).toBe(x <= WITH_OIL);
+    }
+  });
+
+  it('reveals more as the miner walks, and what was seen stays seen', () => {
+    const state = row();
+    updateReveal(state, []);
+    state.avatar.pos = { x: width - 1, y: 0, z: -1 };
+    updateReveal(state, []);
+    for (let x = 0; x < width; x += 1) {
+      const near = x <= WITH_OIL || x >= width - 1 - WITH_OIL;
+      expect(isRevealed(state, { x, y: 0, z: 0 }), `x${x}`).toBe(near);
+    }
+  });
+
+  it('a new run knows only the ground round the start, never under a tree', () => {
     const state = createRun(1, 'none', 'standard');
+    const start = state.avatar.pos;
     for (let y = 0; y < state.size.y; y += 1) {
       for (let x = 0; x < state.size.x; x += 1) {
-        const underTree = isUnderTree(state, { x, y, z: 0 });
-        expect(isRevealed(state, { x, y, z: 0 })).toBe(!underTree);
+        const ground = { x, y, z: 0 };
+        if (isRevealed(state, ground)) {
+          expect(isUnderTree(state, ground)).toBe(false);
+          expect(Math.abs(x - start.x) + Math.abs(y - start.y)).toBeLessThanOrEqual(WITH_OIL);
+        }
         expect(isRevealed(state, { x, y, z: 1 })).toBe(false);
       }
     }
   });
 
-  it('is lit everywhere, but daylight does not shine down a hole', () => {
-    // A pit in the top layer, further from the avatar than its lamp reaches.
-    const width = WITH_OIL + 6;
+  it('a pit far from the miner is not seen, and daylight does not shine down it', () => {
     const pitX = width - 1;
     const state = buildState({
       layers: [['#'.repeat(width - 1) + '.'], ['#'.repeat(width)], ['#'.repeat(width)]],
       avatar: { x: 0, y: 0, z: -1 },
     });
     updateReveal(state, []);
-    expect(isRevealed(state, { x: pitX, y: 0, z: 0 })).toBe(true); // the pit: top layer
-    expect(isRevealed(state, { x: pitX, y: 0, z: 1 })).toBe(false); // its floor
+    expect(isRevealed(state, { x: pitX, y: 0, z: 0 })).toBe(false);
+    expect(isRevealed(state, { x: pitX, y: 0, z: 1 })).toBe(false);
   });
 });
 

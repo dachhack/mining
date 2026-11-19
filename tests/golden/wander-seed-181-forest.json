@@ -5,7 +5,7 @@
   "loadoutId": "standard",
   "recordedWith": "wander",
   "expectedStatus": "ended: death, outOfFuel",
-  "expectedHash": "31f204727e69899d",
+  "expectedHash": "8722f30206dbc666",
   "decisions": [
     "move to 16,17,-1 drop 0 ap 1",
     "drop 2 timber ap 0",
