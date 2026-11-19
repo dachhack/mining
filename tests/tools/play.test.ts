@@ -28,11 +28,11 @@ import {
 } from '../../src/engine';
 import type { GameState } from '../../src/engine';
 import { loadLog, resolveChoice, runCli } from '../../tools/play/cli';
-import { describeEvents } from '../../tools/play/describe';
+import { describeEvents } from '../../src/app/text/describe';
 import { helpText } from '../../tools/play/help';
-import { replayLog } from '../../tools/play/log';
-import type { LogEntry } from '../../tools/play/log';
-import { ACTIONS_HEADING, buildView, renderView } from '../../tools/play/view';
+import { replayLog } from '../../src/app/text/log';
+import type { LogEntry } from '../../src/app/text/log';
+import { ACTIONS_HEADING, buildView, renderView } from '../../src/app/text/view';
 import { act, buildState } from '../engine/helpers';
 
 /** The text one step prints for `state`. */

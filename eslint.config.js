@@ -5,7 +5,9 @@ import prettier from 'eslint-config-prettier';
 import globals from 'globals';
 
 export default defineConfig(
-  { ignores: ['dist/', 'coverage/', 'test-results/', 'playwright-report/'] },
+  // android/ is the Capacitor project: generated Java and Gradle files, plus a
+  // copy of the web build that `npx cap sync` puts there.
+  { ignores: ['dist/', 'coverage/', 'test-results/', 'playwright-report/', 'android/'] },
   js.configs.recommended,
   ...tseslint.configs.strict,
   prettier,

@@ -3,8 +3,10 @@
 //
 //   npm run play -- --help
 //
-// The work is in tools/play/: view.ts (what the player may see), describe.ts
-// (wording), log.ts (the play log), cli.ts (arguments and the one-shot
+// The view and wording are shared with the web preview screen, so they live
+// in src/app/text/: view.ts (what the player may see), describe.ts (wording),
+// log.ts (the play log), turn.ts (one choice and what came of it). The
+// command line itself is in tools/play/: cli.ts (arguments and the one-shot
 // modes), help.ts (usage and rules). This file only prints, and runs the
 // interactive prompt.
 

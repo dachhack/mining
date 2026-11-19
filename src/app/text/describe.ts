@@ -5,16 +5,8 @@
 // is described from the action itself (which the engine offers only for cells
 // in reach, all of them revealed) and from the data tables.
 
-import {
-  BLOCKS,
-  STRUCTURES,
-  TELLS,
-  WORLD,
-  blockDefByCode,
-  findRecipe,
-  itemDef,
-} from '../../src/data';
-import type { ItemStack, Vec3 } from '../../src/data';
+import { BLOCKS, STRUCTURES, TELLS, WORLD, blockDefByCode, findRecipe, itemDef } from '../../data';
+import type { ItemStack, Vec3 } from '../../data';
 import {
   blockDefAt,
   canCarry,
@@ -26,8 +18,8 @@ import {
   looseItemsAt,
   showsMineralTraces,
   structureAt,
-} from '../../src/engine';
-import type { Action, GameEvent, GameState } from '../../src/engine';
+} from '../../engine';
+import type { Action, GameEvent, GameState } from '../../engine';
 import type { LogEntry } from './log';
 import { tracedSymbolsText } from './symbols';
 

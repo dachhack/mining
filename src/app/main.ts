@@ -1,12 +1,9 @@
-import { ENGINE_VERSION } from '../engine';
+import './preview.css';
+import { mountPreview } from './preview';
 
-// M0 placeholder. The real title screen arrives in M3.
+// Until M3's real screens arrive, the page is the early phone preview
+// (issue #64): a tap version of `npm run play`.
 const root = document.querySelector<HTMLDivElement>('#app');
 if (root) {
-  root.innerHTML = `
-    <main>
-      <h1>Mining Game</h1>
-      <p data-testid="status">Scaffold build. Engine v${ENGINE_VERSION}.</p>
-    </main>
-  `;
+  mountPreview(root);
 }

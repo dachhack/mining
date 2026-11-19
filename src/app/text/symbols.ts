@@ -4,8 +4,8 @@
 // the map, and describe.ts names the characters in the line that says mineral
 // traces were noticed.
 
-import { BLOCKS } from '../../src/data';
-import type { BlockId } from '../../src/data';
+import { BLOCKS } from '../../data';
+import type { BlockId } from '../../data';
 
 // Map characters for everything that is not a block.
 export const SYMBOL_AVATAR = '@';

@@ -5,3 +5,4 @@ playwright-report/
 package-lock.json
 docs/game-design-doc.md
 docs/repo-plan.md
+android/

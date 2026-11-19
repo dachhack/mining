@@ -6,8 +6,8 @@
 // from src/data, so the text cannot drift from the game when one is tuned.
 
 import { ACTION_COSTS, AVATAR, BLOCKS, FIELD_RECIPES, SHIFT, TELLS, WORLD } from '../../src/data';
-import { stackListText } from './describe';
-import { DEFAULT_LAYERS, DEFAULT_RADIUS } from './view';
+import { stackListText } from '../../src/app/text/describe';
+import { DEFAULT_LAYERS, DEFAULT_RADIUS } from '../../src/app/text/view';
 
 export function helpText(): string {
   const recipes = FIELD_RECIPES.map(

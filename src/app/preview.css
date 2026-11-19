@@ -1,0 +1,179 @@
+/* The early phone preview screen (issue #64). Plain styles for a phone held
+   upright: nothing wider than the screen, buttons at least 44 px tall, and
+   the map scrolls sideways inside its own box. */
+
+/* `hidden` must win over the `display` the classes below set. */
+[hidden] {
+  display: none !important;
+}
+
+.preview {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 12px 24px;
+}
+
+.top .title {
+  font-size: 1.25rem;
+  margin: 8px 0 0;
+}
+
+.top .status {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+  color: #a89f92;
+}
+
+.run-bar,
+.new-run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.run-bar .seed {
+  flex: 1 1 auto;
+  font-family: ui-monospace, monospace;
+  font-size: 0.9rem;
+}
+
+.seed-label {
+  flex: 1 1 140px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.seed-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  font-size: 1rem;
+  font-family: ui-monospace, monospace;
+  padding: 0 8px;
+  background: #241f1b;
+  color: inherit;
+  border: 1px solid #5a5048;
+  border-radius: 6px;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: #2f2823;
+  border: 1px solid #5a5048;
+  border-radius: 8px;
+  min-height: 44px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+button:active {
+  background: #463c34;
+}
+
+button.small {
+  padding: 0 14px;
+}
+
+.error {
+  flex-basis: 100%;
+  margin: 0;
+  color: #ff9b85;
+}
+
+.note {
+  margin: 6px 0;
+  color: #d9c38a;
+}
+
+.line {
+  margin: 0 0 4px;
+  overflow-wrap: anywhere;
+}
+
+/* The gauges stay in sight while the map and the actions scroll under them. */
+.gauges {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #14110f;
+  border-bottom: 1px solid #3a322c;
+  padding: 6px 0;
+  font-size: 0.85rem;
+}
+
+.ended {
+  font-weight: bold;
+  color: #ffb380;
+  margin-top: 8px;
+}
+
+.map-box {
+  margin: 8px 0;
+}
+
+.map-text {
+  font-size: 0.8rem;
+  color: #c9c0b3;
+  margin: 4px 0;
+}
+
+.map {
+  margin: 4px 0;
+  padding: 8px;
+  background: #0c0a09;
+  border: 1px solid #3a322c;
+  border-radius: 6px;
+  font-family: ui-monospace, 'DejaVu Sans Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.25;
+  /* The map keeps its text layout (one character per cell), so it may be
+     wider than the screen: then it scrolls sideways in this box only. */
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.forecast,
+.outcome {
+  font-size: 0.85rem;
+  margin: 8px 0;
+}
+
+.outcome {
+  padding: 8px;
+  border-left: 3px solid #d9c38a;
+  background: #1d1915;
+}
+
+.actions-heading {
+  font-size: 1rem;
+  margin: 12px 0 6px;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  padding: 8px 12px;
+  width: 100%;
+}
+
+.choice-text {
+  overflow-wrap: anywhere;
+}
+
+.choice-meta {
+  font-size: 0.75rem;
+  color: #a89f92;
+  font-family: ui-monospace, monospace;
+}

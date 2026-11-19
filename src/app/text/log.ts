@@ -9,8 +9,8 @@
 // The log stores the actions themselves, not menu numbers, so it stays valid
 // if the order of the action list ever changes.
 
-import { SHIFT } from '../../src/data';
-import type { ItemStack } from '../../src/data';
+import { SHIFT } from '../../data';
+import type { ItemStack } from '../../data';
 import {
   ENGINE_VERSION,
   applyAction,
@@ -20,8 +20,8 @@ import {
   inventoryEntries,
   isRunActive,
   legalActions,
-} from '../../src/engine';
-import type { Action, GameEvent, GameState } from '../../src/engine';
+} from '../../engine';
+import type { Action, GameEvent, GameState } from '../../engine';
 
 /** Bumped if the shape of the log file ever changes. */
 export const LOG_FORMAT = 1;

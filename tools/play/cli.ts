@@ -9,11 +9,19 @@ import { dirname } from 'node:path';
 import { CONTRACT_IDS, DEFAULT_LOADOUT_ID, GAME_DATA, validateData } from '../../src/data';
 import { ENGINE_VERSION, countItem, hashState, isRunActive, legalActions } from '../../src/engine';
 import type { GameState } from '../../src/engine';
-import { choiceName, describeChoice, describeEvents } from './describe';
+import { choiceName } from '../../src/app/text/describe';
 import { helpText } from './help';
-import { END_SHIFT, logFromText, logToText, menuChoices, newSession, replayLog, step } from './log';
-import type { LogEntry, PlayLog, Session } from './log';
-import { DEFAULT_LAYERS, buildView, renderView } from './view';
+import {
+  END_SHIFT,
+  logFromText,
+  logToText,
+  menuChoices,
+  newSession,
+  replayLog,
+} from '../../src/app/text/log';
+import type { LogEntry, PlayLog, Session } from '../../src/app/text/log';
+import { takeTurn } from '../../src/app/text/turn';
+import { DEFAULT_LAYERS, buildView, renderView } from '../../src/app/text/view';
 
 /** What the command line asked for. `null` means "not given". */
 export interface CliOptions {
@@ -193,9 +201,7 @@ export function takeChoices(session: Session, choices: string[]): ChoicesResult 
           'Nothing was done from it on.',
       };
     }
-    const text = describeChoice(session.state, entry);
-    const events = step(session, entry);
-    lines.push(`> ${text}. ${describeEvents(session.state, events).join(' ')}`.trimEnd());
+    lines.push(takeTurn(session, entry));
     taken += 1;
   }
   return { lines, taken, refused: null };
