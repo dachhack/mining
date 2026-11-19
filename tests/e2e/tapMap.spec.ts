@@ -204,3 +204,86 @@ test('at phone width: no sideways scroll, and every tap target is at least 44 px
     expect(height).toBeGreaterThanOrEqual(44);
   }
 });
+
+// ----- Pinch to zoom (issue #69) -----
+
+/** How many cells the map shows across now. */
+async function cellsAcross(canvas: Locator): Promise<number> {
+  return Number(await canvas.getAttribute('data-cells'));
+}
+
+/**
+ * A two-finger pinch on the map, sent as raw touch events through the
+ * Chrome DevTools Protocol (Playwright's touchscreen has one finger only).
+ * The fingers start `from` pixels either side of the map's middle and end
+ * `to` pixels either side: `to` > `from` spreads them (zooms in).
+ */
+async function pinch(page: Page, canvas: Locator, from: number, to: number): Promise<void> {
+  const box = await canvas.boundingBox();
+  if (box === null) {
+    throw new Error('the map is not on screen');
+  }
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  const cdp = await page.context().newCDPSession(page);
+  const fingers = (spread: number) => [
+    { x: cx - spread, y: cy, id: 1 },
+    { x: cx + spread, y: cy, id: 2 },
+  ];
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: fingers(from) });
+  const steps = 8;
+  for (let i = 1; i <= steps; i += 1) {
+    const spread = from + ((to - from) * i) / steps;
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: fingers(spread) });
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+}
+
+test('a two-finger pinch zooms the map, and is never a tap', async ({ page }) => {
+  const canvas = page.getByTestId('map-canvas');
+  const gauges = page.getByTestId('gauges');
+  expect(await cellsAcross(canvas)).toBe(16);
+
+  // Spread the fingers to twice the distance: half as many cells across.
+  await pinch(page, canvas, 40, 80);
+  await expect.poll(() => cellsAcross(canvas)).toBeLessThan(10);
+  expect(await cellsAcross(canvas)).toBeGreaterThanOrEqual(8);
+  // Nothing was done: no action, no chooser, no hint.
+  await expect(gauges).toContainText('AP 5/5');
+  await expect(gauges).toContainText('x16 y16, the surface');
+  await expect(page.getByTestId('chooser')).toBeHidden();
+  await expect(page.getByTestId('map-hint')).toBeHidden();
+
+  // Pinch the fingers together, far: out to the whole 32 x 32 layer.
+  await pinch(page, canvas, 120, 20);
+  await expect.poll(() => cellsAcross(canvas)).toBe(32);
+  expect(await camera(canvas)).toMatchObject({ x: 0, y: 0 });
+  await expect(gauges).toContainText('AP 5/5');
+
+  // The zoom is remembered on this device.
+  await page.reload();
+  await expect.poll(() => cellsAcross(page.getByTestId('map-canvas'))).toBe(32);
+
+  // The reset button goes back to 16 x 16.
+  await page.getByRole('button', { name: 'Zoom to 16 by 16' }).click();
+  expect(await cellsAcross(page.getByTestId('map-canvas'))).toBe(16);
+});
+
+test('the mouse wheel zooms too, and taps still work when zoomed', async ({ page }) => {
+  const canvas = page.getByTestId('map-canvas');
+  const box = await canvas.boundingBox();
+  if (box === null) {
+    throw new Error('the map is not on screen');
+  }
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  // Wheel up zooms in.
+  await page.mouse.wheel(0, -400);
+  await expect.poll(() => cellsAcross(canvas)).toBeLessThan(16);
+  // Zoomed in, a tap on the east neighbour still walks there.
+  await tapCell(page, canvas, 17, 16);
+  await expect(page.getByTestId('gauges')).toContainText('x17 y16, the surface');
+  // Wheel down zooms out, no further than the whole layer.
+  await page.mouse.wheel(0, 5000);
+  await expect.poll(() => cellsAcross(canvas)).toBe(32);
+});
