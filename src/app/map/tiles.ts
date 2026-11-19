@@ -18,6 +18,7 @@ import type { BlockId, Vec3 } from '../../data';
 import {
   cellPosition,
   hasTree,
+  isSurface,
   knownCell,
   surfaceKindAt,
   visibleMineralTraces,
@@ -262,7 +263,9 @@ export function buildLayer(
         // `groundUnder` would find nothing anyway; a regrown tree stands over
         // ground the player remembers, which the layer-0 view shows).
         ground: z === WORLD.surfaceZ && !hasTree(state, pos) ? groundUnder(state, x, y) : null,
-        surface: z === WORLD.surfaceZ ? surfaceMark(state, pos) : null,
+        // Only inside the cube's footprint: a zoomed-out window can reach one
+        // column past the edge (PR #71), where there is no surface cell.
+        surface: isSurface(state.size, pos) ? surfaceMark(state, pos) : null,
       });
     }
     rows.push(row);

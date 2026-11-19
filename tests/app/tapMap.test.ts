@@ -482,6 +482,15 @@ describe('the forest on the tap map (issue #70)', () => {
     expect(below[1]?.[2]?.surface).toBeNull();
   });
 
+  it('a window that reaches past the edge of the cube (zoomed out) draws no surface there', () => {
+    // A zoomed-out camera (PR #71) can ask for one column and row past the
+    // edge; there is no surface cell there to read.
+    const tiles = buildLayer(forest(), WORLD.surfaceZ, { x0: 0, y0: 0, size: 4 });
+    expect(tiles[0]?.[3]?.surface).toBeNull();
+    expect(tiles[3]?.[0]?.surface).toBeNull();
+    expect(tiles[1]?.[2]?.surface).toBe('tree');
+  });
+
   it('a tap on a tree beside the miner cuts it, at once (no warning)', () => {
     const state = forest();
     expect(tapNames(state, WORLD.surfaceZ, 2, 1)).toEqual(['cut-e']);
