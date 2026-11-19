@@ -10,8 +10,19 @@ import type { BlockId } from '../../data';
 
 /** The sizes and timings of the map. */
 export const PREVIEW_MAP = {
-  /** Cells across and down the window. */
+  /** Cells across and down the window at the default zoom. */
   viewCells: 16,
+  /** The most zoomed in: this many cells across (big tiles, easy to tap). */
+  minCells: 8,
+  /** The most zoomed out: this many cells across (a whole 32 x 32 layer). */
+  maxCells: 32,
+  /**
+   * How fast the mouse wheel zooms: each pixel of wheel movement multiplies
+   * the cells across by e^(this). 100 px (one notch, usually) is about 16 %.
+   */
+  wheelZoomRate: 0.0015,
+  /** Below this cell size in pixels the grid lines are left out, so marks stay clear. */
+  gridMinCellPx: 12,
   /** A press that moves less than this many pixels is a tap; more is a drag. */
   dragThresholdPx: 8,
   /** How long the "nothing to do there" hint stays, in milliseconds. */

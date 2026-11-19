@@ -119,9 +119,18 @@ button.small {
 
 .map-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   margin-bottom: 6px;
+}
+
+/* Every button in the row shares the width; the layer label has a row of its own. */
+.map-bar > button {
+  flex: 1 1 auto;
+  padding: 0 6px;
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 
 .layer-button {
@@ -133,7 +142,7 @@ button.small {
 }
 
 .layer-label {
-  flex: 1 1 auto;
+  flex: 1 1 100%;
   text-align: center;
   font-size: 0.85rem;
   color: #c9c0b3;
