@@ -34,6 +34,8 @@ If Android refuses with "App not installed" or a "conflicting package" message, 
 
 ## Playing
 
+![The preview at phone width (390 × 844), seed 7 after two choices](images/android-preview-390x844.png)
+
 - The gauges stay at the top. Below them: what came of your last choice, the map (your layer and the ones above and below; the legend under it explains the characters), the hazards, and what ending the shift now would do.
 - Each button is one choice, with its play-tool name and its AP cost in small print. "End the shift" is last.
 - The run is saved on the phone after every choice and resumed when you open the game again.
