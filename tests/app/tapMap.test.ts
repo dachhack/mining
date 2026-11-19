@@ -28,7 +28,7 @@ import {
   zoomRange,
   zoomedAbout,
 } from '../../src/app/map/camera';
-import { actionsForCell, tapAction } from '../../src/app/map/targets';
+import { actionsForCell, tapAction, tapIsRisky } from '../../src/app/map/targets';
 import { buildLayer, layerContext } from '../../src/app/map/tiles';
 import { choiceName, choiceWarning, tapActsAtOnce } from '../../src/app/text/describe';
 import { updateReveal } from '../../src/engine/reveal';
@@ -570,5 +570,47 @@ describe('the forest on the tap map (issue #70)', () => {
     const cut = tapAction(state, 0, 2, 1);
     expect(cut !== null && choiceWarning(state, cut)).toContain('too heavy');
     expect(cut !== null && tapActsAtOnce(state, cut)).toBe(false);
+  });
+});
+
+describe('which taps need a second tap (review of PR #79)', () => {
+  it('a free chosen drop of 1 or 2 blocks is one tap; a drop that hurts is two', () => {
+    const state = seed7();
+    const move = (drop: number) => ({
+      type: 'move' as const,
+      to: { x: 17, y: 16, z: -1 },
+      drop,
+      ap: 1,
+    });
+    expect(tapIsRisky(state, move(0))).toBe(false);
+    // Design doc 5.2: a chosen drop of 1 or 2 blocks is free.
+    expect(AVATAR.freeFallBlocks).toBe(2);
+    expect(tapIsRisky(state, move(1))).toBe(false);
+    expect(tapIsRisky(state, move(2))).toBe(false);
+    // One block past the free ones costs health.
+    expect(tapIsRisky(state, move(AVATAR.freeFallBlocks + 1))).toBe(true);
+  });
+
+  it('a yield too heavy to carry, or a known fall that hurts when digging down, is two taps', () => {
+    const heavy: GameState = structuredClone(takeAll(seed7(), ['mine-down']));
+    heavy.inventory = { ...heavy.inventory, coal: AVATAR.carryCapacity - 3 };
+    const mineEast = legalActions(heavy).find((a) => choiceName(heavy, a) === 'mine-e');
+    expect(mineEast !== undefined && tapIsRisky(heavy, mineEast)).toBe(true);
+    // A plain mine, and a lone dig down onto unseen ground (PR #74), are one tap.
+    const light = takeAll(seed7(), ['mine-down']);
+    const mineWest = legalActions(light).find((a) => choiceName(light, a) === 'mine-w');
+    const dig = legalActions(light).find((a) => choiceName(light, a) === 'mine-down');
+    expect(mineWest !== undefined && tapIsRisky(light, mineWest)).toBe(false);
+    expect(dig !== undefined && tapIsRisky(light, dig)).toBe(false);
+  });
+
+  it('walking into a known one-block hole from the surface is one tap', () => {
+    // Seed 7: dig down at the start, step up east; west is now the hole,
+    // a chosen drop of 1 block onto rock the miner has seen.
+    const state = takeAll(seed7(), ['mine-down', 'e']);
+    const west = tapAction(state, 0, 16, 16);
+    expect(west).toMatchObject({ type: 'move', drop: 1 });
+    expect(west !== null && choiceWarning(state, west)).toContain('you will drop 1 block');
+    expect(west !== null && tapIsRisky(state, west)).toBe(false);
   });
 });

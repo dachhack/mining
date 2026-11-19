@@ -13,7 +13,7 @@ import { BLOCKS, SHIFT, WORLD } from '../../data';
 import type { BlockId } from '../../data';
 import { actionKey } from '../../engine';
 import type { Action, GameState } from '../../engine';
-import { choiceWarning, tapActsAtOnce } from '../text/describe';
+import { choiceWarning } from '../text/describe';
 import {
   VIEW_CELLS,
   cellAt,
@@ -34,7 +34,7 @@ import {
   UNLIT_BRIGHTNESS,
 } from './palette';
 import type { Pattern, SurfaceMark } from './palette';
-import { actionsForCell, mapLayerOf, tapAction } from './targets';
+import { actionsForCell, mapLayerOf, tapAction, tapIsRisky } from './targets';
 import { buildLayer, layerContext } from './tiles';
 import type { LayerContext, Tile } from './tiles';
 
@@ -790,8 +790,8 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
   /**
    * A tap (not a drag) at (px, py) pixels from the map's top-left corner
    * (issue #78). The tap does the cell's one action (`tapAction`) at once,
-   * unless it is risky (`tapActsAtOnce` says no: a fall that hurts or kills,
-   * a yield too heavy to carry). A risky tap marks the cell and says what the
+   * unless it is risky (`tapIsRisky`: a fall or drop that hurts or kills, a
+   * yield too heavy to carry; a free chosen drop is not risky). A risky tap marks the cell and says what the
    * risk is; a second tap on the same cell within `doubleTapMs` does it. A
    * tap anywhere else while a cell is marked only clears the mark.
    */
@@ -816,7 +816,7 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
       showHint(emptyTapHint(state, viewZ, cell.x, cell.y));
       return;
     }
-    if (tapActsAtOnce(state, action)) {
+    if (!tapIsRisky(state, action)) {
       onChoose(action);
       return;
     }

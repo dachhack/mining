@@ -16,12 +16,15 @@
 // list under the map. Crafting, placing, dropping, leaving and ending the
 // shift are only there.
 //
+// `tapIsRisky` says which taps need a second tap on the same cell.
+//
 // It reads nothing but the actions and the miner's position, so it can say
 // nothing about cells the player has not seen.
 
 import { WORLD } from '../../data';
-import { legalActions } from '../../engine';
+import { fallDamage, isFatalFall, legalActions } from '../../engine';
 import type { Action, GameState } from '../../engine';
+import { tapActsAtOnce } from '../text/describe';
 
 /** The cell an action acts on, or `null` for one that acts on no cell of the map. */
 function actionCell(action: Action): { x: number; y: number; z: number } | null {
@@ -93,4 +96,23 @@ export function tapAction(state: GameState, viewZ: number, x: number, y: number)
     }
   }
   return best;
+}
+
+/**
+ * True if a tap on `action` needs a second tap first (issue #78): a fall or
+ * drop that hurts or kills, or a yield too heavy to carry. A walk off a
+ * ledge is a chosen drop (design doc 5.2): free up to
+ * `AVATAR.freeFallBlocks`, and the engine offers it only when the miner has
+ * seen where it lands (`maxChosenDropBlocks` at most). So it is one tap
+ * unless the engine's own `fallDamage` says it costs health (review of PR
+ * #79). Everything else is as `tapActsAtOnce` says. The full list still
+ * shows every warning.
+ */
+export function tapIsRisky(state: GameState, action: Action): boolean {
+  if (action.type === 'move') {
+    return (
+      action.drop > 0 && (fallDamage('chosenDrop', action.drop) > 0 || isFatalFall(action.drop))
+    );
+  }
+  return !tapActsAtOnce(state, action);
 }
