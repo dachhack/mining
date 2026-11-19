@@ -613,4 +613,33 @@ describe('which taps need a second tap (review of PR #79)', () => {
     expect(west !== null && choiceWarning(state, west)).toContain('you will drop 1 block');
     expect(west !== null && tapIsRisky(state, west)).toBe(false);
   });
+
+  it('on the e2e fall run: digging down onto a known gap is two taps, a free 2-block drop one', () => {
+    // The route of tests/e2e/support/fallRun.ts: the cell under the block at
+    // x16 y16 was opened from the side, and the miner stands over it.
+    const state = takeAll(seed7(), [
+      's',
+      'w',
+      'mine-down',
+      'mine-e',
+      'e',
+      'end',
+      'mine-down',
+      'mine-n',
+      'w',
+      'w',
+      'end',
+      'n',
+      'e',
+      'e',
+    ]);
+    const dig = tapAction(state, 0, 16, 16);
+    expect(dig).toMatchObject({ type: 'mine', target: { x: 16, y: 16, z: 0 } });
+    expect(dig !== null && choiceWarning(state, dig)).toContain('lose 2 health');
+    expect(dig !== null && tapIsRisky(state, dig)).toBe(true);
+    // South is the stair hole, 2 blocks down onto seen rock: a free drop.
+    const south = tapAction(state, 0, 16, 17);
+    expect(south).toMatchObject({ type: 'move', drop: 2 });
+    expect(south !== null && tapIsRisky(state, south)).toBe(false);
+  });
 });

@@ -8,6 +8,7 @@ import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 
 import { SAVE_KEY } from '../../src/app/previewSession';
+import { fallRun } from './support/fallRun';
 import { heavyRun } from './support/heavyRun';
 
 async function startRun(page: Page, seed: number): Promise<void> {
@@ -191,32 +192,38 @@ test('walking into a known one-block hole is one tap: a free chosen drop (review
   await expect(canvas).toHaveAttribute('data-pending', '');
 });
 
-test('a risky tap needs a second tap on the same cell; a tap elsewhere cancels it', async ({
-  page,
-}) => {
-  // A run whose pack is too full to carry one more stone, with a stone block
-  // beside the miner (built from the engine: tests/e2e/support/heavyRun.ts).
-  // Mining it would leave the stone lying there, so the tap is risky.
-  const run = heavyRun();
+/** Save a play log as the preview's saved run, reload, and wait for the resume. */
+async function resumeRun(page: Page, logText: string): Promise<void> {
   await page.evaluate(
     ([key, text]) => {
       window.localStorage.setItem(key, text);
     },
-    [SAVE_KEY, run.logText] as const,
+    [SAVE_KEY, logText] as const,
   );
   await page.reload();
   await expect(page.getByTestId('note')).toContainText('Resumed your saved run: seed 7.');
+}
+
+test('a risky tap needs a second tap on the same cell; a tap elsewhere cancels it', async ({
+  page,
+}) => {
+  // A run where the miner stands on the surface over a block with a known
+  // gap under it (built from the engine: tests/e2e/support/fallRun.ts).
+  // Digging down is a fall the forecast knows will hurt, so the tap is risky.
+  const run = fallRun();
+  await resumeRun(page, run.logText);
   const canvas = page.getByTestId('map-canvas');
   const gauges = page.getByTestId('gauges');
   const hint = page.getByTestId('map-hint');
+  await expect(gauges).toContainText('x16 y16, the surface');
   const before = await gauges.innerText();
 
   // First tap: nothing is done; the cell is marked and the hint says why.
-  await tapCell(page, canvas, run.stone.x, run.stone.y);
+  await tapCell(page, canvas, run.miner.x, run.miner.y);
   await expect(hint).toHaveText(
-    'Tap again to mine: too heavy to carry: it will be left lying there',
+    'Tap again to dig down: you are standing on it: you will fall 2 blocks and lose 2 health',
   );
-  await expect(canvas).toHaveAttribute('data-pending', `${run.stone.x},${run.stone.y}`);
+  await expect(canvas).toHaveAttribute('data-pending', `${run.miner.x},${run.miner.y}`);
   expect(await gauges.innerText()).toBe(before);
   // A tap anywhere else only clears the mark.
   await tapCell(page, canvas, run.miner.x + 3, run.miner.y + 3);
@@ -224,9 +231,30 @@ test('a risky tap needs a second tap on the same cell; a tap elsewhere cancels i
   await expect(hint).toBeHidden();
   expect(await gauges.innerText()).toBe(before);
 
-  // Two taps on the same cell: done.
+  // Two taps on the same cell: done, and the fall hurts as forecast.
+  await tapCell(page, canvas, run.miner.x, run.miner.y);
+  await expect(canvas).toHaveAttribute('data-pending', `${run.miner.x},${run.miner.y}`);
+  await tapCell(page, canvas, run.miner.x, run.miner.y);
+  await expect(gauges).toContainText('Health 8/10');
+  await expect(gauges).toContainText('layer 1');
+  await expect(canvas).toHaveAttribute('data-pending', '');
+});
+
+test('a yield too heavy to carry also needs a second tap', async ({ page }) => {
+  // A run whose pack is too full to carry one more stone, with a stone block
+  // beside the miner (built from the engine: tests/e2e/support/heavyRun.ts).
+  const run = heavyRun();
+  await resumeRun(page, run.logText);
+  const canvas = page.getByTestId('map-canvas');
+  const gauges = page.getByTestId('gauges');
+  const before = await gauges.innerText();
+
   await tapCell(page, canvas, run.stone.x, run.stone.y);
+  await expect(page.getByTestId('map-hint')).toHaveText(
+    'Tap again to mine: too heavy to carry: it will be left lying there',
+  );
   await expect(canvas).toHaveAttribute('data-pending', `${run.stone.x},${run.stone.y}`);
+  expect(await gauges.innerText()).toBe(before);
   await tapCell(page, canvas, run.stone.x, run.stone.y);
   await expect(page.getByTestId('outcome')).toContainText(': Stone');
   await expect(canvas).toHaveAttribute('data-pending', '');
