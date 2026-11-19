@@ -327,7 +327,8 @@ describe('mineral traces', () => {
     expect(visibleMineralTraces(state)).toEqual([]);
   });
 
-  // The avatar stands on a ladder in a pit; the ore is the pit's floor.
+  // The avatar stands in a pit; the ore is the pit's floor. Mining it moves
+  // the avatar down into the ore's cell (issue #80).
   function pitOverOre(): GameState {
     return looked(
       buildState({
@@ -337,7 +338,6 @@ describe('mineral traces', () => {
         ],
         avatar: { x: 1, y: 1, z: 0 },
         revealAll: true,
-        ladders: [{ x: 1, y: 1, z: 0 }],
       }),
     );
   }

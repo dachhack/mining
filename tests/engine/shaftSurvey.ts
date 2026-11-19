@@ -6,20 +6,18 @@
 // Everything is read the way a player would get it: traces from the
 // `mineralTracesSeen` events, ore from the `blockRevealed` events.
 
-import { BLOCKS, CONTRACT_IDS, DEFAULT_LOADOUT_ID, STRUCTURES, TELLS, WORLD } from '../../src/data';
+import { BLOCKS, CONTRACT_IDS, DEFAULT_LOADOUT_ID, TELLS } from '../../src/data';
 import type { Vec3 } from '../../src/data';
 import {
   applyAction,
   blockAt,
   cellPosition,
-  countItem,
   createRun,
   endShift,
   isRevealed,
   isRunActive,
   isSolid,
   legalActions,
-  structureAt,
   visibleMineralTraces,
 } from '../../src/engine';
 import type { Action, GameEvent, GameState } from '../../src/engine';
@@ -62,14 +60,10 @@ function oreIsRevealed(state: GameState, ores: Set<number>): boolean {
  * Start a run on `seed` and dig a one-cell shaft straight down from the start
  * cell until the miner stands in layer `targetLayer`, or cannot go on.
  *
- * Mining the block underfoot with nothing to hold on to is an uncontrolled
- * fall that costs health (decision note 0010), so the miner does what a
- * careful player would. Each layer: put a ladder in its own cell, mine the
- * block underfoot, climb down off the ladder (a drop of 1, which is free).
- * Ladders come from the starting kit, then from crafting its timber. Nothing
- * can be placed on the surface, so the first block is mined standing on it,
- * for a fall of one block. When the step it wants is not affordable, it ends
- * the shift.
+ * Each layer: mine the block underfoot, which moves the miner down into it
+ * (issue #80: no gravity, no ladders), or move down if the cell below is
+ * already open. When the step it wants is not affordable, it ends the
+ * shift.
  */
 export function surveyShaft(seed: number, targetLayer: number): ShaftSurvey {
   let state = createRun(seed, CONTRACT_IDS[0] ?? 'none', DEFAULT_LOADOUT_ID);
@@ -102,25 +96,18 @@ export function surveyShaft(seed: number, targetLayer: number): ShaftSurvey {
   function nextAction(): Action | undefined {
     const here = state.avatar.pos;
     const below = { x: here.x, y: here.y, z: here.z + 1 };
-    const isHere = (pos: Vec3): boolean => samePosition(pos, here);
     const isBelow = (pos: Vec3): boolean => samePosition(pos, below);
     const legal = legalActions(state);
 
-    const onSurface = here.z === WORLD.surfaceZ;
-    const onLadder = !onSurface && structureAt(state, here) === STRUCTURES.ladder.code;
-    if (!onSurface && !onLadder) {
-      if (countItem(state, 'ladder') === 0) {
-        return legal.find((action) => action.type === 'craft' && action.recipe === 'ladder');
-      }
-      return legal.find((action) => action.type === 'placeLadder' && isHere(action.target));
-    }
+    // The miner has no gravity (issue #80): dig the block below, which moves
+    // it down, or move down into the cell below if it is already open.
     if (isSolid(state, below)) {
       return legal.find((action) => action.type === 'mine' && isBelow(action.target));
     }
     return legal.find((action) => action.type === 'move' && isBelow(action.to));
   }
 
-  // Two ends of shift in a row mean the miner is stuck (out of ladders, say).
+  // Two ends of shift in a row mean the miner is stuck.
   let shiftsEndedInARow = 0;
   // A guard against a loop that never ends, should the rules change.
   for (let step = 0; step < 1000; step += 1) {

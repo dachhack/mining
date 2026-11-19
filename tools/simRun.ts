@@ -40,7 +40,7 @@ export interface RunMetrics {
   /** 'salvage' or 'death' as the engine reports them, or 'unfinished' at the shift cap. */
   outcome: string;
   /**
-   * 'left', 'fell' or 'outOfFuel' as the engine reports them; 'shiftCap' for a
+   * 'left' or 'outOfFuel' as the engine reports them; 'shiftCap' for a
    * run stopped at `maxShifts`; or 'cutShort' for one stopped at
    * `maxDecisions` (which `npm run sim` never sets, so it never prints it).
    */
@@ -68,7 +68,7 @@ export interface RunMetrics {
   legalActionsPerDecision: Spread;
   /** Recipe id -> times crafted. Every field recipe is listed, so unused ones show 0. */
   recipesUsed: Record<string, number>;
-  /** Item or gauge id -> amount made by crafting (3 per ladder craft, and so on). */
+  /** Item or gauge id -> amount made by crafting (3 per fuel craft, and so on). */
   itemsCrafted: Record<string, number>;
   /** Structure id -> number placed. */
   structuresPlaced: Record<string, number>;
@@ -341,7 +341,7 @@ export interface AggregateMetrics {
   runs: number;
   /** Outcome -> number of runs. 'salvage', 'death' and 'unfinished' are always listed. */
   outcomes: Record<string, number>;
-  /** Cause -> number of runs. 'left', 'fell', 'outOfFuel' and 'shiftCap' are always listed. */
+  /** Cause -> number of runs. 'left', 'outOfFuel' and 'shiftCap' are always listed. */
   causes: Record<string, number>;
   shiftsPlayed: SpreadWithMedian;
   deepestLayer: SpreadWithMedian;
@@ -402,7 +402,7 @@ function combineSpreads(spreads: Spread[]): Spread {
 
 export function aggregate(runs: RunMetrics[]): AggregateMetrics {
   const outcomes = zeroCounts(['salvage', 'death', 'unfinished']);
-  const causes = zeroCounts(['left', 'fell', 'outOfFuel', 'shiftCap']);
+  const causes = zeroCounts(['left', 'outOfFuel', 'shiftCap']);
   const recipesUsed: Record<string, { crafts: number; runs: number }> = {};
   for (const recipe of FIELD_RECIPES) {
     recipesUsed[recipe.id] = { crafts: 0, runs: 0 };

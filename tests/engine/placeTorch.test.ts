@@ -62,12 +62,12 @@ describe('placing a torch (0005 item 19)', () => {
     });
     expect(findActions(onSurface, { type: 'placeTorch' })).toEqual([]);
 
-    // A ladder to the east and a torch to the west leave only its own cell.
+    // A support to the east and a torch to the west leave only its own cell.
     const crowded = buildState({
       layers: tunnelLayers(4),
       avatar: inTunnel(1),
       inventory: { torch: 1 },
-      ladders: [inTunnel(2)],
+      supports: [inTunnel(2)],
       torches: [inTunnel(0)],
     });
     expect(findActions(crowded, { type: 'placeTorch' })).toEqual([

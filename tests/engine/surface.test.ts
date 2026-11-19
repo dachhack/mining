@@ -86,10 +86,10 @@ describe('a tree blocks walking (issue #70 items 1 and 4)', () => {
     expect(findActions(state, { type: 'move', to: { x: 0, y: 1, z: -1 } })).toHaveLength(1);
   });
 
-  it('nor is a step up out of a hole into a tree', () => {
-    // A hole at (1, 1, 0): the miner stands in it. East of it is the ground
-    // under a tree, rock with a tree on top: no step up east. West is the
-    // same rock under a meadow: a step up west is offered.
+  it('from a hole, the way out is straight up, never diagonally into a tree (issue #80)', () => {
+    // A hole at (1, 1, 0) under a meadow: the miner stands in it. The tree
+    // east of the cell above is not a face neighbour, so it is no way out;
+    // the meadow straight above is.
     const state = forestState({
       layers: [
         ['ddd', 'd.d', 'ddd'],
@@ -98,13 +98,14 @@ describe('a tree blocks walking (issue #70 items 1 and 4)', () => {
       avatar: { x: 1, y: 1, z: 0 },
     });
     expect(findActions(state, { type: 'move', to: EAST })).toEqual([]);
-    expect(findActions(state, { type: 'move', to: { x: 0, y: 1, z: -1 } })).toHaveLength(1);
+    expect(findActions(state, { type: 'move', to: { x: 0, y: 1, z: -1 } })).toEqual([]);
+    expect(findActions(state, { type: 'move', to: { x: 1, y: 1, z: -1 } })).toHaveLength(1);
   });
 
-  it('a tree over a hole dug under it from the side is a roof: no step up out of it', () => {
+  it('a tree over a hole dug under it from the side is a roof: no move up out of it', () => {
     // The miner stands at (2, 1, 0), under the east tree, in a hole dug from
-    // the hole at (1, 1, 0). Rock lies north and south of it with meadow on
-    // top, but the tree overhead leaves no headroom (review of PR #72).
+    // the hole at (1, 1, 0). The tree overhead blocks the move up (review of
+    // PR #72; issue #80).
     const state = forestState({
       layers: [
         ['ddd', 'd..', 'ddd'],
@@ -113,11 +114,10 @@ describe('a tree blocks walking (issue #70 items 1 and 4)', () => {
       surface: ['...', '..T', '...'],
       avatar: { x: 2, y: 1, z: 0 },
     });
-    expect(findActions(state, { type: 'move', to: { x: 2, y: 0, z: -1 } })).toEqual([]);
-    expect(findActions(state, { type: 'move', to: { x: 2, y: 2, z: -1 } })).toEqual([]);
-    // Back west into the hole, from where a step up is offered.
+    expect(findActions(state, { type: 'move', to: EAST })).toEqual([]);
+    // Back west into the hole, from where the move up is offered.
     const west = act(state, { type: 'move', to: { x: 1, y: 1, z: 0 } }).state;
-    expect(findActions(west, { type: 'move', to: { x: 1, y: 0, z: -1 } })).toHaveLength(1);
+    expect(findActions(west, { type: 'move', to: { x: 1, y: 1, z: -1 } })).toHaveLength(1);
   });
 
   it('a cut tree leaves a stump, which can be walked on', () => {
@@ -233,6 +233,8 @@ function digUnderEastStump(start: GameState): GameState {
   let state = act(start, { type: 'move', to: EAST }).state;
   state = act(state, { type: 'mine', target: UNDER_EAST }).state;
   state = endShift(state).state; // fresh AP
+  // Digging down put the miner in the hole: up out of it, then back west.
+  state = act(state, { type: 'move', to: EAST }).state;
   return act(state, { type: 'move', to: { x: 1, y: 1, z: -1 } }).state;
 }
 

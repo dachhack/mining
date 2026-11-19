@@ -100,8 +100,6 @@ export interface BuildStateOptions {
   /** Item id -> count. Default: nothing carried. */
   inventory?: Record<string, number>;
   looseItems?: LooseItems[];
-  /** Cells with a ladder in them. */
-  ladders?: Vec3[];
   /** Cells with a torch in them. */
   torches?: Vec3[];
   /** Cells with a support in them. */
@@ -172,7 +170,6 @@ export function buildState(options: BuildStateOptions): GameState {
   if (options.revealAll === true) {
     state.revealed.fill(1);
   }
-  placeStructures(state, options.ladders ?? [], 'ladder');
   placeStructures(state, options.torches ?? [], 'torch');
   placeStructures(state, options.supports ?? [], 'support');
   for (const entry of options.structures ?? []) {

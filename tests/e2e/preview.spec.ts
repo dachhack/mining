@@ -42,7 +42,7 @@ test('a run on a fixed seed is played by tapping choices in the full list', asyn
   await page.getByRole('button', { name: 'Mine below you' }).click();
   // The same two choices in `npm run play -- --seed 7 --do e,mine-down` give the same gauges.
   await expect(gauges).toContainText('AP 2/5');
-  // Digging down onto rock is a safe one-block drop (issue #75): no health lost.
+  // Digging down moves the miner into the dug cell (issues #75 and #80): no health lost.
   await expect(gauges).toContainText('Health 10/10');
   await expect(gauges).toContainText('layer 0');
 

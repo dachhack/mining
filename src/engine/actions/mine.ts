@@ -26,9 +26,9 @@ import { isUnderTree } from '../surface/state';
  *
  * Minecraft-style reach (owner, issue #75; decision note 0022): the pick
  * reaches the avatar's face neighbours only.
- * - North, east, south, west on the avatar's level, and the block below (the
- *   block it stands on: mining it drops the avatar into its cell, see
- *   `isDigDown` and the dispatcher in index.ts). No diagonals.
+ * - North, east, south, west on the avatar's level, and the block below
+ *   (mining it moves the avatar down into its cell: see `applyMine`). No
+ *   diagonals.
  * - The block overhead only with a support in the avatar's own cell, which
  *   holds up what is above (0014 item 9). Supports cannot be placed yet
  *   (M2-3, #53), so today this is never offered in play.
@@ -90,13 +90,20 @@ export function legalMineActions(state: GameState): MineAction[] {
  *   loose in the mined cell (`itemLeft`; 0005 item 16). A stack is never
  *   split. Every yield in the data is a single item today, so there is
  *   nothing to split.
+ * - Digging down (the block below the avatar; `isDigDown`): the avatar then
+ *   moves into the cell it dug, and `moved` follows the yield's events. So
+ *   digging down stays one action (owner, issue #75). The avatar has no
+ *   gravity (owner, issue #80), so it goes no further: if the cell under the
+ *   dug one is open, it stays where it now is (decision note 0024).
  * - Changes `state` in place (it is the dispatcher's private copy). Does not
- *   spend the AP, apply gravity or reveal: the dispatcher does those, in that
- *   order. So if the avatar mined its own floor, `settle` makes it fall; and
- *   a yield left in a cell with no floor falls too.
+ *   spend the AP, settle loose items or reveal: the dispatcher does those, in
+ *   that order. So a yield left in a cell with no floor falls.
  */
 export function applyMine(state: GameState, action: MineAction, events: GameEvent[]): void {
   const target = action.target;
+  // Asked before the block is opened: `isDigDown` only compares positions,
+  // but reading it here keeps the order of the rule plain.
+  const digDown = isDigDown(state, action);
   const minedCode = blockAt(state, target);
   const yields = blockDefAt(state, target).yields;
 
@@ -112,11 +119,17 @@ export function applyMine(state: GameState, action: MineAction, events: GameEven
       events.push({ type: 'itemLeft', pos: { ...target }, item: stack.item, count: stack.count });
     }
   }
+
+  if (digDown) {
+    const from = { ...state.avatar.pos };
+    state.avatar.pos = { ...target };
+    events.push({ type: 'moved', from, to: { ...target } });
+  }
 }
 
 /**
- * True if `action` mines the block the avatar stands on: digging down
- * (issue #75). The dispatcher uses it to decide what kind of fall follows.
+ * True if `action` mines the block directly below the avatar: digging down
+ * (issue #75). Digging down moves the avatar into the dug cell.
  */
 export function isDigDown(state: GameState, action: MineAction): boolean {
   const below = offsetPosition(state.avatar.pos, { x: 0, y: 0, z: 1 });

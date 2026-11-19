@@ -36,13 +36,10 @@ import {
   legalActions,
   previewCubePhase,
   serialise,
-  structureAt,
 } from '../../src/engine';
 import type { GameState } from '../../src/engine';
 import type { Vec3 } from '../../src/data';
-import { cloneState, setBlock, setRevealed, setStructure } from '../../src/engine/state';
-import { updateReveal } from '../../src/engine/reveal';
-import { buildState } from './helpers';
+import { cloneState, setBlock, setStructure } from '../../src/engine/state';
 import { decisionKey, makePolicy } from '../../tools/policies';
 import { playRun } from '../../tools/simRun';
 import { buildView, renderView } from '../../src/app/text/view';
@@ -67,7 +64,6 @@ function isWholeNumber(value: number): boolean {
 function invariantProblems(state: GameState): string[] {
   const problems: string[] = [];
   const pos = state.avatar.pos;
-  const below = { x: pos.x, y: pos.y, z: pos.z + 1 };
 
   // Gauges and counters.
   if (!isWholeNumber(state.ap) || state.ap < 0 || state.ap > SHIFT.apPerShift) {
@@ -103,16 +99,13 @@ function invariantProblems(state: GameState): string[] {
     problems.push(`carried weight ${carriedWeight(state)} is over the limit ${carryCapacity()}`);
   }
 
-  // The avatar: inside the world, in an open cell, held up by rock or a ladder.
+  // The avatar: inside the world, in an open cell. It needs nothing under it:
+  // the miner has no gravity (issue #80).
   if (!inGrid(state.size, pos) && !isSurface(state.size, pos)) {
     problems.push(`the avatar is outside the world at (${pos.x}, ${pos.y}, ${pos.z})`);
   }
   if (!isOpen(state, pos)) {
     problems.push(`the avatar is inside a block at (${pos.x}, ${pos.y}, ${pos.z})`);
-  }
-  const onLadder = structureAt(state, pos) === STRUCTURES.ladder.code;
-  if (!isSolid(state, below) && !onLadder) {
-    problems.push(`the avatar has no footing at (${pos.x}, ${pos.y}, ${pos.z})`);
   }
 
   // Loose items: a positive count, in an open cell, resting on a solid block.
@@ -245,22 +238,20 @@ describe('property tests: random legal play', () => {
 // goes out, so it is run with the lamp lit, out, and running out.
 
 // How far around the avatar to look for cells that matter. No rule looks
-// further than this. Sideways and up, reach is 1 cell. Down, the furthest
-// cell any rule reads is the floor that ends the longest drop a move may
-// choose, taken from a ladder: 1 cell climbed, `maxChosenDropBlocks` fallen,
-// and the floor below that. The window goes 2 cells beyond it, and follows
-// the data value if that is ever raised.
+// further than this: moves and the pick reach the six face neighbours only
+// (issues #75 and #80). The window goes 2 cells beyond that each way.
 const NEAR_SIDEWAYS = 3;
-const NEAR_ABOVE = 2;
-const NEAR_BELOW = AVATAR.maxChosenDropBlocks + 4;
+const NEAR_ABOVE = 3;
+const NEAR_BELOW = 3;
 
 /**
  * The unrevealed cells near the avatar whose content changes `legalActions`.
  * Each one in turn is changed in a copy of the state, in two ways, and the
  * copy's action list is compared with the original's:
  * - the block is swapped (open becomes stone, solid becomes air);
- * - the cell is made open with a ladder in it (footing depends on ladders
- *   as well as on rock, so a ladder nobody has seen must not matter either).
+ * - the cell is made open with a support in it (a support in the miner's
+ *   cell lets it mine overhead, so a support nobody has seen must not
+ *   matter either). Until issue #80 this was a ladder, which was footing.
  * If the list changed, the player could learn what an unseen cell holds by
  * reading the list, so the result must be empty.
  *
@@ -280,12 +271,12 @@ function unseenCellsThatChangeTheActionList(state: GameState): Vec3[] {
         }
         const swapped = cloneState(state);
         setBlock(swapped, pos, isOpen(state, pos) ? BLOCKS.stone.code : BLOCKS.air.code);
-        const withLadder = cloneState(state);
-        setBlock(withLadder, pos, BLOCKS.air.code);
-        setStructure(withLadder, pos, STRUCTURES.ladder.code);
+        const withSupport = cloneState(state);
+        setBlock(withSupport, pos, BLOCKS.air.code);
+        setStructure(withSupport, pos, STRUCTURES.support.code);
         if (
           JSON.stringify(legalActions(swapped)) !== before ||
-          JSON.stringify(legalActions(withLadder)) !== before
+          JSON.stringify(legalActions(withSupport)) !== before
         ) {
           found.push(pos);
         }
@@ -346,8 +337,9 @@ describe('property tests: unrevealed cells do not change the action list (issues
   // starting lamp oil, which shortened the runs of seeds 16 and 20 to just
   // under the number needed, so seeds 19 and 37 took their place. Seed 5
   // took the place of seed 11 with issue #75, whose run it shortened to 128
-  // decisions.)
-  it.each([5, 19, 37])(
+  // decisions. Seeds 12, 15 and 49 took the places of 5, 19 and 37 with
+  // issue #80, which shortened their runs to 145, 136 and 143 decisions.)
+  it.each([12, 15, 49])(
     'with the lamp lit at the start, seed %i',
     (seed) => {
       const { checks } = playAndCheckUnseenCells(seed, null, 300, 4);
@@ -360,8 +352,10 @@ describe('property tests: unrevealed cells do not change the action list (issues
   // shortened seed 27's run in the dark to 57 checks; seed 38 took the place
   // of seed 23 when the top layer stopped being known from the start (73).
   // Seeds 19 and 44 took the places of seeds 38 and 47 with issue #75, which
-  // shortened their runs in the dark to 75 and 67 checks.
-  it.each([19, 34, 44])(
+  // shortened their runs in the dark to 75 and 67 checks. Seeds 57, 58 and
+  // 60 took the places of 19, 34 and 44 with issue #80 (no gravity), which
+  // shortened those runs to 130, 139 and 131 decisions.
+  it.each([57, 58, 60])(
     'with the lamp out from the start, seed %i',
     (seed) => {
       const { checks, checksWithLampOut } = playAndCheckUnseenCells(seed, 0, 300, 2);
@@ -450,13 +444,14 @@ function playAndCheckGroundUnderTrees(
 }
 
 describe('property tests: the ground under a tree changes nothing the player gets (issue #70)', () => {
-  // Seeds whose wander or random run cuts trees on the surface (182 cuts eight
-  // and sees three grow back: tests/golden), and two that dig near the start.
+  // Seeds whose wander or random run cuts trees on the surface (150 cuts five
+  // and sees three grow back: tests/golden; it took the place of 182 with
+  // issue #80), and two that dig near the start.
   // (Random seed 123 took the place of 110 with issue #75: seed 110's random
   // run now leaves the cube after 6 decisions.)
   // (The coal policy now finds coal in sight within a few steps and leaves.)
   it.each([
-    [182, 'wander'],
+    [150, 'wander'],
     [46, 'wander'],
     [3, 'wander'],
     [123, 'random'],
@@ -518,28 +513,6 @@ function whatThePlayerGetsNearTheMiner(state: GameState): string {
 }
 
 describe('property tests: unseen cells change nothing the player gets (issue #75)', () => {
-  // A state no policy reaches: the cell under the block underfoot is known
-  // to be open, and the one under that is unseen. The dig-down text then
-  // says "you will fall 2 blocks or more ... unseen", and must not depend on
-  // what the unseen cell holds (review of PR #74).
-  it('a known open cell under the block underfoot, and an unseen one below it', () => {
-    const solid = ['#####', '#####', '#####', '#####', '#####'];
-    const pocket = ['#####', '#####', '##.##', '#####', '#####'];
-    const state = buildState({
-      layers: [solid, pocket, solid, pocket, solid, solid, solid, solid],
-      avatar: { x: 2, y: 2, z: 1 },
-    });
-    updateReveal(state, []);
-    // As if seen earlier from a side tunnel.
-    setRevealed(state, { x: 2, y: 2, z: 3 }, true);
-    expect(isRevealed(state, { x: 2, y: 2, z: 4 })).toBe(false);
-    const before = whatThePlayerGetsNearTheMiner(state);
-    expect(before).toContain('you will fall 2 blocks or more');
-    for (const code of [BLOCKS.air.code, BLOCKS.stone.code]) {
-      expect(whatThePlayerGetsNearTheMiner(withUnseenCells(state, code)) === before).toBe(true);
-    }
-  });
-
   it.each([
     [8, 'staircase'],
     [11, 'staircase'],

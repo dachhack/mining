@@ -15,7 +15,6 @@ export const SHIFT: ShiftData = {
 // Leaving has no cost given anywhere; 0 is assumed (owner question 27).
 export const ACTION_COSTS: ActionCostData = {
   move: 1,
-  placeLadder: 1,
   placeTorch: 1,
   craft: 1,
   pickUp: 0,

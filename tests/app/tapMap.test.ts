@@ -28,7 +28,7 @@ import {
   zoomRange,
   zoomedAbout,
 } from '../../src/app/map/camera';
-import { actionsForCell, tapAction, tapIsRisky } from '../../src/app/map/targets';
+import { actionsForCell, tapAction, tapIsRisky, verticalAction } from '../../src/app/map/targets';
 import { buildLayer, layerContext } from '../../src/app/map/tiles';
 import { choiceName, choiceWarning, tapActsAtOnce } from '../../src/app/text/describe';
 import { updateReveal } from '../../src/engine/reveal';
@@ -72,7 +72,7 @@ function sampleStates(): { name: string; state: GameState }[] {
 }
 
 /**
- * Change every unseen cell: open or solid, and when open, a ladder and loose
+ * Change every unseen cell: open or solid, and when open, a support and loose
  * coal in it. Ore is left alone: mineral traces on seen rock depend on
  * nearby ore by design (decision note 0012), and that is the engine's rule.
  */
@@ -89,7 +89,7 @@ function changeUnseen(state: GameState, toOpen: boolean): GameState {
     }
     copy.blocks[index] = toOpen ? BLOCKS.air.code : BLOCKS.crystal.code;
     if (toOpen) {
-      copy.structures[index] = STRUCTURES.ladder.code;
+      copy.structures[index] = STRUCTURES.support.code;
       loose.push({ pos, item: 'coal', count: 2 });
     }
   }
@@ -250,14 +250,14 @@ describe('what a tap on the map does (issues #66 and #78)', () => {
     expect(tapNames(state, 1, x + 1, y)).toEqual([]);
   });
 
-  it('in a hole in the top layer: a tap on a neighbouring block mines it, before stepping up onto it', () => {
+  it('in a hole in the top layer: a tap on a neighbouring block mines it', () => {
     // Seed 7 after digging down: the miner is at x16 y16 in layer 0, dirt to
-    // the west, stone to the east. East also offers a step up onto the
-    // surface over that stone; on the top view both are on the same cell, and
-    // mining goes first (issue #78's priority). The step up is in the full list.
+    // the west, stone to the east. (Before issue #80 east also offered a step
+    // up onto the surface over that stone.)
     let state = takeAll(seed7(), ['mine-down']);
     const { x, y } = state.avatar.pos;
-    expect(tapNames(state, 0, x + 1, y).sort()).toEqual(['e', 'mine-e']);
+    // No step up east any more (issue #80): only the mine.
+    expect(tapNames(state, 0, x + 1, y)).toEqual(['mine-e']);
     expect(tapAction(state, 0, x + 1, y)?.type).toBe('mine');
     expect(tapNames(state, 0, x - 1, y)).toContain('mine-w');
     expect(tapAction(state, 0, x - 1, y)?.type).toBe('mine');
@@ -292,67 +292,18 @@ describe('what a tap on the map does (issues #66 and #78)', () => {
 });
 
 describe('warnings that stop a tap acting at once (issue #66)', () => {
-  it('mining underfoot warns of a fall while the cell under the block is unseen; mining beside does not', () => {
+  it('no move and no dig down carries a warning: the miner never falls (issue #80)', () => {
+    // Underground, with the cell under the block underfoot unseen: before
+    // issue #80 the dig down warned of a fall there.
     const state = takeAll(seed7(), ['mine-down']);
-    const named = (name: string) => {
-      const action = legalActions(state).find((a) => choiceName(state, a) === name);
-      if (action === undefined) throw new Error(name);
-      return action;
-    };
-    expect(choiceWarning(state, named('mine-down'))).toContain(
-      'you drop at least 1 block; if there is nothing under it',
-    );
-    expect(choiceWarning(state, named('mine-w'))).toBeNull();
-    expect(choiceWarning(state, named('n'))).toBeNull();
-  });
-
-  it('digging down is one tap while the only note is the unseen cell below (PR #74)', () => {
-    const state = takeAll(seed7(), ['mine-down']);
-    const dig = legalActions(state).find((a) => choiceName(state, a) === 'mine-down');
-    expect(dig).toBeDefined();
-    if (dig !== undefined) {
-      // The warning is still there, for the result line and the full list.
-      expect(choiceWarning(state, dig)).not.toBeNull();
-      expect(tapActsAtOnce(state, dig)).toBe(true);
+    const names = legalActions(state).map((action) => choiceName(state, action));
+    expect(names).toContain('mine-down');
+    for (const action of legalActions(state)) {
+      if (action.type === 'move' || action.type === 'mine') {
+        expect(choiceWarning(state, action), choiceName(state, action)).toBeNull();
+        expect(tapActsAtOnce(state, action)).toBe(true);
+      }
     }
-  });
-
-  it('a known fall longer than the safe drop needs a second tap', () => {
-    const state = takeAll(seed7(), ['mine-down']);
-    const { x, y, z } = state.avatar.pos;
-    // The cell under the block underfoot is open and seen, the one under it rock and seen.
-    state.blocks[cellIndex(state.size, { x, y, z: z + 2 })] = BLOCKS.air.code;
-    state.revealed[cellIndex(state.size, { x, y, z: z + 2 })] = 1;
-    state.revealed[cellIndex(state.size, { x, y, z: z + 3 })] = 1;
-    expect(state.blocks[cellIndex(state.size, { x, y, z: z + 3 })]).not.toBe(BLOCKS.air.code);
-    const dig = legalActions(state).find((a) => choiceName(state, a) === 'mine-down');
-    expect(dig).toBeDefined();
-    if (dig !== undefined) {
-      expect(choiceWarning(state, dig)).toContain('you will fall 2 blocks');
-      expect(tapActsAtOnce(state, dig)).toBe(false);
-    }
-  });
-
-  it('digging down onto rock the miner has seen is one tap: no warning (issue #75)', () => {
-    const state = takeAll(seed7(), ['mine-down']);
-    const twoBelow = { ...state.avatar.pos, z: state.avatar.pos.z + 2 };
-    // Seen by hand: as if the miner had looked there from a hole beside.
-    state.revealed[cellIndex(state.size, twoBelow)] = 1;
-    expect(state.blocks[cellIndex(state.size, twoBelow)]).not.toBe(BLOCKS.air.code);
-    const dig = legalActions(state).find((a) => choiceName(state, a) === 'mine-down');
-    expect(dig).toBeDefined();
-    if (dig !== undefined) {
-      expect(choiceWarning(state, dig)).toBeNull();
-      expect(
-        actionsForCell(state, state.avatar.pos.z, state.avatar.pos.x, state.avatar.pos.y),
-      ).toEqual([dig]);
-    }
-  });
-
-  it('a move with a drop warns of the drop', () => {
-    const state = seed7();
-    const move = { type: 'move' as const, to: { x: 1, y: 1, z: 0 }, drop: 2, ap: 1 };
-    expect(choiceWarning(state, move)).toBe('you will drop 2 blocks to layer 2');
   });
 });
 
@@ -573,73 +524,100 @@ describe('the forest on the tap map (issue #70)', () => {
   });
 });
 
-describe('which taps need a second tap (review of PR #79)', () => {
-  it('a free chosen drop of 1 or 2 blocks is one tap; a drop that hurts is two', () => {
-    const state = seed7();
-    const move = (drop: number) => ({
-      type: 'move' as const,
-      to: { x: 17, y: 16, z: -1 },
-      drop,
-      ap: 1,
-    });
-    expect(tapIsRisky(state, move(0))).toBe(false);
-    // Design doc 5.2: a chosen drop of 1 or 2 blocks is free.
-    expect(AVATAR.freeFallBlocks).toBe(2);
-    expect(tapIsRisky(state, move(1))).toBe(false);
-    expect(tapIsRisky(state, move(2))).toBe(false);
-    // One block past the free ones costs health.
-    expect(tapIsRisky(state, move(AVATAR.freeFallBlocks + 1))).toBe(true);
+describe('which taps need a second tap (review of PR #79; issue #80)', () => {
+  it('no move is ever risky: the miner never falls', () => {
+    // Seed 7 after digging down and mining west: the miner can move west,
+    // up onto the surface, and nowhere it could fall.
+    const state = takeAll(seed7(), ['mine-down', 'mine-w']);
+    const moves = legalActions(state).filter((a) => a.type === 'move');
+    expect(moves.length).toBeGreaterThan(1);
+    for (const move of moves) {
+      expect(tapIsRisky(state, move)).toBe(false);
+    }
   });
 
-  it('a yield too heavy to carry, or a known fall that hurts when digging down, is two taps', () => {
+  it('a yield too heavy to carry is two taps; a plain mine and a dig down are one', () => {
     const heavy: GameState = structuredClone(takeAll(seed7(), ['mine-down']));
     heavy.inventory = { ...heavy.inventory, coal: AVATAR.carryCapacity - 3 };
     const mineEast = legalActions(heavy).find((a) => choiceName(heavy, a) === 'mine-e');
     expect(mineEast !== undefined && tapIsRisky(heavy, mineEast)).toBe(true);
-    // A plain mine, and a lone dig down onto unseen ground (PR #74), are one tap.
     const light = takeAll(seed7(), ['mine-down']);
     const mineWest = legalActions(light).find((a) => choiceName(light, a) === 'mine-w');
     const dig = legalActions(light).find((a) => choiceName(light, a) === 'mine-down');
     expect(mineWest !== undefined && tapIsRisky(light, mineWest)).toBe(false);
     expect(dig !== undefined && tapIsRisky(light, dig)).toBe(false);
   });
+});
 
-  it('walking into a known one-block hole from the surface is one tap', () => {
-    // Seed 7: dig down at the start, step up east; west is now the hole,
-    // a chosen drop of 1 block onto rock the miner has seen.
-    const state = takeAll(seed7(), ['mine-down', 'e']);
-    const west = tapAction(state, 0, 16, 16);
-    expect(west).toMatchObject({ type: 'move', drop: 1 });
-    expect(west !== null && choiceWarning(state, west)).toContain('you will drop 1 block');
-    expect(west !== null && tapIsRisky(state, west)).toBe(false);
+describe("a tap on the miner's own cell goes down, never up (issue #80)", () => {
+  it('digs the block underfoot when it is solid', () => {
+    const state = takeAll(seed7(), ['mine-down']);
+    const { x, y } = state.avatar.pos;
+    // The own cell on the top view offers the move up to the surface too.
+    expect(tapNames(state, 0, x, y)).toContain('up');
+    expect(tapAction(state, 0, x, y)).toMatchObject({ type: 'mine', target: { x, y, z: 1 } });
   });
 
-  it('on the e2e fall run: digging down onto a known gap is two taps, a free 2-block drop one', () => {
-    // The route of tests/e2e/support/fallRun.ts: the cell under the block at
-    // x16 y16 was opened from the side, and the miner stands over it.
-    const state = takeAll(seed7(), [
-      's',
-      'w',
-      'mine-down',
-      'mine-e',
-      'e',
-      'end',
-      'mine-down',
-      'mine-n',
-      'w',
-      'w',
-      'end',
-      'n',
-      'e',
-      'e',
-    ]);
-    const dig = tapAction(state, 0, 16, 16);
-    expect(dig).toMatchObject({ type: 'mine', target: { x: 16, y: 16, z: 0 } });
-    expect(dig !== null && choiceWarning(state, dig)).toContain('lose 2 health');
-    expect(dig !== null && tapIsRisky(state, dig)).toBe(true);
-    // South is the stair hole, 2 blocks down onto seen rock: a free drop.
-    const south = tapAction(state, 0, 16, 17);
-    expect(south).toMatchObject({ type: 'move', drop: 2 });
-    expect(south !== null && tapIsRisky(state, south)).toBe(false);
+  it('moves down into the cell below when it is open, and does nothing when nothing is below', () => {
+    // A shaft dug two deep, then the miner goes back up one: below it is open.
+    const state = takeAll(seed7(), ['mine-down', 'mine-down', 'up']);
+    const { x, y, z } = state.avatar.pos;
+    expect(z).toBe(0);
+    expect(tapAction(state, 0, x, y)).toMatchObject({ type: 'move', to: { x, y, z: 1 } });
+    // On the layer below, the same column is the move down too.
+    expect(tapAction(state, 1, x, y)).toMatchObject({ type: 'move', to: { x, y, z: 1 } });
+  });
+
+  it("on the layer above, the miner's column is the move up", () => {
+    const state = takeAll(seed7(), ['mine-down', 'mine-down']);
+    const { x, y, z } = state.avatar.pos;
+    expect(z).toBe(1);
+    expect(tapAction(state, 0, x, y)).toMatchObject({ type: 'move', to: { x, y, z: 0 } });
+  });
+});
+
+describe('the Go up and Go down buttons (issue #80)', () => {
+  it('on the surface: Go up does nothing, Go down digs the block underfoot', () => {
+    const state = seed7();
+    const { x, y } = state.avatar.pos;
+    expect(verticalAction(state, 'up')).toBeNull();
+    expect(verticalAction(state, 'down')).toMatchObject({ type: 'mine', target: { x, y, z: 0 } });
+  });
+
+  it('in a hole: Go up moves out onto the surface; Go down moves into an open cell below', () => {
+    const state = takeAll(seed7(), ['mine-down', 'mine-down', 'up']);
+    const { x, y } = state.avatar.pos;
+    expect(verticalAction(state, 'up')).toMatchObject({ type: 'move', to: { x, y, z: -1 } });
+    expect(verticalAction(state, 'down')).toMatchObject({ type: 'move', to: { x, y, z: 1 } });
+  });
+
+  it("Go up mines the block overhead only with a support in the miner's cell", () => {
+    const state = takeAll(seed7(), ['mine-down', 'mine-down']);
+    const { x, y, z } = state.avatar.pos;
+    // Rock overhead? Fill the shaft above by hand, as if it had been sealed.
+    state.blocks[cellIndex(state.size, { x, y, z: z - 1 })] = BLOCKS.stone.code;
+    expect(verticalAction(state, 'up')).toBeNull();
+    state.structures[cellIndex(state.size, state.avatar.pos)] = STRUCTURES.support.code;
+    expect(verticalAction(state, 'up')).toMatchObject({
+      type: 'mine',
+      target: { x, y, z: z - 1 },
+    });
+  });
+
+  it('a dig down whose yield is too heavy to carry is risky, so Go down needs a second press', () => {
+    // On the surface over stone, with the pack full of stone.
+    const full = buildState({
+      layers: [['###'], ['###']],
+      avatar: { x: 1, y: 0, z: -1 },
+      inventory: { stone: AVATAR.carryCapacity / 2 },
+    });
+    updateReveal(full, []);
+    const down = verticalAction(full, 'down');
+    expect(down).toMatchObject({ type: 'mine', target: { x: 1, y: 0, z: 0 } });
+    expect(down !== null && tapIsRisky(full, down)).toBe(true);
+    // With room in the pack it is one press.
+    full.inventory = {};
+    const light = verticalAction(full, 'down');
+    expect(light !== null && tapIsRisky(full, light)).toBe(false);
   });
 });

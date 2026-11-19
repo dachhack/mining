@@ -75,11 +75,11 @@ describe('golden runs', () => {
 
   // The same for the surface forest (issue #70): this run cuts trees, and
   // some grow back, so the hash pins cutting, stumps and regrowth.
-  it('wander-seed-182-forest.json cuts trees, and some grow back on their stumps', () => {
-    const golden = loadGolden('wander-seed-182-forest.json');
+  it('wander-seed-150-forest.json cuts trees, and some grow back on their stumps', () => {
+    const golden = loadGolden('wander-seed-150-forest.json');
     const cuts = golden.decisions.filter((decision) => decision.startsWith('cutTree'));
     expect(cuts.length).toBeGreaterThan(0);
-    const state = replayFile('wander-seed-182-forest.json');
+    const state = replayFile('wander-seed-150-forest.json');
     let stumps = 0;
     let regrown = 0;
     for (const decision of cuts) {

@@ -283,7 +283,7 @@ describe('a stair dug with face-only reach (issue #75 item 4)', () => {
   /** Take the one legal action that matches. */
   const take = (state: GameState, wanted: object): GameState => act(state, wanted).state;
 
-  it('goes down by mine ahead, walk in, dig down; and can be walked back up to the surface', () => {
+  it('goes down by mine ahead, walk in, dig down; and can be climbed back up to the surface', () => {
     // A row of stone 6 cells long and 4 layers deep, the avatar on the
     // surface over x = 1. Nothing is revealed by hand: each step shows what
     // the next one needs, as in play.
@@ -303,14 +303,17 @@ describe('a stair dug with face-only reach (issue #75 item 4)', () => {
       state = take(state, { type: 'mine', target: { x, y: 0, z: z + 1 } });
       expect(state.avatar.pos).toEqual({ x, y: 0, z: z + 1 });
     }
-    // Every dig down was a safe one-block drop.
+    // Every dig down moved the miner one block down, unhurt.
     expect(state.avatar.health).toBe(AVATAR.startHealth);
 
-    // Back up: a step up west onto each stair, then onto the surface.
+    // Back up the way it came, one move each: up into the cell it dug down
+    // from, then west onto the stair before (issue #80: no step-up rule).
+    state = take(state, { type: 'move', to: { x: 3, y: 0, z: 1 } });
     state = take(state, { type: 'move', to: { x: 2, y: 0, z: 1 } });
+    state = take(state, { type: 'move', to: { x: 2, y: 0, z: 0 } });
     state = take(state, { type: 'move', to: { x: 1, y: 0, z: 0 } });
-    state = take(state, { type: 'move', to: { x: 0, y: 0, z: -1 } });
-    expect(state.avatar.pos).toEqual({ x: 0, y: 0, z: -1 });
+    state = take(state, { type: 'move', to: { x: 1, y: 0, z: -1 } });
+    expect(state.avatar.pos).toEqual({ x: 1, y: 0, z: -1 });
     expect(state.avatar.health).toBe(AVATAR.startHealth);
   });
 });

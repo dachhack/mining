@@ -296,22 +296,6 @@ export function validateData(data: GameData): string[] {
     'avatar.lightRadiusWithOil (at least the radius without oil)',
   );
   requireWholeAtLeast(avatar.torchLightRadius, 0, 'avatar.torchLightRadius');
-  requireWholeAtLeast(avatar.freeFallBlocks, 0, 'avatar.freeFallBlocks');
-  requireWholeAtLeast(avatar.fallDamagePerBlock, 0, 'avatar.fallDamagePerBlock');
-  requireWholeAtLeast(
-    avatar.uncontrolledFallDamagePerBlock,
-    0,
-    'avatar.uncontrolledFallDamagePerBlock',
-  );
-  requireWholeAtLeast(
-    avatar.fatalFallBlocks,
-    Math.max(0, avatar.freeFallBlocks) + 1,
-    'avatar.fatalFallBlocks (more than the free fall)',
-  );
-  requireWholeAtLeast(avatar.maxChosenDropBlocks, 0, 'avatar.maxChosenDropBlocks');
-  if (avatar.maxChosenDropBlocks >= avatar.fatalFallBlocks) {
-    problems.push('avatar.maxChosenDropBlocks must be less than avatar.fatalFallBlocks');
-  }
 
   // --- Tells ---
   const traces = data.tells.mineralTraces;

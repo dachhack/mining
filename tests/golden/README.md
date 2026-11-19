@@ -6,11 +6,11 @@ Recorded runs: seed + list of decisions → expected state hash. `golden.test.ts
 
 | File                            | What it is                                                                                                                   | Decisions | Ends                   | Hash               |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------- | ---------------------- | ------------------ |
-| `staircase-seed-8.json`         | The staircase policy: dig to layer 8, climb back, leave                                                                      | 45        | salvage, left          | `f70d356a9a965c54` |
-| `wander-seed-9.json`            | Random legal actions, never leaving, until the fuel runs out                                                                 | 136       | death, out of fuel     | `9234c7279edb4074` |
-| `random-seed-25-cut-short.json` | Random legal actions, stopped after 150 decisions in the middle of a shift                                                   | 150       | still going (`active`) | `c11212ac8f17219f` |
-| `staircase-seed-11-traces.json` | The staircase policy on a seed where it lights rock near ore: mineral traces are seen, and stay after one ore block is mined | 45        | salvage, left          | `ab0a6489cc520015` |
-| `wander-seed-182-forest.json`   | Random legal actions, never leaving, on a seed where it cuts eight trees on the surface and three grow back (issue #70)      | 177       | death, out of fuel     | `3328be20e7f62947` |
+| `staircase-seed-8.json`         | The staircase policy: dig to layer 8, go back up the way it came, leave                                                      | 54        | salvage, left          | `96fb3911f9d0f329` |
+| `wander-seed-9.json`            | Random legal actions, never leaving, until the fuel runs out                                                                 | 133       | death, out of fuel     | `9393f2325da85f5a` |
+| `random-seed-27-cut-short.json` | Random legal actions, stopped after 150 decisions with the run still going                                                   | 150       | still going (`active`) | `05502a961d337580` |
+| `staircase-seed-11-traces.json` | The staircase policy on a seed where it lights rock near ore: mineral traces are seen, and stay after one ore block is mined | 54        | salvage, left          | `445c0bc15ecec172` |
+| `wander-seed-150-forest.json`   | Random legal actions, never leaving, on a seed where it cuts five trees on the surface and three grow back (issue #70)       | 190       | death, out of fuel     | `74749a3ad6a45471` |
 
 Each file holds:
 
@@ -39,13 +39,15 @@ If the rules, the data in `src/data`, cube generation, the RNG, `serialise` or t
    ```bash
    npm run golden -- --record staircase-seed-8 --seed 8 --policy staircase
    npm run golden -- --record wander-seed-9 --seed 9 --policy wander
-   npm run golden -- --record random-seed-25-cut-short --seed 25 --policy random --max-decisions 150
+   npm run golden -- --record random-seed-27-cut-short --seed 27 --policy random --max-decisions 150
    npm run golden -- --record staircase-seed-11-traces --seed 11 --policy staircase
-   npm run golden -- --record wander-seed-182-forest --seed 182 --policy wander
+   npm run golden -- --record wander-seed-150-forest --seed 150 --policy wander
    ```
 
    Add `--description "..."` to keep a sentence about the run. A new recording may play out quite differently from the old one; check that it still covers what the table above says, and pick another seed if it does not.
 
 All five were recorded again for issue #75 (face-only reach and the safe one-block dig down made recorded mines illegal); the forest run moved from seed 181, which no longer sees a tree grow back, to seed 182.
+
+All five were recorded again for issue #80 (no gravity, no ladders): a move's action key no longer has a `drop` field, and recorded ladder actions are gone, so no old recording replays. The random run moved from seed 25, whose random run now leaves after 17 decisions, to seed 27; the forest run moved from seed 182, which no longer sees a tree grow back, to seed 150.
 
 Either way: update the table above, and say in the PR description which hashes changed and why (`CLAUDE.md`, working agreement).

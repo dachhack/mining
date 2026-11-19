@@ -35,7 +35,7 @@
 //     "aggregate": {                all runs together
 //       "runs": 1000,
 //       "outcomes": { "salvage": n, "death": n, "unfinished": n },
-//       "causes":   { "left": n, "fell": n, "outOfFuel": n, "shiftCap": n },
+//       "causes":   { "left": n, "outOfFuel": n, "shiftCap": n },
 //       "shiftsPlayed":     spread+,
 //       "deepestLayer":     spread+,   -1 is the surface
 //       "blocksMined":      spread+,
@@ -65,7 +65,7 @@
 //       {
 //         "seed": 123, "policy": "random",
 //         "outcome": "salvage" | "death" | "unfinished",
-//         "cause": "left" | "fell" | "outOfFuel" | "shiftCap",
+//         "cause": "left" | "outOfFuel" | "shiftCap",
 //         "shiftsPlayed": n,        shifts started, counting the one the run ended in
 //         "actionsTaken": n,        not counting ends of shift
 //         "deepestLayer": n, "blocksMined": n, "shareOfCubeMined": x,

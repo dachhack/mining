@@ -277,7 +277,7 @@ describe('recorded damage is applied in step (e), in order (0014 item 2)', () =>
 
   it('each cause of damage has its death (design doc 5.3)', () => {
     const deaths: [GameEvent & { type: 'damageTaken' }, string][] = [];
-    for (const cause of ['fall', 'rockfall', 'lava', 'explosion'] as const) {
+    for (const cause of ['rockfall', 'lava', 'explosion'] as const) {
       const state = tunnelState({ health: 1 });
       const events: GameEvent[] = [];
       applyRecordedDamage(state, events, [{ amount: 1, cause }]);
@@ -288,7 +288,6 @@ describe('recorded damage is applied in step (e), in order (0014 item 2)', () =>
       }
     }
     expect(deaths.map(([event, death]) => `${event.cause}: ${death}`)).toEqual([
-      'fall: fell',
       'rockfall: crushed',
       'lava: burned',
       'explosion: burned',
@@ -398,10 +397,9 @@ describe('rest (0014 item 2: only for an avatar alive after damage and air)', ()
 });
 
 describe('after step (e): settle once, then upkeep (0014 item 2)', () => {
-  it('an avatar whose floor the cube phase took falls after the damage is applied', () => {
+  it('an avatar whose floor the cube phase took stays where it is (issue #80)', () => {
     // A shaft: the avatar stands on a block that step (a) removes. It takes
-    // the recorded damage first, then falls 3 blocks uncontrolled (1 + 1 + 2
-    // damage; decision note 0010).
+    // the recorded damage, and does not fall: the miner has no gravity.
     const state = buildState({
       layers: [['.'], ['#'], ['.'], ['.'], ['#']],
       avatar: { x: 0, y: 0, z: 0 },
@@ -421,22 +419,19 @@ describe('after step (e): settle once, then upkeep (0014 item 2)', () => {
       },
       () => {
         const { state: after, events } = endShift(state);
-        expect(after.avatar.pos).toEqual({ x: 0, y: 0, z: 3 });
+        expect(after.avatar.pos).toEqual({ x: 0, y: 0, z: 0 });
         expect(events.map((event) => event.type)).toEqual([
           'damageTaken', // rockfall, in step (e)
-          'fell',
-          'damageTaken', // the fall
           'fuelChanged',
           'shiftEnded',
         ]);
-        expect(after.avatar.health).toBe(10 - 4 - 4);
+        expect(after.avatar.health).toBe(10 - 4);
       },
     );
   });
 
-  it('an avatar that step (e) kills does not then fall: it was crushed, not fell', () => {
-    // The same shaft, deeper (a fall of 8 would be fatal by itself), and the
-    // rockfall takes all the health that is left.
+  it('an avatar that step (e) kills stays where it died; loose items still fall', () => {
+    // The same shaft, deeper, and the rockfall takes all the health that is left.
     const state = buildState({
       layers: [['.'], ['#'], ['.'], ['.'], ['.'], ['.'], ['.'], ['.'], ['.'], ['#']],
       avatar: { x: 0, y: 0, z: 0 },

@@ -266,9 +266,10 @@ describe('a torch placed before the lamp goes out', () => {
       expect(isRevealed(state, pos), key(pos)).toBe(false);
       expect(mineTargets(state)).not.toContain(key(pos));
     }
-    // The floor of the new cell is not known, so the step into it is not offered.
+    // The floor of the new cell is not known. The miner has no gravity (issue
+    // #80), so that does not matter: the step into it is offered.
     expect(isRevealed(state, { ...secondBlock, z: secondBlock.z + 1 })).toBe(false);
-    expect(moveTargets(state)).not.toContain(key(secondBlock));
+    expect(moveTargets(state)).toContain(key(secondBlock));
   });
 
   it('with a torch, its light shows the cells round the new cell, and they can be mined', () => {
@@ -282,129 +283,42 @@ describe('a torch placed before the lamp goes out', () => {
       expect(isRevealed(state, pos), key(pos)).toBe(true);
       expect(mineTargets(state)).not.toContain(key(pos));
     }
-    // Its floor is revealed too, so the miner can walk on.
+    // Its floor is revealed too.
     expect(isRevealed(state, { ...secondBlock, z: secondBlock.z + 1 })).toBe(true);
     expect(moveTargets(state)).toContain(key(secondBlock));
   });
 });
 
-describe('with the lamp out, a move is offered only when it can be judged', () => {
-  it('does not offer a walk onto a floor the miner has not seen, and offers it once lit', () => {
-    const state = buildState({
-      layers: tunnelLayers(),
-      avatar: inTunnel(0),
-      lampOil: 0,
-      inventory: { coal: 1 },
-    });
+describe('with the lamp out, every open cell the miner touches can be moved into (issue #80)', () => {
+  it('offers a walk along a tunnel whose floor has not been seen', () => {
+    const state = buildState({ layers: tunnelLayers(), avatar: inTunnel(0), lampOil: 0 });
     arriveAt(state, inTunnel(3));
 
-    // East and west are open and felt, but the rock under them is not.
+    // East and west are open and felt; the rock under them is not, and it
+    // does not matter: nothing has to hold the miner up.
     expect(isRevealed(state, inTunnel(4))).toBe(true);
-    expect(findActions(state, { type: 'move' })).toEqual([]);
-
-    const { state: lit } = act(state, { type: 'craft', recipe: 'lampOil' });
-    expect(moveTargets(lit)).toEqual(keys([inTunnel(2), inTunnel(4)]));
+    expect(isRevealed(state, { ...inTunnel(4), z: inTunnel(4).z + 1 })).toBe(false);
+    expect(moveTargets(state)).toEqual(keys([inTunnel(2), inTunnel(4)]));
   });
 
-  it('still offers a walk along a tunnel whose floor was seen earlier', () => {
-    const lit = buildState({ layers: tunnelLayers(), avatar: inTunnel(3), lampOil: 1 });
-    updateReveal(lit, []);
-    const dark = waitForTheLampToGoOut(lit);
-
-    expect(moveTargets(dark)).toEqual(keys([inTunnel(2), inTunnel(4)]));
-    // And after the step, the next one: the lamp showed 3 cells of floor each way.
-    const { state: next } = act(dark, { type: 'move', to: inTunnel(4) });
-    expect(moveTargets(next)).toEqual(keys([inTunnel(3), inTunnel(5)]));
-  });
-
-  // A one-row cube seen from the side. The avatar stands at (0,0,1); beside
-  // it at x = 1 is the top of a pit 1 deep.
-  //
-  //            x: 0 1 2
-  //   z = 0       # # #
-  //   z = 1       @ . #
-  //   z = 2       # . #
-  //   z = 3       # # #
-  const pitLayers = [['###'], ['..#'], ['#.#'], ['###']];
-  const besideThePit: Vec3 = { x: 0, y: 0, z: 1 };
-  const overThePit: Vec3 = { x: 1, y: 0, z: 1 };
-
-  it('does not offer a walk off an edge whose drop it cannot judge, and offers it once lit', () => {
-    const dark = buildState({
-      layers: pitLayers,
-      avatar: besideThePit,
-      lampOil: 0,
-      inventory: { coal: 1 },
-    });
-    updateReveal(dark, []);
-
-    // No looking over the edge in the dark: the pit is not seen.
-    expect(isRevealed(dark, { x: 1, y: 0, z: 2 })).toBe(false);
-    expect(findActions(dark, { type: 'move' })).toEqual([]);
-
-    const { state: lit } = act(dark, { type: 'craft', recipe: 'lampOil' });
-    expect(findActions(lit, { type: 'move' })).toEqual([
-      { type: 'move', to: overThePit, drop: 1, ap: 1 },
-    ]);
-  });
-
-  it('does not offer a climb down off a ladder whose drop it cannot judge', () => {
-    // A shaft seen from the side, the avatar on a single ladder at its top
-    // with the floor 2 below: (1,0,0) ladder, (1,0,1) open, (1,0,2) rock.
-    const layers = [['#.#'], ['#.#'], ['###'], ['###']];
-    const top: Vec3 = { x: 1, y: 0, z: 0 };
-    const dark = buildState({
-      layers,
-      avatar: top,
-      ladders: [top],
-      lampOil: 0,
-      inventory: { coal: 1 },
-    });
-    updateReveal(dark, []);
-
-    // The cell below is felt; what is under it is not.
-    expect(findActions(dark, { type: 'move', to: { x: 1, y: 0, z: 1 } })).toEqual([]);
-
-    const { state: lit } = act(dark, { type: 'craft', recipe: 'lampOil' });
-    expect(findActions(lit, { type: 'move', to: { x: 1, y: 0, z: 1 } })).toEqual([
-      { type: 'move', to: { x: 1, y: 0, z: 1 }, drop: 0, ap: 1 },
-    ]);
-  });
-
-  it('offers a climb down onto a ladder it can feel, whatever is under that', () => {
-    const layers = [['#.#'], ['#.#'], ['#.#'], ['#.#'], ['#.#'], ['###']];
-    const top: Vec3 = { x: 1, y: 0, z: 0 };
-    const next: Vec3 = { x: 1, y: 0, z: 1 };
-    const dark = buildState({ layers, avatar: top, ladders: [top, next], lampOil: 0 });
-    updateReveal(dark, []);
-
-    expect(findActions(dark, { type: 'move', to: next })).toEqual([
-      { type: 'move', to: next, drop: 0, ap: 1 },
-    ]);
-  });
-
-  it('does not offer a step up onto a cell it has not seen, and offers it once lit', () => {
-    // Seen from the side: the avatar at (0,0,1) with headroom, a block beside
-    // it at (1,0,1) and an open cell on top of that block at (1,0,0).
+  it('offers a move out over a pit, and down into it, without seeing its bottom', () => {
+    // A one-row cube seen from the side. The avatar stands at (0,0,1); beside
+    // it at x = 1 is the top of a pit 1 deep.
     //
     //            x: 0 1 2
-    //   z = 0       . . #
-    //   z = 1       @ # #
-    //   z = 2       # # #
-    //
-    // Two layers of rock above keep daylight out; they shift every z by 2.
-    const layers = [['###'], ['###'], ['..#'], ['.##'], ['###']];
-    const start: Vec3 = { x: 0, y: 0, z: 3 };
-    const onTop: Vec3 = { x: 1, y: 0, z: 2 };
-    const dark = buildState({ layers, avatar: start, lampOil: 0, inventory: { coal: 1 } });
+    //   z = 0       # # #
+    //   z = 1       @ . #
+    //   z = 2       # . #
+    //   z = 3       # # #
+    const layers = [['###'], ['..#'], ['#.#'], ['###']];
+    const overThePit: Vec3 = { x: 1, y: 0, z: 1 };
+    const dark = buildState({ layers, avatar: { x: 0, y: 0, z: 1 }, lampOil: 0 });
     updateReveal(dark, []);
+    expect(isRevealed(dark, { x: 1, y: 0, z: 2 })).toBe(false);
+    expect(findActions(dark, { type: 'move' })).toEqual([{ type: 'move', to: overThePit, ap: 1 }]);
 
-    expect(isRevealed(dark, onTop)).toBe(false);
-    expect(findActions(dark, { type: 'move' })).toEqual([]);
-
-    const { state: lit } = act(dark, { type: 'craft', recipe: 'lampOil' });
-    expect(findActions(lit, { type: 'move' })).toEqual([
-      { type: 'move', to: onTop, drop: 0, ap: 1 },
-    ]);
+    const { state: over } = act(dark, { type: 'move', to: overThePit });
+    // Now the cell below is felt, and open: the miner may move down into it.
+    expect(findActions(over, { type: 'move', to: { x: 1, y: 0, z: 2 } })).toHaveLength(1);
   });
 });

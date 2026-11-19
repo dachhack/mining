@@ -10,7 +10,6 @@ export type ItemId =
   | 'rareOre'
   | 'relic'
   | 'keystone'
-  | 'ladder'
   | 'support'
   | 'torch'
   | 'ironIngot'
@@ -41,7 +40,6 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   rareOre: { name: 'Rare ore', weight: 2 },
   relic: { name: 'Relic', weight: 2 },
   keystone: { name: 'Keystone', weight: 2 },
-  ladder: { name: 'Ladder', weight: 0 },
   support: { name: 'Support', weight: 2 },
   torch: { name: 'Torch', weight: 1 },
   // Camp-made items (design doc 7.2). Weights: decision note 0014 items 25

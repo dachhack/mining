@@ -13,7 +13,6 @@ export const SYMBOL_UNKNOWN = '?';
 export const SYMBOL_OPEN = '.';
 export const SYMBOL_EDGE = 'X';
 export const SYMBOL_ITEMS = '*';
-export const SYMBOL_LADDER = '=';
 export const SYMBOL_TORCH = '!';
 export const SYMBOL_SUPPORT = 'T';
 // The surface forest (issue #70): one character for each kind of surface cell.

@@ -19,11 +19,10 @@ import { buildState } from './helpers';
 describe('actionKey and sameAction', () => {
   // One of each kind of action.
   const actions: Action[] = [
-    { type: 'move', to: { x: 1, y: 2, z: 3 }, drop: 0, ap: 1 },
+    { type: 'move', to: { x: 1, y: 2, z: 3 }, ap: 1 },
     { type: 'mine', target: { x: 1, y: 2, z: 3 }, ap: 2 },
-    { type: 'placeLadder', target: { x: 1, y: 2, z: 3 }, ap: 1 },
     { type: 'placeTorch', target: { x: 1, y: 2, z: 3 }, ap: 1 },
-    { type: 'craft', recipe: 'ladder', ap: 1 },
+    { type: 'craft', recipe: 'torch', ap: 1 },
     { type: 'pickUp', from: { x: 1, y: 2, z: 3 }, item: 'coal', count: 2, ap: 0 },
     { type: 'drop', item: 'coal', count: 2, ap: 0 },
     { type: 'leave', ap: 0 },
@@ -54,9 +53,8 @@ describe('actionKey and sameAction', () => {
       expect(sameAction(action, structuredClone(action))).toBe(true);
       expect(sameAction(action, { ...action, ap: action.ap + 1 })).toBe(false);
     }
-    const move: Action = { type: 'move', to: { x: 1, y: 2, z: 3 }, drop: 0, ap: 1 };
+    const move: Action = { type: 'move', to: { x: 1, y: 2, z: 3 }, ap: 1 };
     expect(sameAction(move, { ...move, to: { x: 1, y: 2, z: 4 } })).toBe(false);
-    expect(sameAction(move, { ...move, drop: 1 })).toBe(false);
     const pickUp: Action = {
       type: 'pickUp',
       from: { x: 0, y: 0, z: 0 },

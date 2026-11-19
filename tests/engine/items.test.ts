@@ -88,18 +88,6 @@ describe('pick up', () => {
     // Full: the rest of the pile cannot be picked up.
     expect(findActions(after, { type: 'pickUp' })).toEqual([]);
   });
-
-  it('always fits an item that weighs nothing', () => {
-    expect(ITEMS.ladder.weight).toBe(0);
-    const state = buildState({
-      layers: ROOM,
-      avatar: MIDDLE,
-      inventory: { coal: AVATAR.carryCapacity },
-      looseItems: [{ pos: MIDDLE, item: 'ladder', count: 4 }],
-    });
-    const { state: after } = act(state, { type: 'pickUp', item: 'ladder', count: 4 });
-    expect(countItem(after, 'ladder')).toBe(4);
-  });
 });
 
 describe('drop', () => {

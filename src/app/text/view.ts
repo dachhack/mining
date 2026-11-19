@@ -5,8 +5,8 @@
 // know, and `renderView` turns that into text without ever seeing the state.
 // So nothing can be printed that `buildView` did not decide to show.
 //
-// The rule `buildView` follows: a cell's contents (block, open space, ladder,
-// torch, loose items) are read only after `isRevealed` has said yes. Note that
+// The rule `buildView` follows: a cell's contents (block, open space, torch,
+// loose items) are read only after `isRevealed` has said yes. Note that
 // open cells are hidden like blocks: an unrevealed cell prints as `?` whether
 // it is rock or a void (owner question 37).
 //
@@ -60,7 +60,6 @@ import {
   SYMBOL_AVATAR,
   SYMBOL_EDGE,
   SYMBOL_ITEMS,
-  SYMBOL_LADDER,
   SYMBOL_MEADOW,
   SYMBOL_OPEN,
   SYMBOL_OUTCROP,
@@ -120,7 +119,7 @@ export interface ChoiceView {
   /**
    * For a choice that may share a line with others: what they have in common
    * ("Mine Stone, gives 1 Stone" for mine actions that differ only in
-   * direction; "Drop Ladder (one, or all 6)" for the two drops of an item).
+   * direction; "Drop Stone (one, or all 3)" for the two drops of an item).
    * `renderView` prints choices with the same `group` and AP cost as one
    * line. `null` for a choice printed on its own.
    */
@@ -230,9 +229,6 @@ function cellView(
     return { symbol: SYMBOL_ITEMS, meaning: 'loose items (listed below the map)' };
   }
   const structure = structureAt(state, pos);
-  if (structure === STRUCTURES.ladder.code) {
-    return { symbol: SYMBOL_LADDER, meaning: 'ladder' };
-  }
   if (structure === STRUCTURES.torch.code) {
     return { symbol: SYMBOL_TORCH, meaning: 'torch' };
   }
@@ -316,8 +312,7 @@ function hudLines(state: GameState, options: ViewOptions): string[] {
     `Carry ${carriedWeight(state)}/${carryCapacity()}`,
   ].join(' | ');
 
-  const onLadder = structureAt(state, pos) === STRUCTURES.ladder.code ? ', on a ladder' : '';
-  const place = `You (@): x${pos.x} y${pos.y}, ${layerName(pos.z)}${onLadder} | Deepest so far: ${layerName(options.deepestZ)}`;
+  const place = `You (@): x${pos.x} y${pos.y}, ${layerName(pos.z)} | Deepest so far: ${layerName(options.deepestZ)}`;
 
   const carried = inventoryEntries(state);
   const inventory =
@@ -456,7 +451,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     notes.unshift(`Loose in your cell: ${stackListText(ownItems)}`);
   }
   const ownStructure = structureName(state, here);
-  if (ownStructure !== null && ownStructure !== 'ladder') {
+  if (ownStructure !== null) {
     notes.unshift(`In your cell: a ${ownStructure}`);
   }
 

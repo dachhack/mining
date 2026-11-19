@@ -250,8 +250,8 @@ function smallerOf(a: number | null, b: number): number {
 /**
  * Estimated AP to dig straight down the column at (x, y) from the surface
  * until the block in layer `lastLayer` is mined, the Minecraft way (issue
- * #75): mine the block underfoot, drop safely one block, and again. Each
- * block costs its mine cost; the drops are free.
+ * #75): mine the block underfoot, which moves the miner down into it, and
+ * again. Each block costs its mine cost; the moves down come with the mine.
  *
  * An estimate: it counts AP only, and not the AP lost when the next action
  * does not fit into what is left of a shift, nor the way back up.

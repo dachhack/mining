@@ -14,27 +14,18 @@
 import type { Vec3 } from '../data';
 
 /**
- * Walk, step up, climb, or step off a ledge into the cell `to`.
- * `drop` is how many blocks the avatar then falls (0 for none; 0005 item 7),
- * so the list can show the depth of a drop before the player takes it.
+ * Move 1 block into the open face neighbour `to`: sideways, up or down. The
+ * miner has no gravity, so it ends exactly there (owner, issue #80).
  */
 export interface MoveAction {
   type: 'move';
   to: Vec3;
-  drop: number;
   ap: number;
 }
 
 /** Mine the block at `target`. */
 export interface MineAction {
   type: 'mine';
-  target: Vec3;
-  ap: number;
-}
-
-/** Place a ladder from the inventory into the cell `target`. */
-export interface PlaceLadderAction {
-  type: 'placeLadder';
   target: Vec3;
   ap: number;
 }
@@ -196,7 +187,6 @@ export type CampAction =
 export type Action =
   | MoveAction
   | MineAction
-  | PlaceLadderAction
   | PlaceTorchAction
   | CraftAction
   | PickUpAction
@@ -220,13 +210,9 @@ function vecKey(v: Vec3): string {
 export function actionKey(action: Action): string {
   switch (action.type) {
     case 'move':
-      return `move to ${vecKey(action.to)} drop ${action.drop} ap ${action.ap}`;
+      return `move to ${vecKey(action.to)} ap ${action.ap}`;
     case 'mine':
       return `mine ${vecKey(action.target)} ap ${action.ap}`;
-    case 'placeLadder':
-      return `placeLadder ${vecKey(action.target)} ap ${action.ap}`;
-    case 'placeTorch':
-      return `placeTorch ${vecKey(action.target)} ap ${action.ap}`;
     case 'craft':
       return `craft ${action.recipe} ap ${action.ap}`;
     case 'pickUp':
@@ -235,6 +221,7 @@ export function actionKey(action: Action): string {
       return `drop ${action.count} ${action.item} ap ${action.ap}`;
     case 'leave':
       return `leave ap ${action.ap}`;
+    case 'placeTorch':
     case 'placeSupport':
     case 'placeExplosive':
     case 'placePump':
@@ -242,7 +229,7 @@ export function actionKey(action: Action): string {
     case 'placeSafetyLamp':
     case 'seal':
     case 'cutTree':
-      // The same shape as placeLadder: the type, the cell, the cost.
+      // The type, the cell, the cost.
       return `${action.type} ${vecKey(action.target)} ap ${action.ap}`;
     case 'scan':
       return `scan ${vecKey(action.centre)} ap ${action.ap}`;

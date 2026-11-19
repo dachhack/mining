@@ -20,13 +20,14 @@ export type RunOutcome = 'fullSuccess' | 'partial' | 'salvage' | 'death';
  * deaths of design doc 5.3 (0014 item 22).
  */
 export type RunEndCause =
-  'left' | 'fell' | 'outOfFuel' | 'crushed' | 'drowned' | 'suffocated' | 'burned' | 'entombed';
+  'left' | 'outOfFuel' | 'crushed' | 'drowned' | 'suffocated' | 'burned' | 'entombed';
 
 /**
- * Why the avatar took damage: a fall, a falling block, lava (in its cell or
- * beside it), or an explosion (design doc 5.1; 0014 items 8, 15, 16).
+ * Why the avatar took damage: a falling block, lava (in its cell or beside
+ * it), or an explosion (design doc 5.1; 0014 items 8, 15, 16). The miner
+ * never falls (issue #80), so a fall is not a cause.
  */
-export type DamageCause = 'fall' | 'rockfall' | 'lava' | 'explosion';
+export type DamageCause = 'rockfall' | 'lava' | 'explosion';
 
 /** The two fluids. They flow by the same rules (0014 items 12 and 16). */
 export type FluidKind = 'water' | 'lava';
@@ -48,24 +49,15 @@ export type RemovalReason =
 /** Why the air gauge changed. */
 export type AirChangeReason = 'noAir' | 'refilled' | 'rested';
 
-/**
- * The two kinds of descent (design doc 5.2, decision note 0010):
- * - `chosenDrop`: the player chose it as a move, by walking off a ledge or
- *   climbing down off the bottom of a ladder.
- * - `uncontrolled`: the avatar lost its footing some other way, for example
- *   because the block under it was mined. It costs health from the first
- *   block.
- */
-export type FallKind = 'chosenDrop' | 'uncontrolled';
-
 /** Why a gauge (fuel or lamp oil) changed. */
 export type GaugeChangeReason = 'upkeep' | 'crafted';
 
 export type GameEvent =
-  /** The avatar moved under its own power from one cell to another. */
+  /**
+   * The avatar moved under its own power from one cell to another: a move,
+   * or digging down into the cell it dug (it follows that `blockMined`).
+   */
   | { type: 'moved'; from: Vec3; to: Vec3 }
-  /** The avatar fell `distance` blocks. `kind` says whether the player chose the drop. */
-  | { type: 'fell'; from: Vec3; to: Vec3; distance: number; kind: FallKind }
   /** The avatar lost `amount` health and now has `health`. */
   | { type: 'damageTaken'; amount: number; cause: DamageCause; health: number }
   /** The block at `pos` was mined out. `block` is the code of what was there. */

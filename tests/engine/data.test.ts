@@ -40,7 +40,7 @@ describe('validateData', () => {
         id: 'broken',
         name: 'Broken',
         inputs: [{ item: 'unobtainium', count: 1 }],
-        output: { kind: 'item', item: 'ladder', count: 1 },
+        output: { kind: 'item', item: 'torch', count: 1 },
       });
     });
     expect(problems).toHaveLength(1);
@@ -87,10 +87,10 @@ describe('validateData', () => {
   it('reports a recipe with no inputs, a zero count, or a repeated id', () => {
     const problems = problemsAfter((data) => {
       data.recipes.push({
-        id: 'ladder',
-        name: 'Free ladders',
+        id: 'torch',
+        name: 'Free torches',
         inputs: [],
-        output: { kind: 'item', item: 'ladder', count: 0 },
+        output: { kind: 'item', item: 'torch', count: 0 },
       });
     });
     expect(problems.some((p) => p.includes('used more than once'))).toBe(true);
@@ -195,15 +195,13 @@ describe('validateData', () => {
   it('reports bad avatar and shift numbers', () => {
     const problems = problemsAfter((data) => {
       data.avatar.startHealth = 0;
-      data.avatar.fatalFallBlocks = data.avatar.freeFallBlocks; // must be more
-      data.avatar.uncontrolledFallDamagePerBlock = -1;
+      data.avatar.torchLightRadius = -1;
       data.shift.apPerShift = 0;
       data.shift.lampOilBurnEveryShifts = 0;
       data.actionCosts.move = -1;
     });
     expect(problems.some((p) => p.includes('avatar.startHealth'))).toBe(true);
-    expect(problems.some((p) => p.includes('avatar.fatalFallBlocks'))).toBe(true);
-    expect(problems.some((p) => p.includes('avatar.uncontrolledFallDamagePerBlock'))).toBe(true);
+    expect(problems.some((p) => p.includes('avatar.torchLightRadius'))).toBe(true);
     expect(problems.some((p) => p.includes('shift.apPerShift'))).toBe(true);
     expect(problems.some((p) => p.includes('shift.lampOilBurnEveryShifts'))).toBe(true);
     expect(problems.some((p) => p.includes('actionCosts.move'))).toBe(true);
@@ -532,7 +530,7 @@ describe('M2 data (decision note 0014)', () => {
       expect(fieldIds).not.toContain(recipe.id);
     }
     expect(findCampRecipe('pump')?.name).toBe('Pump');
-    expect(findCampRecipe('ladder')).toBeUndefined();
+    expect(findCampRecipe('torch')).toBeUndefined();
     // Camp recipes are not field recipes: nothing can craft them yet.
     expect(findRecipe('pump')).toBeUndefined();
   });
@@ -543,8 +541,8 @@ describe('M2 data (decision note 0014)', () => {
       codes[structureId] = structure.code;
       expect(structure.placedFromItem).toBe(structureId);
     }
+    // Code 1 was the ladder (removed, issue #80); it is not given to anything else.
     expect(codes).toEqual({
-      ladder: 1,
       torch: 2,
       support: 3,
       vent: 4,
@@ -581,14 +579,14 @@ describe('M2 data (decision note 0014)', () => {
   it('reports a camp recipe that reuses a field recipe id or names an unknown item', () => {
     const problems = problemsAfter((data) => {
       data.campRecipes.push({
-        id: 'ladder',
+        id: 'torch',
         name: 'Clash',
         inputs: [{ item: 'adamantium', count: 1 }],
-        output: { kind: 'item', item: 'ladder', count: 1 },
+        output: { kind: 'item', item: 'torch', count: 1 },
       });
     });
     expect(problems).toHaveLength(2);
-    expect(problems[0]).toContain('recipe id "ladder" is used more than once');
+    expect(problems[0]).toContain('recipe id "torch" is used more than once');
     expect(problems[1]).toContain('unknown item "adamantium"');
   });
 

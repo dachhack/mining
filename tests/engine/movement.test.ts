@@ -1,5 +1,5 @@
-// Scenario tests for moving the avatar (design doc 4.1; decision note 0005
-// items 5 to 7; issue #5 and the coordinator's notes on it).
+// Scenario tests for moving the avatar (design doc 4.1 and 5.2; owner, issue
+// #80: the miner has no gravity and moves into any open face neighbour).
 //
 // Cubes are drawn top layer first; each layer is a list of rows (y) and each
 // row a string of cells (x). '#' is stone and '.' is open. z = -1 is the
@@ -32,8 +32,8 @@ function corridor(avatar: Vec3, ap: number = SHIFT.apPerShift): GameState {
 }
 
 /**
- * A stone column at x = 0 beside a pit at x = 1 that is `depth` blocks deep.
- * The avatar stands on the surface on top of the column.
+ * A stone column at x = 0 beside a shaft at x = 1 that is `depth` blocks
+ * deep. The avatar stands on the surface on top of the column.
  */
 function ledge(depth: number): GameState {
   const layers: string[][] = [];
@@ -49,7 +49,7 @@ describe('walking', () => {
     const state = corridor({ x: 1, y: 1, z: 0 });
     const to = { x: 2, y: 1, z: 0 };
     expect(findActions(state, { type: 'move', to })).toEqual([
-      { type: 'move', to, drop: 0, ap: ACTION_COSTS.move },
+      { type: 'move', to, ap: ACTION_COSTS.move },
     ]);
 
     const { state: after, events } = act(state, { type: 'move', to });
@@ -108,93 +108,90 @@ describe('walking', () => {
   });
 });
 
-describe('stepping up', () => {
-  it('climbs onto a block one level up', () => {
+describe('no gravity (issue #80)', () => {
+  it('walks out over a shaft and stays there: nothing has to hold the miner up', () => {
+    for (const depth of [1, 2, 6]) {
+      const state = ledge(depth);
+      const over = { x: 1, y: 0, z: -1 };
+      const { state: after, events } = act(state, { type: 'move', to: over });
+      expect(after.avatar.pos).toEqual(over);
+      expect(after.avatar.health).toBe(AVATAR.startHealth);
+      expect(events).toEqual([{ type: 'moved', from: { x: 0, y: 0, z: -1 }, to: over }]);
+    }
+  });
+
+  it('moves down into an open cell below, one block at a time, whatever is under it', () => {
+    let state = ledge(4);
+    state = act(state, { type: 'move', to: { x: 1, y: 0, z: -1 } }).state;
+    for (let z = 0; z < 4; z += 1) {
+      const to = { x: 1, y: 0, z };
+      expect(findActions(state, { type: 'move', to })).toEqual([
+        { type: 'move', to, ap: ACTION_COSTS.move },
+      ]);
+      state = act(state, { type: 'move', to }).state;
+      expect(state.avatar.pos).toEqual(to);
+      state.ap = SHIFT.apPerShift; // AP is not what this test is about
+    }
+    // At the bottom: rock below, so no move down.
+    expect(findActions(state, { type: 'move', to: { x: 1, y: 0, z: 4 } })).toEqual([]);
+    expect(state.avatar.health).toBe(AVATAR.startHealth);
+  });
+
+  it('moves up a shaft into an open cell above, and out onto the surface', () => {
+    let state = buildState({
+      revealAll: true,
+      layers: [['#.#'], ['#.#'], ['#.#'], ['###']],
+      avatar: { x: 1, y: 0, z: 2 },
+    });
+    for (const z of [1, 0, -1]) {
+      const to = { x: 1, y: 0, z };
+      expect(moveTargets(state)).toContainEqual(to);
+      state = act(state, { type: 'move', to }).state;
+      state.ap = SHIFT.apPerShift;
+    }
+    expect(state.avatar.pos).toEqual({ x: 1, y: 0, z: -1 });
+  });
+
+  it('lists the moves in a fixed order: north, east, south, west, up, down', () => {
     const state = buildState({
       revealAll: true,
-      layers: [['.#'], ['##']],
-      avatar: { x: 0, y: 0, z: 0 },
+      layers: [
+        ['#.#', '...', '#.#'],
+        ['#.#', '...', '#.#'],
+        ['###', '#.#', '###'],
+        ['###', '###', '###'],
+      ],
+      avatar: { x: 1, y: 1, z: 1 },
     });
-    const to = { x: 1, y: 0, z: -1 };
-    expect(findActions(state, { type: 'move', to })).toEqual([
-      { type: 'move', to, drop: 0, ap: ACTION_COSTS.move },
+    expect(moveTargets(state)).toEqual([
+      { x: 1, y: 0, z: 1 },
+      { x: 2, y: 1, z: 1 },
+      { x: 1, y: 2, z: 1 },
+      { x: 0, y: 1, z: 1 },
+      { x: 1, y: 1, z: 0 },
+      { x: 1, y: 1, z: 2 },
     ]);
-    const { state: after, events } = act(state, { type: 'move', to });
-    expect(after.avatar.pos).toEqual(to);
-    expect(events).toEqual([{ type: 'moved', from: { x: 0, y: 0, z: 0 }, to }]);
   });
 
-  it('is refused when the cell above the avatar is solid', () => {
-    // The avatar is at z = 1 under a stone ceiling; the step at x = 1 has
-    // room on top of it.
-    const blocked = buildState({
-      revealAll: true,
-      layers: [['#.'], ['.#'], ['##']],
-      avatar: { x: 0, y: 0, z: 1 },
-    });
-    expect(moveTargets(blocked)).toEqual([]);
-
-    // The same cube with the ceiling opened: now the step is legal.
-    const open = buildState({
-      revealAll: true,
-      layers: [['..'], ['.#'], ['##']],
-      avatar: { x: 0, y: 0, z: 1 },
-    });
-    expect(moveTargets(open)).toEqual([{ x: 1, y: 0, z: 0 }]);
-  });
-
-  it('is refused for a step two blocks high', () => {
+  it('does not move up or down into rock, nor anywhere diagonal', () => {
     const state = buildState({
       revealAll: true,
-      layers: [['.#'], ['.#'], ['##']],
-      avatar: { x: 0, y: 0, z: 1 },
+      // The cells diagonally up and down from the avatar are open; above and below are rock.
+      layers: [
+        ['...', '.#.', '...'],
+        ['#.#', '...', '#.#'],
+        ['...', '.#.', '...'],
+        ['###', '###', '###'],
+      ],
+      avatar: { x: 1, y: 1, z: 1 },
     });
+    for (const to of moveTargets(state)) {
+      expect(to.z).toBe(1);
+    }
+  });
+
+  it('never moves up past the surface', () => {
+    const state = buildState({ revealAll: true, layers: [['#']], avatar: { x: 0, y: 0, z: -1 } });
     expect(moveTargets(state)).toEqual([]);
-  });
-});
-
-describe('walking off a ledge', () => {
-  // `it.each` runs the same test once for each value in the list.
-  it.each([1, 2])('drops %i block(s) without damage', (depth) => {
-    const state = ledge(depth);
-    const to = { x: 1, y: 0, z: -1 };
-    // The action says how far the avatar will drop.
-    expect(findActions(state, { type: 'move', to })).toEqual([
-      { type: 'move', to, drop: depth, ap: ACTION_COSTS.move },
-    ]);
-
-    const { state: after, events } = act(state, { type: 'move', to });
-    const landed = { x: 1, y: 0, z: -1 + depth };
-    expect(after.avatar.pos).toEqual(landed);
-    expect(after.avatar.health).toBe(AVATAR.startHealth);
-    expect(after.ap).toBe(SHIFT.apPerShift - ACTION_COSTS.move);
-    expect(after.status).toEqual({ kind: 'active' });
-    expect(events).toEqual([
-      { type: 'moved', from: { x: 0, y: 0, z: -1 }, to },
-      { type: 'fell', from: to, to: landed, distance: depth, kind: 'chosenDrop' },
-    ]);
-  });
-
-  it('allows a drop of exactly the longest chosen drop in the data, and no longer', () => {
-    expect(moveTargets(ledge(AVATAR.maxChosenDropBlocks))).toEqual([{ x: 1, y: 0, z: -1 }]);
-    expect(moveTargets(ledge(AVATAR.maxChosenDropBlocks + 1))).toEqual([]);
-  });
-
-  it.each([3, 4, 5, 6])('is not a legal action when the drop is %i blocks', (depth) => {
-    expect(moveTargets(ledge(depth))).toEqual([]);
-  });
-
-  it('counts the drop only as far as a ladder that would catch the avatar', () => {
-    // A pit 4 deep with a ladder 2 down: the avatar lands on the ladder.
-    const state = buildState({
-      revealAll: true,
-      layers: [['#.'], ['#.'], ['#.'], ['#.'], ['##']],
-      avatar: { x: 0, y: 0, z: -1 },
-      ladders: [{ x: 1, y: 0, z: 1 }],
-    });
-    const to = { x: 1, y: 0, z: -1 };
-    const { state: after } = act(state, { type: 'move', to, drop: 2 });
-    expect(after.avatar.pos).toEqual({ x: 1, y: 0, z: 1 });
-    expect(after.avatar.health).toBe(AVATAR.startHealth);
   });
 });

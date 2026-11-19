@@ -177,7 +177,7 @@ describe('saving and resuming', () => {
   });
 });
 
-describe('the result line after a dig down (review of PR #74)', () => {
+describe('the result line after a dig down (review of PR #74; issue #80)', () => {
   /** Seed 7 at the start, and its "mine-down" choice. */
   function atStart(): { session: ReturnType<typeof newSession>; dig: LogEntry } {
     const session = newSession(7, 'none', 'standard');
@@ -190,25 +190,24 @@ describe('the result line after a dig down (review of PR #74)', () => {
     return { session, dig };
   }
 
-  it('says in the past tense that the miner dropped 1 block, without the warning', () => {
+  it('says what was mined; the miner is then in the dug cell, and nothing is said of a fall', () => {
     const { session, dig } = atStart();
-    // Before: the list warns, in the future tense.
-    expect(describeChoice(session.state, dig)).toContain('you will fall further and be hurt');
+    // Before: the list says the miner will move down into the block.
+    expect(describeChoice(session.state, dig)).toContain('you move down into it');
+    const before = session.state.avatar.pos;
     const line = takeTurn(session, dig);
-    expect(line).toBe('> Mine below you: Dirt, gives nothing. Mined Dirt. You dropped 1 block.');
+    expect(line).toBe('> Mine below you: Dirt, gives nothing. Mined Dirt.');
+    expect(session.state.avatar.pos).toEqual({ ...before, z: before.z + 1 });
   });
 
-  it('says in the past tense that the miner fell, and the health it lost', () => {
+  it('says the same with open space under the block: the miner does not fall (issue #80)', () => {
     const { session, dig } = atStart();
-    // Open space under the block underfoot, by hand: the dig is a 2-block fall.
     const { x, y } = session.state.avatar.pos;
     const under = cellIndex(session.state.size, { x, y, z: 1 });
     session.state.blocks[under] = BLOCKS.air.code;
     const line = takeTurn(session, dig);
-    expect(line).not.toContain('will');
-    expect(line).toBe(
-      '> Mine below you: Dirt, gives nothing. Mined Dirt. ' +
-        'You lost your footing and fell 2 blocks. You lost 2 health from the fall (now 8).',
-    );
+    expect(line).toBe('> Mine below you: Dirt, gives nothing. Mined Dirt.');
+    expect(session.state.avatar.pos).toEqual({ x, y, z: 0 });
+    expect(session.state.avatar.health).toBe(10);
   });
 });

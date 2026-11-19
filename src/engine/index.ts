@@ -20,14 +20,12 @@ import { legalCutTreeActions, applyCutTree } from './actions/cutTree';
 import { legalGiveUpActions, applyGiveUp } from './actions/giveUp';
 import { legalDropActions, legalPickUpActions, applyDrop, applyPickUp } from './actions/items';
 import { legalLeaveActions, applyLeave } from './actions/leave';
-import { legalMineActions, applyMine, isDigDown } from './actions/mine';
-import { avatarFallDistance } from './footing';
+import { legalMineActions, applyMine } from './actions/mine';
 import { legalMoveActions, applyMove } from './actions/move';
 import { legalPlaceExplosiveActions, applyPlaceExplosive } from './actions/placeExplosive';
-import { legalPlaceLadderActions, applyPlaceLadder } from './actions/placeLadder';
 import { legalPlaceSupportActions, applyPlaceSupport } from './actions/placeSupport';
 import { legalPlaceTorchActions, applyPlaceTorch } from './actions/placeTorch';
-import type { FallKind, GameEvent } from './events';
+import type { GameEvent } from './events';
 import { generateCube } from './generation/cube';
 import { settle } from './gravity';
 import { updateReveal } from './reveal';
@@ -117,7 +115,6 @@ export function legalActions(state: GameState): Action[] {
     ...legalMoveActions(state),
     ...legalCutTreeActions(state),
     ...legalMineActions(state),
-    ...legalPlaceLadderActions(state),
     ...legalPlaceTorchActions(state),
     ...legalPlaceSupportActions(state),
     ...legalPlaceExplosiveActions(state),
@@ -160,9 +157,6 @@ export function applyAction(state: GameState, action: Action): StepResult {
       break;
     case 'mine':
       applyMine(next, action, events);
-      break;
-    case 'placeLadder':
-      applyPlaceLadder(next, action, events);
       break;
     case 'placeTorch':
       applyPlaceTorch(next, action, events);
@@ -209,23 +203,10 @@ export function applyAction(state: GameState, action: Action): StepResult {
       break;
   }
 
-  // After any action: things fall, then light shows what is newly visible,
-  // and any mineral traces on the blocks it falls on.
-  // A fall straight after a move is one the player chose from the move list
-  // (a drop of 1 or 2 blocks, shown there). A fall after anything else is
-  // uncontrolled and costs health from the first block (design doc 5.2,
-  // decision note 0010), except the safe one-block drop of digging down.
-  let fallKind: FallKind = action.type === 'move' ? 'chosenDrop' : 'uncontrolled';
-  // Digging out the block the avatar stands on (owner, issue #75): a drop of
-  // `AVATAR.safeDigDownBlocks` onto footing is safe, as in Minecraft; a longer
-  // fall is uncontrolled, counted from where the avatar stood. The fall is
-  // measured on the true cube, as `settle` does; what the player was told
-  // beforehand depends on known cells only (describe.ts).
-  if (action.type === 'mine' && isDigDown(state, action)) {
-    const distance = avatarFallDistance(next, next.avatar.pos);
-    fallKind = distance <= AVATAR.safeDigDownBlocks ? 'chosenDrop' : 'uncontrolled';
-  }
-  settle(next, events, fallKind);
+  // After any action: loose items with nothing under them fall, then light
+  // shows what is newly visible, and any mineral traces on the blocks it
+  // falls on. The avatar never falls (owner, issue #80).
+  settle(next, events);
   updateReveal(next, events);
   updateMineralTraces(next, events);
   return { state: next, events };
@@ -236,8 +217,9 @@ export function applyAction(state: GameState, action: Action): StepResult {
  * items 1 and 2). Returns the new state and the events; `state` itself is not
  * changed. Throws if the run has already ended.
  *
- * The order: the cube phase's steps (a) to (e) (shift.ts); `settle` once (the
- * avatar and loose items fall if the phase took their floor); if the avatar
+ * The order: the cube phase's steps (a) to (e) (shift.ts); `settle` once
+ * (loose items fall if the phase took their floor; the avatar never falls,
+ * issue #80); if the avatar
  * is still alive, trees grow back on stumps (surface/regrowth.ts) and then
  * upkeep; reveal. The forecast for the next shift is not
  * stored: `previewCubePhase` works it out from the new state when asked.
@@ -250,10 +232,9 @@ export function endShift(state: GameState): StepResult {
   const events: GameEvent[] = [];
 
   runCubePhase(next, events);
-  // Nothing the cube phase does to the avatar's footing is the player's move.
-  // `settle` ends the run itself if the fall kills ("the death check"). An
-  // avatar that step (e) already killed does not fall; loose items still do.
-  settle(next, events, 'uncontrolled');
+  // Loose items whose floor the cube phase took fall. The avatar does not,
+  // even if its floor went (issue #80).
+  settle(next, events);
   if (isRunActive(next)) {
     // Trees grow back on stumps left alone long enough (issue #70; decision
     // note 0020): after the cube phase, before upkeep.
@@ -296,7 +277,6 @@ export type {
   MoveAction,
   PickUpAction,
   PlaceExplosiveAction,
-  PlaceLadderAction,
   PlacePumpAction,
   PlaceSafetyLampAction,
   PlaceSupportAction,
@@ -314,7 +294,6 @@ export type {
   AirChangeReason,
   DamageCause,
   DestructionCause,
-  FallKind,
   FluidKind,
   GameEvent,
   GaugeChangeReason,
@@ -322,7 +301,6 @@ export type {
   RunEndCause,
   RunOutcome,
 } from './events';
-export { fallDamage, isFatalFall } from './gravity';
 export { hashState } from './hash';
 export { canCarry, carriedWeight, carryCapacity } from './inventory';
 export { deserialise, serialise } from './serialise';

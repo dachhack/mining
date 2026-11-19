@@ -5,14 +5,9 @@ export type GaugeId = 'fuel' | 'lampOil';
 /** The gauges a recipe may fill. They are numbers on the state, not carried items. */
 export const GAUGES: GaugeId[] = ['fuel', 'lampOil'];
 
-// Field recipes, design doc 7.1. Craftable anywhere.
+// Field recipes, design doc 7.1. Craftable anywhere. The ladder recipe is
+// gone with ladders (owner, issue #80).
 export const FIELD_RECIPES: RecipeDef[] = [
-  {
-    id: 'ladder',
-    name: 'Ladder (x3)',
-    inputs: [{ item: 'timber', count: 1 }],
-    output: { kind: 'item', item: 'ladder', count: 3 },
-  },
   {
     id: 'support',
     name: 'Support',

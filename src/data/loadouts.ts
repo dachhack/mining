@@ -11,10 +11,8 @@ export const LOADOUTS: Record<LoadoutId, LoadoutDef> = {
     name: 'Standard',
     fuel: 24,
     lampOil: 3,
-    items: [
-      { item: 'ladder', count: 6 },
-      { item: 'timber', count: 2 },
-    ],
+    // The 6 ladders are gone with ladders themselves (owner, issue #80).
+    items: [{ item: 'timber', count: 2 }],
   },
 };
 

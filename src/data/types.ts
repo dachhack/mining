@@ -76,7 +76,7 @@ export interface ItemDef {
   weight: number;
 }
 
-/** Something placed in a cell that is not a block: a ladder, a torch, a support, a pump, ... */
+/** Something placed in a cell that is not a block: a torch, a support, a pump, ... */
 export interface StructureDef {
   /** The number stored in the cube's structure array. 0 means "nothing here". */
   code: number;
@@ -112,27 +112,6 @@ export interface AvatarData {
   lightRadiusWithoutOil: number;
   /** Light radius of a placed torch (0005 item 13). */
   torchLightRadius: number;
-  /** A fall of up to this many blocks does no damage (design doc 5.2). */
-  freeFallBlocks: number;
-  /** Damage for each block fallen beyond `freeFallBlocks`. */
-  fallDamagePerBlock: number;
-  /**
-   * Damage for each of the first `freeFallBlocks` blocks of an uncontrolled
-   * fall: one the player did not choose as a move, because the block under
-   * the avatar was mined (design doc 5.2, issue #34). A chosen drop does not
-   * pay this.
-   */
-  uncontrolledFallDamagePerBlock: number;
-  /** A fall of this many blocks or more is fatal. */
-  fatalFallBlocks: number;
-  /** The longest drop the player may choose to walk off (0005 item 7). */
-  maxChosenDropBlocks: number;
-  /**
-   * Digging out the block the avatar stands on (issue #75): a drop of exactly
-   * this many blocks, onto footing, is safe, like a chosen drop. A longer
-   * fall is uncontrolled, counted from where the avatar stood.
-   */
-  safeDigDownBlocks: number;
 }
 
 export interface ShiftData {
@@ -149,7 +128,6 @@ export interface ShiftData {
 /** AP cost of each action whose cost does not depend on a block (design doc 4.1). */
 export interface ActionCostData {
   move: number;
-  placeLadder: number;
   placeTorch: number;
   craft: number;
   pickUp: number;

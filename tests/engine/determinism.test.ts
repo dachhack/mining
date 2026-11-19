@@ -50,8 +50,10 @@ describe('determinism', () => {
     // refill (issue #32) most wander runs end out of fuel a little sooner.
     // (Seed 6 took the place of seed 4, whose run the forest of issue #70
     // shortened to 186 decisions. Seeds 5 and 26 took the places of seeds 6
-    // and 11 with issue #75, which shortened their runs to 172 and 128.)
-    for (const seed of [5, 26]) {
+    // and 11 with issue #75, which shortened their runs to 172 and 128.
+    // Seeds 15 and 49 took the places of 5 and 26 with issue #80, which
+    // shortened their runs to 145 and 150.)
+    for (const seed of [15, 49]) {
       const recorded = recordedRun(seed, 200);
       expect(recorded.decisions.length).toBe(200);
       const first = replayDecisions(seed, CONTRACT, DEFAULT_LOADOUT_ID, recorded.decisions);
