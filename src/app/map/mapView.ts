@@ -1,5 +1,8 @@
 // The tap map of the phone preview (issue #66): a 16 x 16 window of one
 // layer drawn as coloured tiles on a canvas, dragged to pan, tapped to act.
+// Layer 0 is the top view, with the surface's trees drawn on it (issue #78).
+// A tap does one thing at once, with no menu; a risky one (a fall that
+// hurts, a yield too heavy to carry) waits for a second tap on the same cell.
 //
 // It draws only from `buildLayer` (tiles.ts), which holds what the player
 // knows and nothing else, and it changes the game only by handing one of the
@@ -8,14 +11,9 @@
 
 import { BLOCKS, SHIFT, WORLD } from '../../data';
 import type { BlockId } from '../../data';
+import { actionKey } from '../../engine';
 import type { Action, GameState } from '../../engine';
-import {
-  choiceName,
-  choiceWarning,
-  describeChoice,
-  layerName,
-  tapActsAtOnce,
-} from '../text/describe';
+import { choiceWarning, tapActsAtOnce } from '../text/describe';
 import {
   VIEW_CELLS,
   cellAt,
@@ -31,13 +29,12 @@ import {
   BLOCK_LOOKS,
   MARK_COLOURS,
   PREVIEW_MAP,
-  SURFACE_HAZE,
   SURFACE_LOOKS,
   UNKNOWN_LOOK,
   UNLIT_BRIGHTNESS,
 } from './palette';
 import type { Pattern, SurfaceMark } from './palette';
-import { actionsForCell } from './targets';
+import { actionsForCell, mapLayerOf, tapAction } from './targets';
 import { buildLayer, layerContext } from './tiles';
 import type { LayerContext, Tile } from './tiles';
 
@@ -370,38 +367,35 @@ export function drawTile(
   c: number,
   grid = true,
 ): void {
-  if (tile.kind === 'unknown') {
-    drawUnknown(ctx, x, y, c);
-  } else if (tile.surface === 'tree') {
-    // A tree hides the ground under it (issue #70): drawn solid.
+  if (tile.surface === 'tree') {
+    // A tree hides the cell under it (issue #70): drawn solid, whatever is known below.
     const look = SURFACE_LOOKS.tree;
     ctx.fillStyle = look.haze;
     ctx.fillRect(x, y, c, c);
     drawPattern(ctx, look.pattern, x, y, c, look.ink);
-  } else if (tile.ground !== null || tile.surface !== null) {
-    // An open surface cell: the ground under it, seen through a haze of the
-    // cell's own kind, with that kind's pattern on top.
-    if (tile.ground !== null) {
-      const look = BLOCK_LOOKS[tile.ground];
+  } else {
+    if (tile.kind === 'unknown') {
+      drawUnknown(ctx, x, y, c);
+    } else {
+      const look = BLOCK_LOOKS[tile.block ?? 'air'];
       ctx.fillStyle = look.colour;
       ctx.fillRect(x, y, c, c);
       drawPattern(ctx, look.pattern, x, y, c, look.ink);
+      if (!tile.lit) {
+        // Seen, but not in light now: drawn darker.
+        ctx.fillStyle = `rgba(0, 0, 0, ${1 - UNLIT_BRIGHTNESS})`;
+        ctx.fillRect(x, y, c, c);
+      }
     }
-    const kind = tile.surface === null ? null : SURFACE_LOOKS[tile.surface];
-    ctx.fillStyle = kind === null ? SURFACE_HAZE : kind.haze;
-    ctx.fillRect(x, y, c, c);
-    if (kind !== null) {
+    if (tile.surface !== null) {
+      // On the top view: what lies on the surface over the cell (a stump, a
+      // path, a meadow, an outcrop), as its pattern drawn faintly over the
+      // block under it, so the block still shows (issue #78).
+      const kind = SURFACE_LOOKS[tile.surface];
+      ctx.save();
+      ctx.globalAlpha = PREVIEW_MAP.surfaceMarkAlpha;
       drawPattern(ctx, kind.pattern, x, y, c, kind.ink);
-    }
-  } else {
-    const look = BLOCK_LOOKS[tile.block ?? 'air'];
-    ctx.fillStyle = look.colour;
-    ctx.fillRect(x, y, c, c);
-    drawPattern(ctx, look.pattern, x, y, c, look.ink);
-    if (!tile.lit) {
-      // Seen, but not in light now: drawn darker.
-      ctx.fillStyle = `rgba(0, 0, 0, ${1 - UNLIT_BRIGHTNESS})`;
-      ctx.fillRect(x, y, c, c);
+      ctx.restore();
     }
   }
   drawMarks(ctx, tile, x, y, c);
@@ -429,7 +423,6 @@ function sampleTile(overrides: Partial<Tile>): Tile {
     items: false,
     miner: false,
     minerColumn: false,
-    ground: null,
     surface: null,
     ...overrides,
   };
@@ -468,7 +461,6 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
     if (tile.kind === 'unknown') unknown = true;
     if (tile.kind === 'open') open = true;
     if (tile.kind === 'block' && tile.block !== null) blocks.add(tile.block);
-    if (tile.ground !== null) blocks.add(tile.ground);
     if (tile.kind !== 'unknown' && !tile.lit) unlit = true;
     if (tile.traced) marks.add('traced');
     if (tile.structure !== null) marks.add(tile.structure);
@@ -487,9 +479,10 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
       ),
     );
   }
-  // The surface kinds (issue #70), in a fixed order.
+  // The surface kinds (issue #70), in a fixed order. On the top view the
+  // open kinds are drawn faintly over the block under them.
   const surfaceLabels: [SurfaceMark, string][] = [
-    ['tree', 'tree (cut it; hides the ground)'],
+    ['tree', 'tree (tap beside it to cut; hides the block under it)'],
     ['stump', 'stump (a tree grows back)'],
     ['path', 'dirt path'],
     ['meadow', 'meadow'],
@@ -498,17 +491,11 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
   const surfaceKinds = new Set(tiles.map((tile) => tile.surface));
   for (const [kind, label] of surfaceLabels) {
     if (surfaceKinds.has(kind)) {
-      entries.push(legendEntry(sampleTile({ kind: 'open', block: null, surface: kind }), label));
+      // Shown over dirt, as on the map (a tree hides it anyway).
+      entries.push(legendEntry(sampleTile({ block: 'dirt', surface: kind }), label));
     }
   }
-  if (tiles.some((tile) => tile.ground !== null)) {
-    entries.push(
-      legendEntry(
-        sampleTile({ kind: 'open', block: null, ground: 'dirt', surface: 'meadow' }),
-        'open ground (pale: the ground under it)',
-      ),
-    );
-  } else if (open) {
+  if (open) {
     entries.push(legendEntry(sampleTile({ kind: 'open', block: null }), 'open'));
   }
   // In the order of the data's block list, so the legend does not jump about.
@@ -619,21 +606,17 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
   zoomButton.setAttribute('aria-label', `Zoom to ${VIEW_CELLS} by ${VIEW_CELLS}`);
   bar.append(layerLabel, upButton, downButton, centreButton, zoomButton);
 
-  // The canvas, with the chooser and the hint laid over it.
+  // The canvas, with the hint laid over it.
   const frame = document.createElement('div');
   frame.className = 'map-frame';
   const canvas = document.createElement('canvas');
   canvas.className = 'map-canvas';
   canvas.dataset['testid'] = 'map-canvas';
-  const chooser = document.createElement('div');
-  chooser.className = 'chooser';
-  chooser.dataset['testid'] = 'chooser';
-  chooser.hidden = true;
   const hint = document.createElement('div');
   hint.className = 'map-hint';
   hint.dataset['testid'] = 'map-hint';
   hint.hidden = true;
-  frame.append(canvas, chooser, hint);
+  frame.append(canvas, hint);
 
   const legend = document.createElement('div');
   legend.className = 'map-legend';
@@ -651,10 +634,17 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
   let hintTimer: ReturnType<typeof setTimeout> | null = null;
   // Light and traces for `state`, worked out on the first draw after `show`.
   let context: LayerContext | null = null;
+  /**
+   * A risky tap waiting for its second tap (issue #78): the cell, the layer,
+   * and the action it stands for (by `actionKey`, so a stale one is never
+   * taken). `null` when nothing is marked.
+   */
+  let pending: { x: number; y: number; z: number; key: string } | null = null;
+  let pendingTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** The layer the miner is on (the surface is a layer of its own on the map). */
+  /** The map layer the miner is shown on: the top view (layer 0) while on the surface. */
   function minersMapLayer(s: GameState): number {
-    return s.avatar.pos.z;
+    return mapLayerOf(s.avatar.pos.z);
   }
 
   function cellPixels(): number {
@@ -663,9 +653,12 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
 
   function layerText(s: GameState): string {
     const here = s.avatar.pos.z;
-    const name = viewZ === WORLD.surfaceZ ? 'Surface' : `Layer ${viewZ}`;
+    const name = viewZ === WORLD.surfaceZ + 1 ? 'Top layer' : `Layer ${viewZ}`;
     if (viewZ === here) {
       return `${name} · you are here`;
+    }
+    if (here === WORLD.surfaceZ && viewZ === WORLD.surfaceZ + 1) {
+      return `${name} · you are on the surface`;
     }
     const diff = viewZ - here;
     return `${name} · ${Math.abs(diff)} ${diff > 0 ? 'below' : 'above'} you`;
@@ -715,11 +708,22 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
     }
     legend.replaceChildren(...legendFor(drawn));
 
+    // The cell waiting for a second tap: a bright dashed outline.
+    if (pending !== null && pending.z === viewZ) {
+      ctx.save();
+      ctx.strokeStyle = MARK_COLOURS.pending;
+      ctx.lineWidth = Math.max(2, c / 8);
+      ctx.setLineDash([c / 4, c / 8]);
+      ctx.strokeRect((pending.x - camera.x) * c + 1, (pending.y - camera.y) * c + 1, c - 2, c - 2);
+      ctx.restore();
+    }
+
     layerLabel.textContent = layerText(s);
     const onMinersLayer = viewZ === minersMapLayer(s);
     layerLabel.classList.toggle('mine', onMinersLayer);
     frame.classList.toggle('mine', onMinersLayer);
-    upButton.disabled = viewZ <= WORLD.surfaceZ;
+    // Layer 0, the top view, is as high as the map goes (issue #78).
+    upButton.disabled = viewZ <= WORLD.surfaceZ + 1;
     downButton.disabled = viewZ >= s.size.z - 1;
 
     // For the tests: where the camera is and how big a cell is.
@@ -728,14 +732,20 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
     canvas.dataset['cellPx'] = String(c);
     canvas.dataset['cells'] = String(camera.cells);
     canvas.dataset['layer'] = String(viewZ);
+    canvas.dataset['pending'] = pending === null ? '' : `${pending.x},${pending.y}`;
   }
 
-  function closeChooser(): void {
-    chooser.hidden = true;
-    chooser.replaceChildren();
+  /** Hide the hint now. */
+  function hideHint(): void {
+    hint.hidden = true;
+    if (hintTimer !== null) {
+      clearTimeout(hintTimer);
+      hintTimer = null;
+    }
   }
 
-  function showHint(text: string): void {
+  /** Show `text` over the map; it goes after `ms` milliseconds. */
+  function showHint(text: string, ms: number = PREVIEW_MAP.hintMs): void {
     hint.textContent = text;
     hint.hidden = false;
     if (hintTimer !== null) {
@@ -743,93 +753,82 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
     }
     hintTimer = setTimeout(() => {
       hint.hidden = true;
-    }, PREVIEW_MAP.hintMs);
+    }, ms);
   }
 
-  /** Show the chooser for `actions` next to cell (x, y). */
-  function openChooser(s: GameState, actions: Action[], x: number, y: number): void {
-    const c = cellPixels();
-    const options = actions.map((action) => {
-      const option = button('choice chooser-option', '');
-      const text = document.createElement('span');
-      text.className = 'choice-text';
-      text.textContent = describeChoice(s, action);
-      const meta = document.createElement('span');
-      meta.className = 'choice-meta';
-      meta.textContent = `${choiceName(s, action)} · ${action.ap} AP`;
-      option.append(text, meta);
-      const warning = choiceWarning(s, action);
-      // The warning is shown on a line of its own, unless the description
-      // already says it word for word (mining underfoot does).
-      if (warning !== null && !text.textContent.includes(warning)) {
-        const warn = document.createElement('span');
-        warn.className = 'choice-warning';
-        warn.textContent = `⚠ ${warning}`;
-        option.append(warn);
-      }
-      option.addEventListener('click', () => {
-        closeChooser();
-        onChoose(action);
-      });
-      return option;
-    });
-    const cancel = button('small chooser-cancel', 'Cancel');
-    cancel.addEventListener('click', closeChooser);
-    const title = document.createElement('p');
-    title.className = 'chooser-title';
-    title.textContent = `x${x} y${y}, ${layerName(viewZ)}`;
-    // The title and Cancel come first, so Cancel is in sight however long the list.
-    const head = document.createElement('div');
-    head.className = 'chooser-head';
-    head.append(title, cancel);
-    chooser.replaceChildren(head, ...options);
-    chooser.hidden = false;
+  /** Forget the cell waiting for a second tap, if any. Returns true if there was one. */
+  function clearPending(): boolean {
+    if (pendingTimer !== null) {
+      clearTimeout(pendingTimer);
+      pendingTimer = null;
+    }
+    if (pending === null) {
+      return false;
+    }
+    pending = null;
+    hideHint();
+    return true;
+  }
 
-    // Below the cell if it is in the top half of the map, else above it, and
-    // never taller than the room on that side (it scrolls inside if need be).
-    const frameWidth = frame.clientWidth;
-    const frameHeight = frame.clientHeight;
-    const width = Math.min(frameWidth - 8, 320);
-    chooser.style.width = `${width}px`;
-    const cellLeft = (x - camera.x) * c;
-    const cellTop = (y - camera.y) * c;
-    const left = Math.min(Math.max(cellLeft + c / 2 - width / 2, 4), frameWidth - width - 4);
-    chooser.style.left = `${left}px`;
-    if (cellTop < frameHeight / 2) {
-      chooser.style.top = `${cellTop + c + 4}px`;
-      chooser.style.bottom = '';
-      chooser.style.maxHeight = `${frameHeight - cellTop - c - 8}px`;
-    } else {
-      chooser.style.top = '';
-      chooser.style.bottom = `${frameHeight - cellTop + 4}px`;
-      chooser.style.maxHeight = `${cellTop - 8}px`;
+  /** What a risky tap is about to do, in a few words, for the hint. */
+  function tapVerb(s: GameState, action: Action): string {
+    const here = s.avatar.pos;
+    switch (action.type) {
+      case 'mine':
+        return action.target.x === here.x && action.target.y === here.y ? 'dig down' : 'mine';
+      case 'cutTree':
+        return 'cut the tree';
+      case 'move':
+        return 'go there';
+      case 'pickUp':
+        return 'pick it up';
+      default:
+        return 'do it';
     }
   }
 
-  /** A tap (not a drag) at (px, py) pixels from the map's top-left corner. */
+  /**
+   * A tap (not a drag) at (px, py) pixels from the map's top-left corner
+   * (issue #78). The tap does the cell's one action (`tapAction`) at once,
+   * unless it is risky (`tapActsAtOnce` says no: a fall that hurts or kills,
+   * a yield too heavy to carry). A risky tap marks the cell and says what the
+   * risk is; a second tap on the same cell within `doubleTapMs` does it. A
+   * tap anywhere else while a cell is marked only clears the mark.
+   */
   function tap(px: number, py: number): void {
     if (state === null) {
       return;
     }
-    // While the chooser is open, a tap elsewhere only closes it.
-    if (!chooser.hidden) {
-      closeChooser();
+    const cell = cellAt(camera, px, py, cellPixels());
+    const action = tapAction(state, viewZ, cell.x, cell.y);
+    if (pending !== null) {
+      const sameCell = pending.x === cell.x && pending.y === cell.y && pending.z === viewZ;
+      const confirmed = sameCell && action !== null && actionKey(action) === pending.key;
+      clearPending();
+      if (confirmed && action !== null) {
+        onChoose(action);
+      } else {
+        draw();
+      }
       return;
     }
-    const cell = cellAt(camera, px, py, cellPixels());
-    const actions = actionsForCell(state, viewZ, cell.x, cell.y);
-    const only = actions[0];
-    if (actions.length === 0 || only === undefined) {
+    if (action === null) {
       showHint(emptyTapHint(state, viewZ, cell.x, cell.y));
       return;
     }
-    // One choice and nothing to confirm: take it at once. Digging down with
-    // only the "unseen below" note counts too (`tapActsAtOnce`).
-    if (actions.length === 1 && tapActsAtOnce(state, only)) {
-      onChoose(only);
+    if (tapActsAtOnce(state, action)) {
+      onChoose(action);
       return;
     }
-    openChooser(state, actions, cell.x, cell.y);
+    // Risky: mark the cell and wait for a second tap.
+    pending = { x: cell.x, y: cell.y, z: viewZ, key: actionKey(action) };
+    const warning = choiceWarning(state, action) ?? 'it is risky';
+    showHint(`Tap again to ${tapVerb(state, action)}: ${warning}`, PREVIEW_MAP.doubleTapMs);
+    pendingTimer = setTimeout(() => {
+      clearPending();
+      draw();
+    }, PREVIEW_MAP.doubleTapMs);
+    draw();
   }
 
   // ----- Touch and mouse: a drag pans, a pinch zooms, a tap acts -----
@@ -894,7 +893,7 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
       gesture.pinchDistance = fingers.distance;
       gesture.pinchMidX = fingers.midX;
       gesture.pinchMidY = fingers.midY;
-      closeChooser();
+      clearPending();
     }
   });
 
@@ -927,7 +926,7 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
     const dy = event.clientY - gesture.startY;
     if (gesture.kind === 'press' && Math.hypot(dx, dy) > PREVIEW_MAP.dragThresholdPx) {
       gesture.kind = 'drag';
-      closeChooser();
+      clearPending();
     }
     if (gesture.kind === 'drag') {
       camera = panned(gesture.camera, dx, dy, cellPixels(), state.size);
@@ -991,7 +990,7 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
       // Wheel down (positive deltaY) zooms out: more cells across.
       const cells = camera.cells * Math.exp(event.deltaY * PREVIEW_MAP.wheelZoomRate);
       camera = zoomedAbout(camera, cells, px, py, px, py, frame.clientWidth, state.size);
-      closeChooser();
+      clearPending();
       draw();
       saveZoom(camera.cells);
     },
@@ -1000,16 +999,16 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
 
   // ----- The buttons -----
   upButton.addEventListener('click', () => {
-    if (state !== null && viewZ > WORLD.surfaceZ) {
+    if (state !== null && viewZ > WORLD.surfaceZ + 1) {
       viewZ -= 1;
-      closeChooser();
+      clearPending();
       draw();
     }
   });
   downButton.addEventListener('click', () => {
     if (state !== null && viewZ < state.size.z - 1) {
       viewZ += 1;
-      closeChooser();
+      clearPending();
       draw();
     }
   });
@@ -1018,7 +1017,7 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
       // Keeps the zoom; only the position changes.
       camera = centredOn(state.avatar.pos.x, state.avatar.pos.y, state.size, camera.cells);
       viewZ = minersMapLayer(state);
-      closeChooser();
+      clearPending();
       draw();
     }
   });
@@ -1041,7 +1040,7 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
       if (viewZ === minersMapLayer(state)) {
         camera = followMiner(camera, here.x, here.y, state.size);
       }
-      closeChooser();
+      clearPending();
       draw();
       saveZoom(camera.cells);
     }
@@ -1053,7 +1052,7 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
   function show(next: GameState, fresh: boolean): void {
     state = next;
     context = null;
-    closeChooser();
+    clearPending();
     const here = next.avatar.pos;
     const layer = minersMapLayer(next);
     if (fresh || lastMinerLayer !== layer) {

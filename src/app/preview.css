@@ -178,53 +178,19 @@ button.small {
   -webkit-user-select: none;
 }
 
-.chooser {
-  position: absolute;
-  z-index: 2;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px;
-  background: #1d1915;
-  border: 1px solid #ffb380;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
-  box-sizing: border-box;
-}
-
-.chooser > * {
-  /* Keep each option whole; the chooser scrolls instead. */
-  flex-shrink: 0;
-}
-
-.chooser-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.chooser-title {
-  margin: 0;
-  font-size: 0.75rem;
-  color: #a89f92;
-}
-
-.choice-warning {
-  font-size: 0.8rem;
-  color: #ff9b85;
-  overflow-wrap: anywhere;
-}
-
 .map-hint {
   position: absolute;
   left: 50%;
   bottom: 8px;
   transform: translateX(-50%);
+  /* Long enough for a risky tap's warning (issue #78); it wraps inside the map. */
+  width: max-content;
+  max-width: calc(100% - 16px);
+  box-sizing: border-box;
+  text-align: center;
   padding: 6px 12px;
   background: rgba(0, 0, 0, 0.8);
-  border-radius: 999px;
+  border-radius: 12px;
   font-size: 0.85rem;
   pointer-events: none;
 }
@@ -291,10 +257,6 @@ button.small {
   text-align: left;
   padding: 8px 12px;
   width: 100%;
-}
-
-.chooser .choice-text {
-  font-size: 0.9rem;
 }
 
 .choice-text {

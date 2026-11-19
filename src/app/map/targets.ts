@@ -1,25 +1,25 @@
-// Which choices a tap on the map stands for (issue #66).
+// What a tap on the map does (issues #66 and #78).
 //
-// A tap on cell (x, y) of the layer on screen picks, from the legal actions,
-// those that act on that cell:
-// - a move into it, a mine of it, a pick-up from it, cutting the tree in it
-//   (issue #70: on the surface, a tap on a tree beside the miner);
+// `actionsForCell` lists, from the legal actions, those that act on the cell
+// tapped:
+// - a move into it, a mine of it, a pick-up from it, cutting the tree in it;
 // - on the miner's own cell, on the miner's layer: also the ladder climbs
 //   (up and down the same column) and mining the block underfoot.
 // A move belongs to the layer it ends on, and a mine to the layer of its
-// block. So on the surface a neighbour tap is a walk (coordinator's decision
-// on PR #67). The pick reaches only the faces of the miner's cell (issue
-// #75), so a tap on a neighbouring block mines it, and on the layer below
-// only the cell under the miner has a choice: digging down. One tap digs
-// (coordinator's decision on PR #74, `tapActsAtOnce`), and the result line
-// then says what happened: "You dropped 1 block", or the fall and the health
-// it cost. A known longer or fatal fall still opens the chooser.
-// Everything else (crafting, placing, dropping, leaving, ending the shift)
-// is only in the full list under the map.
+// block. Layer 0 is the top view (issue #78): it stands for the surface as
+// well, so on it a tap also reaches the walks, cuts and pick-ups on the
+// surface over the cell. The miner on the surface counts as on layer 0.
+//
+// `tapAction` then picks the ONE action a tap does, by a fixed priority
+// (coordinator's reading of issue #78): mining or cutting first, then
+// moving, then taking items. There is no menu: anything else is in the full
+// list under the map. Crafting, placing, dropping, leaving and ending the
+// shift are only there.
 //
 // It reads nothing but the actions and the miner's position, so it can say
 // nothing about cells the player has not seen.
 
+import { WORLD } from '../../data';
 import { legalActions } from '../../engine';
 import type { Action, GameState } from '../../engine';
 
@@ -39,10 +39,15 @@ function actionCell(action: Action): { x: number; y: number; z: number } | null 
   }
 }
 
-/** The legal actions a tap on cell (x, y) of layer `viewZ` stands for, in list order. */
+/** The layer the map shows the miner on: the surface is drawn on layer 0, the top view. */
+export function mapLayerOf(z: number): number {
+  return z === WORLD.surfaceZ ? WORLD.surfaceZ + 1 : z;
+}
+
+/** The legal actions that act on cell (x, y) of map layer `viewZ`, in list order. */
 export function actionsForCell(state: GameState, viewZ: number, x: number, y: number): Action[] {
   const here = state.avatar.pos;
-  const onMinersLayer = viewZ === here.z;
+  const onMinersLayer = viewZ === mapLayerOf(here.z);
   const isMinersCell = here.x === x && here.y === y;
 
   return legalActions(state).filter((action) => {
@@ -50,7 +55,7 @@ export function actionsForCell(state: GameState, viewZ: number, x: number, y: nu
     if (cell === null || cell.x !== x || cell.y !== y) {
       return false;
     }
-    if (cell.z === viewZ) {
+    if (mapLayerOf(cell.z) === viewZ) {
       return true;
     }
     if (onMinersLayer && isMinersCell) {
@@ -59,4 +64,33 @@ export function actionsForCell(state: GameState, viewZ: number, x: number, y: nu
     }
     return false;
   });
+}
+
+/** How a tap ranks an action: lower goes first (issue #78). */
+function tapRank(action: Action): number {
+  switch (action.type) {
+    case 'mine':
+    case 'cutTree':
+      return 0;
+    case 'move':
+      return 1;
+    case 'pickUp':
+      return 2;
+    default:
+      return 3;
+  }
+}
+
+/**
+ * The one action a tap on cell (x, y) of map layer `viewZ` does, or `null`
+ * if it does nothing. Among equals, the first in the action list wins.
+ */
+export function tapAction(state: GameState, viewZ: number, x: number, y: number): Action | null {
+  let best: Action | null = null;
+  for (const action of actionsForCell(state, viewZ, x, y)) {
+    if (best === null || tapRank(action) < tapRank(best)) {
+      best = action;
+    }
+  }
+  return best;
 }
