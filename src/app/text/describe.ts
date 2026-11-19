@@ -197,7 +197,18 @@ function mineOutcomeText(state: GameState, target: Vec3, underfoot: string): str
   return `${block.name}${traces}${underfoot}, gives ${stackListText(block.yields)}${tooHeavy}`;
 }
 
-function describeAction(state: GameState, action: Action): string {
+/**
+ * How a choice is worded: `'choice'` for the action list and the chooser,
+ * before it is taken; `'result'` for the line that says what was done,
+ * after it (see `takeTurn`). The result form leaves out the warning about
+ * the fall a dig down may cause: that is a forecast, in the future tense, and
+ * once the dig is done the event lines say in the past tense what happened
+ * ("You dropped 1 block.", or the fall and the health it cost) (review of
+ * PR #74).
+ */
+export type ChoiceForm = 'choice' | 'result';
+
+function describeAction(state: GameState, action: Action, form: ChoiceForm): string {
   const here = state.avatar.pos;
   switch (action.type) {
     case 'move': {
@@ -215,8 +226,9 @@ function describeAction(state: GameState, action: Action): string {
       return `Move ${side}${drop}`;
     }
     case 'mine': {
+      const isUnderfoot = action.target.x === here.x && action.target.y === here.y;
       const underfoot =
-        action.target.x === here.x && action.target.y === here.y
+        isUnderfoot && form === 'choice'
           ? ` (you are standing on it: ${knownFallText(state)})`
           : '';
       return `Mine ${whereFrom(here, action.target)}: ${mineOutcomeText(state, action.target, underfoot)}`;
@@ -419,12 +431,20 @@ export function choiceGroupText(state: GameState, entry: LogEntry): string | nul
   return `Mine ${mineOutcomeText(state, entry.target, '')}`;
 }
 
-/** The text of one line of the action list. */
-export function describeChoice(state: GameState, entry: LogEntry): string {
+/**
+ * The text of one line of the action list (`form` 'choice', the default), or
+ * of what was done, for the result line (`form` 'result'; see `ChoiceForm`).
+ * Describe the choice in the state before it is taken.
+ */
+export function describeChoice(
+  state: GameState,
+  entry: LogEntry,
+  form: ChoiceForm = 'choice',
+): string {
   if (entry.type === 'endShift') {
     return 'End the shift';
   }
-  return describeAction(state, entry);
+  return describeAction(state, entry, form);
 }
 
 /** The display name of the structure with this code. */
@@ -592,8 +612,9 @@ function signed(value: number): string {
  * and also digging down when all the warning says is that the cell under the
  * block is unseen. That cell is almost never known, so the chooser would
  * open on every dig, and the owner asked for one-at-a-time Minecraft
- * digging. The note is not lost: the result line repeats the choice's
- * description, warning included. Every other warning (a known fall longer
+ * digging. The warning stays in the full action list; after the dig the
+ * result line says in the past tense what happened (`ChoiceForm`). Every
+ * other warning (a known fall longer
  * than the safe drop, FATAL, too heavy to carry) still opens the chooser.
  * Reads revealed cells only, like `choiceWarning`.
  */

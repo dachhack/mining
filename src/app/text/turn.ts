@@ -12,8 +12,10 @@ import type { LogEntry, Session } from './log';
  * nothing, if the entry is not legal (see `step`).
  */
 export function takeTurn(session: Session, entry: LogEntry): string {
-  // The choice is described before it is taken: afterwards the state has moved on.
-  const text = describeChoice(session.state, entry);
+  // The choice is described before it is taken: afterwards the state has
+  // moved on. In its 'result' form: no forecast of a fall, since the event
+  // lines say what did happen.
+  const text = describeChoice(session.state, entry, 'result');
   const events = step(session, entry);
   return `> ${text}. ${describeEvents(session.state, events).join(' ')}`.trimEnd();
 }
