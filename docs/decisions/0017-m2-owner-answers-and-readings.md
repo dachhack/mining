@@ -46,6 +46,15 @@ Generation (#52):
 20. Each hazard is generated only in the band design doc 3.1 names for it.
 21. Caverns are generated empty: no pooled water or gas.
 
+## Carry-overs added after the surface forest (PR #72, decision note 0020)
+
+For the paused M2 tasks, to go into their briefs when they resume:
+
+- #52 (generation): path wear and the coal-in-sight step read layer 1 (they wear or place only where layer 1 is solid); once upper-band voids exist this would give away an unseen void, so change them as 0020 says. Add a test that pins the coal guarantee's no-leak property (changing cells under trees must not change what the guarantee does).
+- #53 (cave-ins): a test that regrowth happens after the cube phase: a stump due this shift over a block that falls in step (a) is named in the forecast's `regrowth` part and then does not grow.
+- #54 and #55 (water, lava, gas, air): trees count as open air for flows and connected air, but any rule that lets something enter or rest in a surface cell must also check `hasTree`.
+- All M2 tasks: `ShiftForecast` has a required `regrowth` field; STATE_VERSION is 5; the golden runs were re-recorded for the forest.
+
 ## Consequences
 
 - Starting load becomes 10 of 20; golden runs are re-recorded once, in #57.
