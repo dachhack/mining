@@ -8,7 +8,15 @@
 // engine's `applyAction` or `endShift`). It never edits the state itself.
 
 import { ENGINE_VERSION, isRunActive } from '../engine';
-import { clearSavedRun, loadRun, parseSeed, randomSeed, saveRun, startRun } from './previewSession';
+import {
+  MAX_SEED,
+  clearSavedRun,
+  loadRun,
+  parseSeed,
+  randomSeed,
+  saveRun,
+  startRun,
+} from './previewSession';
 import type { SaveStore } from './previewSession';
 import type { Session } from './text/log';
 import { takeTurn } from './text/turn';
@@ -251,7 +259,7 @@ export function mountPreview(root: HTMLElement): void {
     event.preventDefault();
     const seed = parseSeed(seedInput.value);
     if (seed === null) {
-      seedError.textContent = 'The seed must be a whole number from 0 to 4294967295.';
+      seedError.textContent = `The seed must be a whole number from 0 to ${MAX_SEED}.`;
       seedError.hidden = false;
       return;
     }

@@ -7,7 +7,8 @@ name: Android preview
 #   on the rolling "android-preview" pre-release, replacing the previous APK.
 # - On a pull request that touches the Android wrapper: build and upload the
 #   artifact only, to check the build still works. Nothing is published.
-# - Manual runs ("Run workflow" on the Actions tab) behave like a push.
+# - Manual runs ("Run workflow" on the Actions tab) behave like a push when
+#   started on main; on any other branch they build without publishing.
 #
 # The debug APK is signed with the fixed, public preview key committed at
 # android/app/debug-preview.keystore (so each new APK installs over the last),
@@ -26,9 +27,12 @@ on:
       - '.github/workflows/android-preview.yml'
   workflow_dispatch:
 
+# A newer push cancels an older run only on pull requests. On main a run is
+# never cancelled part-way, because a cancelled publish could leave the
+# release deleted and not yet re-made (no APK to download).
 concurrency:
   group: android-preview-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -69,8 +73,9 @@ jobs:
           retention-days: 30
 
   publish:
-    # Only for main (or a manual run): pull requests do not publish.
-    if: github.event_name != 'pull_request'
+    # Only for main, also for manual runs: pull requests and manual runs on
+    # other branches build but do not publish, so the release is always main.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     permissions:

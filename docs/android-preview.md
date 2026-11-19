@@ -28,7 +28,7 @@ You can turn "Allow from this source" off again afterwards; it is only needed wh
 
 ### Update it
 
-Download the APK again from the same link and install it over the old one. Your saved run is kept, unless the game's rules have changed so that it no longer replays; then the app says so and starts a new run.
+Download the APK again from the same link and install it over the old one. Your saved run is kept. If the game's rules have changed since you saved it, the app says so when it resumes the run, because it is replayed under the new rules and may not be exactly where you left it; if it no longer replays at all, the app says so and starts a new run.
 
 Every preview build is signed with the same key, so a new one installs over the old one. That key (`android/app/debug-preview.keystore`, the standard Android debug settings: alias `androiddebugkey`, password `android`) is public on purpose: it is for this debug preview only and is never used for the Play Store. The Play builds in M4 use a separate, secret upload key.
 

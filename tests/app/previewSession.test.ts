@@ -3,7 +3,7 @@
 // No DOM is needed: storage is a small stand-in for `localStorage`.
 import { describe, expect, it } from 'vitest';
 
-import { hashState } from '../../src/engine';
+import { ENGINE_VERSION, hashState } from '../../src/engine';
 import {
   MAX_SEED,
   SAVE_KEY,
@@ -105,6 +105,23 @@ describe('saving and resuming', () => {
     expect(loaded.note).toBe('Resumed your saved run: seed 7.');
     expect(hashState(loaded.session?.state ?? session.state)).toBe(hashState(session.state));
     expect(loaded.session?.log.actions).toEqual(session.log.actions);
+  });
+
+  it('a save from another engine version is resumed with a note saying so', () => {
+    const store = memoryStore();
+    const session = startRun(7);
+    take(session, 'e');
+    saveRun(store, session);
+    const log = JSON.parse(store.data.get(SAVE_KEY) ?? '{}') as { engineVersion: string };
+    log.engineVersion = '0.0.1';
+    store.data.set(SAVE_KEY, JSON.stringify(log));
+
+    const loaded = loadRun(store);
+    expect(loaded.session).not.toBeNull();
+    expect(loaded.note).toBe(
+      'Resumed your saved run: seed 7. It was saved on engine 0.0.1 and replayed on engine ' +
+        `${ENGINE_VERSION}: the rules may have changed.`,
+    );
   });
 
   it('with nothing saved there is nothing to resume', () => {

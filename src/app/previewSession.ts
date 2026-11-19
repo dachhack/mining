@@ -97,8 +97,9 @@ export interface LoadResult {
 }
 
 /**
- * Resume the saved run. A run saved by an older engine may no longer replay
- * (the rules changed); it is then dropped and the player is told why.
+ * Resume the saved run. A run saved by another engine version is replayed
+ * under this engine's rules, and the note says so. If it no longer replays
+ * (the rules changed), it is dropped and the player is told why.
  */
 export function loadRun(store: SaveStore | null): LoadResult {
   if (store === null) {
@@ -116,7 +117,15 @@ export function loadRun(store: SaveStore | null): LoadResult {
   try {
     const log = logFromText(text);
     const session = replayLog(log);
-    return { session, note: `Resumed your saved run: seed ${log.seed}.` };
+    let note = `Resumed your saved run: seed ${log.seed}.`;
+    if (log.engineVersion !== ENGINE_VERSION) {
+      // The choices still replay, but under the new rules, so the run the
+      // player comes back to may differ from the one they left.
+      note +=
+        ` It was saved on engine ${log.engineVersion} and replayed on engine ` +
+        `${ENGINE_VERSION}: the rules may have changed.`;
+    }
+    return { session, note };
   } catch {
     clearSavedRun(store);
     return {
