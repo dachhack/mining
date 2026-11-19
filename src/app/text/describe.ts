@@ -587,6 +587,36 @@ function signed(value: number): string {
 }
 
 /**
+ * True if a tap on the map should take this choice at once, without opening
+ * the chooser (coordinator's decision on PR #74): a choice with no warning,
+ * and also digging down when all the warning says is that the cell under the
+ * block is unseen. That cell is almost never known, so the chooser would
+ * open on every dig, and the owner asked for one-at-a-time Minecraft
+ * digging. The note is not lost: the result line repeats the choice's
+ * description, warning included. Every other warning (a known fall longer
+ * than the safe drop, FATAL, too heavy to carry) still opens the chooser.
+ * Reads revealed cells only, like `choiceWarning`.
+ */
+export function tapActsAtOnce(state: GameState, entry: LogEntry): boolean {
+  if (choiceWarning(state, entry) === null) {
+    return true;
+  }
+  if (entry.type !== 'mine') {
+    return false;
+  }
+  const here = state.avatar.pos;
+  const isDigDown =
+    entry.target.x === here.x && entry.target.y === here.y && entry.target.z === here.z + 1;
+  if (!isDigDown) {
+    return false;
+  }
+  const drop = knownDigDownDrop(state);
+  const block = blockDefAt(state, entry.target);
+  const fits = block.yields.every((stack) => canCarry(state, stack.item, stack.count));
+  return drop.kind === 'unseen' && drop.blocks <= AVATAR.safeDigDownBlocks && fits;
+}
+
+/**
  * The warning a choice carries, or `null` if it carries none: a fall or
  * a drop (which may cost health), or a yield (of mining or of cutting a
  * tree) too heavy to carry. The tap map

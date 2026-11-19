@@ -10,9 +10,10 @@
 // block. So on the surface a neighbour tap is a walk (coordinator's decision
 // on PR #67). The pick reaches only the faces of the miner's cell (issue
 // #75), so a tap on a neighbouring block mines it, and on the layer below
-// only the cell under the miner has a choice: digging down. Digging down onto
-// rock the miner has seen carries no warning, so one tap digs; the turn log
-// then says "You dropped 1 block".
+// only the cell under the miner has a choice: digging down. One tap digs
+// (coordinator's decision on PR #74, `tapActsAtOnce`): the note that the
+// cell below is unseen shows in the result line, not in the chooser. A known
+// longer or fatal fall still opens the chooser.
 // Everything else (crafting, placing, dropping, leaving, ending the shift)
 // is only in the full list under the map.
 //

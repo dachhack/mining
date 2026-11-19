@@ -30,7 +30,7 @@ import {
 } from '../../src/app/map/camera';
 import { actionsForCell } from '../../src/app/map/targets';
 import { buildLayer, layerContext } from '../../src/app/map/tiles';
-import { choiceName, choiceWarning } from '../../src/app/text/describe';
+import { choiceName, choiceWarning, tapActsAtOnce } from '../../src/app/text/describe';
 import { updateReveal } from '../../src/engine/reveal';
 import { buildState } from '../engine/helpers';
 
@@ -295,6 +295,33 @@ describe('warnings that stop a tap acting at once (issue #66)', () => {
     );
     expect(choiceWarning(state, named('mine-w'))).toBeNull();
     expect(choiceWarning(state, named('n'))).toBeNull();
+  });
+
+  it('digging down is one tap while the only note is the unseen cell below (PR #74)', () => {
+    const state = takeAll(seed7(), ['mine-down']);
+    const dig = legalActions(state).find((a) => choiceName(state, a) === 'mine-down');
+    expect(dig).toBeDefined();
+    if (dig !== undefined) {
+      // The warning is still there, for the result line and the full list.
+      expect(choiceWarning(state, dig)).not.toBeNull();
+      expect(tapActsAtOnce(state, dig)).toBe(true);
+    }
+  });
+
+  it('a known fall longer than the safe drop still opens the chooser', () => {
+    const state = takeAll(seed7(), ['mine-down']);
+    const { x, y, z } = state.avatar.pos;
+    // The cell under the block underfoot is open and seen, the one under it rock and seen.
+    state.blocks[cellIndex(state.size, { x, y, z: z + 2 })] = BLOCKS.air.code;
+    state.revealed[cellIndex(state.size, { x, y, z: z + 2 })] = 1;
+    state.revealed[cellIndex(state.size, { x, y, z: z + 3 })] = 1;
+    expect(state.blocks[cellIndex(state.size, { x, y, z: z + 3 })]).not.toBe(BLOCKS.air.code);
+    const dig = legalActions(state).find((a) => choiceName(state, a) === 'mine-down');
+    expect(dig).toBeDefined();
+    if (dig !== undefined) {
+      expect(choiceWarning(state, dig)).toContain('you will fall 2 blocks');
+      expect(tapActsAtOnce(state, dig)).toBe(false);
+    }
   });
 
   it('digging down onto rock the miner has seen is one tap: no warning (issue #75)', () => {

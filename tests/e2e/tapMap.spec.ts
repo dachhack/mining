@@ -1,5 +1,6 @@
 // The tap map of the phone preview (issue #66): drag to pan, "Centre on me",
-// tap a cell to move or mine, and the chooser for a choice with a warning.
+// tap a cell to move or mine, and the chooser for a tap that stands for more
+// than one choice or for a choice with a warning.
 // Seed 7 starts on the surface at x16 y16 over dirt; under it, on layer 0,
 // there is dirt to the west (see `npm run play -- --seed 7 --do mine-down`).
 // The map starts on the miner's own layer, the surface.
@@ -52,6 +53,17 @@ async function drag(page: Page, canvas: Locator, dx: number, dy: number): Promis
   await page.mouse.up();
 }
 
+/**
+ * Drop one timber in the miner's cell (from the full list), so a tap on the
+ * miner stands for two choices, picking it up and digging down, and opens
+ * the chooser. Since PR #74 a lone dig down is taken on one tap.
+ */
+async function dropTimberHere(page: Page): Promise<void> {
+  await page.getByText(/^All actions/).click();
+  await page.getByRole('button', { name: /^Drop/ }).filter({ hasText: 'Timber' }).first().click();
+  await page.getByText(/^All actions/).click();
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await page.evaluate(() => {
@@ -102,24 +114,40 @@ test('on the surface a tap on a neighbour walks there at once', async ({ page })
   await tapCell(page, canvas, 18, 16);
   await expect(page.getByTestId('map-hint')).toHaveText('Nothing to do there');
   await tapCell(page, canvas, 18, 17);
-  await expect(page.getByTestId('chooser')).toContainText('Mine below you');
+  await expect(page.getByTestId('outcome')).toContainText('> Mine below you');
 });
 
-test('tapping the miner opens the chooser with the fall warning; one more tap mines', async ({
+test('tapping the miner digs down at once; the unseen-below note is in the result line', async ({
+  page,
+}) => {
+  // Coordinator's decision on PR #74: one tap digs, as in Minecraft. The
+  // cell under the block is unseen, so the result line says what could have
+  // happened without saying what is there (issue #75).
+  const canvas = page.getByTestId('map-canvas');
+  await tapCell(page, canvas, 16, 16);
+  await expect(page.getByTestId('chooser')).toBeHidden();
+  await expect(page.getByTestId('outcome')).toContainText(
+    'you drop at least 1 block; if there is nothing under it (layer 1, unseen) you will fall further and be hurt',
+  );
+  await expect(page.getByTestId('outcome')).toContainText('You dropped 1 block.');
+  await expect(page.getByTestId('gauges')).toContainText('AP 4/5');
+  // There was rock under it: a safe one-block drop.
+  await expect(page.getByTestId('gauges')).toContainText('Health 10/10');
+  await expect(page.getByTestId('gauges')).toContainText('x16 y16, layer 0');
+  await expect(page.getByTestId('layer-label')).toHaveText('Layer 0 · you are here');
+});
+
+test('a tap standing for two choices opens the chooser; a tap elsewhere cancels it', async ({
   page,
 }) => {
   const canvas = page.getByTestId('map-canvas');
-  await tapCell(page, canvas, 16, 16);
+  await dropTimberHere(page);
   const chooser = page.getByTestId('chooser');
+  await tapCell(page, canvas, 16, 16);
   await expect(chooser).toBeVisible();
-  // The cell under the block is unseen, so the warning says what may happen
-  // without saying what is there (issue #75).
-  await expect(chooser).toContainText(
-    'you drop at least 1 block; if there is nothing under it (layer 1, unseen) you will fall further and be hurt',
-  );
-  // Nothing was done yet.
-  await expect(page.getByTestId('gauges')).toContainText('AP 5/5');
-
+  await expect(chooser).toContainText('Mine below you');
+  // The warning is shown in the chooser too.
+  await expect(chooser).toContainText('you drop at least 1 block');
   // Tapping elsewhere on the map cancels. (The chooser covers the top half
   // of the map, above the miner, so the tap is in the bottom half.)
   await tapCell(page, canvas, 10, 22);
@@ -129,10 +157,7 @@ test('tapping the miner opens the chooser with the fall warning; one more tap mi
   await tapCell(page, canvas, 16, 16);
   await chooser.getByRole('button', { name: /Mine below you/ }).click();
   await expect(page.getByTestId('gauges')).toContainText('AP 4/5');
-  // There was rock under it: a safe one-block drop.
-  await expect(page.getByTestId('gauges')).toContainText('Health 10/10');
   await expect(page.getByTestId('gauges')).toContainText('x16 y16, layer 0');
-  await expect(page.getByTestId('layer-label')).toHaveText('Layer 0 · you are here');
 });
 
 test('tapping a neighbouring block mines it, and tapping the open cell moves there', async ({
@@ -140,11 +165,8 @@ test('tapping a neighbouring block mines it, and tapping the open cell moves the
 }) => {
   const canvas = page.getByTestId('map-canvas');
   const gauges = page.getByTestId('gauges');
+  // One tap digs down (coordinator's decision on PR #74).
   await tapCell(page, canvas, 16, 16);
-  await page
-    .getByTestId('chooser')
-    .getByRole('button', { name: /Mine below you/ })
-    .click();
   await expect(gauges).toContainText('AP 4/5');
 
   // West is dirt: one tap mines it (one choice, no warning).
@@ -178,21 +200,20 @@ test('the layer buttons show the layer below, where only the block underfoot can
   page,
 }) => {
   const canvas = page.getByTestId('map-canvas');
+  // One tap digs down (coordinator's decision on PR #74).
   await tapCell(page, canvas, 16, 16);
-  await page
-    .getByTestId('chooser')
-    .getByRole('button', { name: /Mine below you/ })
-    .click();
   await page.getByRole('button', { name: 'Look one layer down' }).click();
   await expect(page.getByTestId('layer-label')).toHaveText('Layer 1 · 1 below you');
   // The block under the west neighbour is out of reach (issue #75).
   await tapCell(page, canvas, 15, 16);
   await expect(page.getByTestId('map-hint')).toHaveText('Nothing to do there');
-  // The block underfoot is dug down from here too.
-  await tapCell(page, canvas, 16, 16);
-  await expect(page.getByTestId('chooser')).toContainText('Mine below you');
   await page.getByRole('button', { name: 'Look one layer up' }).click();
   await expect(page.getByTestId('layer-label')).toHaveText('Layer 0 · you are here');
+  // The block underfoot is dug down from the layer below too, in one tap.
+  await page.getByRole('button', { name: 'Look one layer down' }).click();
+  await tapCell(page, canvas, 16, 16);
+  await expect(page.getByTestId('outcome')).toContainText('> Mine below you');
+  await expect(page.getByTestId('gauges')).toContainText('layer 1');
 });
 
 test('at phone width: no sideways scroll, and every tap target is at least 44 px', async ({
@@ -201,6 +222,7 @@ test('at phone width: no sideways scroll, and every tap target is at least 44 px
   await page.setViewportSize({ width: 390, height: 844 });
   const canvas = page.getByTestId('map-canvas');
   // With the chooser open, so its buttons are measured too.
+  await dropTimberHere(page);
   await tapCell(page, canvas, 16, 16);
   await expect(page.getByTestId('chooser')).toBeVisible();
   const overflow = await page.evaluate(
