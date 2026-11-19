@@ -57,7 +57,9 @@ describe('the starting fuel (decision note 0014 item 33)', () => {
     }
     // With seeds that never pay back, no starting fuel covers every seed.
     expect(report.aggregate.startingFuelNeededForAll).toBeNull();
-  });
+    // 100 trips, longer since the forest (look-holes, cutting): about 3 s
+    // here, over the default 5 s limit on a slow CI runner.
+  }, 30000);
 });
 
 describe('the coal policy', () => {
