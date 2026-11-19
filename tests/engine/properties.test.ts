@@ -40,7 +40,9 @@ import {
 } from '../../src/engine';
 import type { GameState } from '../../src/engine';
 import type { Vec3 } from '../../src/data';
-import { cloneState, setBlock, setStructure } from '../../src/engine/state';
+import { cloneState, setBlock, setRevealed, setStructure } from '../../src/engine/state';
+import { updateReveal } from '../../src/engine/reveal';
+import { buildState } from './helpers';
 import { decisionKey, makePolicy } from '../../tools/policies';
 import { playRun } from '../../tools/simRun';
 import { buildView, renderView } from '../../src/app/text/view';
@@ -516,6 +518,28 @@ function whatThePlayerGetsNearTheMiner(state: GameState): string {
 }
 
 describe('property tests: unseen cells change nothing the player gets (issue #75)', () => {
+  // A state no policy reaches: the cell under the block underfoot is known
+  // to be open, and the one under that is unseen. The dig-down text then
+  // says "you will fall 2 blocks or more ... unseen", and must not depend on
+  // what the unseen cell holds (review of PR #74).
+  it('a known open cell under the block underfoot, and an unseen one below it', () => {
+    const solid = ['#####', '#####', '#####', '#####', '#####'];
+    const pocket = ['#####', '#####', '##.##', '#####', '#####'];
+    const state = buildState({
+      layers: [solid, pocket, solid, pocket, solid, solid, solid, solid],
+      avatar: { x: 2, y: 2, z: 1 },
+    });
+    updateReveal(state, []);
+    // As if seen earlier from a side tunnel.
+    setRevealed(state, { x: 2, y: 2, z: 3 }, true);
+    expect(isRevealed(state, { x: 2, y: 2, z: 4 })).toBe(false);
+    const before = whatThePlayerGetsNearTheMiner(state);
+    expect(before).toContain('you will fall 2 blocks or more');
+    for (const code of [BLOCKS.air.code, BLOCKS.stone.code]) {
+      expect(whatThePlayerGetsNearTheMiner(withUnseenCells(state, code)) === before).toBe(true);
+    }
+  });
+
   it.each([
     [8, 'staircase'],
     [11, 'staircase'],

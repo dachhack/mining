@@ -79,7 +79,8 @@ describe('mining the block underfoot with nothing to hold the miner', () => {
     expect(events.filter((event) => event.type === 'damageTaken')).toEqual([]);
   });
 
-  it.each([2])('costs health for a fall of %i blocks', (distance) => {
+  it('costs health for a fall of 2 blocks', () => {
+    const distance = 2;
     const damage = distance * AVATAR.uncontrolledFallDamagePerBlock;
     expect(damage).toBeGreaterThan(0);
     const state = overVoid(distance - 1);

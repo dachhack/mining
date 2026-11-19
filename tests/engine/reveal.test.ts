@@ -236,7 +236,7 @@ describe('the surface (owner, after PR #72: only what has been discovered)', () 
   // Daylight no longer reveals the whole top layer. On the surface it does the
   // lamp's work round the miner, lamp oil or not: light spreads over the
   // surface cells as far as the lamp's radius and shows the blocks under
-  // them, and the pick's reach shows the rest of what it touches.
+  // them, and touch shows the block underfoot (issue #75).
   const width = WITH_OIL + 6;
   function row(): GameState {
     return buildState({
@@ -289,7 +289,27 @@ describe('the surface (owner, after PR #72: only what has been discovered)', () 
     }
   });
 
-  it('a pit far from the miner is not seen, and daylight does not shine down it', () => {
+  it('daylight goes down an open hole near the miner, like the lamp, lamp oil or not', () => {
+    // A hole two cells deep at x = 1, beside the miner at x = 0 on the
+    // surface. Daylight spreads surface (1) -> layer 0 (2) -> layer 1 (3) and
+    // reveals what touches the lit cells: the hole's floor on layer 2 and its
+    // walls on layer 1 (review of PR #74: the words follow the code).
+    expect(WITH_OIL).toBeGreaterThanOrEqual(3);
+    const state = buildState({
+      layers: [['#.' + '#'.repeat(width - 2)], ['#.' + '#'.repeat(width - 2)], ['#'.repeat(width)]],
+      avatar: { x: 0, y: 0, z: -1 },
+    });
+    state.lampOil = 0;
+    updateReveal(state, []);
+    expect(isRevealed(state, { x: 1, y: 0, z: 1 })).toBe(true);
+    expect(isRevealed(state, { x: 1, y: 0, z: 2 })).toBe(true);
+    expect(isRevealed(state, { x: 0, y: 0, z: 1 })).toBe(true);
+    expect(isRevealed(state, { x: 2, y: 0, z: 1 })).toBe(true);
+    // Light goes no further than the radius: nothing on layer 2 beside the floor.
+    expect(isRevealed(state, { x: 0, y: 0, z: 2 })).toBe(false);
+  });
+
+  it('a pit far from the miner is not seen, and daylight does not reach down it', () => {
     const pitX = width - 1;
     const state = buildState({
       layers: [['#'.repeat(width - 1) + '.'], ['#'.repeat(width)], ['#'.repeat(width)]],

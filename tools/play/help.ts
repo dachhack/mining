@@ -197,8 +197,9 @@ THE GAME
   - You always know the six cells touching your own (north, east, south, west, above, below).
     Nothing else: not the block behind a wall, not what is under the floor of a cell beside you,
     not the bottom of a drop your light does not reach.
-  - Daylight does not shine down a hole: from the surface you see that a hole is there, not
-    what is at its bottom.
+  - On the surface daylight spreads from you like your lamp's light: over open ground and down
+    into an open hole near you, a few steps through open cells. It gives no light underground:
+    once you are in the rock, only your lamp and torches light it.
   - What you have seen stays on the map. An unseen cell is "?" whether it is rock or open.
   - A torch lights the cells around it for good, the way your lamp does, and it needs no oil.
     Place it in your own cell or an open cell touching yours. A cell holds one thing: a ladder

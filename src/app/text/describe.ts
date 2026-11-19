@@ -93,32 +93,18 @@ function blocksText(count: number): string {
  * that cell holds (issue #75 item 2).
  */
 function knownFallText(state: GameState): string {
-  const here = state.avatar.pos;
-  // A ladder in the avatar's own cell is footing: it holds whatever is mined.
-  if (structureAt(state, here) === STRUCTURES.ladder.code) {
+  const drop = knownDigDownDrop(state);
+  if (drop.kind === 'ladder') {
     return 'your ladder holds you, you will not fall';
   }
-  // With the block gone the avatar drops into its cell: a fall of 1. It
-  // falls on from a cell while that cell has no ladder and the cell below it
-  // is open.
-  let fall = 1;
-  for (;;) {
-    const below = { x: here.x, y: here.y, z: here.z + fall + 1 };
-    if (!isRevealed(state, below)) {
-      const unseen = layerName(below.z);
-      if (fall <= AVATAR.safeDigDownBlocks) {
-        return `you drop at least ${blocksText(fall)}; if there is nothing under it (${unseen}, unseen) you will fall further and be hurt`;
-      }
-      const cost = fallDamage('uncontrolled', fall);
-      return `you will fall ${blocksText(fall)} or more and lose at least ${cost} health; the cell under that (${unseen}) is unseen`;
+  const fall = drop.blocks;
+  if (drop.kind === 'unseen') {
+    const unseen = layerName(drop.unseenZ);
+    if (fall <= AVATAR.safeDigDownBlocks) {
+      return `you drop at least ${blocksText(fall)}; if there is nothing under it (${unseen}, unseen) you will fall further and be hurt`;
     }
-    if (isSolid(state, below)) {
-      break;
-    }
-    fall += 1;
-    if (structureAt(state, below) === STRUCTURES.ladder.code) {
-      break; // a ladder further down catches the fall
-    }
+    const cost = fallDamage('uncontrolled', fall);
+    return `you will fall ${blocksText(fall)} or more and lose at least ${cost} health; the cell under that (${unseen}) is unseen`;
   }
   if (fall <= AVATAR.safeDigDownBlocks) {
     return `you drop ${blocksText(fall)}, no harm`;
@@ -131,17 +117,57 @@ function knownFallText(state: GameState): string {
 }
 
 /**
- * True if the drop that digging down would cause is known to be the safe
- * one-block drop (or a ladder holds the avatar). Read from revealed cells
- * only. For the tap map: such a dig needs no warning.
+ * What the player knows of the drop that digging down would cause. One of:
+ * - `{ kind: 'ladder' }`: a ladder in the avatar's own cell holds it;
+ * - `{ kind: 'known', blocks }`: the whole fall is known, `blocks` long;
+ * - `{ kind: 'unseen', blocks, unseenZ }`: the avatar falls at least
+ *   `blocks`, and the layer `unseenZ` cell that decides whether it falls on
+ *   is unseen.
+ *
+ * Read from revealed cells only. With the block gone the avatar drops into
+ * its cell: a fall of 1. It falls on while the cell below is open and has no
+ * ladder. The walk stops at the first unseen cell, so nothing here depends on
+ * what that cell holds (issue #75 item 2). `knownFallText` and
+ * `digDownIsKnownSafe` both use it, so the list and the tap map cannot
+ * disagree.
  */
-function digDownIsKnownSafe(state: GameState): boolean {
+type DigDownDrop =
+  | { kind: 'ladder' }
+  | { kind: 'known'; blocks: number }
+  | { kind: 'unseen'; blocks: number; unseenZ: number };
+
+function knownDigDownDrop(state: GameState): DigDownDrop {
   const here = state.avatar.pos;
   if (structureAt(state, here) === STRUCTURES.ladder.code) {
+    return { kind: 'ladder' };
+  }
+  let fall = 1;
+  for (;;) {
+    const below = { x: here.x, y: here.y, z: here.z + fall + 1 };
+    if (!isRevealed(state, below)) {
+      return { kind: 'unseen', blocks: fall, unseenZ: below.z };
+    }
+    if (isSolid(state, below)) {
+      return { kind: 'known', blocks: fall };
+    }
+    fall += 1;
+    if (structureAt(state, below) === STRUCTURES.ladder.code) {
+      return { kind: 'known', blocks: fall }; // a ladder further down catches the fall
+    }
+  }
+}
+
+/**
+ * True if the drop that digging down would cause is known to be safe: a
+ * ladder holds the avatar, or the whole drop is known and no longer than
+ * `AVATAR.safeDigDownBlocks`. For the tap map: such a dig needs no warning.
+ */
+function digDownIsKnownSafe(state: GameState): boolean {
+  const drop = knownDigDownDrop(state);
+  if (drop.kind === 'ladder') {
     return true;
   }
-  const under = { x: here.x, y: here.y, z: here.z + 2 };
-  return isRevealed(state, under) && isSolid(state, under);
+  return drop.kind === 'known' && drop.blocks <= AVATAR.safeDigDownBlocks;
 }
 
 /** What the player is told when the run is over, in words (the engine's ids are not shown). */
