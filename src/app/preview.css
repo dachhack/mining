@@ -111,29 +111,145 @@ button.small {
   margin-top: 8px;
 }
 
-.map-box {
+/* ----- The tap map (issue #66) ----- */
+
+.tap-map {
   margin: 8px 0;
 }
 
-.map-text {
-  font-size: 0.8rem;
-  color: #c9c0b3;
-  margin: 4px 0;
+.map-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
-.map {
-  margin: 4px 0;
+.layer-button {
+  padding: 0 10px;
+}
+
+.layer-button:disabled {
+  opacity: 0.4;
+}
+
+.layer-label {
+  flex: 1 1 auto;
+  text-align: center;
+  font-size: 0.85rem;
+  color: #c9c0b3;
+}
+
+/* The miner's own layer is marked in its label and by the map's border. */
+.layer-label.mine {
+  color: #ffb380;
+  font-weight: bold;
+}
+
+.map-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border: 2px solid #3a322c;
+  border-radius: 4px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.map-frame.mine {
+  border-color: #ff8a5c;
+}
+
+.map-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* The map handles its own drags: the page must not scroll or zoom under them. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.chooser {
+  position: absolute;
+  z-index: 2;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   padding: 8px;
-  background: #0c0a09;
-  border: 1px solid #3a322c;
-  border-radius: 6px;
-  font-family: ui-monospace, 'DejaVu Sans Mono', Menlo, monospace;
-  font-size: 12px;
-  line-height: 1.25;
-  /* The map keeps its text layout (one character per cell), so it may be
-     wider than the screen: then it scrolls sideways in this box only. */
-  white-space: pre;
-  overflow-x: auto;
+  background: #1d1915;
+  border: 1px solid #ffb380;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  box-sizing: border-box;
+}
+
+.chooser > * {
+  /* Keep each option whole; the chooser scrolls instead. */
+  flex-shrink: 0;
+}
+
+.chooser-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.chooser-title {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #a89f92;
+}
+
+.choice-warning {
+  font-size: 0.8rem;
+  color: #ff9b85;
+  overflow-wrap: anywhere;
+}
+
+.map-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 6px;
+  font-size: 0.75rem;
+  color: #c9c0b3;
+}
+
+.legend-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-swatch {
+  width: 18px;
+  height: 18px;
+}
+
+.map-notes {
+  font-size: 0.8rem;
+  color: #c9c0b3;
+}
+
+.all-actions > summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
 }
 
 .forecast,
@@ -166,6 +282,10 @@ button.small {
   text-align: left;
   padding: 8px 12px;
   width: 100%;
+}
+
+.chooser .choice-text {
+  font-size: 0.9rem;
 }
 
 .choice-text {

@@ -5,8 +5,9 @@ name: Android preview
 #
 # - On a push to main: build, then publish the APK as a workflow artifact AND
 #   on the rolling "android-preview" pre-release, replacing the previous APK.
-# - On a pull request that touches the Android wrapper: build and upload the
-#   artifact only, to check the build still works. Nothing is published.
+# - On a pull request that touches the Android wrapper or the screen it wraps:
+#   build and upload the artifact only, to check the build still works.
+#   Nothing is published.
 # - Manual runs ("Run workflow" on the Actions tab) behave like a push when
 #   started on main; on any other branch they build without publishing.
 #
@@ -19,8 +20,11 @@ on:
   push:
     branches: [main]
   pull_request:
+    # The Android wrapper, and the screen it wraps (src/app, index.html).
     paths:
       - 'android/**'
+      - 'src/app/**'
+      - 'index.html'
       - 'capacitor.config.ts'
       - 'package.json'
       - 'package-lock.json'

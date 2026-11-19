@@ -524,3 +524,28 @@ function blockIdByCode(code: number): string {
 function signed(value: number): string {
   return value > 0 ? `+${value}` : String(value);
 }
+
+/**
+ * The warning a choice carries, or `null` if it carries none: a fall or
+ * a drop (which may cost health), or a yield too heavy to carry. The tap map
+ * of the phone preview (src/app/map) acts at once on a tap only for a choice
+ * with no warning; one with a warning is shown first, with this text.
+ * Worked out from revealed cells only, like the rest of this file.
+ */
+export function choiceWarning(state: GameState, entry: LogEntry): string | null {
+  const here = state.avatar.pos;
+  if (entry.type === 'move' && entry.drop > 0) {
+    return `you will drop ${blocksText(entry.drop)} to ${layerName(entry.to.z + entry.drop)}`;
+  }
+  if (entry.type === 'mine') {
+    if (entry.target.x === here.x && entry.target.y === here.y && entry.target.z > here.z) {
+      return `you are standing on it: ${knownFallText(state)}`;
+    }
+    const block = blockDefAt(state, entry.target);
+    const fits = block.yields.every((stack) => canCarry(state, stack.item, stack.count));
+    if (!fits) {
+      return 'too heavy to carry: it will be left lying there';
+    }
+  }
+  return null;
+}

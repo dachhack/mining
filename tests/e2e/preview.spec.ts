@@ -11,6 +11,11 @@ async function startRun(page: Page, seed: number): Promise<void> {
   await expect(page.getByTestId('seed')).toHaveText(`Seed ${seed}`);
 }
 
+/** Unfold the full list of choices under the map (folded by default since issue #66). */
+async function openAllActions(page: Page): Promise<void> {
+  await page.getByText(/^All actions/).click();
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
   // Each test starts with no saved run.
@@ -20,12 +25,13 @@ test.beforeEach(async ({ page }) => {
   await page.reload();
 });
 
-test('a run on a fixed seed is played by tapping its choices', async ({ page }) => {
+test('a run on a fixed seed is played by tapping choices in the full list', async ({ page }) => {
   await startRun(page, 7);
+  await openAllActions(page);
   const gauges = page.getByTestId('gauges');
   await expect(gauges).toContainText('Shift 1 | AP 5/5 | Fuel 24');
   await expect(gauges).toContainText('the surface');
-  await expect(page.getByTestId('map')).toContainText('Legend:');
+  await expect(page.getByTestId('map-legend')).toContainText('Dirt');
   await expect(page.getByTestId('forecast')).toContainText('If you end the shift now:');
 
   // Tap by label: the button's text is what the play tool prints for the choice.
@@ -45,6 +51,7 @@ test('a run on a fixed seed is played by tapping its choices', async ({ page }) 
 
 test('the run is saved after each choice and resumed on reload', async ({ page }) => {
   await startRun(page, 7);
+  await openAllActions(page);
   await page.getByRole('button', { name: 'Move east' }).click();
   await expect(page.getByTestId('gauges')).toContainText('AP 4/5');
   await page.reload();
@@ -69,15 +76,16 @@ test('a bad seed is refused', async ({ page }) => {
 test('the screen fits a phone held upright', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await startRun(page, 7);
-  // No page-wide sideways scroll: the map scrolls inside its own box.
+  await openAllActions(page);
+  // No page-wide sideways scroll.
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
   expect(overflow).toBeLessThanOrEqual(0);
-  // Every button is at least 44 px tall.
+  // Every button, and the fold of the full list, is at least 44 px tall.
   const heights = await page
-    .getByRole('button')
-    .evaluateAll((buttons) => buttons.map((b) => b.getBoundingClientRect().height));
+    .locator('button:visible, summary')
+    .evaluateAll((targets) => targets.map((t) => t.getBoundingClientRect().height));
   expect(heights.length).toBeGreaterThan(5);
   for (const height of heights) {
     expect(height).toBeGreaterThanOrEqual(44);
