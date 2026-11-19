@@ -301,29 +301,32 @@ describe('the surface (owner, after PR #72: only what has been discovered)', () 
   });
 });
 
-describe('reach (0005 item 10)', () => {
+describe('only exposed faces are known (issue #75; replaces reach, 0005 item 10)', () => {
   // The avatar walks to the dead end of a tunnel that is longer than its
-  // light. The lamp is lit: reach covers all 17 cells only then (with the
-  // lamp out it is the six cells the avatar touches; see darkness.test.ts).
-  // Light alone shows none of the cells tested here: no face of theirs
-  // touches an open cell.
+  // light. Before issue #75 the lit lamp revealed all 17 cells the pick could
+  // reach and the cell overhead. Now it reveals only cells that touch a lit
+  // open cell, and always the six cells touching the avatar's own.
   const length = WITH_OIL + 4;
   const end = length - 1;
   const level = TUNNEL_Z;
-  const diagonals: Vec3[] = [
+  // Cells round the dead end that touch no open cell: the diagonals beyond
+  // the end, and the corners and the front of the ring below.
+  const hidden: Vec3[] = [
     { x: end + 1, y: TUNNEL_Y - 1, z: level },
     { x: end + 1, y: TUNNEL_Y + 1, z: level },
-    { x: end - 1, y: TUNNEL_Y + 1, z: level },
-    { x: end - 1, y: TUNNEL_Y - 1, z: level },
+    { x: end + 1, y: TUNNEL_Y, z: level + 1 },
+    { x: end + 1, y: TUNNEL_Y - 1, z: level + 1 },
+    { x: end + 1, y: TUNNEL_Y + 1, z: level + 1 },
+    { x: end - 1, y: TUNNEL_Y - 1, z: level + 1 },
+    { x: end - 1, y: TUNNEL_Y + 1, z: level + 1 },
   ];
-  const aroundBelow: Vec3[] = [];
-  for (const dy of [-1, 0, 1]) {
-    for (const dx of [-1, 0, 1]) {
-      if (dx !== 0 || dy !== 0) {
-        aroundBelow.push({ x: end + dx, y: TUNNEL_Y + dy, z: level + 1 });
-      }
-    }
-  }
+  const faces: Vec3[] = [
+    { x: end + 1, y: TUNNEL_Y, z: level },
+    { x: end, y: TUNNEL_Y - 1, z: level },
+    { x: end, y: TUNNEL_Y + 1, z: level },
+    { x: end, y: TUNNEL_Y, z: level - 1 },
+    { x: end, y: TUNNEL_Y, z: level + 1 },
+  ];
 
   function atStart(): GameState {
     const state = buildState({ layers: tunnelLayers(length), avatar: inTunnel(0), lampOil: 1 });
@@ -331,29 +334,27 @@ describe('reach (0005 item 10)', () => {
     return state;
   }
 
-  it('reveals the diagonals and the 8 cells around the one below when the avatar arrives', () => {
+  it('on arrival reveals the faces round the avatar, and not the cells that touch no open cell', () => {
     const state = atStart();
-    expect(diagonals.length).toBe(4);
-    expect(aroundBelow.length).toBe(8);
-    for (const pos of [...diagonals, ...aroundBelow]) {
+    for (const pos of [...hidden, ...faces]) {
       expect(isRevealed(state, pos)).toBe(false);
     }
 
     arriveAt(state, inTunnel(end));
 
-    for (const pos of [...diagonals, ...aroundBelow]) {
-      expect(isRevealed(state, pos)).toBe(true);
+    for (const pos of faces) {
+      expect(isRevealed(state, pos), `${pos.x},${pos.y},${pos.z}`).toBe(true);
     }
-    // The cell overhead and the one straight below are in reach too.
-    expect(isRevealed(state, { x: end, y: TUNNEL_Y, z: level - 1 })).toBe(true);
-    expect(isRevealed(state, { x: end, y: TUNNEL_Y, z: level + 1 })).toBe(true);
+    for (const pos of hidden) {
+      expect(isRevealed(state, pos), `${pos.x},${pos.y},${pos.z}`).toBe(false);
+    }
   });
 
-  it('keeps them revealed after the avatar leaves', () => {
+  it('keeps the faces revealed after the avatar leaves', () => {
     const state = atStart();
     arriveAt(state, inTunnel(end));
     arriveAt(state, inTunnel(0));
-    for (const pos of [...diagonals, ...aroundBelow]) {
+    for (const pos of faces) {
       expect(isRevealed(state, pos)).toBe(true);
     }
   });

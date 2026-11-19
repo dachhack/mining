@@ -294,8 +294,8 @@ function structureName(state: GameState, pos: Vec3): string | null {
 function hudLines(state: GameState, options: ViewOptions): string[] {
   const pos = state.avatar.pos;
   // The lamp-out banner says what the lamp no longer shows. It does not say
-  // what may not be done: blocks seen earlier can still be mined, diagonals
-  // too (issue #47 item 1). On the surface daylight does the lamp's work
+  // what may not be done: blocks seen earlier and in reach can still be
+  // mined (issue #47 item 1). On the surface daylight does the lamp's work
   // whatever the oil, so there the banner is only "lamp is out".
   // Both read the player's own state only: the oil gauge and where it stands.
   let lamp = '';

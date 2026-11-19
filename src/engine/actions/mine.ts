@@ -1,9 +1,10 @@
-// Mining a block (design doc 4.1; 0005 items 10 to 12 and 16).
+// Mining a block (design doc 4.1; 0005 items 10 to 12 and 16; decision note
+// 0022: Minecraft-style, face neighbours only).
 
-import { BLOCKS } from '../../data';
+import { BLOCKS, STRUCTURES } from '../../data';
 import type { MineAction } from '../actionTypes';
 import type { GameEvent } from '../events';
-import { MINE_REACH_OFFSETS, offsetPosition } from '../neighbours';
+import { MINE_REACH_OFFSETS, MINE_UP_OFFSET, offsetPosition } from '../neighbours';
 import { canCarry } from '../inventory';
 import {
   addItem,
@@ -13,7 +14,9 @@ import {
   inGrid,
   isRevealed,
   isSurface,
+  samePosition,
   setBlock,
+  structureAt,
 } from '../state';
 import type { GameState } from '../state';
 import { isUnderTree } from '../surface/state';
@@ -21,34 +24,44 @@ import { isUnderTree } from '../surface/state';
 /**
  * Every `MineAction` the player could take now.
  *
- * - One action for each mineable block within reach, in the order of
- *   `MINE_REACH_OFFSETS`, with `ap` set to the block's mine cost from `BLOCKS`.
+ * Minecraft-style reach (owner, issue #75; decision note 0022): the pick
+ * reaches the avatar's face neighbours only.
+ * - North, east, south, west on the avatar's level, and the block below (the
+ *   block it stands on: mining it drops the avatar into its cell, see
+ *   `isDigDown` and the dispatcher in index.ts). No diagonals.
+ * - The block overhead only with a support in the avatar's own cell, which
+ *   holds up what is above (0014 item 9). Supports cannot be placed yet
+ *   (M2-3, #53), so today this is never offered in play.
+ * - One action for each mineable block, in the order of `MINE_REACH_OFFSETS`
+ *   and then overhead, with `ap` set to the block's mine cost from `BLOCKS`.
  * - A block is mineable if it is inside the grid, is revealed, and has a mine
  *   cost. Open space and bedrock (everything outside the grid) have none.
- *   There is no line-of-sight test: a diagonal is mineable even when both
- *   cells it shares an edge with are solid (0005 item 10).
  * - Only revealed blocks can be mined, so an action's AP cost can never give
- *   away a block the player cannot see. With the lamp lit `updateReveal`
- *   reveals every cell in reach (0005 item 10) and this test removes nothing.
- *   With the lamp out the miner knows only the six cells it touches (issue
- *   #33; decision note 0011), so the diagonals and the 8 cells around the one
- *   below are mineable only if something else has revealed them: an earlier
- *   visit with the lamp lit, a torch, or daylight.
+ *   away a block the player cannot see. A face neighbour of the avatar is
+ *   revealed whenever the avatar's own cell is (it is always lit or touched),
+ *   so in practice every block in reach is known.
+ * - From the surface the only block in reach is the one underfoot; a layer-0
+ *   block with a tree over it is never that one, and the check is kept so
+ *   that the rule of issue #70 ("mining down from the surface is not offered
+ *   under a tree") holds whatever the reach.
  * - Does not change `state`. Lists actions as if the avatar had unlimited AP;
  *   the dispatcher in index.ts removes the ones that cost too much, which is
  *   what makes a block that costs more than the AP left not mineable this
  *   shift (0005 item 12).
- * - From the surface, a layer-0 block with a tree over it is not mineable
- *   (issue #70: "mining down from the surface is not offered under a tree").
- *   From underground it is, like any other revealed block: it is revealed
- *   only by light or reach from the side or below (decision note 0020).
  * - The drill (`mineCostWithDrill`) is not in M1, so the plain cost is used.
+ *
+ * For the paused M2 tasks (#53 cave-ins, #55 arming unstable ore): the
+ * targets are exactly the cells listed here; arming checks "a block beside
+ * unstable ore was mined", and a block underfoot is beside the ore around it.
  */
 export function legalMineActions(state: GameState): MineAction[] {
   const actions: MineAction[] = [];
   const onSurface = isSurface(state.size, state.avatar.pos);
-  for (const offset of MINE_REACH_OFFSETS) {
-    const target = offsetPosition(state.avatar.pos, offset);
+  const targets = MINE_REACH_OFFSETS.map((offset) => offsetPosition(state.avatar.pos, offset));
+  if (structureAt(state, state.avatar.pos) === STRUCTURES.support.code) {
+    targets.push(offsetPosition(state.avatar.pos, MINE_UP_OFFSET));
+  }
+  for (const target of targets) {
     if (!inGrid(state.size, target) || !isRevealed(state, target)) {
       continue;
     }
@@ -99,4 +112,13 @@ export function applyMine(state: GameState, action: MineAction, events: GameEven
       events.push({ type: 'itemLeft', pos: { ...target }, item: stack.item, count: stack.count });
     }
   }
+}
+
+/**
+ * True if `action` mines the block the avatar stands on: digging down
+ * (issue #75). The dispatcher uses it to decide what kind of fall follows.
+ */
+export function isDigDown(state: GameState, action: MineAction): boolean {
+  const below = offsetPosition(state.avatar.pos, { x: 0, y: 0, z: 1 });
+  return samePosition(action.target, below);
 }

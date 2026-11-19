@@ -17,7 +17,7 @@ import { AVATAR, BLOCKS } from '../../src/data';
 import type { Vec3 } from '../../src/data';
 import { endShift, isRevealed, legalActions } from '../../src/engine';
 import type { GameEvent, GameState } from '../../src/engine';
-import { edgeLookCells, updateReveal } from '../../src/engine/reveal';
+import { updateReveal } from '../../src/engine/reveal';
 import { cellPosition, cloneState, isOpen, setBlock } from '../../src/engine/state';
 import { buildState, findActions } from './helpers';
 
@@ -199,11 +199,11 @@ describe('issue #15: the move list shows only what is revealed', () => {
   );
 });
 
-// The rule itself (owner question 40): how far the avatar sees over an edge.
-// It looks only with the lamp lit (issue #33), so these states have oil. The
-// lamp's light then goes down the shaft as well, so "and no further" is
-// claimed only for cells that light does not reach either.
-describe('looking over an edge (question 40)', () => {
+// Owner question 40 let the miner "look over an edge" with the lamp lit:
+// see down a drop beside it as far as a move would need. Issue #75 (decision
+// note 0022) removed that: only exposed faces are known, so a drop is seen
+// only as far as light goes down it. These tests pin what light shows now.
+describe('no looking over an edge (issue #75): light alone shows a drop', () => {
   /** A 3 x 1 cube: the avatar at (0,0,0) beside a shaft `depth` cells deep at x = 1. */
   function shaftLayers(depth: number): string[][] {
     const layers: string[][] = [['..#']];
@@ -214,38 +214,24 @@ describe('looking over an edge (question 40)', () => {
     return layers;
   }
 
-  it('sees down to the first solid block, and no further', () => {
+  it('light shows a shallow shaft down to its first solid block, and no further', () => {
     const state = stateWithLampLit(shaftLayers(1), EDGE_AVATAR);
-    // (1,0,1) is open, (1,0,2) is the floor of the shaft.
-    expect(edgeLookCells(state)).toEqual([
-      { x: 1, y: 0, z: 1 },
-      { x: 1, y: 0, z: 2 },
-    ]);
+    // (1,0,1) is open and lit, (1,0,2) is the floor of the shaft.
     expect(isRevealed(state, { x: 1, y: 0, z: 2 })).toBe(true);
     expect(isRevealed(state, { x: 1, y: 0, z: 3 })).toBe(false);
   });
 
-  it('sees one cell past the longest drop a move may choose, and no further', () => {
-    const lastSeen = AVATAR.maxChosenDropBlocks + 1;
-    // A shaft much deeper than that.
-    const state = stateWithLampLit(shaftLayers(lastSeen + 3), EDGE_AVATAR);
-    expect(edgeLookCells(state)).toHaveLength(lastSeen);
-    for (let z = 1; z <= lastSeen; z += 1) {
-      expect(isRevealed(state, { x: 1, y: 0, z })).toBe(true);
+  it('a shaft deeper than the light reaches is seen only as far as the light goes', () => {
+    const radius = AVATAR.lightRadiusWithOil;
+    const state = stateWithLampLit(shaftLayers(radius + 4), EDGE_AVATAR);
+    // The light goes 1 step sideways, then down: the last lit cell is
+    // (1,0,radius-1), and the cell under it is seen.
+    for (let z = 1; z <= radius; z += 1) {
+      expect(isRevealed(state, { x: 1, y: 0, z }), `z${z}`).toBe(true);
     }
-    expect(isRevealed(state, { x: 1, y: 0, z: lastSeen + 1 })).toBe(false);
+    expect(isRevealed(state, { x: 1, y: 0, z: radius + 1 })).toBe(false);
     // The drop is too long to choose, so the walk is not offered.
     expect(findActions(state, { type: 'move' })).toEqual([]);
-  });
-
-  it('looks only straight down the shaft, not at its walls', () => {
-    // (The lamp's light shows the walls anyway; this is about the look.)
-    const state = stateWithLampLit(shaftLayers(2), EDGE_AVATAR);
-    expect(isRevealed(state, { x: 1, y: 0, z: 2 })).toBe(true);
-    for (const pos of edgeLookCells(state)) {
-      expect(pos.x).toBe(1);
-      expect(pos.y).toBe(0);
-    }
   });
 
   it('sees nothing over an edge with the lamp out (issue #33)', () => {
@@ -255,37 +241,24 @@ describe('looking over an edge (question 40)', () => {
     }
   });
 
-  it('does not look under a solid neighbour', () => {
+  it('does not see under a solid neighbour', () => {
     // The avatar is in a one-cell pit: every sideways neighbour is solid.
     const state = stateWithLampLit([['#.#'], ['###'], ['###'], ['###']], { x: 1, y: 0, z: 0 });
-    expect(edgeLookCells(state)).toEqual([]);
-    expect(isRevealed(state, { x: 0, y: 0, z: 2 })).toBe(false);
-    expect(isRevealed(state, { x: 2, y: 0, z: 2 })).toBe(false);
+    expect(isRevealed(state, { x: 0, y: 0, z: 1 })).toBe(false);
+    expect(isRevealed(state, { x: 2, y: 0, z: 1 })).toBe(false);
   });
 
-  it('looks down its own column only when it is on a ladder', () => {
-    // A shaft 4 deep at x = 1, the avatar in its top cell.
+  it('on a ladder, light down the shaft shows its floor, and a drop too long is not offered', () => {
+    // A shaft 4 deep at x = 1, the avatar in its top cell on a ladder.
     const layers = [['#.#'], ['#.#'], ['#.#'], ['#.#'], ['###']];
     const top = { x: 1, y: 0, z: 0 };
-
     const onLadder = stateWithLampLit(layers, top, [top]);
-    expect(edgeLookCells(onLadder)).toEqual([
-      { x: 1, y: 0, z: 1 },
-      { x: 1, y: 0, z: 2 },
-      { x: 1, y: 0, z: 3 },
-    ]);
-    expect(isRevealed(onLadder, { x: 1, y: 0, z: 3 })).toBe(true);
+    expect(isRevealed(onLadder, { x: 1, y: 0, z: 4 })).toBe(true);
     // The floor is 3 below the ladder's foot: too far, so no climb down.
     expect(findActions(onLadder, { type: 'move', to: { x: 1, y: 0, z: 1 } })).toEqual([]);
-
-    // Without the ladder (the avatar is put there by hand; it would fall in
-    // play) there is no column to look down.
-    const noLadder = buildState({ layers, avatar: top });
-    updateReveal(noLadder, []);
-    expect(edgeLookCells(noLadder)).toEqual([]);
   });
 
-  it('emits a blockRevealed event for each cell seen over the edge', () => {
+  it('emits a blockRevealed event for each cell light shows down the edge', () => {
     const state = buildState({ layers: shaftLayers(2), avatar: EDGE_AVATAR });
     const events: GameEvent[] = [];
     updateReveal(state, events);

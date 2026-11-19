@@ -7,9 +7,12 @@
 // - on the miner's own cell, on the miner's layer: also the ladder climbs
 //   (up and down the same column) and mining the block underfoot.
 // A move belongs to the layer it ends on, and a mine to the layer of its
-// block. So on the surface a neighbour tap is a walk, and the block under a
-// neighbour is mined from the layer-0 view, as one layer down is mined
-// underground (coordinator's decision on PR #67).
+// block. So on the surface a neighbour tap is a walk (coordinator's decision
+// on PR #67). The pick reaches only the faces of the miner's cell (issue
+// #75), so a tap on a neighbouring block mines it, and on the layer below
+// only the cell under the miner has a choice: digging down. Digging down onto
+// rock the miner has seen carries no warning, so one tap digs; the turn log
+// then says "You dropped 1 block".
 // Everything else (crafting, placing, dropping, leaving, ending the shift)
 // is only in the full list under the map.
 //

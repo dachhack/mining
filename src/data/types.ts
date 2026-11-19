@@ -127,6 +127,12 @@ export interface AvatarData {
   fatalFallBlocks: number;
   /** The longest drop the player may choose to walk off (0005 item 7). */
   maxChosenDropBlocks: number;
+  /**
+   * Digging out the block the avatar stands on (issue #75): a drop of exactly
+   * this many blocks, onto footing, is safe, like a chosen drop. A longer
+   * fall is uncontrolled, counted from where the avatar stood.
+   */
+  safeDigDownBlocks: number;
 }
 
 export interface ShiftData {

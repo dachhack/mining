@@ -66,9 +66,9 @@ CHOICES: NAMES AND NUMBERS
     n e s w                  go north, east, south, west (a walk, a step up or a walk off a ledge:
                              the list says which)
     up, down                 climb a ladder
-    mine-n, mine-ne, ...     mine the block that way on your layer (n ne e se s sw w nw)
-    mine-down                mine the block you stand on
-    mine-n-down, ...         mine the block that way, one layer down
+    mine-n, mine-e, mine-s, mine-w     mine the block beside you, that way (no diagonals)
+    mine-down                mine the block you stand on (dig down)
+    mine-up                  mine the block over your head (only with a support in your cell)
     ladder-here, ladder-n, ladder-up, ladder-down, ...     place a ladder; torch-... the same
     craft-ladder, craft-torch, craft-fuel, ...             craft; the list shows each name
     take-here-stone, take-n-coal, ...                      pick up: where from, then what
@@ -81,7 +81,7 @@ CHOICES: NAMES AND NUMBERS
     leave                    leave the cube (on the surface only)
     end (or 0)               end the shift
   Mine choices that differ only in direction share one line of the list, for example
-    [2] Mine Stone, gives 1 Stone: 7. mine-e  11. mine-se-down  13. mine-nw-down
+    [2] Mine Stone, gives 1 Stone: 7. mine-e  9. mine-w  11. mine-down
   Each of them is still a choice of its own, with its own number and name. The two drops of an
   item share a line in the same way:
     [0] Drop Stone (one, or all 3): 15. drop-stone  16. drop-all-stone
@@ -143,26 +143,29 @@ THE GAME
     if nothing holds you, you fall until something does. A ladder further down the shaft catches
     you, but the fall still counts.
   - There are two kinds of descent. A drop you choose as a move (walking off a ledge, or climbing
-    down off the bottom of a ladder) is free. A fall you did not choose as a move is not: if you
-    mine the block you stand on and no ladder holds you, you lose your footing and it costs
-    health from the first block.
+    down off the bottom of a ladder) is free. Digging down is safe too when you drop ${AVATAR.safeDigDownBlocks} block onto
+    rock: mine the block you stand on and you land on the block that was under it, unhurt. Any
+    other fall is not: if you dig down and there is nothing under the block you mined, you lose
+    your footing, and the whole fall, from where you stood, costs health from the first block.
   - What a fall of that kind costs: ${uncontrolledPerBlock} health for each of the first ${AVATAR.freeFallBlocks} blocks, ${AVATAR.fallDamagePerBlock} health for each
     block beyond that, and a fall of ${AVATAR.fatalFallBlocks} or more kills. So digging straight down under your own
-    feet costs ${uncontrolledPerBlock} health a layer. Nothing in this version of the game gives health back.
+    feet onto rock costs nothing; into an open space below, it costs from the first block. Nothing in this version of the game gives health back.
   - A ladder in your own cell holds you: place a ladder in your cell, then mine below, and you do
     not fall. That, or cutting steps sideways, is the safe way down.
-  - The action list says what mining the block you stand on will cost: how far you will fall and
-    the health you will lose, as far as you have seen the cells below. "1 block" means you have
-    seen where you land and what is under it. "1 block or more" means the cell under your
-    landing is unseen (the list names it): in a shaft one cell wide your lamp shows the floor,
-    not what is under the floor. "FATAL" means it will kill you.
+  - The action list says what mining the block you stand on will do, as far as you know the
+    cells below. You know the block you stand on (you touch it), not what is under it. Until you
+    have seen that cell the list says "you drop at least 1 block; if there is nothing under it
+    you will fall further and be hurt", and names the unseen cell. Once you have seen rock there
+    it says "you drop 1 block, no harm". "FATAL" means it will kill you.
   - After a fall you may stand in a pit with no move on the list: rock on all four sides, too
     high to step onto. A ladder in your cell and one in the cell above let you climb up.
 
   Mining
-  - Your pick reaches the 8 cells around you on your own layer (diagonals too) and the 9 cells
-    of the layer below under those and under you. You cannot mine the block over your head, or
-    anything else on the layer above.
+  - Your pick reaches the blocks that share a face with your cell: north, east, south and west
+    of you, and the block you stand on. No diagonals, and nothing on the layer below except the
+    block under your feet. The block over your head only with a support in your cell (supports
+    cannot be placed yet in this version of the game). To go down, dig the block you stand on;
+    to make a stair, mine the block ahead, walk in, dig down, and so on: you can walk back up it.
   - Each kind of rock costs its own AP (from ${lowestMineCost} for dirt to ${highestMineCost} for hard rock), shown in the list,
     and a block is mined in one action: if it costs more AP than you have left it is not on the
     list, a "Not on the list:" line names it with its cost, and it waits for the next shift.
@@ -190,10 +193,10 @@ THE GAME
     what your light has shown: on the surface daylight does the lamp's work, lamp oil or not,
     but never under a tree.
     Light spreads from you a few steps through open cells: round corners, never through rock.
-    You see every lit cell and every cell touching one.
-  - While your lamp is lit (or you stand on the surface) you also know the cells your pick can reach and the cell over your
-    head, and you can look over an edge: beside a drop, or on a ladder, you see far enough down
-    to judge the drop.
+    You see every lit cell and every cell touching one: only faces that open space shows.
+  - You always know the six cells touching your own (north, east, south, west, above, below).
+    Nothing else: not the block behind a wall, not what is under the floor of a cell beside you,
+    not the bottom of a drop your light does not reach.
   - Daylight does not shine down a hole: from the surface you see that a hole is there, not
     what is at its bottom.
   - What you have seen stays on the map. An unseen cell is "?" whether it is rock or open.
@@ -213,19 +216,17 @@ THE GAME
 
   In the dark (lamp oil 0)
   - You learn only the six cells touching yours: north, east, south, west, above and below.
-    Nothing new diagonally, nothing new around the cell below you, and you cannot look down a
-    drop. On the surface daylight still lights what is round you, as a lit lamp would.
-  - You can mine any block you know. In the dark that is the walls beside you and the floor
-    under you, plus anything you saw earlier or a torch shows: diagonal blocks you saw while
-    the lamp was lit are still on the list.
+    Light shows you nothing more, so you see no further down a drop than the cell below you. On
+    the surface daylight still lights what is round you, as a lit lamp would.
+  - You can mine any block you know that your pick reaches: in the dark that is the walls beside
+    you and the floor under you, the same blocks as with the lamp lit.
   - A move is on the list only when you know every cell it depends on. In the dark you cannot
     walk into a cell unless you know what is under it, step up onto a cell you have not seen,
     or climb down off the foot of a ladder into a drop you have not seen. So you can go back
     the way you came, but a cell you have just dug open beside you cannot be entered: you do
     not know its floor.
-  - Digging straight down still works, but in the dark you do not know what is under the block
-    you stand on: the list says "N blocks or more" with the least health it will cost, and names
-    the unseen cell. The fall may be longer and cost more. A ladder in your own cell holds you while
+  - Digging straight down still works, and as with the lamp lit you do not know what is under the
+    block you stand on until you have seen it: the list says so and names the unseen cell. A ladder in your own cell holds you while
     you mine below, and from it you can feel the cell underneath.
   - You notice no mineral traces in the dark, even on the rock you touch: feeling a block is
     not seeing it. Traces you noticed earlier stay on the map, and a torch's light still shows

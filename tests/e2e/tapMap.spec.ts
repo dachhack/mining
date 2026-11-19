@@ -95,11 +95,14 @@ test('on the surface a tap on a neighbour walks there at once', async ({ page })
   await expect(gauges).toContainText('x18 y17, the surface');
   await expect(gauges).toContainText('AP 2/5');
   await expect(page.getByTestId('chooser')).toBeHidden();
-  // The block under a neighbour is mined from the layer-0 view.
+  // On the layer-0 view the block under a neighbour is out of the pick's
+  // reach (issue #75: face neighbours only); the block underfoot is dug down.
   await page.getByRole('button', { name: 'Look one layer down' }).click();
   await expect(page.getByTestId('layer-label')).toHaveText('Layer 0 · 1 below you');
   await tapCell(page, canvas, 18, 16);
-  await expect(page.getByTestId('outcome')).toContainText('> Mine north, one layer down:');
+  await expect(page.getByTestId('map-hint')).toHaveText('Nothing to do there');
+  await tapCell(page, canvas, 18, 17);
+  await expect(page.getByTestId('chooser')).toContainText('Mine below you');
 });
 
 test('tapping the miner opens the chooser with the fall warning; one more tap mines', async ({
@@ -109,7 +112,11 @@ test('tapping the miner opens the chooser with the fall warning; one more tap mi
   await tapCell(page, canvas, 16, 16);
   const chooser = page.getByTestId('chooser');
   await expect(chooser).toBeVisible();
-  await expect(chooser).toContainText('you will fall 1 block or more and lose at least 1 health');
+  // The cell under the block is unseen, so the warning says what may happen
+  // without saying what is there (issue #75).
+  await expect(chooser).toContainText(
+    'you drop at least 1 block; if there is nothing under it (layer 1, unseen) you will fall further and be hurt',
+  );
   // Nothing was done yet.
   await expect(page.getByTestId('gauges')).toContainText('AP 5/5');
 
@@ -122,7 +129,8 @@ test('tapping the miner opens the chooser with the fall warning; one more tap mi
   await tapCell(page, canvas, 16, 16);
   await chooser.getByRole('button', { name: /Mine below you/ }).click();
   await expect(page.getByTestId('gauges')).toContainText('AP 4/5');
-  await expect(page.getByTestId('gauges')).toContainText('Health 9/10');
+  // There was rock under it: a safe one-block drop.
+  await expect(page.getByTestId('gauges')).toContainText('Health 10/10');
   await expect(page.getByTestId('gauges')).toContainText('x16 y16, layer 0');
   await expect(page.getByTestId('layer-label')).toHaveText('Layer 0 · you are here');
 });
@@ -166,7 +174,7 @@ test('tapping a neighbouring block mines it, and tapping the open cell moves the
   await expect(page.getByTestId('map-hint')).toHaveText('Not enough AP (you have 0)');
 });
 
-test('the layer buttons show the layer below, and its blocks can be mined from there', async ({
+test('the layer buttons show the layer below, where only the block underfoot can be mined', async ({
   page,
 }) => {
   const canvas = page.getByTestId('map-canvas');
@@ -177,9 +185,12 @@ test('the layer buttons show the layer below, and its blocks can be mined from t
     .click();
   await page.getByRole('button', { name: 'Look one layer down' }).click();
   await expect(page.getByTestId('layer-label')).toHaveText('Layer 1 · 1 below you');
-  // Under the west neighbour is dirt: mining it from here is "mine-w-down".
+  // The block under the west neighbour is out of reach (issue #75).
   await tapCell(page, canvas, 15, 16);
-  await expect(page.getByTestId('outcome')).toContainText('> Mine west, one layer down: Dirt');
+  await expect(page.getByTestId('map-hint')).toHaveText('Nothing to do there');
+  // The block underfoot is dug down from here too.
+  await tapCell(page, canvas, 16, 16);
+  await expect(page.getByTestId('chooser')).toContainText('Mine below you');
   await page.getByRole('button', { name: 'Look one layer up' }).click();
   await expect(page.getByTestId('layer-label')).toHaveText('Layer 0 · you are here');
 });

@@ -76,7 +76,7 @@ function withCoalInSightRemoved(seed: number): GameState {
 }
 
 describe('the coal policy', () => {
-  it('fetches coal without leaving the surface, and leaves with the fuel it started with or more', () => {
+  it('fetches coal from the top layer, and leaves with the fuel it started with or more', () => {
     const { metrics } = playRun({
       seed: 23,
       contractId: CONTRACT,
@@ -86,7 +86,10 @@ describe('the coal policy', () => {
     });
     expect(metrics.outcome).toBe('salvage');
     expect(metrics.cause).toBe('left');
-    expect(metrics.deepestLayer).toBe(-1);
+    // Issue #75: the pick reaches only the six face neighbours, so coal in the
+    // top layer is mined by digging down onto it from the surface: the miner
+    // stands in layer 0 afterwards, no deeper.
+    expect(metrics.deepestLayer).toBe(0);
     expect(metrics.damageTaken).toBe(0);
     expect(metrics.recipesUsed['fuel']).toBeGreaterThanOrEqual(1);
     expect(metrics.fuelAtEnd).toBeGreaterThanOrEqual(LOADOUTS[DEFAULT_LOADOUT_ID].fuel);
@@ -94,27 +97,27 @@ describe('the coal policy', () => {
     expect(metrics.finalInventory['coal']).toBe(0);
   });
 
-  it('follows a seam one block down from the hole of coal it found (seed 54, no coal in sight)', () => {
-    // With no coal in sight the policy searches; the first coal it finds is
-    // far enough that its 3 fuel do not cover the search, so it steps into
-    // the hole that coal left and mines coal below.
-    const trip = playCoalTrip(withCoalInSightRemoved(54), 300);
-    expect(trip.coalMined).toBe(2);
+  it('keeps mining coal it finds round the holes it digs (seed 8, no coal in sight)', () => {
+    // With no coal in sight the policy searches with look-holes (issue #75: a
+    // hole shows only the faces of its floor). Once it finds coal it goes on
+    // mining coal it can reach until the fuel is paid back.
+    const trip = playCoalTrip(withCoalInSightRemoved(8), 300);
+    expect(trip.coalMined).toBe(4);
     expect(trip.paidBack).toBe(true);
     expect(trip.cause).toBe('left');
     expect(trip.damageTaken).toBe(0);
   });
 
-  it('with no coal in sight, digs a look-hole and finds coal below (seed 1148)', () => {
-    const trip = playCoalTrip(withCoalInSightRemoved(1148), 300);
+  it('with no coal in sight, digs a look-hole and finds coal below (seed 3)', () => {
+    const trip = playCoalTrip(withCoalInSightRemoved(3), 300);
     expect(trip.coalMined).toBe(1);
-    expect(trip.shiftFirstCoalMined).toBe(1);
+    expect(trip.shiftFirstCoalMined).toBe(2);
     expect(trip.paidBack).toBe(true);
     expect(trip.damageTaken).toBe(0);
   });
 
-  it('gives up and leaves, alive, when look-holes and cut trees show no coal (seed 15)', () => {
-    const trip = playCoalTrip(withCoalInSightRemoved(15), 300);
+  it('gives up and leaves, alive, when look-holes and cut trees show no coal (seed 5)', () => {
+    const trip = playCoalTrip(withCoalInSightRemoved(5), 300);
     expect(trip.coalMined).toBe(0);
     expect(trip.paidBack).toBe(false);
     expect(trip.cause).toBe('left');

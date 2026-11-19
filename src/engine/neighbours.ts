@@ -26,31 +26,21 @@ export const FACE_OFFSETS: readonly Vec3[] = [
 ];
 
 /**
- * The cells the pick can reach, as offsets from the avatar (0005 item 10):
- * the 4 orthogonal neighbours, the 4 diagonals on the avatar's level, the
- * cell below, and the 8 cells around the one below. 17 in all. The cell
- * overhead is not among them (0005 item 11).
+ * The cells the pick can reach, as offsets from the avatar: its face
+ * neighbours only, as in Minecraft (owner, issue #75; decision note 0022).
+ * North, east, south and west on its own level, then the block below. No
+ * diagonals. The block overhead is not among them: it can be mined only
+ * with a support in the avatar's cell (0014 item 9; see `MINE_UP_OFFSET`).
  *
  * The order is fixed, and is the order `legalMineActions` lists them in.
  */
 export const MINE_REACH_OFFSETS: readonly Vec3[] = [
-  // The avatar's level: orthogonal neighbours, then diagonals.
   { x: 0, y: -1, z: 0 },
   { x: 1, y: 0, z: 0 },
   { x: 0, y: 1, z: 0 },
   { x: -1, y: 0, z: 0 },
-  { x: 1, y: -1, z: 0 },
-  { x: 1, y: 1, z: 0 },
-  { x: -1, y: 1, z: 0 },
-  { x: -1, y: -1, z: 0 },
-  // One level down: straight below, then the 8 cells around it.
   { x: 0, y: 0, z: 1 },
-  { x: 0, y: -1, z: 1 },
-  { x: 1, y: 0, z: 1 },
-  { x: 0, y: 1, z: 1 },
-  { x: -1, y: 0, z: 1 },
-  { x: 1, y: -1, z: 1 },
-  { x: 1, y: 1, z: 1 },
-  { x: -1, y: 1, z: 1 },
-  { x: -1, y: -1, z: 1 },
 ];
+
+/** The block overhead (z grows downwards), mined only from under a support (0014 item 9). */
+export const MINE_UP_OFFSET: Vec3 = { x: 0, y: 0, z: -1 };

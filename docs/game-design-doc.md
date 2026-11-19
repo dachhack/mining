@@ -32,12 +32,14 @@ Working title: **Mining Game**. A turn-based roguelike for Android and iOS in wh
 
 - **Coordinates:** `(x, y, z)`, each 0–31. `z = 0` is the top layer and `z = 31` is the bottom. "Down" means increasing `z`.
 - **Generation:** Fully determined by a seed. Generated once at run start.
-- **Visibility:** A block is *revealed* when one of its six faces touches open space the avatar's light can reach, or when a scanner reveals it. Unrevealed blocks render as unknown rock.
-  - **Reach and the lamp [Default]:** With the lamp lit, the miner also knows every cell its pick can reach and the cell overhead, and can look over an edge: it sees the cells a drop would be judged by. With the lamp out, it knows only the six cells that touch its own. Torches reveal the same either way, and a revealed cell stays revealed. (Decision notes 0005 item 10 and 0011.)
-  - **Daylight (owner, after PR #72):** daylight does not reveal the whole top layer. On the surface it does the lamp's work round the avatar, lamp oil or not: light spreads over the open surface cells as far as a lit lamp's radius and reveals the layer-0 blocks under them, and the avatar knows what its pick can reach. So the top layer is known only where the miner has been near, like every other layer. (Decision note 0021.)
+- **Visibility: only exposed faces are known** (owner, issue #75 and after PR #72; decision notes 0021 and 0022). A cell is *revealed* in exactly these ways, on every layer, the top layer included; nothing else reveals one. Unrevealed cells render as unknown, whether rock or open. A revealed cell stays revealed.
+  - **Light:** a cell that is lit, or that shares a face with a lit open cell. Light spreads from its source through open cells, a step at a time through faces: round corners, never through rock. The sources are the miner's lamp ([Default] radius 3; with the lamp out, radius 0: only the miner's own cell, decision note 0011), torches ([Default] radius 3), and **daylight**, which does the lamp's work round the miner while it stands on the surface, lamp oil or not: it spreads over the open surface cells (not into trees) and so reveals the layer-0 blocks under them. Daylight does not reveal the whole top layer, and does not shine down a hole.
+  - **Touch:** the six cells that share a face with the miner's own (north, east, south, west, above, below), lamp lit or not. From the surface that is only the layer-0 block underfoot.
+  - **Scanner:** the cells a scan reveals (section 4.1).
+  - Not revealed: the cells the pick can reach beyond those six, the cell overhead beyond touch, what lies over an edge or under a floor that no light reaches. (These were revealed with the lamp lit before issue #75: decision note 0005 item 10 and question 40, replaced by 0022.)
 - **Surface:** The layer above `z = 0`, one cell per column, where the avatar starts, at the centre. Reaching the surface is how a run is completed. It is open air for water, gas and air, and mostly forest (owner, issue #70; decision note 0020):
   - **Surface cells [Default]:** each is a *tree*, a *dirt path*, a *meadow* or a *stone outcrop*; about 65% start as trees. Paths, meadows and outcrops are open ground: the avatar walks on them, and daylight round the avatar reveals the layer-0 block under them. A path is worn into dirt (ore under it stays), an outcrop stands over stone, a meadow over whatever is there. The start cell and its eight neighbours are meadow, and winding paths join them to the meadows and to at least two edges of the cube. Coal is always in sight at the start (owner, PR #72): at least one coal block is among the layer-0 blocks the avatar sees from its start cell; generation puts one there if none is.
-  - **Trees:** a tree blocks walking (and stepping up into it) and hides the layer-0 block under it: daylight, the lamp, reach and looking over an edge from the surface do not reveal it, and it cannot be mined from the surface. From underground it is seen and mined like any other block.
+  - **Trees:** a tree blocks walking (and stepping up into it) and hides the layer-0 block under it: neither light nor touch from the surface reveals it, and it cannot be mined from the surface. From underground it is seen and mined like any other block.
   - **Cutting [Default]:** cut a tree in a surface cell beside the avatar (north, east, south or west): 2 AP, gives 2 timber (too heavy to carry is left on the stump, as for mining). It leaves a *stump*, open ground, and the block under it is revealed.
   - **Regrowth:** a stump grows a tree again after 10 shifts (owner), counting the shift of the cut, at the end of a shift (after the cube phase, before upkeep), if its layer-0 block is still solid; while that block is gone the count goes back to 0. If the avatar or loose items stand on the stump when the count is reached, the tree grows at the end of the first shift the stump is clear. A regrown tree blocks walking again; the block under it stays known. Paths, meadows and outcrops never grow trees.
 
@@ -97,7 +99,7 @@ The player may end the player phase early. [Default] Unspent AP is lost when the
 | Pick up / drop / stash items | 0 | — |
 | Rest at camp | Whole shift | Restores health and air |
 
-- **Adjacent** means the 6 face neighbours plus the diagonals on the avatar's own level and the level below. The avatar cannot mine the block directly above its head without a support in place first (it would fall on them).
+- **Adjacent** means the face neighbours: north, east, south and west on the avatar's own level, and the block it stands on (owner, issue #75: as in Minecraft; no diagonals, nothing else on the level below). The avatar cannot mine the block directly above its head without a support in its own cell first (it would fall on them). Mining the block it stands on is *digging down* (section 5.2). A stair is dug by mining the block ahead, walking in and digging down, and can be walked back up (section 5.2, step up 1).
 - **Undo:** The player may undo actions within the current player phase as long as no new information was revealed by them.
 
 ## 5. The avatar
@@ -111,13 +113,13 @@ The player may end the player phase early. [Default] Unspent AP is lost when the
 | Carry capacity | 20 weight | — | Stashing at a camp; smelting (ingots are lighter) |
 | Light radius | 3 | Lamp oil running out (drops to 0: only the miner's own cell, so it knows just the six cells it touches; decision note 0011) | Lamp oil, torches |
 
-With the lamp lit the miner also knows the cells within its pick's reach and can look over an edge; with the lamp out it does neither (section 3, Visibility).
+Lamp lit or not, the miner knows the six cells touching its own; light shows the rest (section 3, Visibility).
 
 ### 5.2 Movement and gravity
 
 - The avatar stands on solid blocks, ladders, or camp floors.
-- A chosen drop of 1–2 blocks is free. An uncontrolled fall, any fall that does not directly follow a move (the miner lost its footing for any reason, such as the block under it being mined), is not free: it also deals [Default] 1 damage for each of the first 2 blocks. A ladder in the miner's own cell is footing, so it prevents the fall. A fall of 3–5 deals [Default] 2 damage per block beyond 2. A fall of 6 or more is fatal.
-- Mining the block the avatar stands on causes a fall if nothing is beneath it.
+- A chosen drop of 1–2 blocks is free. An uncontrolled fall, any fall that does not directly follow a move (the miner lost its footing for any reason, such as digging down into open space), is not free: it also deals [Default] 1 damage for each of the first 2 blocks. A ladder in the miner's own cell is footing, so it prevents the fall. A fall of 3–5 deals [Default] 2 damage per block beyond 2. A fall of 6 or more is fatal.
+- **Digging down (owner, issue #75):** mining the block the avatar stands on drops it onto the block below that: a safe one-block drop ([Default] `AVATAR.safeDigDownBlocks` = 1), no damage, a chosen drop. If there is nothing under that block the avatar falls on, and the whole fall, counted from where it stood, is uncontrolled. A ladder in its own cell holds it, as ever. Before it digs, the miner is told only what it knows: until it has seen the cell under the block, "you drop at least one block; if there is nothing under it you will fall further and be hurt".
 - Climbing up more than 1 block requires a ladder or cut steps.
 
 ### 5.3 Ways a run ends in death

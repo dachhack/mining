@@ -20,7 +20,8 @@ import { legalCutTreeActions, applyCutTree } from './actions/cutTree';
 import { legalGiveUpActions, applyGiveUp } from './actions/giveUp';
 import { legalDropActions, legalPickUpActions, applyDrop, applyPickUp } from './actions/items';
 import { legalLeaveActions, applyLeave } from './actions/leave';
-import { legalMineActions, applyMine } from './actions/mine';
+import { legalMineActions, applyMine, isDigDown } from './actions/mine';
+import { avatarFallDistance } from './footing';
 import { legalMoveActions, applyMove } from './actions/move';
 import { legalPlaceExplosiveActions, applyPlaceExplosive } from './actions/placeExplosive';
 import { legalPlaceLadderActions, applyPlaceLadder } from './actions/placeLadder';
@@ -211,10 +212,19 @@ export function applyAction(state: GameState, action: Action): StepResult {
   // After any action: things fall, then light shows what is newly visible,
   // and any mineral traces on the blocks it falls on.
   // A fall straight after a move is one the player chose from the move list
-  // (a drop of 1 or 2 blocks, shown there). A fall after anything else, in
-  // practice after mining the block underfoot, is uncontrolled and costs
-  // health from the first block (design doc 5.2, decision note 0010).
-  const fallKind: FallKind = action.type === 'move' ? 'chosenDrop' : 'uncontrolled';
+  // (a drop of 1 or 2 blocks, shown there). A fall after anything else is
+  // uncontrolled and costs health from the first block (design doc 5.2,
+  // decision note 0010), except the safe one-block drop of digging down.
+  let fallKind: FallKind = action.type === 'move' ? 'chosenDrop' : 'uncontrolled';
+  // Digging out the block the avatar stands on (owner, issue #75): a drop of
+  // `AVATAR.safeDigDownBlocks` onto footing is safe, as in Minecraft; a longer
+  // fall is uncontrolled, counted from where the avatar stood. The fall is
+  // measured on the true cube, as `settle` does; what the player was told
+  // beforehand depends on known cells only (describe.ts).
+  if (action.type === 'mine' && isDigDown(state, action)) {
+    const distance = avatarFallDistance(next, next.avatar.pos);
+    fallKind = distance <= AVATAR.safeDigDownBlocks ? 'chosenDrop' : 'uncontrolled';
+  }
   settle(next, events, fallKind);
   updateReveal(next, events);
   updateMineralTraces(next, events);

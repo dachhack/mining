@@ -57,7 +57,7 @@ function seed7(): GameState {
 
 /** A few states with plenty of unseen cells, on the surface and underground. */
 function sampleStates(): { name: string; state: GameState }[] {
-  const dug = takeAll(seed7(), ['mine-down', 'mine-down', 'end', 'mine-w', 'mine-w-down']);
+  const dug = takeAll(seed7(), ['mine-down', 'mine-down', 'end', 'mine-w', 'w', 'mine-down']);
   const torch = takeAll(seed7(), ['mine-down']);
   torch.structures[cellIndex(torch.size, torch.avatar.pos)] = STRUCTURES.torch.code;
   torch.looseItems = [{ pos: { ...torch.avatar.pos }, item: 'coal', count: 2 }];
@@ -227,16 +227,17 @@ function tapNames(state: GameState, z: number, x: number, y: number): string[] {
 }
 
 describe('what a tap on the map does (issue #66)', () => {
-  it('on the surface: a neighbour is a walk; the own cell is digging down; the layer below is mined', () => {
+  it('on the surface: a neighbour is a walk; the own cell is digging down; on the layer below only the cell underfoot', () => {
     // Coordinator's decision on PR #67: a surface neighbour tap walks at
-    // once, and the block under a neighbour is mined from the layer-0 view.
+    // once. Issue #75: the pick reaches faces only, so on the layer below
+    // only the block underfoot can be mined.
     const state = seed7();
     const { x, y } = state.avatar.pos;
     const surface = WORLD.surfaceZ;
     expect(tapNames(state, surface, x + 1, y)).toEqual(['e']);
     expect(tapNames(state, surface, x, y - 1)).toEqual(['n']);
     expect(tapNames(state, surface, x, y)).toEqual(['mine-down']);
-    expect(tapNames(state, 0, x + 1, y)).toEqual(['mine-e-down']);
+    expect(tapNames(state, 0, x + 1, y)).toEqual([]);
     expect(tapNames(state, 0, x, y)).toEqual(['mine-down']);
     // Two cells away: nothing.
     expect(tapNames(state, surface, x + 2, y)).toEqual([]);
@@ -254,9 +255,11 @@ describe('what a tap on the map does (issue #66)', () => {
     // East is stone; stepping up east onto the surface is on the surface layer, not here.
     expect(tapNames(state, z, x + 1, y)).toEqual(['mine-e']);
     expect(tapNames(state, WORLD.surfaceZ, x + 1, y)).toEqual(['e']);
-    // The own cell: mining underfoot. The diagonal-down mines are on the layer below.
+    // The own cell: mining underfoot, also from the layer below. Nothing else
+    // on the layer below is in reach (issue #75).
     expect(tapNames(state, z, x, y)).toEqual(['mine-down']);
-    expect(tapNames(state, z + 1, x - 1, y)).toEqual(['mine-w-down']);
+    expect(tapNames(state, z + 1, x, y)).toEqual(['mine-down']);
+    expect(tapNames(state, z + 1, x - 1, y)).toEqual([]);
     state = takeNamed(state, 'mine-w');
     expect(tapNames(state, z, x - 1, y)).toEqual(['w']);
   });
@@ -280,16 +283,34 @@ describe('what a tap on the map does (issue #66)', () => {
 });
 
 describe('warnings that stop a tap acting at once (issue #66)', () => {
-  it('mining underfoot warns of the fall; mining beside does not', () => {
+  it('mining underfoot warns of a fall while the cell under the block is unseen; mining beside does not', () => {
     const state = takeAll(seed7(), ['mine-down']);
     const named = (name: string) => {
       const action = legalActions(state).find((a) => choiceName(state, a) === name);
       if (action === undefined) throw new Error(name);
       return action;
     };
-    expect(choiceWarning(state, named('mine-down'))).toContain('you will fall');
+    expect(choiceWarning(state, named('mine-down'))).toContain(
+      'you drop at least 1 block; if there is nothing under it',
+    );
     expect(choiceWarning(state, named('mine-w'))).toBeNull();
     expect(choiceWarning(state, named('n'))).toBeNull();
+  });
+
+  it('digging down onto rock the miner has seen is one tap: no warning (issue #75)', () => {
+    const state = takeAll(seed7(), ['mine-down']);
+    const twoBelow = { ...state.avatar.pos, z: state.avatar.pos.z + 2 };
+    // Seen by hand: as if the miner had looked there from a hole beside.
+    state.revealed[cellIndex(state.size, twoBelow)] = 1;
+    expect(state.blocks[cellIndex(state.size, twoBelow)]).not.toBe(BLOCKS.air.code);
+    const dig = legalActions(state).find((a) => choiceName(state, a) === 'mine-down');
+    expect(dig).toBeDefined();
+    if (dig !== undefined) {
+      expect(choiceWarning(state, dig)).toBeNull();
+      expect(
+        actionsForCell(state, state.avatar.pos.z, state.avatar.pos.x, state.avatar.pos.y),
+      ).toEqual([dig]);
+    }
   });
 
   it('a move with a drop warns of the drop', () => {

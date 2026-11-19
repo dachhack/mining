@@ -17,4 +17,7 @@ export const AVATAR: AvatarData = {
   uncontrolledFallDamagePerBlock: 1,
   fatalFallBlocks: 6,
   maxChosenDropBlocks: 2,
+  // Owner, issue #75: "safe one-block drop" when digging out the block you
+  // stand on, as in Minecraft.
+  safeDigDownBlocks: 1,
 };

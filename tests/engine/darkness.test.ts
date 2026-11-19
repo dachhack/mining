@@ -1,10 +1,12 @@
 // Scenario tests for "light matters" (issue #33; decision note 0011).
 //
 // With the lamp out the miner works by touch: only the six cells that share a
-// face with its own are revealed by reach. The diagonals and the ring of cells
-// around the one below are not, and it cannot look over an edge. Mining still
-// needs a revealed block, and a move is offered only when every cell it is
-// judged by is revealed.
+// face with its own are revealed. Mining still needs a revealed block, and a
+// move is offered only when every cell it is judged by is revealed.
+//
+// Since issue #75 (decision note 0022) the lit lamp shows only exposed faces:
+// cells that touch a lit open cell. It no longer shows the 17 cells the pick
+// used to reach, and the pick reaches face neighbours only.
 //
 // Where a test needs the avatar somewhere it could not walk to in the dark, it
 // is put there by hand and `updateReveal` is called, which is what the
@@ -173,25 +175,46 @@ describe('with the lamp out, reach is the six cells the miner touches', () => {
     );
   });
 
-  it('with the lamp lit, reveals and offers all 17 cells in reach as before', () => {
+  /**
+   * The cells a lit lamp shows round `here` in the tunnel that the dark does
+   * not: the diagonals beside it (each touches a lit tunnel cell) and the
+   * floor of the tunnel cells east and west. The corners of the ring below
+   * touch no open cell, so even a lit lamp does not show them (issue #75).
+   */
+  function shownByLight(pos: Vec3): Vec3[] {
+    return [
+      ...diagonals(pos),
+      { x: pos.x - 1, y: pos.y, z: pos.z + 1 },
+      { x: pos.x + 1, y: pos.y, z: pos.z + 1 },
+    ];
+  }
+  function cornersBelow(pos: Vec3): Vec3[] {
+    return ringBelow(pos).filter((cell) => cell.x !== pos.x && cell.y !== pos.y);
+  }
+
+  it('with the lamp lit, shows the exposed faces round it, not the corners below, and offers the 3 face blocks', () => {
     const state = buildState({ layers: tunnelLayers(), avatar: inTunnel(0), lampOil: 1 });
     arriveAt(state, here);
-    for (const pos of [...diagonals(here), ...ringBelow(here)]) {
+    for (const pos of shownByLight(here)) {
       expect(isRevealed(state, pos), key(pos)).toBe(true);
     }
-    // 17 in reach, less the two open tunnel cells east and west.
-    expect(mineTargets(state).length).toBe(15);
+    for (const pos of cornersBelow(here)) {
+      expect(isRevealed(state, pos), key(pos)).toBe(false);
+    }
+    // Face neighbours only (issue #75): north, south and below; east and
+    // west are the open tunnel.
+    expect(mineTargets(state).length).toBe(3);
   });
 
-  it('relighting the lamp (crafting oil) reveals the diagonals and the ring below', () => {
+  it('relighting the lamp (crafting oil) shows the exposed faces round it', () => {
     const dark = inTheDark({ coal: 1 });
     const { state: lit } = act(dark, { type: 'craft', recipe: 'lampOil' });
 
     expect(lit.lampOil).toBeGreaterThan(0);
-    for (const pos of [...diagonals(here), ...ringBelow(here)]) {
+    for (const pos of shownByLight(here)) {
       expect(isRevealed(lit, pos), key(pos)).toBe(true);
     }
-    expect(mineTargets(lit).length).toBe(15);
+    expect(mineTargets(lit).length).toBe(3);
   });
 
   it('keeps what was revealed when the lamp goes out', () => {
@@ -199,17 +222,17 @@ describe('with the lamp out, reach is the six cells the miner touches', () => {
     updateReveal(lit, []);
     const dark = waitForTheLampToGoOut(lit);
 
-    for (const pos of [...diagonals(here), ...ringBelow(here)]) {
+    for (const pos of shownByLight(here)) {
       expect(isRevealed(dark, pos), key(pos)).toBe(true);
     }
-    // A full shift's AP is back, so every block in reach is affordable again.
-    expect(mineTargets(dark).length).toBe(15);
+    expect(mineTargets(dark).length).toBe(3);
   });
 });
 
 describe('a torch placed before the lamp goes out', () => {
-  // The miner stands at tunnel cell 3 and digs a side passage north in the
-  // dark: first the wall beside it, then the block beyond that.
+  // The miner stands at tunnel cell 3 and digs a side passage north: the
+  // wall beside it while the lamp is lit (so its floor is seen and it can
+  // step in), then, once the lamp is out, the block beyond that.
   const here = inTunnel(3);
   const firstBlock: Vec3 = { x: here.x, y: here.y - 1, z: here.z };
   const secondBlock: Vec3 = { x: here.x, y: here.y - 2, z: here.z };
@@ -226,11 +249,11 @@ describe('a torch placed before the lamp goes out', () => {
     if (withTorch) {
       state = act(state, { type: 'placeTorch', target: here }).state;
     }
-    state = waitForTheLampToGoOut(state);
+    // Lit, the newly opened cell shows its floor, so the step into it can be
+    // judged (issue #75: the lamp shows only exposed faces).
     state = act(state, { type: 'mine', target: firstBlock }).state;
-    // The floor of `firstBlock` was in reach while the lamp was lit, so the
-    // step into it can be judged.
     state = act(state, { type: 'move', to: firstBlock }).state;
+    state = waitForTheLampToGoOut(state);
     state = act(state, { type: 'mine', target: secondBlock }).state;
     // A new shift, so that what is offered next is not cut short by AP.
     return endShift(state).state;
@@ -253,10 +276,11 @@ describe('a torch placed before the lamp goes out', () => {
 
     expect(state.lampOil).toBe(0);
     // The new cell is two steps from the torch, so it is lit, and every cell
-    // touching it is revealed: these two are diagonals of the miner's cell.
+    // touching it is revealed: these two are diagonals of the miner's cell,
+    // which the pick does not reach (issue #75), but the map shows.
     for (const pos of diagonals(firstBlock).filter((cell) => cell.y === secondBlock.y)) {
       expect(isRevealed(state, pos), key(pos)).toBe(true);
-      expect(mineTargets(state)).toContain(key(pos));
+      expect(mineTargets(state)).not.toContain(key(pos));
     }
     // Its floor is revealed too, so the miner can walk on.
     expect(isRevealed(state, { ...secondBlock, z: secondBlock.z + 1 })).toBe(true);

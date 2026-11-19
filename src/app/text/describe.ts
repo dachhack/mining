@@ -6,6 +6,7 @@
 // in reach, all of them revealed) and from the data tables.
 
 import {
+  AVATAR,
   BLOCKS,
   STRUCTURES,
   SURFACE,
@@ -77,22 +78,19 @@ function blocksText(count: number): string {
 }
 
 /**
- * What the player knows about the fall that follows mining the block the
- * avatar stands on, for the action list. This is the one lethal choice in
- * M1, and it costs health from the first block (an uncontrolled fall,
- * decision note 0010), so the list must say what it costs.
+ * What the player knows about the drop that follows mining the block the
+ * avatar stands on (digging down; owner, issue #75).
  *
- * It is worked out from revealed cells only. The column under the avatar is
- * walked downwards, and at the first cell the player has not seen the answer
- * stops at "at least so far": what lies beyond is not looked at, so the text
- * cannot give it away. (The engine's own fall, in gravity.ts, uses the real
- * cube; the two agree whenever the whole column is revealed.)
+ * Digging down drops the avatar into the cell of the block it mined. If the
+ * cell under that one gives footing, that is a safe one-block drop
+ * (`AVATAR.safeDigDownBlocks`), as in Minecraft. If not, the avatar keeps
+ * falling, and the whole fall, counted from where it stood, is uncontrolled
+ * and hurts (decision note 0010).
  *
- * "N blocks or more" is said only when that first unseen cell is met, and the
- * text names its layer; with the bottom of the fall seen it is "N blocks"
- * exactly (issue #47 item 5). In a bare one-cell shaft the cell under the
- * block underfoot is not seen (the lamp shows the floor, not what is under
- * it), so there the honest answer stays "1 block or more".
+ * Worked out from revealed cells only. The column under the mined block is
+ * walked downwards; at the first cell the player has not seen the answer
+ * stops, and says only what could happen, so the text cannot give away what
+ * that cell holds (issue #75 item 2).
  */
 function knownFallText(state: GameState): string {
   const here = state.avatar.pos;
@@ -104,15 +102,15 @@ function knownFallText(state: GameState): string {
   // falls on from a cell while that cell has no ladder and the cell below it
   // is open.
   let fall = 1;
-  let known = true;
-  // The layer of the first unseen cell, if the walk meets one.
-  let unseenLayer = 0;
   for (;;) {
     const below = { x: here.x, y: here.y, z: here.z + fall + 1 };
     if (!isRevealed(state, below)) {
-      known = false;
-      unseenLayer = below.z;
-      break;
+      const unseen = layerName(below.z);
+      if (fall <= AVATAR.safeDigDownBlocks) {
+        return `you drop at least ${blocksText(fall)}; if there is nothing under it (${unseen}, unseen) you will fall further and be hurt`;
+      }
+      const cost = fallDamage('uncontrolled', fall);
+      return `you will fall ${blocksText(fall)} or more and lose at least ${cost} health; the cell under that (${unseen}) is unseen`;
     }
     if (isSolid(state, below)) {
       break;
@@ -122,21 +120,28 @@ function knownFallText(state: GameState): string {
       break; // a ladder further down catches the fall
     }
   }
-
-  // The cost of the fall as far as it is known. If the bottom is unseen the
-  // real fall may be longer, so the real cost may be higher, never lower.
-  const cost = fallDamage('uncontrolled', fall);
-  let harm: string;
-  if (isFatalFall(fall) || cost >= state.avatar.health) {
-    harm = ', FATAL';
-  } else if (cost > 0) {
-    harm = known ? ` and lose ${cost} health` : ` and lose at least ${cost} health`;
-  } else {
-    harm = known ? ', no harm' : '';
+  if (fall <= AVATAR.safeDigDownBlocks) {
+    return `you drop ${blocksText(fall)}, no harm`;
   }
-  return known
-    ? `you will fall ${blocksText(fall)}${harm}`
-    : `you will fall ${blocksText(fall)} or more${harm}; the cell under that (${layerName(unseenLayer)}) is unseen`;
+  // A known fall longer than the safe drop: uncontrolled from the first block.
+  const cost = fallDamage('uncontrolled', fall);
+  const harm =
+    isFatalFall(fall) || cost >= state.avatar.health ? ', FATAL' : ` and lose ${cost} health`;
+  return `you will fall ${blocksText(fall)}${harm}`;
+}
+
+/**
+ * True if the drop that digging down would cause is known to be the safe
+ * one-block drop (or a ladder holds the avatar). Read from revealed cells
+ * only. For the tap map: such a dig needs no warning.
+ */
+function digDownIsKnownSafe(state: GameState): boolean {
+  const here = state.avatar.pos;
+  if (structureAt(state, here) === STRUCTURES.ladder.code) {
+    return true;
+  }
+  const under = { x: here.x, y: here.y, z: here.z + 2 };
+  return isRevealed(state, under) && isSolid(state, under);
 }
 
 /** What the player is told when the run is over, in words (the engine's ids are not shown). */
@@ -302,8 +307,8 @@ function idInLowerCase(id: string): string {
  * The names:
  * - moves: n, e, s, w (a walk or a step up: a direction offers one or the
  *   other, never both), up and down (on a ladder);
- * - mine-n, mine-ne, ... on your layer; mine-down for the block underfoot;
- *   mine-n-down, mine-ne-down, ... for the layer below;
+ * - mine-n, mine-e, mine-s, mine-w beside you; mine-down for the block
+ *   underfoot; mine-up overhead (only with a support, issue #75);
  * - ladder-here, ladder-n, ladder-up, ladder-down; torch- the same;
  * - craft-ladder, craft-lamp-oil, ...: "craft-" and the recipe;
  * - take-here-stone, take-n-coal, ...: "take-", where from, and the item;
@@ -570,7 +575,11 @@ export function choiceWarning(state: GameState, entry: LogEntry): string | null 
   }
   if (entry.type === 'mine') {
     if (entry.target.x === here.x && entry.target.y === here.y && entry.target.z > here.z) {
-      return `you are standing on it: ${knownFallText(state)}`;
+      // A dig known to end in the safe one-block drop needs no warning: one
+      // tap digs (issue #75). Otherwise the warning says what could happen.
+      if (!digDownIsKnownSafe(state)) {
+        return `you are standing on it: ${knownFallText(state)}`;
+      }
     }
     const block = blockDefAt(state, entry.target);
     const fits = block.yields.every((stack) => canCarry(state, stack.item, stack.count));
