@@ -4,17 +4,17 @@
 // those that act on that cell:
 // - a move into it, a mine of it, a pick-up from it;
 // - on the miner's own cell, on the miner's layer: also the ladder climbs
-//   (up and down the same column) and mining the block underfoot;
-// - with the miner on the surface and the top layer on screen (the screen
-//   then draws the miner on the block it stands on): also the walks and
-//   pick-ups on the surface above that cell.
+//   (up and down the same column) and mining the block underfoot.
+// A move belongs to the layer it ends on, and a mine to the layer of its
+// block. So on the surface a neighbour tap is a walk, and the block under a
+// neighbour is mined from the layer-0 view, as one layer down is mined
+// underground (coordinator's decision on PR #67).
 // Everything else (crafting, placing, dropping, leaving, ending the shift)
 // is only in the full list under the map.
 //
 // It reads nothing but the actions and the miner's position, so it can say
 // nothing about cells the player has not seen.
 
-import { WORLD } from '../../data';
 import { legalActions } from '../../engine';
 import type { Action, GameState } from '../../engine';
 
@@ -37,8 +37,6 @@ export function actionsForCell(state: GameState, viewZ: number, x: number, y: nu
   const here = state.avatar.pos;
   const onMinersLayer = viewZ === here.z;
   const isMinersCell = here.x === x && here.y === y;
-  // The miner on the surface, with the top layer on screen.
-  const surfaceView = here.z === WORLD.surfaceZ && viewZ === WORLD.surfaceZ + 1;
 
   return legalActions(state).filter((action) => {
     const cell = actionCell(action);
@@ -51,10 +49,6 @@ export function actionsForCell(state: GameState, viewZ: number, x: number, y: nu
     if (onMinersLayer && isMinersCell) {
       // Climbing the ladder up or down, or mining the block underfoot.
       return action.type === 'move' || (action.type === 'mine' && cell.z === here.z + 1);
-    }
-    if (surfaceView && cell.z === WORLD.surfaceZ) {
-      // Walking on the surface, or picking up there.
-      return action.type === 'move' || action.type === 'pickUp';
     }
     return false;
   });

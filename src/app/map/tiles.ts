@@ -38,8 +38,14 @@ export interface Tile {
   structure: StructureMark | null;
   /** True if loose items lie in the cell. */
   items: boolean;
-  /** True if the miner is here (on the surface: the block under the miner, see `buildLayer`). */
+  /** True if the miner is here. */
   miner: boolean;
+  /**
+   * For a surface cell: the block of the top layer under it (the ground the
+   * miner walks on), drawn pale under the open air; `null` elsewhere. The top
+   * layer is always seen, so this is known to the player.
+   */
+  ground: BlockId | null;
   /** True if the miner is in this column on another layer (drawn as a faint ring). */
   minerColumn: boolean;
 }
@@ -136,6 +142,15 @@ function structureMark(code: number): StructureMark | null {
   return code === 0 ? null : 'other';
 }
 
+/** The solid block of the top layer under the surface cell (x, y), as far as the player knows. */
+function groundUnder(state: GameState, x: number, y: number): BlockId | null {
+  const cell = knownCell(state, { x, y, z: WORLD.surfaceZ + 1 });
+  if (cell === null || !blockDefByCode(cell.block).solid) {
+    return null;
+  }
+  return BLOCK_ID_BY_CODE.get(cell.block) ?? null;
+}
+
 /**
  * What `buildLayer` works out once for the whole cube: the lit open cells and
  * the blocks with traces. Worth keeping while the state does not change (the
@@ -158,8 +173,8 @@ export function layerContext(state: GameState): LayerContext {
  * player knows of each cell. Cells outside the cube are left out (the camera
  * keeps the window inside it).
  *
- * When the miner stands on the surface and `z` is the top layer, the miner
- * is drawn on the block it stands on, as the text map does (issue #46).
+ * The surface is a layer of its own (where the miner walks at the start);
+ * its cells show the ground under them.
  * `context` may be passed in when it was already worked out for this state.
  */
 export function buildLayer(
@@ -170,7 +185,6 @@ export function buildLayer(
 ): Tile[][] {
   const here = state.avatar.pos;
   const { lit, traced } = context;
-  const minerOnSurfaceAbove = here.z === WORLD.surfaceZ && z === WORLD.surfaceZ + 1;
   // Daylight: the surface, and every cell of the top layer, which touches it.
   const daylight = z <= WORLD.surfaceZ + 1;
 
@@ -179,9 +193,7 @@ export function buildLayer(
     const row: Tile[] = [];
     for (let x = window.x0; x < window.x0 + window.size; x += 1) {
       const pos = { x, y, z };
-      const miner =
-        (here.x === x && here.y === y && here.z === z) ||
-        (minerOnSurfaceAbove && here.x === x && here.y === y);
+      const miner = here.x === x && here.y === y && here.z === z;
       const minerColumn = !miner && here.x === x && here.y === y;
       const cell = knownCell(state, pos);
       if (cell === null) {
@@ -196,6 +208,7 @@ export function buildLayer(
           items: false,
           miner,
           minerColumn,
+          ground: null,
         });
         continue;
       }
@@ -220,6 +233,7 @@ export function buildLayer(
         items: cell.looseItems.length > 0,
         miner,
         minerColumn,
+        ground: z === WORLD.surfaceZ ? groundUnder(state, x, y) : null,
       });
     }
     rows.push(row);

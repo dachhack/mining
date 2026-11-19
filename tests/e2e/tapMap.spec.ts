@@ -2,6 +2,7 @@
 // tap a cell to move or mine, and the chooser for a choice with a warning.
 // Seed 7 starts on the surface at x16 y16 over dirt; under it, on layer 0,
 // there is dirt to the west (see `npm run play -- --seed 7 --do mine-down`).
+// The map starts on the miner's own layer, the surface.
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 
@@ -66,7 +67,7 @@ test('the map is centred on the miner, a drag pans it, "Centre on me" brings it 
   const canvas = page.getByTestId('map-canvas');
   // x16 y16 on a 32 x 32 cube: the 16 x 16 window starts at x8 y8.
   expect(await camera(canvas)).toMatchObject({ x: 8, y: 8 });
-  await expect(page.getByTestId('layer-label')).toHaveText('Layer 0 · you stand on it');
+  await expect(page.getByTestId('layer-label')).toHaveText('Surface · you are here');
 
   const { cellPx } = await camera(canvas);
   await drag(page, canvas, 3 * cellPx, 2 * cellPx);
@@ -80,6 +81,25 @@ test('the map is centred on the miner, a drag pans it, "Centre on me" brings it 
 
   await page.getByRole('button', { name: 'Centre on me' }).click();
   expect(await camera(canvas)).toMatchObject({ x: 8, y: 8 });
+});
+
+test('on the surface a tap on a neighbour walks there at once', async ({ page }) => {
+  const canvas = page.getByTestId('map-canvas');
+  const gauges = page.getByTestId('gauges');
+  await tapCell(page, canvas, 17, 16);
+  await expect(gauges).toContainText('x17 y16, the surface');
+  await expect(gauges).toContainText('AP 4/5');
+  await tapCell(page, canvas, 18, 16);
+  await expect(gauges).toContainText('x18 y16, the surface');
+  await tapCell(page, canvas, 18, 17);
+  await expect(gauges).toContainText('x18 y17, the surface');
+  await expect(gauges).toContainText('AP 2/5');
+  await expect(page.getByTestId('chooser')).toBeHidden();
+  // The block under a neighbour is mined from the layer-0 view.
+  await page.getByRole('button', { name: 'Look one layer down' }).click();
+  await expect(page.getByTestId('layer-label')).toHaveText('Layer 0 · 1 below you');
+  await tapCell(page, canvas, 18, 16);
+  await expect(page.getByTestId('outcome')).toContainText('> Mine north, one layer down:');
 });
 
 test('tapping the miner opens the chooser with the fall warning; one more tap mines', async ({

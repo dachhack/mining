@@ -78,6 +78,9 @@ export const BLOCK_LOOKS: Record<BlockId, BlockLook> = {
 /** Cells the player has not seen: dark, with diagonal lines, never coloured by what is there. */
 export const UNKNOWN_LOOK = { colour: '#1d1916', ink: '#3a332d' };
 
+/** The pale veil over a surface cell, through which the ground under it shows. */
+export const SURFACE_HAZE = 'rgba(232, 224, 210, 0.6)';
+
 /** How much darker a seen cell is drawn when it is not in light (0 = black, 1 = as lit). */
 export const UNLIT_BRIGHTNESS = 0.45;
 

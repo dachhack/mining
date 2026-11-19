@@ -164,19 +164,29 @@ describe('the tap map shows only what the player knows (issue #66)', () => {
     }
   });
 
-  it('marks the miner, and on the surface draws it on the block it stands on', () => {
+  it('marks the miner on its own layer, and its column on the others', () => {
+    // The miner starts on the surface, which is its own layer on the map
+    // (coordinator's decision on PR #67, design question 3).
     const start = seed7();
     const here = start.avatar.pos;
     expect(here.z).toBe(WORLD.surfaceZ);
+    const surface = buildLayer(start, WORLD.surfaceZ, { x0: here.x, y0: here.y, size: 1 });
+    // The surface tile shows the ground under it (the top layer is always seen).
+    expect(surface[0]?.[0]).toMatchObject({ kind: 'open', ground: 'dirt', miner: true });
     const layer0 = buildLayer(start, 0, { x0: here.x, y0: here.y, size: 1 });
-    expect(layer0[0]?.[0]).toMatchObject({ kind: 'block', block: 'dirt', miner: true });
+    expect(layer0[0]?.[0]).toMatchObject({
+      kind: 'block',
+      block: 'dirt',
+      miner: false,
+      minerColumn: true,
+    });
     const below = takeAll(start, ['mine-down']);
     const tile = buildLayer(below, below.avatar.pos.z, {
       x0: below.avatar.pos.x,
       y0: below.avatar.pos.y,
       size: 1,
     })[0]?.[0];
-    expect(tile).toMatchObject({ kind: 'open', miner: true, lit: true });
+    expect(tile).toMatchObject({ kind: 'open', miner: true, lit: true, ground: null });
   });
 
   it('draws a seen cell out of the light darker, and the lamp lights the cells round the miner', () => {
@@ -212,13 +222,22 @@ function tapNames(state: GameState, z: number, x: number, y: number): string[] {
 }
 
 describe('what a tap on the map does (issue #66)', () => {
-  it('on the surface: the own cell offers mining underfoot; a neighbour, a walk and a mine', () => {
+  it('on the surface: a neighbour is a walk; the own cell is digging down; the layer below is mined', () => {
+    // Coordinator's decision on PR #67: a surface neighbour tap walks at
+    // once, and the block under a neighbour is mined from the layer-0 view.
     const state = seed7();
     const { x, y } = state.avatar.pos;
+    const surface = WORLD.surfaceZ;
+    expect(tapNames(state, surface, x + 1, y)).toEqual(['e']);
+    expect(tapNames(state, surface, x, y - 1)).toEqual(['n']);
+    expect(tapNames(state, surface, x, y)).toEqual(['mine-down']);
+    expect(tapNames(state, 0, x + 1, y)).toEqual(['mine-e-down']);
     expect(tapNames(state, 0, x, y)).toEqual(['mine-down']);
-    expect(tapNames(state, 0, x + 1, y)).toEqual(['e', 'mine-e-down']);
     // Two cells away: nothing.
-    expect(tapNames(state, 0, x + 2, y)).toEqual([]);
+    expect(tapNames(state, surface, x + 2, y)).toEqual([]);
+    // A surface walk carries no warning, so one tap walks.
+    const east = actionsForCell(state, surface, x + 1, y)[0];
+    expect(east !== undefined && choiceWarning(state, east)).toBeNull();
   });
 
   it('underground: a neighbouring block is mined, an open neighbour is walked into', () => {

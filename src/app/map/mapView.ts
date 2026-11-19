@@ -12,7 +12,14 @@ import type { Action, GameState } from '../../engine';
 import { choiceName, choiceWarning, describeChoice, layerName } from '../text/describe';
 import { VIEW_CELLS, cellAt, centredOn, followMiner, isInView, panned } from './camera';
 import type { Camera } from './camera';
-import { BLOCK_LOOKS, MARK_COLOURS, PREVIEW_MAP, UNKNOWN_LOOK, UNLIT_BRIGHTNESS } from './palette';
+import {
+  BLOCK_LOOKS,
+  MARK_COLOURS,
+  PREVIEW_MAP,
+  SURFACE_HAZE,
+  UNKNOWN_LOOK,
+  UNLIT_BRIGHTNESS,
+} from './palette';
 import type { Pattern } from './palette';
 import { actionsForCell } from './targets';
 import { buildLayer, layerContext } from './tiles';
@@ -288,6 +295,14 @@ export function drawTile(
 ): void {
   if (tile.kind === 'unknown') {
     drawUnknown(ctx, x, y, c);
+  } else if (tile.ground !== null) {
+    // A surface cell: the ground under it, seen through pale open air.
+    const look = BLOCK_LOOKS[tile.ground];
+    ctx.fillStyle = look.colour;
+    ctx.fillRect(x, y, c, c);
+    drawPattern(ctx, look.pattern, x, y, c, look.ink);
+    ctx.fillStyle = SURFACE_HAZE;
+    ctx.fillRect(x, y, c, c);
   } else {
     const look = BLOCK_LOOKS[tile.block ?? 'air'];
     ctx.fillStyle = look.colour;
@@ -322,6 +337,7 @@ function sampleTile(overrides: Partial<Tile>): Tile {
     items: false,
     miner: false,
     minerColumn: false,
+    ground: null,
     ...overrides,
   };
 }
@@ -359,6 +375,7 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
     if (tile.kind === 'unknown') unknown = true;
     if (tile.kind === 'open') open = true;
     if (tile.kind === 'block' && tile.block !== null) blocks.add(tile.block);
+    if (tile.ground !== null) blocks.add(tile.ground);
     if (tile.kind !== 'unknown' && !tile.lit) unlit = true;
     if (tile.traced) marks.add('traced');
     if (tile.structure !== null) marks.add(tile.structure);
@@ -377,7 +394,14 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
       ),
     );
   }
-  if (open) {
+  if (tiles.some((tile) => tile.ground !== null)) {
+    entries.push(
+      legendEntry(
+        sampleTile({ kind: 'open', block: null, ground: 'dirt' }),
+        'surface (pale: the ground under it)',
+      ),
+    );
+  } else if (open) {
     entries.push(legendEntry(sampleTile({ kind: 'open', block: null }), 'open'));
   }
   // In the order of the data's block list, so the legend does not jump about.
@@ -494,9 +518,9 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
   // Light and traces for `state`, worked out on the first draw after `show`.
   let context: LayerContext | null = null;
 
-  /** The layer the map shows for the miner: on the surface, the top layer under it. */
+  /** The layer the miner is on (the surface is a layer of its own on the map). */
   function minersMapLayer(s: GameState): number {
-    return s.avatar.pos.z === WORLD.surfaceZ ? WORLD.surfaceZ + 1 : s.avatar.pos.z;
+    return s.avatar.pos.z;
   }
 
   function cellPixels(): number {
@@ -508,9 +532,6 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
     const name = viewZ === WORLD.surfaceZ ? 'Surface' : `Layer ${viewZ}`;
     if (viewZ === here) {
       return `${name} · you are here`;
-    }
-    if (here === WORLD.surfaceZ && viewZ === WORLD.surfaceZ + 1) {
-      return `${name} · you stand on it`;
     }
     const diff = viewZ - here;
     return `${name} · ${Math.abs(diff)} ${diff > 0 ? 'below' : 'above'} you`;
