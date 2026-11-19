@@ -8,6 +8,7 @@ Date: 2026-11-19. Status: accepted (owner approved issue #64 as a side task outs
 - **The web page is the preview screen** (`src/app/preview.ts`) until M3: the play tool's gauges, map, hazards, forecast and "what came of it" lines, and one button per choice. It changes the game only through the choice list (`applyAction` / `endShift`).
 - **A run is saved as its play log** in `localStorage` (the same JSON as `npm run play -- --log`), and resumed by replaying it. A log that no longer replays (the rules changed) is dropped with a note to the player.
 - **Capacitor 8.6.2 and its Android project were added now**, ahead of M4, for a debug APK only. The Android project in `android/` is committed as Capacitor generated it; only its web-asset copy is ignored. `.github/workflows/android-preview.yml` builds the APK on every push to `main` and publishes it on a rolling pre-release tagged `android-preview`. No signing secrets and no Play upload: those stay in M4.
+- **One fixed, public debug key** (`android/app/debug-preview.keystore`, alias `androiddebugkey`, passwords `android`) signs every preview build (coordinator's answer to the PR #65 question), so a new APK installs over the last and keeps the saved run. It is for the debug preview only and is never used for Play; M4 adds a separate, secret upload key.
 
 ## Consequences
 

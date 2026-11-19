@@ -9,8 +9,10 @@ name: Android preview
 #   artifact only, to check the build still works. Nothing is published.
 # - Manual runs ("Run workflow" on the Actions tab) behave like a push.
 #
-# A debug APK is signed with a throwaway key that the Android tools make on
-# the fly, so no signing secrets are needed. Play Store builds come in M4.
+# The debug APK is signed with the fixed, public preview key committed at
+# android/app/debug-preview.keystore (so each new APK installs over the last),
+# so no signing secrets are needed. Play Store builds and their secret upload
+# key come in M4.
 
 on:
   push:

@@ -4,7 +4,7 @@ The early preview (issue #64) is a plain tap screen for the game as it stands on
 
 ## In the phone's browser
 
-Open the GitHub Pages address of this repository (Settings → Pages shows it, normally `https://dachhack.github.io/mining/`). Nothing to install. It updates every time `main` changes.
+Open the repository's GitHub Pages address: on GitHub, go to the repository's **Settings → Pages**, where it is shown under "Your site is live at". Nothing to install. It updates every time `main` changes.
 
 ## As an Android app
 
@@ -30,7 +30,9 @@ You can turn "Allow from this source" off again afterwards; it is only needed wh
 
 Download the APK again from the same link and install it over the old one. Your saved run is kept, unless the game's rules have changed so that it no longer replays; then the app says so and starts a new run.
 
-If Android refuses with "App not installed" or a "conflicting package" message, uninstall Mining Game first and install again. This happens when the build was made on a different machine: each debug build is signed with that machine's own throwaway key, and Android only installs an update signed with the same key. (The saved run is lost on uninstall.)
+Every preview build is signed with the same key, so a new one installs over the old one. That key (`android/app/debug-preview.keystore`, the standard Android debug settings: alias `androiddebugkey`, password `android`) is public on purpose: it is for this debug preview only and is never used for the Play Store. The Play builds in M4 use a separate, secret upload key.
+
+If Android ever refuses with "App not installed" or a "conflicting package" message (for example over a copy you built yourself on another machine, which is signed with that machine's own debug key), uninstall Mining Game first and install again. The saved run is lost on uninstall.
 
 ## Playing
 
