@@ -59,8 +59,9 @@ export interface CoalGeometry {
    */
   topLayerCoalSeenAtStart: number;
   /**
-   * Steps to walk over the surface until a top-layer coal block is beside the
-   * miner, in the pick's reach. `null` if the top layer has no coal.
+   * Steps to walk over the surface until a top-layer coal block is in the
+   * pick's reach. Since issue #75 that is underfoot, so this equals
+   * `stepsToStandOnTopLayerCoal`. `null` if the top layer has no coal.
    */
   stepsToReachTopLayerCoal: number | null;
   /**
@@ -76,8 +77,8 @@ export interface CoalGeometry {
    */
   topLayerCoalAp: number | null;
   /**
-   * Estimated AP to get the cheapest coal block below the top layer: walk,
-   * dig a ladder shaft beside it, mine it. See `shaftAp`. `null` if none.
+   * Estimated AP to get the cheapest coal block below the top layer: walk to
+   * its column and dig straight down to it. See `digDownAp`. `null` if none.
    */
   undergroundCoalAp: number | null;
   /** The layer that block is in. `null` if none. */
@@ -247,22 +248,18 @@ function smallerOf(a: number | null, b: number): number {
 // ---------------------------------------------------------------------------
 
 /**
- * Estimated AP to dig a one-cell shaft down the column at (x, y) until the
- * miner stands in layer `standLayer`, the way the m1-r2 playtesters dug:
- * mine the top block from the surface and drop into the hole, then for each
- * further layer put a ladder in the miner's own cell, mine the block
- * underfoot and climb down. -1 is the surface, which needs no digging.
+ * Estimated AP to dig straight down the column at (x, y) from the surface
+ * until the block in layer `lastLayer` is mined, the Minecraft way (issue
+ * #75): mine the block underfoot, drop safely one block, and again. Each
+ * block costs its mine cost; the drops are free.
  *
  * An estimate: it counts AP only, and not the AP lost when the next action
- * does not fit into what is left of a shift.
+ * does not fit into what is left of a shift, nor the way back up.
  */
-function shaftAp(state: GameState, x: number, y: number, standLayer: number): number {
+function digDownAp(state: GameState, x: number, y: number, lastLayer: number): number {
   let ap = 0;
-  for (let layer = 0; layer <= standLayer; layer += 1) {
+  for (let layer = 0; layer <= lastLayer; layer += 1) {
     ap += blockDefAt(state, { x, y, z: layer }).mineCost ?? 0;
-    if (layer > 0) {
-      ap += ACTION_COSTS.placeLadder + ACTION_COSTS.move;
-    }
   }
   return ap;
 }
@@ -334,9 +331,6 @@ export function measureCoalGeometry(state: GameState): CoalGeometry {
         if (blockAt(state, coal) !== coalCode) {
           continue;
         }
-        const mineAp = blockDefAt(state, coal).mineCost ?? 0;
-        // From the surface, coal under a tree is mined only once the tree is cut.
-        const coalUnderTree = z === 0 && hasTree(state, { x, y, z: WORLD.surfaceZ });
         if (z === 0) {
           topLayerCoalBlocks += 1;
           if (isRevealed(state, coal)) {
@@ -344,32 +338,19 @@ export function measureCoalGeometry(state: GameState): CoalGeometry {
           }
           stepsToStandOn = smallerOf(stepsToStandOn, Math.abs(x - start.x) + Math.abs(y - start.y));
         }
-        // The miner works from one layer above the coal, in one of the eight
-        // columns around it: from there the block is in the pick's reach, and
-        // mining it does not take the miner's own floor away.
-        for (let dy = -1; dy <= 1; dy += 1) {
-          for (let dx = -1; dx <= 1; dx += 1) {
-            const standX = x + dx;
-            const standY = y + dy;
-            const isCoalColumn = dx === 0 && dy === 0;
-            const inFootprint =
-              standX >= 0 && standX < state.size.x && standY >= 0 && standY < state.size.y;
-            if (isCoalColumn || !inFootprint) {
-              continue;
-            }
-            // Walking over the surface, one step per cell, no diagonals.
-            const steps = Math.abs(standX - start.x) + Math.abs(standY - start.y);
-            const walkAp = routeAp[standX + state.size.x * standY] as number;
-            const cutAp = coalUnderTree ? SURFACE.cutTree.ap : 0;
-            const ap = walkAp + shaftAp(state, standX, standY, z - 1) + cutAp + mineAp;
-            if (z === 0) {
-              stepsToReach = smallerOf(stepsToReach, steps);
-              topLayerCoalAp = smallerOf(topLayerCoalAp, ap);
-            } else if (undergroundCoalAp === null || ap < undergroundCoalAp) {
-              undergroundCoalAp = ap;
-              undergroundCoalLayer = z;
-            }
-          }
+        // The pick reaches face neighbours only (issue #75), so the miner
+        // stands in the coal's own column and digs down to it: walk there
+        // over the surface (cutting the trees in the way, and the one over
+        // the coal's column if there is one, by walking into it), then dig.
+        const steps = Math.abs(x - start.x) + Math.abs(y - start.y);
+        const walkAp = routeAp[x + state.size.x * y] as number;
+        const ap = walkAp + digDownAp(state, x, y, z);
+        if (z === 0) {
+          stepsToReach = smallerOf(stepsToReach, steps);
+          topLayerCoalAp = smallerOf(topLayerCoalAp, ap);
+        } else if (undergroundCoalAp === null || ap < undergroundCoalAp) {
+          undergroundCoalAp = ap;
+          undergroundCoalLayer = z;
         }
       }
     }

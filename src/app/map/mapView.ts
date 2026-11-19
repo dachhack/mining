@@ -9,7 +9,13 @@
 import { BLOCKS, SHIFT, WORLD } from '../../data';
 import type { BlockId } from '../../data';
 import type { Action, GameState } from '../../engine';
-import { choiceName, choiceWarning, describeChoice, layerName } from '../text/describe';
+import {
+  choiceName,
+  choiceWarning,
+  describeChoice,
+  layerName,
+  tapActsAtOnce,
+} from '../text/describe';
 import {
   VIEW_CELLS,
   cellAt,
@@ -817,7 +823,9 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
       showHint(emptyTapHint(state, viewZ, cell.x, cell.y));
       return;
     }
-    if (actions.length === 1 && choiceWarning(state, only) === null) {
+    // One choice and nothing to confirm: take it at once. Digging down with
+    // only the "unseen below" note counts too (`tapActsAtOnce`).
+    if (actions.length === 1 && tapActsAtOnce(state, only)) {
       onChoose(only);
       return;
     }

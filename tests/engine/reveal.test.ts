@@ -232,77 +232,121 @@ describe('what stays revealed', () => {
   });
 });
 
-describe('the surface', () => {
-  it('reveals the whole top layer and nothing of layer 1 at the start', () => {
-    const state = buildState({
-      layers: [
-        ['####', '####', '####'],
-        ['####', '####', '####'],
-        ['####', '####', '####'],
-      ],
+describe('the surface (owner, after PR #72: only what has been discovered)', () => {
+  // Daylight no longer reveals the whole top layer. On the surface it does the
+  // lamp's work round the miner, lamp oil or not: light spreads over the
+  // surface cells as far as the lamp's radius and shows the blocks under
+  // them, and touch shows the block underfoot (issue #75).
+  const width = WITH_OIL + 6;
+  function row(): GameState {
+    return buildState({
+      layers: [['#'.repeat(width)], ['#'.repeat(width)], ['#'.repeat(width)]],
       avatar: { x: 0, y: 0, z: -1 },
     });
+  }
+
+  it('reveals the top layer only as far as the light reaches, and nothing of layer 1', () => {
+    const state = row();
     updateReveal(state, []);
-    for (let y = 0; y < state.size.y; y += 1) {
-      for (let x = 0; x < state.size.x; x += 1) {
-        expect(isRevealed(state, { x, y, z: 0 })).toBe(true);
-        expect(isRevealed(state, { x, y, z: 1 })).toBe(false);
-        expect(isRevealed(state, { x, y, z: 2 })).toBe(false);
-      }
+    for (let x = 0; x < width; x += 1) {
+      expect(isRevealed(state, { x, y: 0, z: 0 }), `x${x}`).toBe(x <= WITH_OIL);
+      expect(isRevealed(state, { x, y: 0, z: 1 })).toBe(false);
     }
   });
 
-  it('does the same for a new run, except under the trees (issue #70)', () => {
-    // Since the forest, a new run's top layer is revealed except where a
-    // tree stands over it (and the cells round the start, which the lamp
-    // and the pick reach, are never under a tree: the start clearing).
+  it('does the same with the lamp out: on the surface daylight does its work', () => {
+    const state = row();
+    state.lampOil = 0;
+    updateReveal(state, []);
+    for (let x = 0; x < width; x += 1) {
+      expect(isRevealed(state, { x, y: 0, z: 0 }), `x${x}`).toBe(x <= WITH_OIL);
+    }
+  });
+
+  it('reveals more as the miner walks, and what was seen stays seen', () => {
+    const state = row();
+    updateReveal(state, []);
+    state.avatar.pos = { x: width - 1, y: 0, z: -1 };
+    updateReveal(state, []);
+    for (let x = 0; x < width; x += 1) {
+      const near = x <= WITH_OIL || x >= width - 1 - WITH_OIL;
+      expect(isRevealed(state, { x, y: 0, z: 0 }), `x${x}`).toBe(near);
+    }
+  });
+
+  it('a new run knows only the ground round the start, never under a tree', () => {
     const state = createRun(1, 'none', 'standard');
+    const start = state.avatar.pos;
     for (let y = 0; y < state.size.y; y += 1) {
       for (let x = 0; x < state.size.x; x += 1) {
-        const underTree = isUnderTree(state, { x, y, z: 0 });
-        expect(isRevealed(state, { x, y, z: 0 })).toBe(!underTree);
+        const ground = { x, y, z: 0 };
+        if (isRevealed(state, ground)) {
+          expect(isUnderTree(state, ground)).toBe(false);
+          expect(Math.abs(x - start.x) + Math.abs(y - start.y)).toBeLessThanOrEqual(WITH_OIL);
+        }
         expect(isRevealed(state, { x, y, z: 1 })).toBe(false);
       }
     }
   });
 
-  it('is lit everywhere, but daylight does not shine down a hole', () => {
-    // A pit in the top layer, further from the avatar than its lamp reaches.
-    const width = WITH_OIL + 6;
+  it('daylight goes down an open hole near the miner, like the lamp, lamp oil or not', () => {
+    // A hole two cells deep at x = 1, beside the miner at x = 0 on the
+    // surface. Daylight spreads surface (1) -> layer 0 (2) -> layer 1 (3) and
+    // reveals what touches the lit cells: the hole's floor on layer 2 and its
+    // walls on layer 1 (review of PR #74: the words follow the code).
+    expect(WITH_OIL).toBeGreaterThanOrEqual(3);
+    const state = buildState({
+      layers: [['#.' + '#'.repeat(width - 2)], ['#.' + '#'.repeat(width - 2)], ['#'.repeat(width)]],
+      avatar: { x: 0, y: 0, z: -1 },
+    });
+    state.lampOil = 0;
+    updateReveal(state, []);
+    expect(isRevealed(state, { x: 1, y: 0, z: 1 })).toBe(true);
+    expect(isRevealed(state, { x: 1, y: 0, z: 2 })).toBe(true);
+    expect(isRevealed(state, { x: 0, y: 0, z: 1 })).toBe(true);
+    expect(isRevealed(state, { x: 2, y: 0, z: 1 })).toBe(true);
+    // Light goes no further than the radius: nothing on layer 2 beside the floor.
+    expect(isRevealed(state, { x: 0, y: 0, z: 2 })).toBe(false);
+  });
+
+  it('a pit far from the miner is not seen, and daylight does not reach down it', () => {
     const pitX = width - 1;
     const state = buildState({
       layers: [['#'.repeat(width - 1) + '.'], ['#'.repeat(width)], ['#'.repeat(width)]],
       avatar: { x: 0, y: 0, z: -1 },
     });
     updateReveal(state, []);
-    expect(isRevealed(state, { x: pitX, y: 0, z: 0 })).toBe(true); // the pit: top layer
-    expect(isRevealed(state, { x: pitX, y: 0, z: 1 })).toBe(false); // its floor
+    expect(isRevealed(state, { x: pitX, y: 0, z: 0 })).toBe(false);
+    expect(isRevealed(state, { x: pitX, y: 0, z: 1 })).toBe(false);
   });
 });
 
-describe('reach (0005 item 10)', () => {
+describe('only exposed faces are known (issue #75; replaces reach, 0005 item 10)', () => {
   // The avatar walks to the dead end of a tunnel that is longer than its
-  // light. The lamp is lit: reach covers all 17 cells only then (with the
-  // lamp out it is the six cells the avatar touches; see darkness.test.ts).
-  // Light alone shows none of the cells tested here: no face of theirs
-  // touches an open cell.
+  // light. Before issue #75 the lit lamp revealed all 17 cells the pick could
+  // reach and the cell overhead. Now it reveals only cells that touch a lit
+  // open cell, and always the six cells touching the avatar's own.
   const length = WITH_OIL + 4;
   const end = length - 1;
   const level = TUNNEL_Z;
-  const diagonals: Vec3[] = [
+  // Cells round the dead end that touch no open cell: the diagonals beyond
+  // the end, and the corners and the front of the ring below.
+  const hidden: Vec3[] = [
     { x: end + 1, y: TUNNEL_Y - 1, z: level },
     { x: end + 1, y: TUNNEL_Y + 1, z: level },
-    { x: end - 1, y: TUNNEL_Y + 1, z: level },
-    { x: end - 1, y: TUNNEL_Y - 1, z: level },
+    { x: end + 1, y: TUNNEL_Y, z: level + 1 },
+    { x: end + 1, y: TUNNEL_Y - 1, z: level + 1 },
+    { x: end + 1, y: TUNNEL_Y + 1, z: level + 1 },
+    { x: end - 1, y: TUNNEL_Y - 1, z: level + 1 },
+    { x: end - 1, y: TUNNEL_Y + 1, z: level + 1 },
   ];
-  const aroundBelow: Vec3[] = [];
-  for (const dy of [-1, 0, 1]) {
-    for (const dx of [-1, 0, 1]) {
-      if (dx !== 0 || dy !== 0) {
-        aroundBelow.push({ x: end + dx, y: TUNNEL_Y + dy, z: level + 1 });
-      }
-    }
-  }
+  const faces: Vec3[] = [
+    { x: end + 1, y: TUNNEL_Y, z: level },
+    { x: end, y: TUNNEL_Y - 1, z: level },
+    { x: end, y: TUNNEL_Y + 1, z: level },
+    { x: end, y: TUNNEL_Y, z: level - 1 },
+    { x: end, y: TUNNEL_Y, z: level + 1 },
+  ];
 
   function atStart(): GameState {
     const state = buildState({ layers: tunnelLayers(length), avatar: inTunnel(0), lampOil: 1 });
@@ -310,29 +354,27 @@ describe('reach (0005 item 10)', () => {
     return state;
   }
 
-  it('reveals the diagonals and the 8 cells around the one below when the avatar arrives', () => {
+  it('on arrival reveals the faces round the avatar, and not the cells that touch no open cell', () => {
     const state = atStart();
-    expect(diagonals.length).toBe(4);
-    expect(aroundBelow.length).toBe(8);
-    for (const pos of [...diagonals, ...aroundBelow]) {
+    for (const pos of [...hidden, ...faces]) {
       expect(isRevealed(state, pos)).toBe(false);
     }
 
     arriveAt(state, inTunnel(end));
 
-    for (const pos of [...diagonals, ...aroundBelow]) {
-      expect(isRevealed(state, pos)).toBe(true);
+    for (const pos of faces) {
+      expect(isRevealed(state, pos), `${pos.x},${pos.y},${pos.z}`).toBe(true);
     }
-    // The cell overhead and the one straight below are in reach too.
-    expect(isRevealed(state, { x: end, y: TUNNEL_Y, z: level - 1 })).toBe(true);
-    expect(isRevealed(state, { x: end, y: TUNNEL_Y, z: level + 1 })).toBe(true);
+    for (const pos of hidden) {
+      expect(isRevealed(state, pos), `${pos.x},${pos.y},${pos.z}`).toBe(false);
+    }
   });
 
-  it('keeps them revealed after the avatar leaves', () => {
+  it('keeps the faces revealed after the avatar leaves', () => {
     const state = atStart();
     arriveAt(state, inTunnel(end));
     arriveAt(state, inTunnel(0));
-    for (const pos of [...diagonals, ...aroundBelow]) {
+    for (const pos of faces) {
       expect(isRevealed(state, pos)).toBe(true);
     }
   });

@@ -1,13 +1,14 @@
-// Light and reveal (design doc 3 and 5.1; 0005 items 10, 13, 14 and 15;
-// decision note 0011, "light matters").
+// Light and reveal (design doc 3 and 5.1; 0005 items 13, 14 and 15; decision
+// notes 0011, 0021 and 0022).
 //
-// Three things reveal a cell:
-// - light: the cell is lit, or shares a face with a lit cell;
-// - reach: with the lamp lit, the cell is one the avatar's pick can reach, or
-//   the one overhead; with the lamp out, only the six cells that share a face
-//   with the avatar's own (it works by touch);
-// - looking over an edge, with the lamp lit only: the cell is one a drop is
-//   judged by (question 40).
+// Only exposed faces are known (owner, issue #75). Two things reveal a cell:
+// - light: the cell is lit, or shares a face with a lit cell. The avatar's
+//   lamp, or daylight while it stands on the surface (0021), and torches
+//   give light;
+// - touch: the six cells that share a face with the avatar's own.
+// The lamp no longer shows the cells the pick can reach beyond those, the
+// cell overhead, or what lies over an edge (0005 item 10 and question 40,
+// replaced by 0022).
 //
 // Which cells are lit is worked out afresh each time and never stored. Only
 // the result, `state.revealed`, is kept, and a revealed cell stays revealed.
@@ -15,8 +16,7 @@
 import { AVATAR, STRUCTURES } from '../data';
 import type { Vec3 } from '../data';
 import type { GameEvent } from './events';
-import { cellBelow, hasLadder } from './footing';
-import { FACE_OFFSETS, MINE_REACH_OFFSETS, offsetPosition } from './neighbours';
+import { FACE_OFFSETS, offsetPosition } from './neighbours';
 import {
   blockAt,
   cellCount,
@@ -25,21 +25,33 @@ import {
   inGrid,
   isOpen,
   isRevealed,
-  isSolid,
   isSurface,
   setRevealed,
 } from './state';
 import type { GameState } from './state';
-import { hasTree, isUnderTree } from './surface/state';
+import { hasTree } from './surface/state';
 
 /** True while the miner's lamp burns: there is lamp oil left (0011). */
 export function isLampLit(state: GameState): boolean {
   return state.lampOil > 0;
 }
 
-/** How far the avatar's lamp reaches now: less once the lamp oil is gone (0005 item 15). */
+/**
+ * True while the avatar sees by light: its lamp burns, or it stands on the
+ * surface, where daylight does the lamp's work whatever the oil (owner, after
+ * PR #72: the top layer is known only where the miner has been near).
+ */
+export function hasAvatarLight(state: GameState): boolean {
+  return isLampLit(state) || isSurface(state.size, state.avatar.pos);
+}
+
+/**
+ * How far the avatar's light reaches now: the lamp's radius, or daylight's
+ * (the same) on the surface; less once the lamp oil is gone underground
+ * (0005 item 15).
+ */
 export function avatarLightRadius(state: GameState): number {
-  return isLampLit(state) ? AVATAR.lightRadiusWithOil : AVATAR.lightRadiusWithoutOil;
+  return hasAvatarLight(state) ? AVATAR.lightRadiusWithOil : AVATAR.lightRadiusWithoutOil;
 }
 
 /** The cells holding a placed torch, in the order the cube stores them. */
@@ -98,65 +110,6 @@ function positionKey(pos: Vec3): string {
 }
 
 /**
- * The cells the avatar sees by looking over an edge (owner question 40, an
- * extension of "reach reveals", 0005 item 10). These are the cells a drop is
- * judged by in actions/move.ts, so that the move list never depends on a
- * cell the player has not seen, whatever the light (issue #15).
- *
- * Looking needs light: with the lamp out the avatar sees nothing over an
- * edge, and `updateReveal` does not call this (0011). The moves then check
- * for themselves that every cell they are judged by is revealed.
- *
- * The avatar looks down two kinds of column:
- * - the one under each open sideways neighbour (a walk off an edge);
- * - the one under its own cell, when that cell holds a ladder (a climb down
- *   off the bottom of the ladder).
- *
- * In each column the cells are taken in turn going down, starting one level
- * below the avatar's, until the first solid block (which is included) or
- * until one cell past the longest drop a move may choose
- * (`AVATAR.maxChosenDropBlocks`), whichever comes first. One cell past is
- * enough: if that cell is open too, the drop is too long to be offered,
- * however much further it goes.
- *
- * Does not change `state`. The order is fixed: sideways neighbours in
- * `FACE_OFFSETS` order, then the avatar's own column; each column top down.
- * Cells outside the grid may be among them; `updateReveal` skips those.
- */
-export function edgeLookCells(state: GameState): Vec3[] {
-  const here = state.avatar.pos;
-
-  // The cell at the top of each column. All are on the avatar's level.
-  const columnTops: Vec3[] = [];
-  for (const offset of FACE_OFFSETS) {
-    // The four face offsets with z = 0 are the sideways ones.
-    if (offset.z === 0) {
-      const beside = offsetPosition(here, offset);
-      // Not past a tree: the miner cannot walk into one (issue #70).
-      if (isOpen(state, beside) && !hasTree(state, beside)) {
-        columnTops.push(beside);
-      }
-    }
-  }
-  if (hasLadder(state, here)) {
-    columnTops.push(here);
-  }
-
-  const cells: Vec3[] = [];
-  for (const top of columnTops) {
-    let current = top;
-    for (let depth = 1; depth <= AVATAR.maxChosenDropBlocks + 1; depth += 1) {
-      current = cellBelow(current);
-      cells.push(current);
-      if (isSolid(state, current)) {
-        break;
-      }
-    }
-  }
-  return cells;
-}
-
-/**
  * Work out which cells are lit and reveal the blocks the light shows. The
  * dispatcher in index.ts calls this when a run is created, after every action
  * and at the end of every shift, which covers everything that can change the
@@ -166,23 +119,21 @@ export function edgeLookCells(state: GameState): Vec3[] {
  * - Changes `state.revealed` in place and appends a `blockRevealed` event for
  *   each cell that was not revealed before, in the order the cube stores
  *   cells (top layer first), so the same state always gives the same events.
- * - Trees (issue #70): the ground under a tree is not revealed by daylight,
- *   light does not pass through a tree, and from the surface reach and
- *   looking over an edge do not go under one. From underground, light and
- *   reach reveal it as any other cell.
- * - Lit cells: the surface, plus open cells reachable from the avatar within
+ * - The top layer is not revealed by daylight as a whole (owner, after PR
+ *   #72): only what the miner's light comes near. On the surface, daylight
+ *   does the lamp's work, lamp oil or not (`hasAvatarLight`).
+ * - Trees (issue #70): light does not pass through a tree, so the ground
+ *   under one is not seen from the surface. From underground, light reveals
+ *   it as any other cell.
+ * - Lit cells: open cells reachable from the avatar within
  *   its light radius, plus open cells reachable from each torch within the
  *   torch radius (0005 item 13).
  * - A cell is revealed when it is lit or one of its faces touches a lit open
  *   cell (0005 item 14). That goes for open cells as well as solid blocks: the
  *   player sees that the tunnel goes on one cell past the edge of the light.
- * - With the lamp lit, the cells within the avatar's reach and the one
- *   overhead are revealed (0005 item 10), and so are the cells the avatar
- *   sees by looking over an edge (question 40; see `edgeLookCells`).
- * - With the lamp out, the miner works by touch (0011): only the six cells
- *   that share a face with its own are revealed by reach, and looking over
- *   an edge reveals nothing. Light from a torch or from the sky still
- *   reveals what it reaches, as above.
+ * - The six cells that share a face with the avatar's own are always revealed
+ *   (with the lamp out underground the miner knows them by touch, 0011).
+ *   Nothing else is revealed by reach, overhead or over an edge (0022).
  * - Only cells inside the grid have a revealed flag; the rest are skipped.
  * - Once revealed, a cell stays revealed.
  */
@@ -198,19 +149,11 @@ export function updateReveal(state: GameState, events: GameEvent[]): void {
     }
   }
 
-  // The surface is always lit, and every cell of the top layer touches it,
-  // except where a tree stands over it: a tree hides the ground under it
-  // until it is cut (issue #70).
-  for (let y = 0; y < state.size.y; y += 1) {
-    for (let x = 0; x < state.size.x; x += 1) {
-      const ground = { x, y, z: 0 };
-      if (!isUnderTree(state, ground)) {
-        reveal(ground);
-      }
-    }
-  }
-
-  // The avatar's lamp and each torch.
+  // The avatar's light (its lamp, or daylight on the surface) and each torch.
+  // Daylight does NOT reveal the whole top layer: a top-layer block is known
+  // only once the miner's light has come near it (owner, after PR
+  // #72). On the surface the light spreads over the open surface cells, not
+  // into trees, and reveals the blocks under them.
   const lit: Vec3[] = litCellsFrom(state, state.avatar.pos, avatarLightRadius(state));
   for (const torch of torchPositions(state)) {
     lit.push(...litCellsFrom(state, torch, AVATAR.torchLightRadius));
@@ -222,35 +165,15 @@ export function updateReveal(state: GameState, events: GameEvent[]): void {
     }
   }
 
-  // From the surface the pick cannot reach under a tree (issue #70: mining
-  // down is not offered there), so reach does not reveal the ground under one.
-  const onSurface = isSurface(state.size, state.avatar.pos);
-  if (isLampLit(state)) {
-    // Reach: what the pick can touch, and the cell overhead.
-    for (const offset of MINE_REACH_OFFSETS) {
-      const reached = offsetPosition(state.avatar.pos, offset);
-      if (!(onSurface && isUnderTree(state, reached))) {
-        reveal(reached);
-      }
-    }
-    reveal(offsetPosition(state.avatar.pos, { x: 0, y: 0, z: -1 }));
-
-    // Looking over an edge: the cells a drop is judged by.
-    for (const pos of edgeLookCells(state)) {
-      reveal(pos);
-    }
-  } else {
-    // By touch: the six cells that share a face with the avatar's own. This
-    // is written out, not left to the light radius, so that it holds whatever
-    // `AVATAR.lightRadiusWithoutOil` is.
-    for (const offset of FACE_OFFSETS) {
-      // From the surface the only cell of the grid this touches is the one
-      // underfoot, which is never under a tree; the check is kept for clarity.
-      const touched = offsetPosition(state.avatar.pos, offset);
-      if (!(onSurface && isUnderTree(state, touched))) {
-        reveal(touched);
-      }
-    }
+  // Only exposed faces are known (owner, issue #75; decision note 0022). The
+  // lamp no longer shows the cells the pick can reach, the cell overhead, or
+  // what lies over an edge: only what light shows (above) and, always, the
+  // six cells that touch the avatar's own. With light, those six already
+  // touch a lit cell (the avatar's own); with the lamp out underground the
+  // miner knows them by touch (0011). From the surface the only cell of the
+  // grid this touches is the one underfoot, never under a tree.
+  for (const offset of FACE_OFFSETS) {
+    reveal(offsetPosition(state.avatar.pos, offset));
   }
 
   // Plain numeric sort; without the function, JavaScript sorts numbers as text.

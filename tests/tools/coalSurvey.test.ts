@@ -2,7 +2,7 @@
 // issue #51, decision note 0014 item 33).
 
 import { describe, expect, it } from 'vitest';
-import { BLOCKS, CONTRACT_IDS, DEFAULT_LOADOUT_ID, LOADOUTS, SURFACE } from '../../src/data';
+import { BLOCKS, CONTRACT_IDS, DEFAULT_LOADOUT_ID, LOADOUTS } from '../../src/data';
 import { blockAt, cellIndex, createRun, isRevealed } from '../../src/engine';
 import type { GameState } from '../../src/engine';
 import { cloneState } from '../../src/engine/state';
@@ -46,11 +46,8 @@ describe('the starting fuel (decision note 0014 item 33)', () => {
       expect(entry.trip.paidBack).toBe(true);
       expect(entry.trip.lowestFuel).toBeGreaterThanOrEqual(DEFAULT_MARGIN_SHIFTS);
       expect(entry.trip.fuelAtEnd).toBeGreaterThanOrEqual(startingFuel);
-      // The coal in sight is within the walk the data promises.
+      // Some coal is in sight at the start.
       expect(entry.geometry.topLayerCoalSeenAtStart).toBeGreaterThan(0);
-      expect(entry.geometry.stepsToStandOnTopLayerCoal ?? Infinity).toBeLessThanOrEqual(
-        SURFACE.generation.coalInSightWithinSteps,
-      );
     }
     // The smallest starting fuel that would still do is a real number, and
     // the loadout's is not below it.
@@ -61,35 +58,17 @@ describe('the starting fuel (decision note 0014 item 33)', () => {
 
 /**
  * A fresh run of `seed` with the coal the player sees at the start turned to
- * dirt, except (with `keepFarthest`) the one farthest from the start. Built
- * by hand, as a scenario test would, to drive the coal policy's fallbacks
- * (following a seam, look-holes, cutting trees), which a fresh run no longer
- * needs since coal is always in sight near the start.
+ * dirt. Built by hand, as a scenario test would, to drive the coal policy's
+ * fallbacks (look-holes, cutting trees, following a seam), which a fresh run
+ * no longer needs since coal is always in sight at the start.
  */
-function withCoalInSightRemoved(seed: number, keepFarthest: boolean): GameState {
+function withCoalInSightRemoved(seed: number): GameState {
   const state = cloneState(createRun(seed, CONTRACT, DEFAULT_LOADOUT_ID));
-  const start = state.avatar.pos;
-  let farthest = -1;
-  let farthestSteps = -1;
   for (let y = 0; y < state.size.y; y += 1) {
     for (let x = 0; x < state.size.x; x += 1) {
       const pos = { x, y, z: 0 };
       if (isRevealed(state, pos) && blockAt(state, pos) === BLOCKS.coalSeam.code) {
-        const steps = Math.abs(x - start.x) + Math.abs(y - start.y);
-        if (steps > farthestSteps) {
-          farthestSteps = steps;
-          farthest = cellIndex(state.size, pos);
-        }
-      }
-    }
-  }
-  for (let y = 0; y < state.size.y; y += 1) {
-    for (let x = 0; x < state.size.x; x += 1) {
-      const pos = { x, y, z: 0 };
-      const index = cellIndex(state.size, pos);
-      const keep = keepFarthest && index === farthest;
-      if (!keep && isRevealed(state, pos) && blockAt(state, pos) === BLOCKS.coalSeam.code) {
-        state.blocks[index] = BLOCKS.dirt.code;
+        state.blocks[cellIndex(state.size, pos)] = BLOCKS.dirt.code;
       }
     }
   }
@@ -97,7 +76,7 @@ function withCoalInSightRemoved(seed: number, keepFarthest: boolean): GameState 
 }
 
 describe('the coal policy', () => {
-  it('fetches coal without leaving the surface, and leaves with the fuel it started with or more', () => {
+  it('fetches coal from the top layer, and leaves with the fuel it started with or more', () => {
     const { metrics } = playRun({
       seed: 23,
       contractId: CONTRACT,
@@ -107,7 +86,10 @@ describe('the coal policy', () => {
     });
     expect(metrics.outcome).toBe('salvage');
     expect(metrics.cause).toBe('left');
-    expect(metrics.deepestLayer).toBe(-1);
+    // Issue #75: the pick reaches only the six face neighbours, so coal in the
+    // top layer is mined by digging down onto it from the surface: the miner
+    // stands in layer 0 afterwards, no deeper.
+    expect(metrics.deepestLayer).toBe(0);
     expect(metrics.damageTaken).toBe(0);
     expect(metrics.recipesUsed['fuel']).toBeGreaterThanOrEqual(1);
     expect(metrics.fuelAtEnd).toBeGreaterThanOrEqual(LOADOUTS[DEFAULT_LOADOUT_ID].fuel);
@@ -115,26 +97,27 @@ describe('the coal policy', () => {
     expect(metrics.finalInventory['coal']).toBe(0);
   });
 
-  it('follows a seam one block down from the hole of far coal (seed 2, only its farthest coal left)', () => {
-    // The one coal in sight is far: one block's 3 fuel do not cover the walk,
-    // so the policy steps into the hole it left and mines coal below.
-    const trip = playCoalTrip(withCoalInSightRemoved(2, true), 300);
-    expect(trip.coalMined).toBe(2);
+  it('keeps mining coal it finds round the holes it digs (seed 8, no coal in sight)', () => {
+    // With no coal in sight the policy searches with look-holes (issue #75: a
+    // hole shows only the faces of its floor). Once it finds coal it goes on
+    // mining coal it can reach until the fuel is paid back.
+    const trip = playCoalTrip(withCoalInSightRemoved(8), 300);
+    expect(trip.coalMined).toBe(4);
     expect(trip.paidBack).toBe(true);
     expect(trip.cause).toBe('left');
     expect(trip.damageTaken).toBe(0);
   });
 
-  it('with no coal in sight, digs a look-hole and finds coal below (seed 1148)', () => {
-    const trip = playCoalTrip(withCoalInSightRemoved(1148, false), 300);
+  it('with no coal in sight, digs a look-hole and finds coal below (seed 3)', () => {
+    const trip = playCoalTrip(withCoalInSightRemoved(3), 300);
     expect(trip.coalMined).toBe(1);
-    expect(trip.shiftFirstCoalMined).toBe(1);
+    expect(trip.shiftFirstCoalMined).toBe(2);
     expect(trip.paidBack).toBe(true);
     expect(trip.damageTaken).toBe(0);
   });
 
-  it('gives up and leaves, alive, when look-holes and cut trees show no coal (seed 15)', () => {
-    const trip = playCoalTrip(withCoalInSightRemoved(15, false), 300);
+  it('gives up and leaves, alive, when look-holes and cut trees show no coal (seed 5)', () => {
+    const trip = playCoalTrip(withCoalInSightRemoved(5), 300);
     expect(trip.coalMined).toBe(0);
     expect(trip.paidBack).toBe(false);
     expect(trip.cause).toBe('left');
@@ -146,12 +129,13 @@ describe('the coal survey', () => {
   it('measures the distances the m1-r2 evaluation gives for its three seeds', () => {
     // docs/playtests/m1-r2/evaluation.md, finding 3: "14 steps from the start
     // on seed 11, 4 on seed 23, 9 on seed 37". Since coal is put in sight near
-    // the start where the forest hid it (owner's decision on PR #72), seeds 11
-    // and 37 have coal nearer: 8 and 6 steps. Seed 23 is as it was.
+    // the start where the forest hid it (owner's decision on PR #72), and
+    // "in sight" is now what the miner sees from the start cell (owner, after
+    // PR #72), all three have coal within 3 steps.
     const standOn = [11, 23, 37].map(
       (seed) => surveyCoalSeed(seed, options(seed, 1)).geometry.stepsToStandOnTopLayerCoal,
     );
-    expect(standOn).toEqual([8, 4, 6]);
+    expect(standOn).toEqual([3, 3, 3]);
   });
 
   it('walks at least as far as it measured, and costs at least the AP it estimated', () => {

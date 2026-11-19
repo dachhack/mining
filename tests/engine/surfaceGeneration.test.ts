@@ -2,7 +2,7 @@
 // checked over many seeds, and the surface data table.
 
 import { describe, expect, it } from 'vitest';
-import { BLOCKS, ITEMS, SURFACE, WORLD, validateSurfaceData } from '../../src/data';
+import { AVATAR, BLOCKS, ITEMS, SURFACE, WORLD, validateSurfaceData } from '../../src/data';
 import type { Vec3 } from '../../src/data';
 import { blockAt, createRun, isRevealed, surfaceKindAt } from '../../src/engine';
 import type { GameState } from '../../src/engine';
@@ -46,38 +46,6 @@ function openGroundFromStart(state: GameState): Set<string> {
     frontier = next;
   }
   return reached;
-}
-
-/** The open surface cells within `maxSteps` steps of the start, walking over open ground only. */
-function openGroundWithin(state: GameState, maxSteps: number): Vec3[] {
-  const start = WORLD.startPosition;
-  const seen = new Set<string>([`${start.x},${start.y}`]);
-  const cells: Vec3[] = [{ ...start }];
-  let frontier: Vec3[] = [start];
-  for (let step = 1; step <= maxSteps; step += 1) {
-    const next: Vec3[] = [];
-    for (const cell of frontier) {
-      for (const [dx, dy] of [
-        [0, -1],
-        [1, 0],
-        [0, 1],
-        [-1, 0],
-      ] as const) {
-        const x = cell.x + dx;
-        const y = cell.y + dy;
-        const inside = x >= 0 && x < state.size.x && y >= 0 && y < state.size.y;
-        if (!inside || seen.has(`${x},${y}`) || kindAt(state, x, y) === KINDS.tree.code) {
-          continue;
-        }
-        seen.add(`${x},${y}`);
-        const reached = { x, y, z: WORLD.surfaceZ };
-        cells.push(reached);
-        next.push(reached);
-      }
-    }
-    frontier = next;
-  }
-  return cells;
 }
 
 describe('surface generation (issue #70 item 2)', () => {
@@ -168,29 +136,47 @@ describe('surface generation (issue #70 item 2)', () => {
     }
   });
 
-  it('puts coal in sight within a short walk of the start on every seed (owner, PR #72)', () => {
-    // 1,000 seeds: the coal survey's range. Walking over open ground only.
-    const limit = SURFACE.generation.coalInSightWithinSteps;
+  it('shows coal at the start on every seed (owner, PR #72)', () => {
+    // 1,000 seeds: the coal survey's range. Some coal is among the top-layer
+    // blocks the miner sees from its start cell.
     for (let seed = 1; seed <= 1000; seed += 1) {
       const state =
         seed <= runs.length ? (runs[seed - 1] as GameState) : createRun(seed, 'none', 'standard');
-      const near = openGroundWithin(state, limit);
-      const coalNear = near.some((cell) => {
-        const ground = { x: cell.x, y: cell.y, z: 0 };
-        return isRevealed(state, ground) && blockAt(state, ground) === BLOCKS.coalSeam.code;
-      });
-      expect(coalNear, `seed ${seed}`).toBe(true);
+      let coalSeen = false;
+      for (let y = 0; y < state.size.y && !coalSeen; y += 1) {
+        for (let x = 0; x < state.size.x; x += 1) {
+          const ground = { x, y, z: 0 };
+          if (isRevealed(state, ground) && blockAt(state, ground) === BLOCKS.coalSeam.code) {
+            coalSeen = true;
+            break;
+          }
+        }
+      }
+      expect(coalSeen, `seed ${seed}`).toBe(true);
     }
   }, 60000);
 
-  it('the top layer is revealed exactly where no tree stands', () => {
+  it('at the start the top layer is known only round the start, and never under a tree', () => {
+    // Owner, after PR #72: "only show what has been discovered". Daylight no
+    // longer reveals the whole top layer; the miner's light (daylight on the
+    // surface) and reach do, as far as the lamp's radius.
+    const start = WORLD.startPosition;
     for (const state of runs.slice(0, 20)) {
+      let known = 0;
       for (let y = 0; y < state.size.y; y += 1) {
         for (let x = 0; x < state.size.x; x += 1) {
-          const open = kindAt(state, x, y) !== KINDS.tree.code;
-          expect(isRevealed(state, { x, y, z: 0 })).toBe(open);
+          if (!isRevealed(state, { x, y, z: 0 })) {
+            continue;
+          }
+          known += 1;
+          expect(kindAt(state, x, y)).not.toBe(KINDS.tree.code);
+          const steps = Math.abs(x - start.x) + Math.abs(y - start.y);
+          expect(steps).toBeLessThanOrEqual(AVATAR.lightRadiusWithOil);
         }
       }
+      // The start clearing at least, and far less than the whole layer.
+      expect(known).toBeGreaterThanOrEqual(9);
+      expect(known).toBeLessThan(40);
     }
   });
 });
@@ -213,7 +199,6 @@ describe('the surface data (src/data/surface.ts)', () => {
     bad.generation.pathEdges = 1;
     bad.generation.outcropBlock = 'granite';
     bad.generation.outcropChance = 2;
-    bad.generation.coalInSightWithinSteps = 1;
     bad.generation.coalInSightBlock = 'peat';
     const problems = validateSurfaceData(bad, blockIds, itemIds);
     expect(problems).toEqual(
@@ -226,7 +211,6 @@ describe('the surface data (src/data/surface.ts)', () => {
         'generation.pathEdges must be a whole number of at least 2, but is 1',
         'generation.outcropBlock names an unknown block "granite"',
         'generation.outcropChance must be from 0 to 1, but is 2',
-        'generation.coalInSightWithinSteps must be a whole number of at least 2, but is 1',
         'generation.coalInSightBlock names an unknown block "peat"',
       ]),
     );

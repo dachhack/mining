@@ -184,18 +184,23 @@ describe('cutting a tree (issue #70 item 3)', () => {
 
 describe('mining down under a tree (issue #70 item 4)', () => {
   it('is not offered from the surface, even when the block under the tree is known', () => {
-    // Make the ground under the south-east tree known (a regrown tree stands
-    // over ground the miner remembers).
+    // Make the ground under the trees known (a regrown tree stands over
+    // ground the miner remembers). Since issue #75 the pick reaches only the
+    // block underfoot from the surface, and the miner never stands in a tree.
     const state = forestState();
     state.revealed[2 + 3 * 2] = 1;
+    state.revealed[2 + 3 * 1] = 1;
     expect(findActions(state, { type: 'mine', target: UNDER_SOUTH_EAST })).toEqual([]);
     expect(findActions(state, { type: 'mine', target: UNDER_EAST })).toEqual([]);
-    // Open ground beside it: offered.
-    expect(findActions(state, { type: 'mine', target: { x: 1, y: 2, z: 0 } })).toHaveLength(1);
+    // Only the block underfoot.
+    expect(findActions(state, { type: 'mine' })).toEqual([
+      { type: 'mine', target: { x: 1, y: 1, z: 0 }, ap: 1 },
+    ]);
   });
 
-  it('is offered from the stump once the tree is cut', () => {
-    const { state } = act(forestState(), { type: 'cutTree', target: EAST });
+  it('is offered from the stump once the tree is cut: walk onto it and dig down', () => {
+    let state = act(forestState(), { type: 'cutTree', target: EAST }).state;
+    state = act(state, { type: 'move', to: EAST }).state;
     expect(findActions(state, { type: 'mine', target: UNDER_EAST })).toHaveLength(1);
   });
 
@@ -218,6 +223,17 @@ function endShifts(start: GameState, count: number): GameState {
     state = endShift(state).state;
   }
   return state;
+}
+
+/**
+ * Walk onto the stump east of the miner, dig out the ground under it (a safe
+ * one-block drop, issue #75), and step back up west, off the stump.
+ */
+function digUnderEastStump(start: GameState): GameState {
+  let state = act(start, { type: 'move', to: EAST }).state;
+  state = act(state, { type: 'mine', target: UNDER_EAST }).state;
+  state = endShift(state).state; // fresh AP
+  return act(state, { type: 'move', to: { x: 1, y: 1, z: -1 } }).state;
 }
 
 /** The forest state with the east tree cut; the miner stays beside the stump. */
@@ -279,7 +295,7 @@ describe('regrowth (issue #70 item 5)', () => {
     let state = cutBesideMiner();
     state = endShifts(state, 3);
     expect(stumpAgeAt(state, EAST)).toBe(3);
-    state = act(state, { type: 'mine', target: UNDER_EAST }).state;
+    state = digUnderEastStump(state);
     state = endShifts(state, N + 3);
     expect(hasStump(state, EAST)).toBe(true);
     expect(stumpAgeAt(state, EAST)).toBe(0);
@@ -289,8 +305,8 @@ describe('regrowth (issue #70 item 5)', () => {
     // A stump over a hole, then the hole is filled (as rubble or sealant
     // would): N more shifts, not fewer.
     let state = cutBesideMiner();
-    state = act(state, { type: 'mine', target: UNDER_EAST }).state;
-    state = endShifts(state, 2);
+    state = digUnderEastStump(state); // ends one shift
+    state = endShifts(state, 1);
     state.blocks[2 + 3 * 1] = BLOCKS.dirt.code; // ground again, put in by hand
     state = endShifts(state, N - 1);
     expect(hasStump(state, EAST)).toBe(true);

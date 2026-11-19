@@ -12,8 +12,8 @@
 //    Under a path cell, plain rock in layer 0 is worn to dirt.
 // 5. Stone outcrops: each tree cell over stone becomes an outcrop with the
 //    chance in the data.
-// 6. Coal in sight: if no coal lies under open ground within a short walk
-//    of the start, some is put there (owner's decision on PR #72).
+// Coal in sight at the start (owner's decision on PR #72) is a separate step,
+// `ensureCoalInSight`, which `createRun` calls once the miner is placed.
 //
 // What the player cannot see. Steps 1 to 4 read nothing of the cube, so where
 // the trees, meadows and paths are says nothing about the ground. Step 5 is
@@ -25,7 +25,8 @@
 import { BLOCKS, SURFACE, WORLD } from '../../data';
 import type { Vec3 } from '../../data';
 import { nextFloat, nextInt } from '../rng';
-import { blockAt, isSolid, setBlock } from '../state';
+import { updateReveal } from '../reveal';
+import { blockAt, cloneState, isRevealed, isSolid, setBlock } from '../state';
 import type { GameState } from '../state';
 import { setSurfaceKind, surfaceCells, surfaceKindAt } from './state';
 
@@ -244,82 +245,63 @@ export function generateSurface(state: GameState): void {
       setSurfaceKind(state, cell, SURFACE.kinds.outcrop.code);
     }
   }
-
-  // 6. Coal in sight near the start (owner, PR #72).
-  ensureCoalInSight(state);
 }
 
 /**
- * The open surface cells a miner can walk to from the start cell without
- * cutting a tree, at most `maxSteps` steps away, with their distance, nearest
- * first and in a fixed order (a breadth-first search, steps in `STEPS` order).
- */
-function openCellsNearStart(state: GameState, maxSteps: number): { cell: Vec3; steps: number }[] {
-  const start = WORLD.startPosition;
-  const found: { cell: Vec3; steps: number }[] = [{ cell: { ...start }, steps: 0 }];
-  const seen = new Set<string>([`${start.x},${start.y}`]);
-  let frontier: Vec3[] = [start];
-  for (let steps = 1; steps <= maxSteps; steps += 1) {
-    const next: Vec3[] = [];
-    for (const from of frontier) {
-      for (const step of STEPS) {
-        const x = from.x + step.dx;
-        const y = from.y + step.dy;
-        const key = `${x},${y}`;
-        if (!inFootprint(state, x, y) || seen.has(key)) {
-          continue;
-        }
-        const cell = surfaceCell(x, y);
-        if (surfaceKindAt(state, cell) === SURFACE.kinds.tree.code) {
-          continue;
-        }
-        seen.add(key);
-        found.push({ cell, steps });
-        next.push(cell);
-      }
-    }
-    frontier = next;
-  }
-  return found;
-}
-
-/**
- * Step 6 (owner's decision on PR #72, "Coal visible near start"): make sure
- * some coal lies in layer 0 under open ground within `coalInSightWithinSteps`
- * steps of the start, walking over open ground. If generation already put
- * some there, nothing changes and no random number is drawn. Otherwise one
- * open cell in that walk (not the start cell, not an outcrop, whose stone is
- * its rule) is picked at random, and its layer-0 block becomes coal. It
- * replaces plain rock only, and only where the block under it is solid, so
- * the cube stays at rest (0014 item 19); if no cell qualifies, any block of
- * such a cell is replaced (this has not happened on any seed tested).
+ * Coal in sight at the start (owner's decision on PR #72, "Coal visible near
+ * start"). `createRun` calls this once the miner is on its start cell with its
+ * lamp, just before the first reveal: it makes sure that reveal shows some
+ * coal.
  *
- * Only open ground is read, all of which the player sees, so whether coal
- * was added says nothing about the ground under the trees.
+ * The layer-0 blocks the first reveal will show are worked out on a copy of
+ * the state: since the owner's change after PR #72 that is only the ground
+ * round the start, lit by daylight, never ground under a tree. If one of them
+ * is coal, nothing changes and no random number is drawn. Otherwise one of
+ * them (not the start cell, which the miner stands on, and not an outcrop,
+ * whose stone is its rule) is picked at random, and becomes coal. It replaces
+ * plain rock (`coalInSightReplaces`), and only where the block under it is
+ * solid, so the cube stays at rest (0014 item 19); if no cell qualifies, any
+ * such block is replaced (this has not happened on any seed tested).
+ *
+ * Only ground the player will see at the start is read (and layer 1's
+ * solidity, as the path rule does), so whether coal was added says nothing
+ * about the ground under the trees.
  */
-function ensureCoalInSight(state: GameState): void {
+export function ensureCoalInSight(state: GameState): void {
   const gen = SURFACE.generation;
   const coal = blockCode(gen.coalInSightBlock);
-  const near = openCellsNearStart(state, gen.coalInSightWithinSteps);
-  const groundOf = (cell: Vec3): Vec3 => ({ x: cell.x, y: cell.y, z: 0 });
-  if (near.some((entry) => blockAt(state, groundOf(entry.cell)) === coal)) {
+  const start = state.avatar.pos;
+
+  // What the first reveal will show: run it on a copy.
+  const preview = cloneState(state);
+  updateReveal(preview, []);
+  const seen: Vec3[] = [];
+  for (let y = 0; y < state.size.y; y += 1) {
+    for (let x = 0; x < state.size.x; x += 1) {
+      const ground = { x, y, z: 0 };
+      if (isRevealed(preview, ground)) {
+        seen.push(ground);
+      }
+    }
+  }
+  if (seen.some((ground) => blockAt(state, ground) === coal)) {
     return;
   }
+
   const replaceable = gen.coalInSightReplaces.map(blockCode);
-  const places = near.filter(
-    (entry) =>
-      entry.steps > 0 &&
-      surfaceKindAt(state, entry.cell) !== SURFACE.kinds.outcrop.code &&
-      isSolid(state, { x: entry.cell.x, y: entry.cell.y, z: 1 }),
+  const places = seen.filter(
+    (ground) =>
+      !(ground.x === start.x && ground.y === start.y) &&
+      surfaceKindAt(state, surfaceCell(ground.x, ground.y)) !== SURFACE.kinds.outcrop.code &&
+      isSolid(state, { x: ground.x, y: ground.y, z: 1 }),
   );
-  const plainRock = places.filter((entry) =>
-    replaceable.includes(blockAt(state, groundOf(entry.cell))),
-  );
+  const plainRock = places.filter((ground) => replaceable.includes(blockAt(state, ground)));
   const choices = plainRock.length > 0 ? plainRock : places;
   const chosen = choices[nextInt(state.rng, choices.length)];
   if (chosen === undefined) {
-    // Cannot happen: the start cell's eight neighbours are open meadow.
-    throw new Error('No open cell near the start to put coal under');
+    // Cannot happen: the start cell's eight neighbours are open meadow, and
+    // daylight shows the ground under them.
+    throw new Error('No ground in sight of the start to put coal in');
   }
-  setBlock(state, groundOf(chosen.cell), coal);
+  setBlock(state, chosen, coal);
 }

@@ -49,8 +49,9 @@ describe('determinism', () => {
     // Seeds whose wander run lasts at least 200 decisions. Without a fuel
     // refill (issue #32) most wander runs end out of fuel a little sooner.
     // (Seed 6 took the place of seed 4, whose run the forest of issue #70
-    // shortened to 186 decisions.)
-    for (const seed of [6, 11]) {
+    // shortened to 186 decisions. Seeds 5 and 26 took the places of seeds 6
+    // and 11 with issue #75, which shortened their runs to 172 and 128.)
+    for (const seed of [5, 26]) {
       const recorded = recordedRun(seed, 200);
       expect(recorded.decisions.length).toBe(200);
       const first = replayDecisions(seed, CONTRACT, DEFAULT_LOADOUT_ID, recorded.decisions);

@@ -190,11 +190,14 @@ describe('legalActions after a save and load (0006, canonical order)', () => {
 
   it('still does after an action of each of this task’s kinds', () => {
     let state = busyState();
+    // The mine is last and digs down (since issue #75 the pick reaches face
+    // neighbours only, and every face neighbour of MIDDLE but the floor is
+    // open): the miner then drops into the hole.
     const steps: object[] = [
-      { type: 'mine', target: { x: 1, y: 1, z: 0 } },
       { type: 'pickUp', from: EAST, item: 'coal' },
       { type: 'drop', item: 'timber', count: 1 },
       { type: 'placeTorch', target: NORTH },
+      { type: 'mine', target: { x: 2, y: 2, z: 1 } },
     ];
     for (const step of steps) {
       state = act(state, step).state;
