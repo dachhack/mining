@@ -287,3 +287,79 @@ test('the mouse wheel zooms too, and taps still work when zoomed', async ({ page
   await page.mouse.wheel(0, 5000);
   await expect.poll(() => cellsAcross(canvas)).toBe(32);
 });
+
+/**
+ * Raw touch input through one Chrome DevTools Protocol session (a touch
+ * sequence must stay on one session). 'touchStart' and 'touchMove' list the
+ * fingers that are down; 'touchEnd' lists the fingers that lift (an empty
+ * list lifts them all), so one finger can lift before the others.
+ */
+async function toucher(page: Page) {
+  const cdp = await page.context().newCDPSession(page);
+  return async (
+    type: 'touchStart' | 'touchMove' | 'touchEnd',
+    points: { x: number; y: number; id: number }[],
+  ): Promise<void> => {
+    await cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points });
+  };
+}
+
+test('a pinch that ends one finger at a time is never a tap (review of PR #71)', async ({
+  page,
+}) => {
+  const canvas = page.getByTestId('map-canvas');
+  const gauges = page.getByTestId('gauges');
+  const before = await camera(canvas);
+  const box = await canvas.boundingBox();
+  if (box === null) {
+    throw new Error('the map is not on screen');
+  }
+  const cy = box.y + box.height / 2;
+  const left = { x: box.x + box.width / 2 - 50, y: cy, id: 1 };
+  const right = { x: box.x + box.width / 2 + 50, y: cy, id: 2 };
+  const touch = await toucher(page);
+  await touch('touchStart', [left, right]);
+  // Finger 1 lifts first; finger 2 stays down ...
+  await touch('touchEnd', [left]);
+  // ... then moves onto the miner's east neighbour and lifts there.
+  const east = await cellPoint(canvas, 17, 16);
+  await touch('touchMove', [{ ...right, x: east.x, y: east.y }]);
+  await touch('touchEnd', []);
+  // Nothing was done, nothing panned, and no chooser or hint.
+  await expect(gauges).toContainText('x16 y16, the surface');
+  await expect(gauges).toContainText('AP 5/5');
+  expect(await camera(canvas)).toEqual(before);
+  await expect(page.getByTestId('chooser')).toBeHidden();
+  await expect(page.getByTestId('map-hint')).toBeHidden();
+});
+
+test('with three fingers down, lifting one of the first two does not make the map jump', async ({
+  page,
+}) => {
+  const canvas = page.getByTestId('map-canvas');
+  const box = await canvas.boundingBox();
+  if (box === null) {
+    throw new Error('the map is not on screen');
+  }
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  const one = { x: cx - 60, y: cy, id: 1 };
+  const two = { x: cx, y: cy, id: 2 };
+  const three = { x: cx + 60, y: cy, id: 3 };
+  const touch = await toucher(page);
+  await touch('touchStart', [one, two, three]);
+  const before = await camera(canvas);
+  // Finger 1 lifts: the pinch goes on with fingers 2 and 3, which have not moved.
+  await touch('touchEnd', [one]);
+  // A tiny move of the remaining pair must move the map only a tiny bit.
+  await touch('touchMove', [
+    { ...two, x: two.x + 1 },
+    { ...three, x: three.x + 1 },
+  ]);
+  const after = await camera(canvas);
+  expect(Math.abs(after.x - before.x)).toBeLessThan(0.2);
+  expect(Math.abs(after.y - before.y)).toBeLessThan(0.2);
+  expect(Math.abs(after.cellPx - before.cellPx)).toBeLessThan(0.5);
+  await touch('touchEnd', []);
+  await expect(page.getByTestId('gauges')).toContainText('AP 5/5');
+});

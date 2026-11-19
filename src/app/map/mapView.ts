@@ -846,7 +846,22 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
       return;
     }
     pointers.delete(event.pointerId);
-    if (pointers.size > 0 || gesture === null) {
+    if (gesture === null) {
+      return;
+    }
+    if (pointers.size >= 2 && gesture.kind === 'pinch') {
+      // With three fingers down, lifting one of the first two makes a new
+      // pair: start the pinch afresh from where it is now, or the map would
+      // jump once (review of PR #71).
+      const fingers = twoFingers();
+      if (fingers !== null) {
+        gesture.camera = { ...camera };
+        gesture.pinchDistance = fingers.distance;
+        gesture.pinchMidX = fingers.midX;
+        gesture.pinchMidY = fingers.midY;
+      }
+    }
+    if (pointers.size > 0) {
       return; // other fingers are still down: the gesture goes on
     }
     const ended = gesture;

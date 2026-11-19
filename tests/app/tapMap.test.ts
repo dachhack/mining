@@ -298,7 +298,7 @@ describe('warnings that stop a tap acting at once (issue #66)', () => {
 });
 
 describe('the map camera (issue #66)', () => {
-  const size = { x: 32, y: 32, cells: 16 };
+  const size = { x: 32, y: 32 };
 
   it('centres on a cell, kept inside the cube', () => {
     expect(VIEW_CELLS).toBe(16);
@@ -328,7 +328,7 @@ describe('the map camera (issue #66)', () => {
 });
 
 describe('the map follows the miner (review of PR #67)', () => {
-  const size = { x: 32, y: 32, cells: 16 };
+  const size = { x: 32, y: 32 };
 
   it('recentres when a neighbour of the miner is off screen, so the next tap can reach it', () => {
     // The miner at x8 in the left-hand column of a window starting at x8: the
