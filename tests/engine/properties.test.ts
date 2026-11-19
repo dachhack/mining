@@ -438,12 +438,12 @@ function playAndCheckGroundUnderTrees(
 }
 
 describe('property tests: the ground under a tree changes nothing the player gets (issue #70)', () => {
-  // The coal policy walks the surface, cuts trees and digs look-holes beside
-  // the forest; wander and random dig down near the start. Seed 59's coal
-  // run cuts 20 trees and sees two grow back (tests/golden).
+  // Seeds whose wander or random run cuts trees on the surface (181 cuts four
+  // and sees one grow back: tests/golden), and two that dig near the start.
+  // (The coal policy now finds coal in sight within a few steps and leaves.)
   it.each([
-    [59, 'coal'],
-    [15, 'coal'],
+    [181, 'wander'],
+    [46, 'wander'],
     [3, 'wander'],
     [110, 'random'],
   ])(

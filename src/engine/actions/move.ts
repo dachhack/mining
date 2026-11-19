@@ -107,12 +107,15 @@ export function legalMoveActions(state: GameState): MoveAction[] {
       // before its content is read.
       const onTop = cellAbove(beside);
       const overhead = cellAbove(here);
+      // A tree overhead (a hole dug under one from the side) is a roof: no
+      // headroom to step up (review of PR #72).
       if (
         isRevealed(state, onTop) &&
         isOpen(state, onTop) &&
         !hasTree(state, onTop) &&
         isRevealed(state, overhead) &&
-        isOpen(state, overhead)
+        isOpen(state, overhead) &&
+        !hasTree(state, overhead)
       ) {
         actions.push(moveTo(onTop, 0));
       }

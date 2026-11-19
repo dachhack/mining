@@ -152,6 +152,7 @@ export function missingMoveNotes(state: GameState): string[] {
         move.drop > 0 &&
         isRevealed(state, overhead) &&
         isOpen(state, overhead) &&
+        !hasTree(state, overhead) &&
         isRevealed(state, onTop) &&
         isOpen(state, onTop)
       ) {
@@ -184,9 +185,11 @@ export function missingMoveNotes(state: GameState): string[] {
       // cell on top of the rock to be open. Only the unseen case is worth a
       // line; with rock in either place it is just a wall.
       rockSides += 1;
-      if (isRevealed(state, overhead) && isOpen(state, overhead) && !isRevealed(state, onTop)) {
+      const headroom =
+        isRevealed(state, overhead) && isOpen(state, overhead) && !hasTree(state, overhead);
+      if (headroom && !isRevealed(state, onTop)) {
         unseenTops.push(side);
-      } else if (isRevealed(state, overhead) && isOpen(state, overhead) && hasTree(state, onTop)) {
+      } else if (headroom && hasTree(state, onTop)) {
         // Out of a hole in layer 0 onto the surface, where a tree stands.
         notes.push(`No step up ${side}: a tree stands on top of the rock there.`);
       }
@@ -223,7 +226,8 @@ export function missingMoveNotes(state: GameState): string[] {
     rockSides === SIDEWAYS.length &&
     !hasLadder(state, here) &&
     isRevealed(state, overhead) &&
-    isOpen(state, overhead)
+    isOpen(state, overhead) &&
+    !hasTree(state, overhead)
   ) {
     // The way out is a ladder in the avatar's cell and one in the cell
     // above. Said only when both cells could take one.

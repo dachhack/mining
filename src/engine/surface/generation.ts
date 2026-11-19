@@ -12,6 +12,8 @@
 //    Under a path cell, plain rock in layer 0 is worn to dirt.
 // 5. Stone outcrops: each tree cell over stone becomes an outcrop with the
 //    chance in the data.
+// 6. Coal in sight: if no coal lies under open ground within a short walk
+//    of the start, some is put there (owner's decision on PR #72).
 //
 // What the player cannot see. Steps 1 to 4 read nothing of the cube, so where
 // the trees, meadows and paths are says nothing about the ground. Step 5 is
@@ -227,17 +229,97 @@ export function generateSurface(state: GameState): void {
     carvePath(state, start, end);
   }
 
-  // 5. Stone outcrops, in the order the surface is stored.
+  // 5. Stone outcrops, in the order the surface is stored. The number is
+  // drawn for every tree cell before the ground is looked at, so how far the
+  // generator advances never depends on the ground under the trees (review
+  // of PR #72).
   const outcropUnder = blockCode(gen.outcropBlock);
   for (const cell of surfaceCells(state)) {
     if (surfaceKindAt(state, cell) !== SURFACE.kinds.tree.code) {
       continue;
     }
-    if (blockAt(state, { x: cell.x, y: cell.y, z: 0 }) !== outcropUnder) {
-      continue;
-    }
-    if (nextFloat(state.rng) < gen.outcropChance) {
+    const roll = nextFloat(state.rng);
+    const overStone = blockAt(state, { x: cell.x, y: cell.y, z: 0 }) === outcropUnder;
+    if (overStone && roll < gen.outcropChance) {
       setSurfaceKind(state, cell, SURFACE.kinds.outcrop.code);
     }
   }
+
+  // 6. Coal in sight near the start (owner, PR #72).
+  ensureCoalInSight(state);
+}
+
+/**
+ * The open surface cells a miner can walk to from the start cell without
+ * cutting a tree, at most `maxSteps` steps away, with their distance, nearest
+ * first and in a fixed order (a breadth-first search, steps in `STEPS` order).
+ */
+function openCellsNearStart(state: GameState, maxSteps: number): { cell: Vec3; steps: number }[] {
+  const start = WORLD.startPosition;
+  const found: { cell: Vec3; steps: number }[] = [{ cell: { ...start }, steps: 0 }];
+  const seen = new Set<string>([`${start.x},${start.y}`]);
+  let frontier: Vec3[] = [start];
+  for (let steps = 1; steps <= maxSteps; steps += 1) {
+    const next: Vec3[] = [];
+    for (const from of frontier) {
+      for (const step of STEPS) {
+        const x = from.x + step.dx;
+        const y = from.y + step.dy;
+        const key = `${x},${y}`;
+        if (!inFootprint(state, x, y) || seen.has(key)) {
+          continue;
+        }
+        const cell = surfaceCell(x, y);
+        if (surfaceKindAt(state, cell) === SURFACE.kinds.tree.code) {
+          continue;
+        }
+        seen.add(key);
+        found.push({ cell, steps });
+        next.push(cell);
+      }
+    }
+    frontier = next;
+  }
+  return found;
+}
+
+/**
+ * Step 6 (owner's decision on PR #72, "Coal visible near start"): make sure
+ * some coal lies in layer 0 under open ground within `coalInSightWithinSteps`
+ * steps of the start, walking over open ground. If generation already put
+ * some there, nothing changes and no random number is drawn. Otherwise one
+ * open cell in that walk (not the start cell, not an outcrop, whose stone is
+ * its rule) is picked at random, and its layer-0 block becomes coal. It
+ * replaces plain rock only, and only where the block under it is solid, so
+ * the cube stays at rest (0014 item 19); if no cell qualifies, any block of
+ * such a cell is replaced (this has not happened on any seed tested).
+ *
+ * Only open ground is read, all of which the player sees, so whether coal
+ * was added says nothing about the ground under the trees.
+ */
+function ensureCoalInSight(state: GameState): void {
+  const gen = SURFACE.generation;
+  const coal = blockCode(gen.coalInSightBlock);
+  const near = openCellsNearStart(state, gen.coalInSightWithinSteps);
+  const groundOf = (cell: Vec3): Vec3 => ({ x: cell.x, y: cell.y, z: 0 });
+  if (near.some((entry) => blockAt(state, groundOf(entry.cell)) === coal)) {
+    return;
+  }
+  const replaceable = gen.coalInSightReplaces.map(blockCode);
+  const places = near.filter(
+    (entry) =>
+      entry.steps > 0 &&
+      surfaceKindAt(state, entry.cell) !== SURFACE.kinds.outcrop.code &&
+      isSolid(state, { x: entry.cell.x, y: entry.cell.y, z: 1 }),
+  );
+  const plainRock = places.filter((entry) =>
+    replaceable.includes(blockAt(state, groundOf(entry.cell))),
+  );
+  const choices = plainRock.length > 0 ? plainRock : places;
+  const chosen = choices[nextInt(state.rng, choices.length)];
+  if (chosen === undefined) {
+    // Cannot happen: the start cell's eight neighbours are open meadow.
+    throw new Error('No open cell near the start to put coal under');
+  }
+  setBlock(state, groundOf(chosen.cell), coal);
 }

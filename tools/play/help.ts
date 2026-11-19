@@ -175,6 +175,7 @@ THE GAME
   The forest
   - Most of the surface is forest. A tree blocks the way: you cannot walk or step up into it.
     Dirt paths, meadows and stone outcrops are open ground; an outcrop stands over stone.
+    Some coal always lies in sight under open ground within ${SURFACE.generation.coalInSightWithinSteps} steps' walk of where you start.
   - Cut a tree beside you (north, east, south or west; ${SURFACE.cutTree.ap} AP) for ${cutYield}. It leaves a
     stump, which is open ground. Timber too heavy to carry is left lying on the stump.
   - A tree hides the ground under it: from the surface you see that block only once the tree
