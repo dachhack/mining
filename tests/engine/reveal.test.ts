@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { AVATAR, BLOCKS, SHIFT } from '../../src/data';
 import type { Vec3 } from '../../src/data';
-import { cellIndex, createRun, endShift, isRevealed } from '../../src/engine';
+import { cellIndex, createRun, endShift, isRevealed, isUnderTree } from '../../src/engine';
 import type { GameEvent, GameState } from '../../src/engine';
 import { updateReveal } from '../../src/engine/reveal';
 import { buildState } from './helpers';
@@ -252,11 +252,15 @@ describe('the surface', () => {
     }
   });
 
-  it('does the same for a new run', () => {
+  it('does the same for a new run, except under the trees (issue #70)', () => {
+    // Since the forest, a new run's top layer is revealed except where a
+    // tree stands over it (and the cells round the start, which the lamp
+    // and the pick reach, are never under a tree: the start clearing).
     const state = createRun(1, 'none', 'standard');
     for (let y = 0; y < state.size.y; y += 1) {
       for (let x = 0; x < state.size.x; x += 1) {
-        expect(isRevealed(state, { x, y, z: 0 })).toBe(true);
+        const underTree = isUnderTree(state, { x, y, z: 0 });
+        expect(isRevealed(state, { x, y, z: 0 })).toBe(!underTree);
         expect(isRevealed(state, { x, y, z: 1 })).toBe(false);
       }
     }

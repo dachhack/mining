@@ -48,7 +48,9 @@ describe('determinism', () => {
   it('the same seed and decisions give the same hash, run twice in one process', () => {
     // Seeds whose wander run lasts at least 200 decisions. Without a fuel
     // refill (issue #32) most wander runs end out of fuel a little sooner.
-    for (const seed of [4, 11]) {
+    // (Seed 6 took the place of seed 4, whose run the forest of issue #70
+    // shortened to 186 decisions.)
+    for (const seed of [6, 11]) {
       const recorded = recordedRun(seed, 200);
       expect(recorded.decisions.length).toBe(200);
       const first = replayDecisions(seed, CONTRACT, DEFAULT_LOADOUT_ID, recorded.decisions);

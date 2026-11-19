@@ -22,7 +22,7 @@ import type { ArmedCharge, Camp, GameState, LooseItems, RunStatus } from './stat
 
 /**
  * A GameState with nothing in it that JSON cannot hold. The nine cube arrays
- * are run-length encoded: `[value, runLength, value, runLength, ...]`. A cube
+ * and the two surface arrays are run-length encoded: `[value, runLength, value, runLength, ...]`. A cube
  * that is all stone becomes just `[2, 32768]`.
  */
 export interface SerialisedState {
@@ -41,6 +41,9 @@ export interface SerialisedState {
   cracks: number[];
   structures: number[];
   tracesSeen: number[];
+  /** One entry per surface cell (issue #70), run-length encoded like the cube arrays. */
+  surface: number[];
+  stumpAge: number[];
   avatar: { pos: Vec3; health: number; air: number; resting: boolean };
   ap: number;
   fuel: number;
@@ -133,6 +136,8 @@ export function serialise(state: GameState): SerialisedState {
     cracks: runLengthEncode(state.cracks),
     structures: runLengthEncode(state.structures),
     tracesSeen: runLengthEncode(state.tracesSeen),
+    surface: runLengthEncode(state.surface),
+    stumpAge: runLengthEncode(state.stumpAge),
     avatar: {
       pos: { x: state.avatar.pos.x, y: state.avatar.pos.y, z: state.avatar.pos.z },
       health: state.avatar.health,
@@ -212,6 +217,8 @@ export function deserialise(saved: SerialisedState): GameState {
     cracks: runLengthDecode(saved.cracks, cells, 'cracks'),
     structures: runLengthDecode(saved.structures, cells, 'structures'),
     tracesSeen: runLengthDecode(saved.tracesSeen, cells, 'tracesSeen'),
+    surface: runLengthDecode(saved.surface, size.x * size.y, 'surface'),
+    stumpAge: runLengthDecode(saved.stumpAge, size.x * size.y, 'stumpAge'),
     avatar: {
       pos: avatarPos,
       health: saved.avatar.health,

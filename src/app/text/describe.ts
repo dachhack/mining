@@ -5,7 +5,16 @@
 // is described from the action itself (which the engine offers only for cells
 // in reach, all of them revealed) and from the data tables.
 
-import { BLOCKS, STRUCTURES, TELLS, WORLD, blockDefByCode, findRecipe, itemDef } from '../../data';
+import {
+  BLOCKS,
+  STRUCTURES,
+  SURFACE,
+  TELLS,
+  WORLD,
+  blockDefByCode,
+  findRecipe,
+  itemDef,
+} from '../../data';
 import type { ItemStack, Vec3 } from '../../data';
 import {
   blockDefAt,
@@ -220,6 +229,14 @@ function describeAction(state: GameState, action: Action): string {
     }
     case 'leave':
       return 'Leave the cube with what you carry (ends the run alive)';
+    case 'cutTree': {
+      // Like mining: say what it gives, and if that is too heavy to carry.
+      const yields = SURFACE.cutTree.yields;
+      const fits = yields.every((stack) => canCarry(state, stack.item, stack.count));
+      const tooHeavy = fits ? '' : ' (too heavy to carry: it will be left lying there)';
+      const side = compass(action.target.x - here.x, action.target.y - here.y);
+      return `Cut the tree ${side}: gives ${stackListText(yields)}${tooHeavy}; the ground under it shows, and a tree grows back in ${SURFACE.regrowShifts} shifts if the stump is left alone`;
+    }
     // The M2 actions. The engine offers none of them yet (their modules are
     // stubs; decision note 0015), so these plain lines are never shown. The
     // play-tool task (M2-6) gives each its wording.
@@ -291,6 +308,7 @@ function idInLowerCase(id: string): string {
  * - craft-ladder, craft-lamp-oil, ...: "craft-" and the recipe;
  * - take-here-stone, take-n-coal, ...: "take-", where from, and the item;
  * - drop-stone (one) and drop-all-stone (the whole stack);
+ * - cut-n, cut-e, cut-s, cut-w: cut the tree in that direction (issue #70);
  * - leave, and end for "end the shift".
  */
 export function choiceName(state: GameState, entry: LogEntry): string {
@@ -321,6 +339,8 @@ export function choiceName(state: GameState, entry: LogEntry): string {
         : `drop-all-${idInLowerCase(entry.item)}`;
     case 'leave':
       return 'leave';
+    case 'cutTree':
+      return `cut-${whereShort(here, entry.target)}`;
     // The M2 actions: never offered yet (see `describeAction`). M2-6 names them.
     case 'placeSupport':
     case 'placeExplosive':
@@ -479,6 +499,16 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
       case 'runEnded':
         // The view that follows opens with the outcome.
         break;
+      case 'treeCut':
+        lines.push('You cut down the tree; a stump is left.');
+        break;
+      case 'treeGrew': {
+        const here = after.avatar.pos;
+        const side = compass(event.pos.x - here.x, event.pos.y - here.y);
+        const where = side === '' ? '' : ` at x${event.pos.x} y${event.pos.y} (${side} of you)`;
+        lines.push(`A tree grew back on a stump${where}.`);
+        break;
+      }
     }
   }
   return lines;
@@ -527,7 +557,8 @@ function signed(value: number): string {
 
 /**
  * The warning a choice carries, or `null` if it carries none: a fall or
- * a drop (which may cost health), or a yield too heavy to carry. The tap map
+ * a drop (which may cost health), or a yield (of mining or of cutting a
+ * tree) too heavy to carry. The tap map
  * of the phone preview (src/app/map) acts at once on a tap only for a choice
  * with no warning; one with a warning is shown first, with this text.
  * Worked out from revealed cells only, like the rest of this file.
@@ -545,6 +576,13 @@ export function choiceWarning(state: GameState, entry: LogEntry): string | null 
     const fits = block.yields.every((stack) => canCarry(state, stack.item, stack.count));
     if (!fits) {
       return 'too heavy to carry: it will be left lying there';
+    }
+  }
+  if (entry.type === 'cutTree') {
+    // Like mining: timber that does not fit is left on the stump (issue #70).
+    const fits = SURFACE.cutTree.yields.every((stack) => canCarry(state, stack.item, stack.count));
+    if (!fits) {
+      return 'too heavy to carry: the timber will be left lying on the stump';
     }
   }
   return null;

@@ -12,6 +12,7 @@ Every gameplay number and recipe from the design doc lives here, as plain TypeSc
 | `hazards.ts`    | Cave-in, water, gas, explosion, lava and air numbers         | Design doc 6; 0014      |
 | `camps.ts`      | Camp size, costs and upkeep; scanner numbers                 | Design doc 8; 0014      |
 | `avatar.ts`     | Health, carry capacity, light radii, fall damage             | Design doc 5.1, 5.2     |
+| `surface.ts`    | The surface forest: kinds, cutting, regrowth, generation     | Design doc 3; 0020      |
 | `tells.ts`      | Tells: how near ore must be for rock to show mineral traces  | Design doc 6; 0012      |
 | `shift.ts`      | AP per shift, fuel upkeep, lamp-oil burn, fixed action costs | Design doc 4, 4.1; 0005 |
 | `loadouts.ts`   | Starting kits; the placeholder contract id                   | 0005 items 22, 23       |

@@ -47,6 +47,7 @@ const FAKE_FORECAST: ShiftForecast = {
     lampOilAfter: 10,
     runEnds: null,
   },
+  regrowth: [],
 };
 
 vi.mock('../../src/engine/actions/leave', () => ({

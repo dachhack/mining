@@ -34,7 +34,11 @@ Working title: **Mining Game**. A turn-based roguelike for Android and iOS in wh
 - **Generation:** Fully determined by a seed. Generated once at run start.
 - **Visibility:** A block is *revealed* when one of its six faces touches open space the avatar's light can reach, or when a scanner reveals it. Unrevealed blocks render as unknown rock.
   - **Reach and the lamp [Default]:** With the lamp lit, the miner also knows every cell its pick can reach and the cell overhead, and can look over an edge: it sees the cells a drop would be judged by. With the lamp out, it knows only the six cells that touch its own. Torches and daylight reveal the same either way, and a revealed cell stays revealed. (Decision notes 0005 item 10 and 0011.)
-- **Surface:** The space above `z = 0` is open air. The avatar starts on top of the cube at the centre. Reaching the surface is how a run is completed.
+- **Surface:** The layer above `z = 0`, one cell per column, where the avatar starts, at the centre. Reaching the surface is how a run is completed. It is open air for water, gas and air, and mostly forest (owner, issue #70; decision note 0020):
+  - **Surface cells [Default]:** each is a *tree*, a *dirt path*, a *meadow* or a *stone outcrop*; about 65% start as trees. Paths, meadows and outcrops are open ground: the avatar walks on them and daylight reveals the layer-0 block under them. A path is worn into dirt (ore under it stays), an outcrop stands over stone, a meadow over whatever is there. The start cell and its eight neighbours are meadow, and winding paths join them to the meadows and to at least two edges of the cube. Coal is always in sight near the start (owner, PR #72): at least one coal block lies under open ground within [Default] 8 steps of the start, walking over open ground; generation puts one there if none is.
+  - **Trees:** a tree blocks walking (and stepping up into it) and hides the layer-0 block under it: daylight, the lamp, reach and looking over an edge from the surface do not reveal it, and it cannot be mined from the surface. From underground it is seen and mined like any other block.
+  - **Cutting [Default]:** cut a tree in a surface cell beside the avatar (north, east, south or west): 2 AP, gives 2 timber (too heavy to carry is left on the stump, as for mining). It leaves a *stump*, open ground, and the block under it is revealed.
+  - **Regrowth:** a stump grows a tree again after 10 shifts (owner), counting the shift of the cut, at the end of a shift (after the cube phase, before upkeep), if its layer-0 block is still solid; while that block is gone the count goes back to 0. If the avatar or loose items stand on the stump when the count is reached, the tree grows at the end of the first shift the stump is clear. A regrown tree blocks walking again; the block under it stays known. Paths, meadows and outcrops never grow trees.
 
 ### 3.1 Depth bands [Default]
 
@@ -52,7 +56,7 @@ Working title: **Mining Game**. A turn-based roguelike for Android and iOS in wh
 | Stone | 2 | Stone | Standard |
 | Hard rock | 3 | Stone | 2 AP with a drill |
 | Coal seam | 2 | Coal | Fuel source |
-| Timber-root | 1 | Timber | Upper band only |
+| Timber-root | 1 | Timber | Upper band only; trees on the surface are the other source |
 | Iron / copper ore | 2 | Raw ore | Smelt at a camp |
 | Crystal | 3 | Crystal | Deep band |
 | Unstable ore | 2 | Rare ore | Explodes if a neighbour is mined first without bracing |
@@ -84,6 +88,7 @@ The player may end the player phase early. [Default] Unspent AP is lost when the
 | Move 1 block (walk, climb a ladder, step up 1) | 1 | — |
 | Drop down 1–2 blocks | 1 | — |
 | Mine an adjacent block | Per block type | — |
+| Cut a tree beside you on the surface | 2 | — (gives 2 timber) |
 | Place ladder / support / torch | 1 | Materials |
 | Place pump / vent / sealant | 1 | Crafted item |
 | Scan | 2 | 1 scanner charge |

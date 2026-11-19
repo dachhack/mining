@@ -28,6 +28,9 @@ export { CAMP_RECIPES, FIELD_RECIPES, GAUGES } from './recipes';
 export type { GaugeId } from './recipes';
 export { ACTION_COSTS, SHIFT } from './shift';
 export { NO_STRUCTURE, STRUCTURES } from './structures';
+// The surface forest (issue #70): kinds, cutting, regrowth, generation.
+export { SURFACE, surfaceKindByCode, validateSurfaceData } from './surface';
+export type { SurfaceData, SurfaceGenerationData, SurfaceKindDef, SurfaceKinds } from './surface';
 export type { StructureId } from './structures';
 export { TELLS } from './tells';
 export { WORLD } from './world';

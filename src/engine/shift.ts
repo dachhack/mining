@@ -1,6 +1,7 @@
 // The end of a shift: cube phase and upkeep (design doc 4).
 
 import { SHIFT } from '../data';
+import type { Vec3 } from '../data';
 import { stepAvatarEffects } from './cube/avatarEffects';
 import { stepCaveIns } from './cube/caveIns';
 import { stepFluids } from './cube/fluids';
@@ -12,6 +13,7 @@ import type { GameEvent, RunEndCause } from './events';
 import { forecastCountdowns, forecastFlows } from './forecast';
 import type { CountdownForecast } from './forecast';
 import { endRun, isRunActive } from './state';
+import { forecastRegrowth } from './surface/regrowth';
 import type { GameState } from './state';
 
 /**
@@ -53,6 +55,14 @@ export interface ShiftForecast {
   flows: GameEvent[];
   /** What upkeep will do to the gauges. */
   upkeep: UpkeepForecast;
+  /**
+   * The surface cells where a tree will grow back on a stump at the end of
+   * this shift (issue #70; decision note 0020), in the order the surface is
+   * stored. The stump, its ground and what stands on it are all seen; the
+   * cube phase runs first, so this can turn out differently if it takes the
+   * stump's ground.
+   */
+  regrowth: Vec3[];
 }
 
 // ---------------------------------------------------------------------------
@@ -231,5 +241,6 @@ export function forecastShift(state: GameState): ShiftForecast {
     countdowns: forecastCountdowns(state),
     flows: forecastFlows(state),
     upkeep: computeUpkeep(state),
+    regrowth: forecastRegrowth(state),
   };
 }

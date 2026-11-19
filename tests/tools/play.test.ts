@@ -22,6 +22,7 @@ import {
   hashState,
   inGrid,
   isRevealed,
+  isUnderTree,
   isSolid,
   legalActions,
   visibleMineralTraces,
@@ -34,6 +35,7 @@ import { replayLog } from '../../src/app/text/log';
 import type { LogEntry } from '../../src/app/text/log';
 import { ACTIONS_HEADING, buildView, renderView } from '../../src/app/text/view';
 import { act, buildState } from '../engine/helpers';
+import { updateReveal } from '../../src/engine/reveal';
 
 /** The text one step prints for `state`. */
 function viewText(state: GameState): string {
@@ -945,7 +947,10 @@ describe('--help', () => {
     expect(result.output).toContain('mine-down');
     expect(result.output).toContain('--do mine-e,e,end');
     expect(result.output).toContain('Not on the list:');
-    expect(result.output).toContain('While you\n  stand on the surface the map is layer 0 alone');
+    // Since the forest (issue #70) the surface is drawn beside layer 0.
+    expect(result.output).toContain(
+      'While you\n  stand on the surface the map is the whole surface and, beside it, the whole of layer 0',
+    );
   });
 
   it('says unspent AP is lost, and nothing about banking (issue #32)', () => {
@@ -1391,11 +1396,21 @@ describe('the map on the surface (issue #30)', () => {
     expect(view.radiusForAllSeen).toBeNull();
     const top = view.layers.find((layer) => layer.z === 0);
     expect(top?.rows).toHaveLength(state.size.y + 2);
-    // Every cell of the top layer is drawn as what it is (all are revealed).
+    // Every cell of the top layer is drawn as what it is, except the ground
+    // under a tree, which is not seen until the tree is cut (issue #70).
     for (let y = 0; y < state.size.y; y += 1) {
       const row = top?.rows[y + 1] ?? '';
       expect(row).toHaveLength(state.size.x + 2);
       expect(row.charAt(0)).toBe('X');
+      for (let x = 0; x < state.size.x; x += 1) {
+        const underTree = isUnderTree(state, { x, y, z: 0 });
+        expect(row.charAt(x + 1) === '?', `x${x} y${y}`).toBe(underTree);
+      }
+    }
+    // The whole surface is drawn too, and all of it is known.
+    const surface = view.layers.find((layer) => layer.z === -1);
+    expect(surface?.rows).toHaveLength(state.size.y + 2);
+    for (const row of surface?.rows ?? []) {
       expect(row).not.toContain('?');
     }
     const text = renderView(view);
@@ -1488,7 +1503,9 @@ describe('layer labels on a narrow map (issue #20)', () => {
       buildView(createRun(7, 'none', 'standard'), { radius: 4, layers: 1, deepestZ: -1 }),
     );
     expect(text).toContain(
-      '     surface    layer 0\n     (yours)    (below)\ny 12 .........  d#dttddd#',
+      // The surface shows the forest (issue #70), and the ground under the
+      // trees is not seen.
+      '     surface    layer 0\n     (yours)    (below)\ny 12 """""YY::  d#dtt??dd',
     );
   });
 });
@@ -2191,23 +2208,27 @@ describe('ladder advice only where a ladder can go (issue #46 item 1)', () => {
 });
 
 describe('the surface map (issue #46 item 2)', () => {
-  it('draws layer 0 alone, with @ on the block the miner stands on', () => {
+  it('draws the surface and layer 0, with @ on the block the miner stands on', () => {
+    // Issue #46 item 2 drew layer 0 alone, because the surface was open air
+    // everywhere. Since the forest (issue #70) the surface is drawn beside it.
     const state = createRun(7, 'none', 'standard');
     const view = buildView(state, { ...DEFAULT_VIEW, deepestZ: -1 });
-    expect(view.layers.map((layer) => layer.label)).toEqual(['layer 0']);
-    expect(view.layers[0]?.relation).toBe('under you');
+    expect(view.layers.map((layer) => layer.label)).toEqual(['surface', 'layer 0']);
+    expect(view.layers[0]?.relation).toBe('yours');
+    expect(view.layers[1]?.relation).toBe('under you');
     // Row and column 0 of the drawing are the edge, so (16, 16) is at 17, 17.
     expect(view.layers[0]?.rows[17]?.charAt(17)).toBe('@');
+    expect(view.layers[1]?.rows[17]?.charAt(17)).toBe('@');
     const text = renderView(view);
     expect(text).toContain('@ you, on the surface: drawn on the block of layer 0 you stand on');
-    // Half as wide as it was: one layer of 34 characters after the row label.
+    // Two layers of 34 characters after the row label, with a gap of two.
     const row = text.split('\n').find((line) => line.startsWith('y 16 ')) ?? '';
-    expect(row).toHaveLength('y 16 '.length + state.size.x + 2);
+    expect(row).toHaveLength('y 16 '.length + 2 * (state.size.x + 2) + 2);
     // The block under the miner is named where it is mined.
     expect(text).toContain('Mine below you: Dirt');
   });
 
-  it('still lists loose items lying on the surface, which is not drawn', () => {
+  it('lists loose items lying on the surface', () => {
     const state = createRun(7, 'none', 'standard');
     state.looseItems = [
       { pos: { x: 3, y: 4, z: -1 }, item: 'stone', count: 2 },
@@ -2249,5 +2270,68 @@ describe('the drop-all alias is strict (issue #46 item 4)', () => {
     expect(resolveChoice(state, 'drop-all-all-ladder')).toBeNull();
     expect(resolveChoice(state, 'drop-all-all-timber')).toBeNull();
     expect(resolveChoice(state, 'drop-all-all-all-timber')).toBeNull();
+  });
+});
+
+describe('the forest in the play interface (issue #70)', () => {
+  /** A 3 x 3 cube, the miner on the surface in the middle, a tree east of it. */
+  function forest(): GameState {
+    const state = buildState({
+      layers: [
+        ['ddd', 'ddd', 'ddd'],
+        ['ddd', 'ddd', 'ddd'],
+      ],
+      surface: ['p.o', '..T', '...'],
+      avatar: { x: 1, y: 1, z: -1 },
+      fuel: 50,
+    });
+    updateReveal(state, []);
+    return state;
+  }
+
+  it('draws the surface with a character for each kind, and names them in the legend', () => {
+    const view = buildView(forest(), { ...DEFAULT_VIEW, deepestZ: -1 });
+    const surface = view.layers.find((layer) => layer.z === -1);
+    expect(surface?.rows).toEqual(['XXXXX', 'X:"^X', 'X"@YX', 'X"""X', 'XXXXX']);
+    const text = renderView(view);
+    expect(text).toContain('Y tree (blocks the way and hides the ground under it');
+    expect(text).toContain(': dirt path (open)');
+    expect(text).toContain('^ stone outcrop (open, over stone)');
+    expect(text).toContain('" meadow (open)');
+    // Layer 0 under the tree is unseen.
+    const top = view.layers.find((layer) => layer.z === 0);
+    expect(top?.rows[2]).toBe('Xd@?X');
+  });
+
+  it('offers cut-e, says why there is no move east, and names the stump', () => {
+    const state = forest();
+    const text = defaultViewText(state);
+    expect(text).toMatch(/cut-e +\[2\] Cut the tree east: gives 2 Timber/);
+    expect(text).toContain(
+      'Not on the list: No move east: a tree stands there (cut-e cuts it down).',
+    );
+    const cut = resolveChoice(state, 'cut-e');
+    expect(cut).toMatchObject({ type: 'cutTree', target: { x: 2, y: 1, z: -1 } });
+    const after = act(state, { type: 'cutTree' });
+    const afterText = defaultViewText(after.state);
+    expect(describeEvents(after.state, after.events)).toContain(
+      'You cut down the tree; a stump is left.',
+    );
+    expect(afterText).toContain(', stump (open; a tree grows back');
+    expect(afterText).toContain(
+      'Stump at x2 y1: a tree grows back in 10 shifts if nothing stands on it then.',
+    );
+  });
+
+  it('says in the forecast where a tree grows back, and then that it grew', () => {
+    let state = act(forest(), { type: 'cutTree' }).state;
+    for (let shift = 1; shift < 10; shift += 1) {
+      state = endShift(state).state;
+    }
+    expect(defaultViewText(state)).toContain('A tree grows back on the stump at x2 y1.');
+    const { state: after, events } = endShift(state);
+    expect(describeEvents(after, events)).toContain(
+      'A tree grew back on a stump at x2 y1 (east of you).',
+    );
   });
 });
