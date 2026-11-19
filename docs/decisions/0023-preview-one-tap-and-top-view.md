@@ -11,5 +11,5 @@ Date: 2026-11-19. Status: accepted (owner, issue #78; coordinator's reading). Am
 
 ## Consequences
 
-- In a hole in the top layer, a neighbouring block offers both a mine and a step up onto the surface over it; the tap mines (priority), and stepping up is done from the full list.
+- In a hole in the top layer, a neighbouring block offers both a mine and a step up onto the surface over it. The tap mines (priority), and stepping up is done from the full list. This lasts until issue #80. The owner chose option (A) on PR #79 (blocker 2), relayed by the coordinator: keep the fixed priority here. In #80 the miner has no gravity, and tapping an open cell moves there, so climbing out becomes a tap.
 - 0019's "a move belongs to the layer it ends on" still holds below the top layer.
