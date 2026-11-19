@@ -117,18 +117,16 @@ test('on the surface a tap on a neighbour walks there at once', async ({ page })
   await expect(page.getByTestId('outcome')).toContainText('> Mine below you');
 });
 
-test('tapping the miner digs down at once; the unseen-below note is in the result line', async ({
+test('tapping the miner digs down at once; the result line says what happened', async ({
   page,
 }) => {
   // Coordinator's decision on PR #74: one tap digs, as in Minecraft. The
-  // cell under the block is unseen, so the result line says what could have
-  // happened without saying what is there (issue #75).
+  // result line then says in the past tense what happened, with no forecast
+  // of a fall (review of PR #74).
   const canvas = page.getByTestId('map-canvas');
   await tapCell(page, canvas, 16, 16);
   await expect(page.getByTestId('chooser')).toBeHidden();
-  await expect(page.getByTestId('outcome')).toContainText(
-    'you drop at least 1 block; if there is nothing under it (layer 1, unseen) you will fall further and be hurt',
-  );
+  await expect(page.getByTestId('outcome')).not.toContainText('will fall');
   await expect(page.getByTestId('outcome')).toContainText('You dropped 1 block.');
   await expect(page.getByTestId('gauges')).toContainText('AP 4/5');
   // There was rock under it: a safe one-block drop.

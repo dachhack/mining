@@ -3,7 +3,8 @@
 // No DOM is needed: storage is a small stand-in for `localStorage`.
 import { describe, expect, it } from 'vitest';
 
-import { ENGINE_VERSION, hashState } from '../../src/engine';
+import { BLOCKS } from '../../src/data';
+import { ENGINE_VERSION, cellIndex, hashState } from '../../src/engine';
 import {
   MAX_SEED,
   SAVE_KEY,
@@ -16,7 +17,9 @@ import {
 } from '../../src/app/previewSession';
 import type { SaveStore } from '../../src/app/previewSession';
 import { runCli } from '../../tools/play/cli';
-import { menuChoices } from '../../src/app/text/log';
+import { menuChoices, newSession } from '../../src/app/text/log';
+import type { LogEntry } from '../../src/app/text/log';
+import { choiceName, describeChoice } from '../../src/app/text/describe';
 import { takeTurn } from '../../src/app/text/turn';
 import { DEFAULT_LAYERS, buildView } from '../../src/app/text/view';
 
@@ -171,5 +174,41 @@ describe('saving and resuming', () => {
     if (resumed !== null) {
       expect(menuChoices(resumed.state)).toEqual(menuChoices(session.state));
     }
+  });
+});
+
+describe('the result line after a dig down (review of PR #74)', () => {
+  /** Seed 7 at the start, and its "mine-down" choice. */
+  function atStart(): { session: ReturnType<typeof newSession>; dig: LogEntry } {
+    const session = newSession(7, 'none', 'standard');
+    const dig = menuChoices(session.state).find(
+      (entry) => choiceName(session.state, entry) === 'mine-down',
+    );
+    if (dig === undefined) {
+      throw new Error('mine-down is not on the list');
+    }
+    return { session, dig };
+  }
+
+  it('says in the past tense that the miner dropped 1 block, without the warning', () => {
+    const { session, dig } = atStart();
+    // Before: the list warns, in the future tense.
+    expect(describeChoice(session.state, dig)).toContain('you will fall further and be hurt');
+    const line = takeTurn(session, dig);
+    expect(line).toBe('> Mine below you: Dirt, gives nothing. Mined Dirt. You dropped 1 block.');
+  });
+
+  it('says in the past tense that the miner fell, and the health it lost', () => {
+    const { session, dig } = atStart();
+    // Open space under the block underfoot, by hand: the dig is a 2-block fall.
+    const { x, y } = session.state.avatar.pos;
+    const under = cellIndex(session.state.size, { x, y, z: 1 });
+    session.state.blocks[under] = BLOCKS.air.code;
+    const line = takeTurn(session, dig);
+    expect(line).not.toContain('will');
+    expect(line).toBe(
+      '> Mine below you: Dirt, gives nothing. Mined Dirt. ' +
+        'You lost your footing and fell 2 blocks. You lost 2 health from the fall (now 8).',
+    );
   });
 });
