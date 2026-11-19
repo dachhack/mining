@@ -18,7 +18,8 @@ import {
   startRun,
 } from './previewSession';
 import type { SaveStore } from './previewSession';
-import type { Session } from './text/log';
+import { createTapMap } from './map/mapView';
+import type { LogEntry, Session } from './text/log';
 import { takeTurn } from './text/turn';
 import {
   DEFAULT_LAYERS,
@@ -26,7 +27,6 @@ import {
   forecastLine,
   hazardsLine,
   renderEndedLines,
-  renderMap,
 } from './text/view';
 import type { ChoiceView, PlayerView } from './text/view';
 
@@ -122,21 +122,25 @@ export function mountPreview(root: HTMLElement): void {
 
   const ended = element('section', 'ended');
   ended.dataset['testid'] = 'ended';
-  // The map: its header and legend wrap; the grid keeps its text layout and
-  // scrolls sideways inside its own box.
-  const map = element('section', 'map-box');
-  map.dataset['testid'] = 'map';
-  const mapHeader = element('p', 'map-text');
-  const mapGrid = element('pre', 'map');
-  const mapAfter = element('div', 'map-text');
-  map.append(mapHeader, mapGrid, mapAfter);
+  // The map: coloured tiles, drag to pan, tap a cell to act on it (issue #66).
+  const tapMap = createTapMap((action) => {
+    take(action, false);
+  });
+  // What the map cannot show: loose items on the surface, and the like.
+  const mapNotes = element('section', 'map-notes');
+  mapNotes.dataset['testid'] = 'map-notes';
   const forecast = element('section', 'forecast');
   forecast.dataset['testid'] = 'forecast';
   const outcome = element('section', 'outcome');
   outcome.dataset['testid'] = 'outcome';
-  const actionsHeading = element('h2', 'actions-heading', 'Actions');
+  // The full list of choices, folded away: the map covers moving and mining,
+  // and this list has everything else (crafting, placing, dropping, leaving,
+  // ending the shift).
+  const allActions = element('details', 'all-actions');
+  const actionsHeading = element('summary', 'actions-heading', 'All actions');
   const actions = element('section', 'actions');
   actions.dataset['testid'] = 'actions';
+  allActions.append(actionsHeading, actions);
 
   page.append(
     header,
@@ -145,10 +149,10 @@ export function mountPreview(root: HTMLElement): void {
     gauges,
     ended,
     outcome,
-    map,
+    tapMap.element,
+    mapNotes,
     forecast,
-    actionsHeading,
-    actions,
+    allActions,
   );
   root.replaceChildren(page);
 
@@ -164,8 +168,11 @@ export function mountPreview(root: HTMLElement): void {
     saveRun(store, session);
   }
 
-  /** Redraw everything from the player's view of the current state. */
-  function draw(): void {
+  /**
+   * Redraw everything from the player's view of the current state. `fresh`
+   * is true for a new or resumed run: the map then centres on the miner.
+   */
+  function draw(fresh: boolean): void {
     const view: PlayerView = buildView(session.state, {
       // `null`: let the view choose, as the play tool does with no --radius.
       radius: null,
@@ -175,10 +182,8 @@ export function mountPreview(root: HTMLElement): void {
     seedText.textContent = `Seed ${session.log.seed}`;
     showLines(gauges, view.hud);
     showLines(ended, renderEndedLines(view));
-    const mapText = renderMap(view);
-    mapHeader.textContent = mapText.header;
-    mapGrid.textContent = mapText.grid.join('\n');
-    showLines(mapAfter, mapText.after);
+    tapMap.show(session.state, fresh);
+    showLines(mapNotes, view.notes);
     if (view.ended === null) {
       const notOffered = view.notOffered.map((line) => `Not on the list: ${line}`);
       showLines(forecast, [hazardsLine(view), forecastLine(view), ...notOffered]);
@@ -197,29 +202,36 @@ export function mountPreview(root: HTMLElement): void {
         element('span', 'choice-meta', choiceMeta(choice)),
       );
       button.addEventListener('click', () => {
-        take(choice);
+        take(choice.entry, true);
       });
       return button;
     });
     actions.replaceChildren(...buttons);
-    actionsHeading.hidden = buttons.length === 0;
+    actionsHeading.textContent = `All actions (${buttons.length})`;
+    allActions.hidden = buttons.length === 0;
   }
 
-  /** Take one choice from the list, save, and redraw. */
-  function take(choice: ChoiceView): void {
+  /**
+   * Take one choice (from the list or the map), save, and redraw. From the
+   * list the page scrolls back up to the gauges and the map; a tap on the
+   * map leaves the page where it is.
+   */
+  function take(entry: LogEntry, fromList: boolean): void {
     if (!isRunActive(session.state)) {
       return;
     }
     try {
-      lastLines = [takeTurn(session, choice.entry)];
+      lastLines = [takeTurn(session, entry)];
     } catch (error) {
       // Should not happen: the button came from the list of legal choices.
       lastLines = [`That could not be done: ${error instanceof Error ? error.message : ''}`];
     }
     note.hidden = true;
     saveRun(store, session);
-    draw();
-    playTop.scrollIntoView({ block: 'start' });
+    draw(false);
+    if (fromList) {
+      playTop.scrollIntoView({ block: 'start' });
+    }
   }
 
   /** Start a new run on `seed`, replacing the saved one. */
@@ -231,7 +243,7 @@ export function mountPreview(root: HTMLElement): void {
     note.textContent = message;
     note.hidden = false;
     newRunForm.hidden = true;
-    draw();
+    draw(true);
     window.scrollTo(0, 0);
   }
 
@@ -266,5 +278,5 @@ export function mountPreview(root: HTMLElement): void {
     begin(seed, `New run: seed ${seed}.`);
   });
 
-  draw();
+  draw(true);
 }

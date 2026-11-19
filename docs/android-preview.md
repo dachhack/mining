@@ -1,6 +1,6 @@
 # Playing the early preview on a phone
 
-The early preview (issue #64) is a plain tap screen for the game as it stands on `main`: the same view as `npm run play`, with one button per choice. It is throwaway; M3 replaces it. You can play it two ways.
+The early preview (issues #64 and #66) is a plain tap screen for the game as it stands on `main`: the same information as `npm run play`, with a coloured map you can drag and tap. It is throwaway; M3 replaces it. You can play it two ways.
 
 ## In the phone's browser
 
@@ -36,9 +36,12 @@ If Android ever refuses with "App not installed" or a "conflicting package" mess
 
 ## Playing
 
-![The preview at phone width (390 × 844), seed 7 after two choices](images/android-preview-390x844.png)
+![The preview at phone width (390 × 844): seed 7 on layer 1, the chooser open on the miner's cell](images/android-preview-390x844.png)
 
-- The gauges stay at the top. Below them: what came of your last choice, the map (your layer and the ones above and below; the legend under it explains the characters), the hazards, and what ending the shift now would do.
-- Each button is one choice, with its play-tool name and its AP cost in small print. "End the shift" is last.
+- The gauges stay at the top. Below them: what came of your last choice, then the map.
+- **The map** shows 16 × 16 cells of one layer as coloured tiles; the legend under it names what is on screen. Cells you have not seen are dark with diagonal lines (they never show what is really there). Cells you have seen but that are not in light now are drawn darker. Each kind of rock has a pattern as well as a colour. Marks on top: you (a red disc with a white ring), ladders, torches, loose items (a small white diamond), and gold dots for mineral traces.
+- **Drag** the map to look around. **Centre on me** brings it back to you. **▲ Up** and **▼ Down** show the layer above or below (the label says which layer, and the map's border is orange on your own layer).
+- **Tap a cell** to act on it: walk into it, mine it, or pick up what lies there. On your own cell: mine the block you stand on, or climb a ladder. To mine one layer down, look at the layer below and tap the block there. A run starts on the surface (drawn pale, with the ground showing through): tap a neighbour to walk there, tap yourself to dig down, or press ▼ Down to see layer 0 and mine one of its blocks. If the map is out of AP for a cell, it says "Not enough AP". If there is only one thing to do and it has no warning, it is done at once. Otherwise a small list opens with each choice, its AP cost and its warning (such as a fall): tap one, or tap elsewhere to cancel.
+- Everything else (crafting, placing ladders and torches, dropping, leaving, ending the shift) is in **All actions** under the map: tap it to unfold the full list.
 - The run is saved on the phone after every choice and resumed when you open the game again.
 - **Restart** plays the same seed again from the start. **New run** asks for a seed (a random one is filled in); the same seed always makes the same cube.
