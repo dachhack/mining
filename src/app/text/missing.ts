@@ -23,10 +23,10 @@
 // at all (a pit after a fall), the step up that is not there, and
 // `tooLittleApNote` for what costs more AP than is left.
 
-import { ACTION_COSTS, AVATAR, NO_STRUCTURE, SHIFT, STRUCTURES } from '../../src/data';
-import type { Vec3 } from '../../src/data';
-import { inGrid, isOpen, isRevealed, isSolid, legalActions, structureAt } from '../../src/engine';
-import type { GameState } from '../../src/engine';
+import { ACTION_COSTS, AVATAR, NO_STRUCTURE, SHIFT, STRUCTURES } from '../../data';
+import type { Vec3 } from '../../data';
+import { inGrid, isOpen, isRevealed, isSolid, legalActions, structureAt } from '../../engine';
+import type { GameState } from '../../engine';
 import { choiceName, compass } from './describe';
 
 /** The four sideways steps, in the order the action list uses. */

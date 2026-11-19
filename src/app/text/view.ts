@@ -24,8 +24,8 @@ import {
   WORLD,
   blockDefByCode,
   itemDef,
-} from '../../src/data';
-import type { Vec3 } from '../../src/data';
+} from '../../data';
+import type { Vec3 } from '../../data';
 import {
   blockAt,
   carriedWeight,
@@ -40,8 +40,8 @@ import {
   previewCubePhase,
   structureAt,
   visibleMineralTraces,
-} from '../../src/engine';
-import type { GameState } from '../../src/engine';
+} from '../../engine';
+import type { GameState } from '../../engine';
 import {
   choiceName,
   choiceGroupText,
@@ -569,19 +569,36 @@ function pad(text: string, width: number): string {
   return text.padEnd(width, ' ');
 }
 
-/** Turn a view into the text one step prints. Sees the view only, never the state. */
-export function renderView(view: PlayerView): string {
-  const lines: string[] = [];
-
-  if (view.ended !== null) {
-    const e = view.ended;
-    lines.push(`=== RUN ENDED: ${e.headline} ===`);
-    lines.push(
-      `Shifts played: ${e.shiftsPlayed} | Deepest: ${e.deepest} | Health ${e.health} | Fuel ${e.fuel}`,
-    );
+/** The "RUN ENDED" lines once the run is over; none while it is going. */
+export function renderEndedLines(view: PlayerView): string[] {
+  if (view.ended === null) {
+    return [];
   }
-  lines.push(...view.hud);
+  const e = view.ended;
+  return [
+    `=== RUN ENDED: ${e.headline} ===`,
+    `Shifts played: ${e.shiftsPlayed} | Deepest: ${e.deepest} | Health ${e.health} | Fuel ${e.fuel}`,
+  ];
+}
 
+/** The map part of the view, in three pieces (see `renderMap`). */
+export interface MapText {
+  /** The "Map: x .. y .." line. */
+  header: string;
+  /** The layer labels and one row per y: the part that must keep its layout. */
+  grid: string[];
+  /** The legend line and the notes. */
+  after: string[];
+}
+
+/**
+ * The map part of the view: its "Map:" header, the layers side by side, the
+ * legend and the notes. Used by `renderView` and by the web preview screen
+ * (src/app/preview.ts), so both draw the map the same way. The preview lets
+ * the header and legend wrap, and scrolls only the grid sideways.
+ */
+export function renderMap(view: PlayerView): MapText {
+  const grid: string[] = [];
   // The map: the layers side by side, one text row per y.
   const width = view.window.x1 - view.window.x0 + 1;
   const height = view.window.y1 - view.window.y0 + 1;
@@ -596,10 +613,9 @@ export function renderView(view: PlayerView): string {
   } else if (view.allSeenOnMap) {
     beyond = '; everything you have seen of these layers is on the map';
   }
-  lines.push(
+  const header =
     `Map: x ${view.window.x0}..${view.window.x1} left to right (east is right), ` +
-      `y ${view.window.y0}..${view.window.y1} top to bottom (north is up)${beyond}`,
-  );
+    `y ${view.window.y0}..${view.window.y1} top to bottom (north is up)${beyond}`;
   // Each layer gets a column as wide as its map or its labels, whichever is
   // wider, so the labels stay over their maps on a narrow map (issue #20).
   const columnWidths = view.layers.map((layer) =>
@@ -612,21 +628,40 @@ export function renderView(view: PlayerView): string {
       .join(gap)
       .trimEnd();
   }
-  lines.push(margin + sideBySide(view.layers.map((layer) => layer.label)));
-  lines.push(margin + sideBySide(view.layers.map((layer) => `(${layer.relation})`)));
+  grid.push(margin + sideBySide(view.layers.map((layer) => layer.label)));
+  grid.push(margin + sideBySide(view.layers.map((layer) => `(${layer.relation})`)));
   for (let row = 0; row < height; row += 1) {
     const y = String(view.window.y0 + row).padStart(3, ' ');
-    lines.push(`y${y} ` + sideBySide(view.layers.map((layer) => layer.rows[row] ?? '')));
+    grid.push(`y${y} ` + sideBySide(view.layers.map((layer) => layer.rows[row] ?? '')));
   }
-  lines.push(`Legend: ${view.legend.join(' | ')}`);
-  lines.push(...view.notes);
+  const after = [`Legend: ${view.legend.join(' | ')}`, ...view.notes];
+  return { header, grid, after };
+}
+
+/** The "Hazards:" line. */
+export function hazardsLine(view: PlayerView): string {
+  return `Hazards: ${view.hazards.length === 0 ? 'none known' : view.hazards.join(' | ')}`;
+}
+
+/** The "If you end the shift now:" line. */
+export function forecastLine(view: PlayerView): string {
+  return `If you end the shift now: ${view.forecast ?? ''}`;
+}
+
+/** Turn a view into the text one step prints. Sees the view only, never the state. */
+export function renderView(view: PlayerView): string {
+  const lines: string[] = [];
+  lines.push(...renderEndedLines(view));
+  lines.push(...view.hud);
+  const map = renderMap(view);
+  lines.push(map.header, ...map.grid, ...map.after);
 
   if (view.ended !== null) {
     return lines.join('\n');
   }
 
-  lines.push(`Hazards: ${view.hazards.length === 0 ? 'none known' : view.hazards.join(' | ')}`);
-  lines.push(`If you end the shift now: ${view.forecast ?? ''}`);
+  lines.push(hazardsLine(view));
+  lines.push(forecastLine(view));
   for (const note of view.notOffered) {
     lines.push(`Not on the list: ${note}`);
   }

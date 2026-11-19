@@ -1,0 +1,97 @@
+name: Android preview
+
+# Builds the early phone preview (issue #64) as a debug APK: an Android app
+# file that can be installed straight onto a phone. See docs/android-preview.md.
+#
+# - On a push to main: build, then publish the APK as a workflow artifact AND
+#   on the rolling "android-preview" pre-release, replacing the previous APK.
+# - On a pull request that touches the Android wrapper: build and upload the
+#   artifact only, to check the build still works. Nothing is published.
+# - Manual runs ("Run workflow" on the Actions tab) behave like a push.
+#
+# A debug APK is signed with a throwaway key that the Android tools make on
+# the fly, so no signing secrets are needed. Play Store builds come in M4.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'capacitor.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/android-preview.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: android-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Capacitor 8 needs Node 22 or later; .nvmrc says 22.
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # The web build, into dist/.
+      - run: npm run build
+      # Copy dist/ into the Android project (android/app/src/main/assets/public).
+      - run: npx cap sync android
+      # Capacitor 8's Android project is compiled for Java 21.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      # Gradle is Android's build tool; gradlew is its launcher, committed in
+      # android/. It downloads the Gradle version the project names, then
+      # builds the debug APK. The runner image already has the Android SDK.
+      - name: Build the debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+      - name: Name the APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk mining-game-preview.apk
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mining-game-preview-apk
+          path: mining-game-preview.apk
+          retention-days: 30
+
+  publish:
+    # Only for main (or a manual run): pull requests do not publish.
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      # Needed to create the release and move its tag.
+      contents: write
+    # One publish at a time, so two quick pushes cannot interleave.
+    concurrency:
+      group: android-preview-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: mining-game-preview-apk
+      - name: Replace the android-preview pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # Delete the old release and its tag (ignore "not found" the first
+          # time), then make a new one at this commit with the new APK.
+          gh release delete android-preview --cleanup-tag --yes || true
+          gh release create android-preview mining-game-preview.apk \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Android preview (latest main)" \
+            --notes "Debug build of the early phone preview from commit $GITHUB_SHA. Install steps: docs/android-preview.md."
