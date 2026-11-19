@@ -16,6 +16,12 @@ export const SYMBOL_ITEMS = '*';
 export const SYMBOL_LADDER = '=';
 export const SYMBOL_TORCH = '!';
 export const SYMBOL_SUPPORT = 'T';
+// The surface forest (issue #70): one character for each kind of surface cell.
+export const SYMBOL_TREE = 'Y';
+export const SYMBOL_STUMP = ',';
+export const SYMBOL_PATH = ':';
+export const SYMBOL_MEADOW = '"';
+export const SYMBOL_OUTCROP = '^';
 /** Traced rock of a kind that has no character of its own in `TRACED_SYMBOLS`. */
 export const SYMBOL_TRACES = '%';
 

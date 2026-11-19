@@ -69,33 +69,37 @@ function pocketWithEast(blockId: BlockId): string[][] {
   return layers;
 }
 
-describe('which cells can be mined (0005 items 10 and 11)', () => {
-  it('offers each of the 17 cells in reach, and not the cell overhead', () => {
-    const state = seenState({ layers: POCKET, avatar: IN_POCKET, ap: 99 });
+describe('which cells can be mined (face neighbours only: issue #75, decision note 0022)', () => {
+  // Before issue #75 the pick reached 17 cells (0005 item 10): the 8 around
+  // the avatar and the 9 on the level below. Now it reaches the face
+  // neighbours only, as in Minecraft: north, east, south, west, and below.
+  const FACES = [
+    { x: 0, y: -1, z: 0 },
+    { x: 1, y: 0, z: 0 },
+    { x: 0, y: 1, z: 0 },
+    { x: -1, y: 0, z: 0 },
+    { x: 0, y: 0, z: 1 },
+  ];
 
-    const expected: string[] = [];
-    for (const dz of [0, 1]) {
-      for (const dy of [-1, 0, 1]) {
-        for (const dx of [-1, 0, 1]) {
-          if (dz === 0 && dx === 0 && dy === 0) {
-            continue; // the avatar's own cell
-          }
-          expected.push(`${IN_POCKET.x + dx},${IN_POCKET.y + dy},${IN_POCKET.z + dz}`);
-        }
-      }
-    }
-    expect(expected.length).toBe(17);
+  it('offers the 5 face neighbours in reach, no diagonal, and not the cell overhead', () => {
+    const state = seenState({ layers: POCKET, avatar: IN_POCKET, ap: 99 });
+    const expected = FACES.map(
+      (f) => `${IN_POCKET.x + f.x},${IN_POCKET.y + f.y},${IN_POCKET.z + f.z}`,
+    );
     expect(mineTargets(state)).toEqual(expected.sort());
 
     const overhead = { x: IN_POCKET.x, y: IN_POCKET.y, z: IN_POCKET.z - 1 };
     expect(isOpen(state, overhead)).toBe(false); // there is a block there to mine
     expect(findActions(state, { type: 'mine', target: overhead })).toEqual([]);
+    // Diagonals, on the avatar's level and below, are not offered.
+    expect(findActions(state, { type: 'mine', target: { x: 3, y: 3, z: 1 } })).toEqual([]);
+    expect(findActions(state, { type: 'mine', target: { x: 3, y: 2, z: 2 } })).toEqual([]);
   });
 
-  it('mines each of the 17 cells, leaving it open', () => {
+  it('mines each of the 5 cells, leaving it open', () => {
     const state = seenState({ layers: POCKET, avatar: IN_POCKET, ap: 99 });
     const actions = findActions(state, { type: 'mine' });
-    expect(actions.length).toBe(17);
+    expect(actions.length).toBe(5);
     for (const action of actions) {
       const target = (action as MineAction).target;
       const { state: after, events } = applyAction(state, action);
@@ -106,35 +110,38 @@ describe('which cells can be mined (0005 items 10 and 11)', () => {
     }
   });
 
-  it('mines a diagonal even when both cells it shares an edge with are solid', () => {
-    const state = seenState({ layers: POCKET, avatar: IN_POCKET });
-    const diagonal = { x: 3, y: 3, z: 1 };
-    expect(isOpen(state, { x: 3, y: 2, z: 1 })).toBe(false);
-    expect(isOpen(state, { x: 2, y: 3, z: 1 })).toBe(false);
-
-    const { state: after } = act(state, { type: 'mine', target: diagonal });
-    expect(isOpen(after, diagonal)).toBe(true);
+  it("mines the block overhead only with a support in the avatar's cell (0014 item 9)", () => {
+    const overhead = { x: IN_POCKET.x, y: IN_POCKET.y, z: IN_POCKET.z - 1 };
+    const supported = seenState({
+      layers: POCKET,
+      avatar: IN_POCKET,
+      ap: 99,
+      supports: [IN_POCKET],
+    });
+    expect(findActions(supported, { type: 'mine', target: overhead })).toHaveLength(1);
+    expect(mineTargets(supported)).toHaveLength(6);
   });
 
   it('never offers bedrock: nothing outside the grid, and no open cell', () => {
     // In a pit in the corner of a one-layer cube: beyond two sides and below
-    // is bedrock. Only the three cells of the layer that hold stone are left.
+    // is bedrock. Only the two face neighbours that hold stone are left.
     const pit = seenState({ layers: [['.#', '##']], avatar: { x: 0, y: 0, z: 0 }, ap: 99 });
-    expect(mineTargets(pit)).toEqual(['0,1,0', '1,0,0', '1,1,0']);
+    expect(mineTargets(pit)).toEqual(['0,1,0', '1,0,0']);
 
-    // On the surface the cells beside the avatar are open air, and the ones
-    // below are the top layer.
+    // On the surface the cells beside the avatar are open air: the only
+    // block in reach is the one underfoot.
     const surface = seenState({
       layers: [['###', '###', '###']],
       avatar: { x: 0, y: 0, z: -1 },
       ap: 99,
     });
-    expect(mineTargets(surface)).toEqual(['0,0,0', '0,1,0', '1,0,0', '1,1,0']);
+    expect(mineTargets(surface)).toEqual(['0,0,0']);
   });
 
   it('does not offer a block that has not been revealed', () => {
-    // Cannot arise in play, because reach reveals (0005 item 10); the state
-    // is hand-built with nothing revealed and no reveal run.
+    // Cannot arise in play, because the six cells touching the avatar are
+    // always revealed; the state is hand-built with nothing revealed and no
+    // reveal run.
     const unseen = buildState({ layers: POCKET, avatar: IN_POCKET, ap: 99 });
     expect(findActions(unseen, { type: 'mine' })).toEqual([]);
   });
@@ -269,5 +276,41 @@ describe('after mining', () => {
       block: BLOCKS.stone.code,
     });
     expect(legalActions(after).length).toBeGreaterThan(0);
+  });
+});
+
+describe('a stair dug with face-only reach (issue #75 item 4)', () => {
+  /** Take the one legal action that matches. */
+  const take = (state: GameState, wanted: object): GameState => act(state, wanted).state;
+
+  it('goes down by mine ahead, walk in, dig down; and can be walked back up to the surface', () => {
+    // A row of stone 6 cells long and 4 layers deep, the avatar on the
+    // surface over x = 1. Nothing is revealed by hand: each step shows what
+    // the next one needs, as in play.
+    let state = seenState({
+      layers: [['######'], ['######'], ['######'], ['######']],
+      avatar: { x: 1, y: 0, z: -1 },
+      ap: 99,
+    });
+    // Dig down onto layer 0, then two steps of the stair.
+    state = take(state, { type: 'mine', target: { x: 1, y: 0, z: 0 } });
+    expect(state.avatar.pos).toEqual({ x: 1, y: 0, z: 0 });
+    for (let step = 1; step <= 2; step += 1) {
+      const x = 1 + step;
+      const z = step - 1;
+      state = take(state, { type: 'mine', target: { x, y: 0, z } });
+      state = take(state, { type: 'move', to: { x, y: 0, z } });
+      state = take(state, { type: 'mine', target: { x, y: 0, z: z + 1 } });
+      expect(state.avatar.pos).toEqual({ x, y: 0, z: z + 1 });
+    }
+    // Every dig down was a safe one-block drop.
+    expect(state.avatar.health).toBe(AVATAR.startHealth);
+
+    // Back up: a step up west onto each stair, then onto the surface.
+    state = take(state, { type: 'move', to: { x: 2, y: 0, z: 1 } });
+    state = take(state, { type: 'move', to: { x: 1, y: 0, z: 0 } });
+    state = take(state, { type: 'move', to: { x: 0, y: 0, z: -1 } });
+    expect(state.avatar.pos).toEqual({ x: 0, y: 0, z: -1 });
+    expect(state.avatar.health).toBe(AVATAR.startHealth);
   });
 });

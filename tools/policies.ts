@@ -24,11 +24,14 @@ import type { Vec3 } from '../src/data';
 import {
   actionKey,
   blockAt,
+  blockDefAt,
   countItem,
   createRng,
+  hasTree,
   isRevealed,
   isSolid,
   isSurface,
+  isUnderTree,
   legalActions,
   nextInt,
 } from '../src/engine';
@@ -109,20 +112,27 @@ const HEADINGS: Vec3[] = [
  * A policy that cuts a staircase down to `targetLayer`, climbs back up it,
  * and leaves from the surface.
  *
- * One stair, seen from the side, heading right (`@` is the avatar, `1` and
- * `2` the two blocks it mines, in that order):
+ * The pick reaches face neighbours only (issue #75), so a stair is dug the
+ * Minecraft way: forward, step in, down. Seen from the side, heading right
+ * (`@` is the avatar, `1` and `2` the blocks it mines, in that order):
  *
- *     @ 1        . .        . .
- *     # 2   ->   # @   ->   # .
- *     # #        # #        # @ ...
+ *     @ 1        . @        . .
+ *     # #   ->   # 2   ->   # @ ...
+ *     # #        # #        # #
  *
- * 1. Mine the block beside the avatar. That is the headroom the avatar needs
- *    to step back up later (a step up needs the cell over its head open).
- * 2. Mine the block under that one.
- * 3. Walk into the gap and drop one block. The avatar is now one layer lower
- *    and one cell along.
+ * 1. Mine the block beside the avatar (on the surface there is none: the
+ *    cell beside is open air). That is also the headroom the avatar needs
+ *    to step back up later.
+ * 2. Walk into it. Its floor is the next stair.
+ * 3. Mine the block underfoot: a safe one-block drop (issue #75). The avatar
+ *    is now one layer lower and one cell along.
  *
  * Going back up is then one "step up" move per stair. No ladders are used.
+ *
+ * The surface is a forest (issue #70): the ground under a tree cannot be
+ * mined from the surface, and a tree cannot be walked into. So before the
+ * first stair the policy cuts the tree on the cell ahead of the start, if
+ * there is one. Underground, trees do not matter.
  *
  * At the edge of the cube the staircase turns right (east, south, west,
  * north). It never turns straight back: that would mine the stair the avatar
@@ -137,6 +147,9 @@ export function makeStaircasePolicy(targetLayer: number): Policy {
   // The policy's notes between calls.
   let goingDown = true;
   let heading = 0; // index into HEADINGS
+  // True once the avatar has walked into the cell of the next stair and has
+  // not yet dug down from it.
+  let stepped = false;
 
   /** Take `wanted` if it is legal; otherwise end the shift, or throw if stuck. */
   function takeOrWait(state: GameState, wanted: Action | undefined, what: string): Decision {
@@ -154,8 +167,8 @@ export function makeStaircasePolicy(targetLayer: number): Policy {
 
   /**
    * The cell beside `here` in the direction the staircase is heading. At the
-   * edge of the cube's footprint the heading turns right first (the footprint
-   * is more than one cell wide, so some heading always fits).
+   * edge of the cube the heading turns right first (the footprint is more
+   * than one cell wide, so some heading always fits).
    */
   function cellAhead(state: GameState, here: Vec3): Vec3 {
     for (let turns = 0; turns < HEADINGS.length; turns += 1) {
@@ -174,28 +187,40 @@ export function makeStaircasePolicy(targetLayer: number): Policy {
 
   function decideGoingDown(state: GameState): Decision {
     const here = state.avatar.pos;
+    const legal = legalActions(state);
+
+    // 3. Standing on the next stair: dig down (a safe one-block drop).
+    if (stepped) {
+      const below = { x: here.x, y: here.y, z: here.z + 1 };
+      const dig = legal.find((action) => action.type === 'mine' && sameCell(action.target, below));
+      if (dig !== undefined) {
+        stepped = false;
+      }
+      return takeOrWait(state, dig, 'dig down');
+    }
 
     const beside = cellAhead(state, here);
-    const belowBeside = { x: beside.x, y: beside.y, z: beside.z + 1 };
-
-    // 1. Headroom. (On the surface the cell beside is already open air.)
+    // On the surface the way ahead must be free of trees.
+    if (hasTree(state, beside)) {
+      const cut = legal.find(
+        (action) => action.type === 'cutTree' && sameCell(action.target, beside),
+      );
+      return takeOrWait(state, cut, 'cut the tree ahead');
+    }
+    // 1. The block beside the avatar.
     if (isSolid(state, beside)) {
-      const mine = legalActions(state).find(
+      const mine = legal.find(
         (action) => action.type === 'mine' && sameCell(action.target, beside),
       );
       return takeOrWait(state, mine, 'mine the block beside the avatar');
     }
-    // 2. The next stair's cell.
-    if (isSolid(state, belowBeside)) {
-      const mine = legalActions(state).find(
-        (action) => action.type === 'mine' && sameCell(action.target, belowBeside),
-      );
-      return takeOrWait(state, mine, 'mine the block below and beside the avatar');
-    }
-    // 3. Walk in and drop one block.
-    const walk = legalActions(state).find(
-      (action) => action.type === 'move' && sameCell(action.to, beside) && action.drop === 1,
+    // 2. Walk onto the next stair (it has a floor: nothing has dug under it).
+    const walk = legal.find(
+      (action) => action.type === 'move' && sameCell(action.to, beside) && action.drop === 0,
     );
+    if (walk !== undefined) {
+      stepped = true;
+    }
     return takeOrWait(state, walk, 'walk onto the next stair');
   }
 
@@ -237,18 +262,6 @@ export function makeStaircasePolicy(targetLayer: number): Policy {
 /** The id of the field recipe that turns coal into fuel (src/data/recipes.ts). */
 export const FUEL_RECIPE_ID = 'fuel';
 
-/** The eight cells around a cell on the same level, as (x, y) steps, in a fixed order. */
-const AROUND: Vec3[] = [
-  { x: 0, y: -1, z: 0 },
-  { x: 1, y: 0, z: 0 },
-  { x: 0, y: 1, z: 0 },
-  { x: -1, y: 0, z: 0 },
-  { x: 1, y: -1, z: 0 },
-  { x: 1, y: 1, z: 0 },
-  { x: -1, y: 1, z: 0 },
-  { x: -1, y: -1, z: 0 },
-];
-
 /** The top-layer block under the surface cell `surfaceCell`. */
 function floorUnder(surfaceCell: Vec3): Vec3 {
   return { x: surfaceCell.x, y: surfaceCell.y, z: 0 };
@@ -267,6 +280,14 @@ function hasKnownFloor(state: GameState, surfaceCell: Vec3): boolean {
   return isRevealed(state, floor) && isSolid(state, floor);
 }
 
+/**
+ * True if the miner can walk on the surface cell: no tree stands in it
+ * (issue #70) and its floor is known to be there.
+ */
+function isWalkable(state: GameState, surfaceCell: Vec3): boolean {
+  return !hasTree(state, surfaceCell) && hasKnownFloor(state, surfaceCell);
+}
+
 /** True if the player has seen the top-layer cell under `surfaceCell` and it is a hole. */
 function isKnownHole(state: GameState, surfaceCell: Vec3): boolean {
   const floor = floorUnder(surfaceCell);
@@ -279,21 +300,25 @@ function isKnownCoal(state: GameState, pos: Vec3): boolean {
 }
 
 /**
- * The first known coal block the pick can reach from the cell `stand` without
- * taking the miner's own floor away, or `undefined` if there is none.
- *
- * The pick reaches the eight cells around the miner and, one level down, the
- * block underfoot and the eight around that one (decision note 0005 item 10).
- * The block underfoot is left out: mining it would drop the miner into the
- * hole. From the surface only the level below can hold a block.
+ * The first known coal block the pick can reach from the cell `stand`, or
+ * `undefined` if there is none. The pick reaches face neighbours only
+ * (issue #75):
+ * - from the surface, the block underfoot (digging it is a safe one-block
+ *   drop when the block under it is solid, and the miner is then in the hole
+ *   the coal left);
+ * - in a hole, the blocks north, east, south and west of the miner. The
+ *   block underfoot is left out there: the policy goes no deeper than one
+ *   block, so it can always step back up.
  */
 function coalInReach(state: GameState, stand: Vec3): Vec3 | undefined {
-  for (const levelsDown of [0, 1]) {
-    for (const step of AROUND) {
-      const target = { x: stand.x + step.x, y: stand.y + step.y, z: stand.z + levelsDown };
-      if (isKnownCoal(state, target)) {
-        return target;
-      }
+  if (isSurface(state.size, stand)) {
+    const underfoot = floorUnder(stand);
+    return !isUnderTree(state, underfoot) && isKnownCoal(state, underfoot) ? underfoot : undefined;
+  }
+  for (const step of HEADINGS) {
+    const target = { x: stand.x + step.x, y: stand.y + step.y, z: stand.z };
+    if (isKnownCoal(state, target)) {
+      return target;
     }
   }
   return undefined;
@@ -311,8 +336,9 @@ interface SurfaceRoute {
  * The shortest walk over the surface from the miner's cell to a surface cell
  * for which `isGoal` is true, or `undefined` if there is no such cell.
  *
- * The walk only crosses surface cells whose floor is still there, so it goes
- * round the holes left by coal already mined. This is a breadth-first search:
+ * The walk only crosses surface cells whose floor is still there and that
+ * hold no tree, so it goes round the holes left by coal already mined and
+ * round the forest. This is a breadth-first search:
  * `frontier` holds the cells reached in exactly `steps` steps.
  *
  * `isGoal` is a function passed in as a value, as in Python.
@@ -339,7 +365,7 @@ function routeOverSurface(
         const to = { x: from.x + step.x, y: from.y + step.y, z: from.z };
         const key = `${to.x},${to.y}`;
         const inFootprint = to.x >= 0 && to.x < state.size.x && to.y >= 0 && to.y < state.size.y;
-        if (!inFootprint || seen.has(key) || !hasKnownFloor(state, to)) {
+        if (!inFootprint || seen.has(key) || !isWalkable(state, to)) {
           continue;
         }
         seen.add(key);
@@ -365,20 +391,33 @@ function routeOverSurface(
  * Each time it is asked, the first of these that applies:
  * 1. It has crafted fuel and the gauge is back to at least what the run
  *    started with: go home (step up out of a hole if it is in one, and leave).
- * 2. It carries coal: craft fuel from it.
- * 3. Standing in a hole: mine coal in reach, and step back up when none is.
+ * 2. It carries timber (from cutting trees): drop it, so coal always fits.
+ *    It carries coal: craft fuel from it.
+ * 3. Standing in a hole: mine coal in reach (north, east, south or west of
+ *    it), and step back up when none is.
  * 4. On the surface:
- *    a. top-layer coal is in reach beside it: mine it;
- *    b. top-layer coal can be walked to: take one step towards the nearest;
- *    c. no top-layer coal is left, but a hole it has not been down shows coal
- *       at the bottom: walk to it and step in (a drop of one block);
- *    d. otherwise give up and leave.
+ *    a. standing over known coal: dig it out from underfoot (a safe
+ *       one-block drop; issue #75), which leaves the miner in the hole;
+ *    b. known coal under open ground can be walked to: take one step
+ *       towards the nearest;
+ *    c. a hole it has not been down shows coal at the bottom or beside it
+ *       from inside: walk to it and step in (a drop of one block);
+ *    d. no coal in sight (the forest hides much of the top layer; issue
+ *       #70): dig a look-hole. Walk onto an open surface cell whose floor is
+ *       cheap rock and whose hole would show cells not seen yet, and dig
+ *       down into it. From there the lamp shows the sides and the floor of
+ *       the hole, and step 3 takes any coal beside it. At most
+ *       `LOOK_HOLES_MAX` look-holes;
+ *    e. no look-hole left to dig: cut the nearest tree (at most
+ *       `TREES_CUT_MAX`), which shows the ground under it and opens new
+ *       ground for look-holes;
+ *    f. otherwise give up and leave.
  *
- * It uses only what a player sees: the whole top layer is in daylight from
- * the first shift, and the bottom of a hole is seen from above. It never
- * mines the block underfoot and digs through no rock, so it takes no damage
- * and uses no ladders. It goes no deeper than one block; that makes it a
- * careful player, not the best one.
+ * It uses only what a player sees. It digs down only from the surface, into
+ * the top layer, so every drop is the safe one-block drop when the block
+ * under is solid, and it can always step back up; it uses no ladders. It
+ * goes no deeper than one block; that makes it a careful player, not the
+ * best one.
  *
  * When the action it wants costs more AP than are left it ends the shift; if
  * the action is missing even with full AP it throws, as the staircase does.
@@ -389,6 +428,11 @@ export function makeCoalPolicy(): Policy {
   let hasCraftedFuel = false;
   // The holes it has stepped into, as "x,y" strings, so it tries each once.
   const holesTried = new Set<string>();
+  let lookHolesDug = 0;
+  let treesCut = 0;
+  // Holes left where it mined top-layer coal, as "x,y": coal comes in veins,
+  // so the ground round such a hole is worth a look from inside.
+  const coalHoles = new Set<string>();
 
   function takeOrWait(state: GameState, wanted: Action | undefined, what: string): Decision {
     if (wanted !== undefined) {
@@ -409,9 +453,49 @@ export function makeCoalPolicy(): Policy {
     const bottom = { x: hole.x, y: hole.y, z: hole.z + 1 };
     return (
       !holesTried.has(`${hole.x},${hole.y}`) &&
+      !hasTree(state, surfaceCell) &&
       isKnownHole(state, surfaceCell) &&
-      isKnownCoal(state, bottom)
+      (isKnownCoal(state, bottom) ||
+        coalInReach(state, hole) !== undefined ||
+        coalHoles.has(`${hole.x},${hole.y}`))
     );
+  }
+
+  /**
+   * Is the surface cell a good place for a look-hole (step 4d)? It must be
+   * open ground with a known floor of cheap rock, and from inside the hole
+   * the miner must see at least `LOOK_HOLE_MIN_UNSEEN_CELLS` cells it has
+   * not seen yet: the faces of the hole (its four sides and its floor).
+   */
+  function isLookHoleSpot(state: GameState, surfaceCell: Vec3): boolean {
+    if (!isWalkable(state, surfaceCell)) {
+      return false;
+    }
+    const floor = floorUnder(surfaceCell);
+    const cost = blockDefAt(state, floor).mineCost;
+    if (cost === null || cost > LOOK_HOLE_MAX_MINE_AP) {
+      return false;
+    }
+    let unseen = 0;
+    const faces = [...HEADINGS, { x: 0, y: 0, z: 1 }];
+    for (const step of faces) {
+      const cell = { x: floor.x + step.x, y: floor.y + step.y, z: floor.z + step.z };
+      if (inFootprintOf(state, cell) && !isRevealed(state, cell)) {
+        unseen += 1;
+      }
+    }
+    return unseen >= LOOK_HOLE_MIN_UNSEEN_CELLS;
+  }
+
+  /** A surface cell beside `stand` with a tree in it, if any. */
+  function treeBeside(state: GameState, stand: Vec3): Vec3 | undefined {
+    for (const step of HEADINGS) {
+      const beside = { x: stand.x + step.x, y: stand.y + step.y, z: stand.z };
+      if (hasTree(state, beside)) {
+        return beside;
+      }
+    }
+    return undefined;
   }
 
   /** The surface cell beside `surfaceCell` that is over a hole worth stepping into, if any. */
@@ -425,9 +509,8 @@ export function makeCoalPolicy(): Policy {
     return undefined;
   }
 
-  return {
-    name: 'coal',
-    decide: (state: GameState): Decision => {
+  function decide(state: GameState): Decision {
+    {
       if (fuelAtStart === null) {
         fuelAtStart = state.fuel;
       }
@@ -436,10 +519,15 @@ export function makeCoalPolicy(): Policy {
       const legal = legalActions(state);
       const leave = legal.find((action) => action.type === 'leave');
       const stepUp = legal.find((action) => action.type === 'move' && action.to.z === here.z - 1);
-      const mineCoal = (coal: Vec3 | undefined): Action | undefined =>
-        legal.find(
+      const mineCoal = (coal: Vec3 | undefined): Action | undefined => {
+        const found = legal.find(
           (action) => action.type === 'mine' && coal !== undefined && sameCell(action.target, coal),
         );
+        if (found !== undefined && coal !== undefined && coal.z === 0) {
+          coalHoles.add(`${coal.x},${coal.y}`);
+        }
+        return found;
+      };
 
       // 1. The trip has paid for itself.
       if (hasCraftedFuel && state.fuel >= fuelAtStart) {
@@ -447,7 +535,18 @@ export function makeCoalPolicy(): Policy {
           ? takeOrWait(state, leave, 'leave from the surface')
           : takeOrWait(state, stepUp, 'step up out of the hole');
       }
-      // 2. Turn coal into fuel as soon as it is in the pack.
+      // 2a. Timber from cut trees is no use to this trip and weighs the pack
+      // down, so that coal no longer fits: drop it (0 AP).
+      const dropTimber = legal.find(
+        (action) =>
+          action.type === 'drop' &&
+          action.item === 'timber' &&
+          action.count === countItem(state, 'timber'),
+      );
+      if (dropTimber !== undefined) {
+        return dropTimber;
+      }
+      // 2b. Turn coal into fuel as soon as it is in the pack.
       if (countItem(state, 'coal') > 0) {
         const craft = legal.find(
           (action) => action.type === 'craft' && action.recipe === FUEL_RECIPE_ID,
@@ -472,12 +571,77 @@ export function makeCoalPolicy(): Policy {
       if (toCoal !== undefined && toCoal.firstStep === undefined) {
         return takeOrWait(state, mineCoal(coalInReach(state, here)), 'mine the coal in reach');
       }
-      // 4c. A hole with coal at the bottom.
-      const route =
-        toCoal ??
-        routeOverSurface(state, (cell: Vec3): boolean => holeBeside(state, cell) !== undefined);
+      // 4c. A hole with coal at the bottom or in reach from inside.
+      const toHole = routeOverSurface(
+        state,
+        (cell: Vec3): boolean => holeBeside(state, cell) !== undefined,
+      );
+      // A hole near by is looked into first (the vein may go on under the
+      // trees); then coal it can see, however far; a look-hole only when no
+      // coal is in sight. (Tried the other way round, look-holes before long
+      // walks, the survey came out worse: a look-hole finds coal less often
+      // than a walk to coal already seen.)
+      const isNear = (found: SurfaceRoute | undefined): boolean =>
+        found !== undefined && found.steps <= COAL_WALK_MAX_STEPS;
+      let route: SurfaceRoute | undefined = isNear(toHole) ? toHole : toCoal;
       if (route === undefined) {
-        // 4d. No coal in sight that can be got at: give up.
+        // 4d. Dig a look-hole at the nearest good spot: walk onto it and dig
+        // down (a safe one-block drop into the hole).
+        const toSpot =
+          lookHolesDug < LOOK_HOLES_MAX && state.lampOil > 0
+            ? routeOverSurface(state, (cell: Vec3): boolean => isLookHoleSpot(state, cell))
+            : undefined;
+        if (toSpot !== undefined && toSpot.firstStep !== undefined) {
+          const nextCell = toSpot.firstStep;
+          const walk = legal.find(
+            (action) =>
+              action.type === 'move' && sameCell(action.to, nextCell) && action.drop === 0,
+          );
+          return takeOrWait(state, walk, 'walk towards a look-hole');
+        }
+        if (toSpot !== undefined) {
+          const floor = floorUnder(here);
+          const dig = legal.find(
+            (action) => action.type === 'mine' && sameCell(action.target, floor),
+          );
+          if (dig !== undefined) {
+            lookHolesDug += 1;
+            holesTried.add(`${here.x},${here.y}`);
+          }
+          return takeOrWait(state, dig, 'dig a look-hole');
+        }
+        // No look-hole left to dig: walk to coal or a hole however far it is.
+        route = toCoal ?? toHole;
+      }
+      if (route === undefined) {
+        // 4e. Cut into the forest: the nearest tree, which shows the ground
+        // under it and makes room for more look-holes.
+        const toTree =
+          treesCut < TREES_CUT_MAX
+            ? routeOverSurface(
+                state,
+                (cell: Vec3): boolean => treeBeside(state, cell) !== undefined,
+              )
+            : undefined;
+        if (toTree !== undefined && toTree.firstStep !== undefined) {
+          const nextCell = toTree.firstStep;
+          const walk = legal.find(
+            (action) =>
+              action.type === 'move' && sameCell(action.to, nextCell) && action.drop === 0,
+          );
+          return takeOrWait(state, walk, 'walk towards a tree');
+        }
+        if (toTree !== undefined) {
+          const tree = treeBeside(state, here) as Vec3;
+          const cut = legal.find(
+            (action) => action.type === 'cutTree' && sameCell(action.target, tree),
+          );
+          if (cut !== undefined) {
+            treesCut += 1;
+          }
+          return takeOrWait(state, cut, 'cut a tree');
+        }
+        // 4f. Nothing left to try: give up.
         return takeOrWait(state, leave, 'leave from the surface');
       }
       if (route.firstStep === undefined) {
@@ -489,8 +653,13 @@ export function makeCoalPolicy(): Policy {
             sameCell(action.to, hole) &&
             action.drop === 1,
         );
-        if (stepIn !== undefined && hole !== undefined) {
+        if (hole !== undefined && (stepIn !== undefined || state.ap >= SHIFT.apPerShift)) {
+          // Tried once, whether the step in is offered or not: with the lamp
+          // out the drop cannot be seen, and a deeper hole is not a drop of 1.
           holesTried.add(`${hole.x},${hole.y}`);
+          if (stepIn === undefined) {
+            return decide(state);
+          }
         }
         return takeOrWait(state, stepIn, 'step into the hole');
       }
@@ -500,8 +669,28 @@ export function makeCoalPolicy(): Policy {
         (action) => action.type === 'move' && sameCell(action.to, nextCell) && action.drop === 0,
       );
       return takeOrWait(state, walk, 'walk over the surface');
-    },
-  };
+    }
+  }
+
+  return { name: 'coal', decide };
+}
+
+/** A hole no further than this many steps away is looked into before walking to coal (step 4c). */
+const COAL_WALK_MAX_STEPS = 10;
+/** The most look-holes the coal policy digs before it gives up (step 4d). */
+export const LOOK_HOLES_MAX = 12;
+/** The most trees the coal policy cuts before it gives up (step 4e). */
+export const TREES_CUT_MAX = 20;
+/** A look-hole is dug only through rock that costs at most this much AP to mine. */
+const LOOK_HOLE_MAX_MINE_AP = 1;
+/** A look-hole must let the miner see at least this many cells it has not seen (of the 5 faces of its floor: four sides and below). */
+const LOOK_HOLE_MIN_UNSEEN_CELLS = 4;
+
+/** True if the cell's column is inside the cube's footprint and the cell is in the grid or on the surface. */
+function inFootprintOf(state: GameState, pos: Vec3): boolean {
+  return (
+    pos.x >= 0 && pos.x < state.size.x && pos.y >= 0 && pos.y < state.size.y && pos.z < state.size.z
+  );
 }
 
 function sameCell(a: Vec3, b: Vec3): boolean {

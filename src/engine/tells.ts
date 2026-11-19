@@ -25,7 +25,7 @@ import { AVATAR, BLOCKS, STRUCTURES, TELLS } from '../data';
 import type { Vec3 } from '../data';
 import type { GameEvent } from './events';
 import { FACE_OFFSETS, offsetPosition } from './neighbours';
-import { avatarLightRadius, isLampLit, litCellsFrom, torchPositions } from './reveal';
+import { avatarLightRadius, hasAvatarLight, litCellsFrom, torchPositions } from './reveal';
 import { blockAt, cellCount, cellIndex, cellPosition, inGrid, isRevealed } from './state';
 import type { GameState } from './state';
 
@@ -89,18 +89,19 @@ export function carriesMineralTraces(state: GameState, pos: Vec3): boolean {
  *
  * Light travels through open cells only, so a solid block is never itself a
  * lit cell. A block is "in light" when one of its faces touches a lit open
- * cell: exactly the blocks light reveals (0005 item 14). The surface is
- * always lit too, so every block of the top layer is in light;
- * `updateMineralTraces` adds those itself.
+ * cell: exactly the blocks light reveals (0005 item 14). On the surface
+ * daylight does the lamp's work (`hasAvatarLight`), so the top-layer blocks
+ * round the miner are in light; the rest of the top layer is not (owner,
+ * after PR #72).
  *
- * With the lamp out it gives no light here at all (issue #33; decision note
- * 0011). The miner then knows the six blocks it touches, and `updateReveal`
+ * With the lamp out underground it gives no light here at all (issue #33;
+ * decision note 0011). The miner then knows the six blocks it touches, and `updateReveal`
  * still treats its own cell as lit to reveal them, but knowing a block by
  * touch is not seeing it in light, so no traces are noticed on them. Torches
- * and daylight show traces as before.
+ * show traces as before.
  */
 function lampAndTorchLight(state: GameState): Vec3[] {
-  const lit: Vec3[] = isLampLit(state)
+  const lit: Vec3[] = hasAvatarLight(state)
     ? litCellsFrom(state, state.avatar.pos, avatarLightRadius(state))
     : [];
   // `includes` is a fast built-in search of the whole array. Most of the
@@ -112,29 +113,6 @@ function lampAndTorchLight(state: GameState): Vec3[] {
     }
   }
   return lit;
-}
-
-/**
- * Is there any ore in the layers near enough to the top layer to give one of
- * its blocks traces? Only a shortcut for `updateMineralTraces`: when the
- * answer is no (the usual case, since ore lies deeper), the whole top layer
- * can be skipped without looking at each of its blocks in turn.
- */
-function oreNearTopLayer(state: GameState): boolean {
-  const deepestLayer = Math.min(TELLS.mineralTraces.distance, state.size.z - 1);
-  // The cube stores the top layer first, so the layers 0 to `deepestLayer`
-  // are the cells from index 0 to the last cell of that layer.
-  const lastCell = { x: state.size.x - 1, y: state.size.y - 1, z: deepestLayer };
-  const lastIndex = cellIndex(state.size, lastCell);
-  // `subarray` is a view of part of the array (no copy), and `includes` a
-  // fast built-in search. This runs after every action, so it is worth it.
-  const layers = state.blocks.subarray(0, lastIndex + 1);
-  for (const code of TRACE_SOURCE_CODES) {
-    if (layers.includes(code)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /**
@@ -150,23 +128,16 @@ function oreNearTopLayer(state: GameState): boolean {
  *   state always gives the same events.
  * - A block that is revealed but not in light is left alone: traces need
  *   light to be noticed. So a miner whose lamp is out notices none by touch,
- *   not even on the six blocks around it; only on blocks a torch or daylight
- *   lights (decision note 0011).
+ *   not even on the six blocks around it underground; only on blocks a torch
+ *   lights, or daylight round it on the surface (decision note 0011).
  * - Nothing else in `state` is changed, and no block is revealed.
  */
 export function updateMineralTraces(state: GameState, events: GameEvent[]): void {
   // Only blocks in light can show traces, so only those are looked at: the
-  // top layer, and the cells touching a cell the lamp or a torch lights.
-  // `candidates` holds their cell indexes (see `cellIndex`); a Set, because
-  // one block can touch several lit cells.
+  // cells touching a cell the avatar's light (lamp, or daylight on the
+  // surface) or a torch lights. `candidates` holds their cell indexes (see
+  // `cellIndex`); a Set, because one block can touch several lit cells.
   const candidates = new Set<number>();
-  if (oreNearTopLayer(state)) {
-    for (let y = 0; y < state.size.y; y += 1) {
-      for (let x = 0; x < state.size.x; x += 1) {
-        candidates.add(cellIndex(state.size, { x, y, z: 0 }));
-      }
-    }
-  }
   for (const pos of lampAndTorchLight(state)) {
     for (const offset of FACE_OFFSETS) {
       const beside = offsetPosition(pos, offset);

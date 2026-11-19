@@ -6,18 +6,27 @@
 // things:
 //
 // 1. The cube, read whole. How far the nearest coal is from the start, in the
-//    top layer and by digging. This looks at blocks a player has not seen
-//    (only the top layer is in view at the start), so it is a measurement of
-//    the generated cubes, not of play.
+//    top layer and by digging, cutting the trees in the way (issue #70). This
+//    looks at blocks a player has not seen (at the start only the top layer
+//    outside the forest is in view), so it is a measurement of the generated
+//    cubes, not of play.
 // 2. A trip, played with the engine by the `coal` policy of tools/policies.ts:
-//    walk to the nearest top-layer coal, mine it, craft fuel, and stop when
-//    the fuel gauge is back to what the run started with (following a seam
-//    one block down if the top layer runs out first). This is what a careful
-//    player can do with what is on the first screen.
+//    walk to the nearest coal in sight, mine it, craft fuel, and stop when the
+//    fuel gauge is back to what the run started with; with no coal in sight it
+//    digs look-holes and cuts trees to find some. This is what a careful
+//    player can do with what it sees.
 //
 // Everything goes through the engine's public surface.
 
-import { ACTION_COSTS, BLOCKS, FIELD_RECIPES, SHIFT, WORLD, findLoadout } from '../src/data';
+import {
+  ACTION_COSTS,
+  BLOCKS,
+  FIELD_RECIPES,
+  SHIFT,
+  SURFACE,
+  WORLD,
+  findLoadout,
+} from '../src/data';
 import type { Vec3 } from '../src/data';
 import {
   ENGINE_VERSION,
@@ -26,6 +35,8 @@ import {
   blockDefAt,
   createRun,
   endShift,
+  hasTree,
+  isRevealed,
   isRunActive,
 } from '../src/engine';
 import type { GameEvent, GameState } from '../src/engine';
@@ -39,11 +50,18 @@ const WORST_SEEDS_LISTED = 10;
 
 /** What the generated cube of one seed holds, measured from the start cell. */
 export interface CoalGeometry {
-  /** Coal blocks in the top layer (layer 0), which is in daylight from the start. */
+  /** Coal blocks in the top layer (layer 0). */
   topLayerCoalBlocks: number;
   /**
-   * Steps to walk over the surface until a top-layer coal block is beside the
-   * miner, in the pick's reach. `null` if the top layer has no coal.
+   * Of those, the ones the player sees at the start: not under a tree
+   * (issue #70). The rest show once the tree over them is cut or the ground
+   * round them is dug.
+   */
+  topLayerCoalSeenAtStart: number;
+  /**
+   * Steps to walk over the surface until a top-layer coal block is in the
+   * pick's reach. Since issue #75 that is underfoot, so this equals
+   * `stepsToStandOnTopLayerCoal`. `null` if the top layer has no coal.
    */
   stepsToReachTopLayerCoal: number | null;
   /**
@@ -52,11 +70,15 @@ export interface CoalGeometry {
    * more than the one above. `null` if the top layer has no coal.
    */
   stepsToStandOnTopLayerCoal: number | null;
-  /** Estimated AP to walk to the cheapest top-layer coal block and mine it. `null` if none. */
+  /**
+   * Estimated AP to walk to the cheapest top-layer coal block and mine it,
+   * cutting the trees in the way (issue #70): each tree walked through costs
+   * a cut, and coal under a tree needs that tree cut first. `null` if none.
+   */
   topLayerCoalAp: number | null;
   /**
-   * Estimated AP to get the cheapest coal block below the top layer: walk,
-   * dig a ladder shaft beside it, mine it. See `shaftAp`. `null` if none.
+   * Estimated AP to get the cheapest coal block below the top layer: walk to
+   * its column and dig straight down to it. See `digDownAp`. `null` if none.
    */
   undergroundCoalAp: number | null;
   /** The layer that block is in. `null` if none. */
@@ -115,6 +137,8 @@ export interface Distribution {
 export interface CoalSurveyAggregate {
   seeds: number;
   seedsWithTopLayerCoal: number;
+  /** Seeds where some top-layer coal is in sight at the start (not under a tree). */
+  seedsWithTopLayerCoalSeenAtStart: number;
   stepsToReachTopLayerCoal: Distribution;
   stepsToStandOnTopLayerCoal: Distribution;
   topLayerCoalAp: Distribution;
@@ -224,24 +248,63 @@ function smallerOf(a: number | null, b: number): number {
 // ---------------------------------------------------------------------------
 
 /**
- * Estimated AP to dig a one-cell shaft down the column at (x, y) until the
- * miner stands in layer `standLayer`, the way the m1-r2 playtesters dug:
- * mine the top block from the surface and drop into the hole, then for each
- * further layer put a ladder in the miner's own cell, mine the block
- * underfoot and climb down. -1 is the surface, which needs no digging.
+ * Estimated AP to dig straight down the column at (x, y) from the surface
+ * until the block in layer `lastLayer` is mined, the Minecraft way (issue
+ * #75): mine the block underfoot, drop safely one block, and again. Each
+ * block costs its mine cost; the drops are free.
  *
  * An estimate: it counts AP only, and not the AP lost when the next action
- * does not fit into what is left of a shift.
+ * does not fit into what is left of a shift, nor the way back up.
  */
-function shaftAp(state: GameState, x: number, y: number, standLayer: number): number {
+function digDownAp(state: GameState, x: number, y: number, lastLayer: number): number {
   let ap = 0;
-  for (let layer = 0; layer <= standLayer; layer += 1) {
+  for (let layer = 0; layer <= lastLayer; layer += 1) {
     ap += blockDefAt(state, { x, y, z: layer }).mineCost ?? 0;
-    if (layer > 0) {
-      ap += ACTION_COSTS.placeLadder + ACTION_COSTS.move;
-    }
   }
   return ap;
+}
+
+/**
+ * The cheapest AP to walk from the start to every surface cell, cutting the
+ * trees on the way (issue #70): a step costs `ACTION_COSTS.move`, and a step
+ * into a tree costs a cut as well. Indexed by `x + size.x * y`. At the start
+ * there are no holes, so every cell has a floor.
+ *
+ * This is Dijkstra's shortest-path search, written plainly: the costs are
+ * small whole numbers, so instead of a priority queue it keeps one list of
+ * cells for each total cost and works through the lists in order.
+ */
+function surfaceRouteAp(state: GameState, start: Vec3): number[] {
+  const width = state.size.x;
+  const best: number[] = new Array<number>(state.size.x * state.size.y).fill(Infinity);
+  const buckets: Vec3[][] = [];
+  best[start.x + width * start.y] = 0;
+  buckets[0] = [start];
+  for (let cost = 0; cost < buckets.length; cost += 1) {
+    for (const cell of buckets[cost] ?? []) {
+      if ((best[cell.x + width * cell.y] as number) < cost) {
+        continue; // reached more cheaply already
+      }
+      for (const [dx, dy] of [
+        [0, -1],
+        [1, 0],
+        [0, 1],
+        [-1, 0],
+      ] as const) {
+        const next = { x: cell.x + dx, y: cell.y + dy, z: cell.z };
+        if (next.x < 0 || next.x >= state.size.x || next.y < 0 || next.y >= state.size.y) {
+          continue;
+        }
+        const stepCost = ACTION_COSTS.move + (hasTree(state, next) ? SURFACE.cutTree.ap : 0);
+        const total = cost + stepCost;
+        if (total < (best[next.x + width * next.y] as number)) {
+          best[next.x + width * next.y] = total;
+          (buckets[total] ??= []).push(next);
+        }
+      }
+    }
+  }
+  return best;
 }
 
 /**
@@ -253,6 +316,8 @@ export function measureCoalGeometry(state: GameState): CoalGeometry {
   const coalCode = BLOCKS.coalSeam.code;
 
   let topLayerCoalBlocks = 0;
+  let topLayerCoalSeenAtStart = 0;
+  const routeAp = surfaceRouteAp(state, start);
   let stepsToReach: number | null = null;
   let stepsToStandOn: number | null = null;
   let topLayerCoalAp: number | null = null;
@@ -266,35 +331,26 @@ export function measureCoalGeometry(state: GameState): CoalGeometry {
         if (blockAt(state, coal) !== coalCode) {
           continue;
         }
-        const mineAp = blockDefAt(state, coal).mineCost ?? 0;
         if (z === 0) {
           topLayerCoalBlocks += 1;
+          if (isRevealed(state, coal)) {
+            topLayerCoalSeenAtStart += 1;
+          }
           stepsToStandOn = smallerOf(stepsToStandOn, Math.abs(x - start.x) + Math.abs(y - start.y));
         }
-        // The miner works from one layer above the coal, in one of the eight
-        // columns around it: from there the block is in the pick's reach, and
-        // mining it does not take the miner's own floor away.
-        for (let dy = -1; dy <= 1; dy += 1) {
-          for (let dx = -1; dx <= 1; dx += 1) {
-            const standX = x + dx;
-            const standY = y + dy;
-            const isCoalColumn = dx === 0 && dy === 0;
-            const inFootprint =
-              standX >= 0 && standX < state.size.x && standY >= 0 && standY < state.size.y;
-            if (isCoalColumn || !inFootprint) {
-              continue;
-            }
-            // Walking over the surface, one step per cell, no diagonals.
-            const steps = Math.abs(standX - start.x) + Math.abs(standY - start.y);
-            const ap = steps * ACTION_COSTS.move + shaftAp(state, standX, standY, z - 1) + mineAp;
-            if (z === 0) {
-              stepsToReach = smallerOf(stepsToReach, steps);
-              topLayerCoalAp = smallerOf(topLayerCoalAp, ap);
-            } else if (undergroundCoalAp === null || ap < undergroundCoalAp) {
-              undergroundCoalAp = ap;
-              undergroundCoalLayer = z;
-            }
-          }
+        // The pick reaches face neighbours only (issue #75), so the miner
+        // stands in the coal's own column and digs down to it: walk there
+        // over the surface (cutting the trees in the way, and the one over
+        // the coal's column if there is one, by walking into it), then dig.
+        const steps = Math.abs(x - start.x) + Math.abs(y - start.y);
+        const walkAp = routeAp[x + state.size.x * y] as number;
+        const ap = walkAp + digDownAp(state, x, y, z);
+        if (z === 0) {
+          stepsToReach = smallerOf(stepsToReach, steps);
+          topLayerCoalAp = smallerOf(topLayerCoalAp, ap);
+        } else if (undergroundCoalAp === null || ap < undergroundCoalAp) {
+          undergroundCoalAp = ap;
+          undergroundCoalLayer = z;
         }
       }
     }
@@ -312,6 +368,7 @@ export function measureCoalGeometry(state: GameState): CoalGeometry {
 
   return {
     topLayerCoalBlocks,
+    topLayerCoalSeenAtStart,
     stepsToReachTopLayerCoal: stepsToReach,
     stepsToStandOnTopLayerCoal: stepsToStandOn,
     topLayerCoalAp,
@@ -423,6 +480,8 @@ function aggregateCoalSurvey(seeds: SeedCoalSurvey[], marginShifts: number): Coa
   return {
     seeds: seeds.length,
     seedsWithTopLayerCoal: geometries.filter((g) => g.topLayerCoalBlocks > 0).length,
+    seedsWithTopLayerCoalSeenAtStart: geometries.filter((g) => g.topLayerCoalSeenAtStart > 0)
+      .length,
     stepsToReachTopLayerCoal: distributionOf(
       withoutNulls(geometries.map((g) => g.stepsToReachTopLayerCoal)),
     ),
@@ -509,16 +568,17 @@ export function formatCoalSurvey(report: CoalSurveyReport): string {
     `coal survey: ${s.seeds} seeds (${s.firstSeed}-${s.firstSeed + s.seeds - 1}), starting fuel ${s.startingFuel}, margin ${s.marginShifts} shifts`,
     `rules in force: ${SHIFT.apPerShift} AP and ${SHIFT.fuelPerShift} fuel a shift, a step costs ${ACTION_COSTS.move} AP, coal costs ${BLOCKS.coalSeam.mineCost ?? 0} AP to mine and ${ACTION_COSTS.craft} AP to craft into ${fuelPerCoal} fuel; start cell (${start.x}, ${start.y})`,
     '',
-    'The cubes, read whole (a player sees only the top layer at the start):',
+    'The cubes, read whole (a player sees only the top layer outside the forest at the start):',
     `  seeds with coal in the top layer:        ${a.seedsWithTopLayerCoal} of ${a.seeds}`,
+    `  ... with some of it in sight at the start: ${a.seedsWithTopLayerCoalSeenAtStart} of ${a.seeds}`,
     `  steps until top-layer coal is in reach:  ${distributionLine(a.stepsToReachTopLayerCoal)}`,
     `  steps to stand on top-layer coal:        ${distributionLine(a.stepsToStandOnTopLayerCoal)}`,
-    `  AP to walk to top-layer coal and mine it:        ${distributionLine(a.topLayerCoalAp)}`,
+    `  AP to walk to top-layer coal and mine it (cutting trees in the way): ${distributionLine(a.topLayerCoalAp)}`,
     `  AP to walk, dig to deeper coal and mine it (est): ${distributionLine(a.undergroundCoalAp)}`,
     `  AP for the cheaper of the two:                   ${distributionLine(a.cheapestCoalAp)}`,
     `  seeds where digging is the cheaper way:  ${a.seedsWhereUndergroundCoalIsCheaper} of ${a.seeds}`,
     '',
-    'The trip, played by the coal policy (walk to top-layer coal, mine, craft fuel, until the gauge is back to its start):',
+    'The trip, played by the coal policy (walk to coal in sight, else dig look-holes and cut trees; mine, craft fuel, until the gauge is back to its start):',
     `  trips that got the fuel back:            ${a.tripsPaidBack} of ${a.seeds}`,
     `  ... and never read below ${s.marginShifts} fuel:        ${a.tripsPaidBackWithMargin} of ${a.seeds}`,
     `  shift the first coal was mined in:       ${distributionLine(a.shiftFirstCoalMined)}`,

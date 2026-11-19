@@ -169,6 +169,16 @@ export interface DecommissionCampAction {
   ap: number;
 }
 
+/**
+ * Cut the tree in the surface cell `target`, beside the avatar's, for timber
+ * (issue #70; decision note 0020).
+ */
+export interface CutTreeAction {
+  type: 'cutTree';
+  target: Vec3;
+  ap: number;
+}
+
 /** Give up: end the run as entombed (0014 item 23). */
 export interface GiveUpAction {
   type: 'giveUp';
@@ -196,7 +206,8 @@ export type Action =
   | PlaceExplosiveAction
   | CampToolAction
   | CampAction
-  | GiveUpAction;
+  | GiveUpAction
+  | CutTreeAction;
 
 function vecKey(v: Vec3): string {
   return `${v.x},${v.y},${v.z}`;
@@ -230,6 +241,7 @@ export function actionKey(action: Action): string {
     case 'placeVent':
     case 'placeSafetyLamp':
     case 'seal':
+    case 'cutTree':
       // The same shape as placeLadder: the type, the cell, the cost.
       return `${action.type} ${vecKey(action.target)} ap ${action.ap}`;
     case 'scan':

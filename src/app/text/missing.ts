@@ -25,7 +25,15 @@
 
 import { ACTION_COSTS, AVATAR, NO_STRUCTURE, SHIFT, STRUCTURES } from '../../data';
 import type { Vec3 } from '../../data';
-import { inGrid, isOpen, isRevealed, isSolid, legalActions, structureAt } from '../../engine';
+import {
+  hasTree,
+  inGrid,
+  isOpen,
+  isRevealed,
+  isSolid,
+  legalActions,
+  structureAt,
+} from '../../engine';
 import type { GameState } from '../../engine';
 import { choiceName, compass } from './describe';
 
@@ -36,6 +44,11 @@ const SIDEWAYS = [
   { x: 0, y: 1 },
   { x: -1, y: 0 },
 ];
+
+/** "n", "e", "s" or "w" for a sideways step: the end of the name of a cut choice. */
+function choiceSide(step: { x: number; y: number }): string {
+  return step.y < 0 ? 'n' : step.y > 0 ? 's' : step.x > 0 ? 'e' : 'w';
+}
 
 function hasLadder(state: GameState, pos: Vec3): boolean {
   return structureAt(state, pos) === STRUCTURES.ladder.code;
@@ -139,11 +152,17 @@ export function missingMoveNotes(state: GameState): string[] {
         move.drop > 0 &&
         isRevealed(state, overhead) &&
         isOpen(state, overhead) &&
+        !hasTree(state, overhead) &&
         isRevealed(state, onTop) &&
         isOpen(state, onTop)
       ) {
         noStep.push(side);
       }
+      continue;
+    }
+    if (hasTree(state, beside)) {
+      // A tree blocks the way (issue #70). The surface is always seen.
+      notes.push(`No move ${side}: a tree stands there (cut-${choiceSide(step)} cuts it down).`);
       continue;
     }
     if (isOpen(state, beside)) {
@@ -166,8 +185,13 @@ export function missingMoveNotes(state: GameState): string[] {
       // cell on top of the rock to be open. Only the unseen case is worth a
       // line; with rock in either place it is just a wall.
       rockSides += 1;
-      if (isRevealed(state, overhead) && isOpen(state, overhead) && !isRevealed(state, onTop)) {
+      const headroom =
+        isRevealed(state, overhead) && isOpen(state, overhead) && !hasTree(state, overhead);
+      if (headroom && !isRevealed(state, onTop)) {
         unseenTops.push(side);
+      } else if (headroom && hasTree(state, onTop)) {
+        // Out of a hole in layer 0 onto the surface, where a tree stands.
+        notes.push(`No step up ${side}: a tree stands on top of the rock there.`);
       }
     }
   }
@@ -202,7 +226,8 @@ export function missingMoveNotes(state: GameState): string[] {
     rockSides === SIDEWAYS.length &&
     !hasLadder(state, here) &&
     isRevealed(state, overhead) &&
-    isOpen(state, overhead)
+    isOpen(state, overhead) &&
+    !hasTree(state, overhead)
   ) {
     // The way out is a ladder in the avatar's cell and one in the cell
     // above. Said only when both cells could take one.

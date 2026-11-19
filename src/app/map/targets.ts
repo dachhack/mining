@@ -2,13 +2,18 @@
 //
 // A tap on cell (x, y) of the layer on screen picks, from the legal actions,
 // those that act on that cell:
-// - a move into it, a mine of it, a pick-up from it;
+// - a move into it, a mine of it, a pick-up from it, cutting the tree in it
+//   (issue #70: on the surface, a tap on a tree beside the miner);
 // - on the miner's own cell, on the miner's layer: also the ladder climbs
 //   (up and down the same column) and mining the block underfoot.
 // A move belongs to the layer it ends on, and a mine to the layer of its
-// block. So on the surface a neighbour tap is a walk, and the block under a
-// neighbour is mined from the layer-0 view, as one layer down is mined
-// underground (coordinator's decision on PR #67).
+// block. So on the surface a neighbour tap is a walk (coordinator's decision
+// on PR #67). The pick reaches only the faces of the miner's cell (issue
+// #75), so a tap on a neighbouring block mines it, and on the layer below
+// only the cell under the miner has a choice: digging down. One tap digs
+// (coordinator's decision on PR #74, `tapActsAtOnce`), and the result line
+// then says what happened: "You dropped 1 block", or the fall and the health
+// it cost. A known longer or fatal fall still opens the chooser.
 // Everything else (crafting, placing, dropping, leaving, ending the shift)
 // is only in the full list under the map.
 //
@@ -27,6 +32,8 @@ function actionCell(action: Action): { x: number; y: number; z: number } | null 
       return action.target;
     case 'pickUp':
       return action.from;
+    case 'cutTree':
+      return action.target;
     default:
       return null;
   }

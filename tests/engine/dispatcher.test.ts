@@ -47,6 +47,7 @@ const FAKE_FORECAST: ShiftForecast = {
     lampOilAfter: 10,
     runEnds: null,
   },
+  regrowth: [],
 };
 
 vi.mock('../../src/engine/actions/leave', () => ({
@@ -78,6 +79,18 @@ vi.mock('../../src/engine/gravity', () => ({
 vi.mock('../../src/engine/reveal', () => ({
   updateReveal: (): void => {
     calls.push('updateReveal');
+  },
+}));
+
+// Coal in sight at the start (owner, PR #72) runs the real reveal on a copy;
+// with reveal faked it would find nothing in sight. Here it only records that
+// `createRun` calls it, and when.
+vi.mock('../../src/engine/surface/generation', async () => ({
+  ...(await vi.importActual<typeof import('../../src/engine/surface/generation')>(
+    '../../src/engine/surface/generation',
+  )),
+  ensureCoalInSight: (): void => {
+    calls.push('ensureCoalInSight');
   },
 }));
 
@@ -291,7 +304,8 @@ describe('previewCubePhase', () => {
 describe('createRun', () => {
   it('reveals what can be seen from the start', () => {
     createRun(1, 'none', 'standard');
-    expect(calls).toEqual(['updateReveal', 'updateMineralTraces']);
+    // Coal in sight is made sure of first, then the first reveal shows it.
+    expect(calls).toEqual(['ensureCoalInSight', 'updateReveal', 'updateMineralTraces']);
   });
 });
 

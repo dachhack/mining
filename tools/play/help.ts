@@ -5,7 +5,16 @@
 // states rules, in the order a player meets them. Every number in it is read
 // from src/data, so the text cannot drift from the game when one is tuned.
 
-import { ACTION_COSTS, AVATAR, BLOCKS, FIELD_RECIPES, SHIFT, TELLS, WORLD } from '../../src/data';
+import {
+  ACTION_COSTS,
+  AVATAR,
+  BLOCKS,
+  FIELD_RECIPES,
+  SHIFT,
+  SURFACE,
+  TELLS,
+  WORLD,
+} from '../../src/data';
 import { stackListText } from '../../src/app/text/describe';
 import { DEFAULT_LAYERS, DEFAULT_RADIUS } from '../../src/app/text/view';
 
@@ -17,6 +26,7 @@ export function helpText(): string {
   const uncontrolledPerBlock = AVATAR.uncontrolledFallDamagePerBlock;
   const bottomLayer = WORLD.size.z - 1;
   const traceSteps = TELLS.mineralTraces.distance;
+  const cutYield = stackListText(SURFACE.cutTree.yields);
   // The lamp burns oil at the end of every Nth shift of the run, counted from
   // the first shift: with 4, at the end of shifts 4, 8, 12, ...
   const burnEvery = SHIFT.lampOilBurnEveryShifts;
@@ -56,9 +66,9 @@ CHOICES: NAMES AND NUMBERS
     n e s w                  go north, east, south, west (a walk, a step up or a walk off a ledge:
                              the list says which)
     up, down                 climb a ladder
-    mine-n, mine-ne, ...     mine the block that way on your layer (n ne e se s sw w nw)
-    mine-down                mine the block you stand on
-    mine-n-down, ...         mine the block that way, one layer down
+    mine-n, mine-e, mine-s, mine-w     mine the block beside you, that way (no diagonals)
+    mine-down                mine the block you stand on (dig down)
+    mine-up                  mine the block over your head (only with a support in your cell)
     ladder-here, ladder-n, ladder-up, ladder-down, ...     place a ladder; torch-... the same
     craft-ladder, craft-torch, craft-fuel, ...             craft; the list shows each name
     take-here-stone, take-n-coal, ...                      pick up: where from, then what
@@ -66,10 +76,12 @@ CHOICES: NAMES AND NUMBERS
                                                            carried only drop-stone is listed;
                                                            drop-all-stone then does the same
                                                            (and nothing else is read that way)
+    cut-n, cut-e, cut-s, cut-w                             cut down the tree that way (on the
+                                                           surface only)
     leave                    leave the cube (on the surface only)
     end (or 0)               end the shift
   Mine choices that differ only in direction share one line of the list, for example
-    [2] Mine Stone, gives 1 Stone: 7. mine-e  11. mine-se-down  13. mine-nw-down
+    [2] Mine Stone, gives 1 Stone: 7. mine-e  9. mine-w  11. mine-down
   Each of them is still a choice of its own, with its own number and name. The two drops of an
   item share a line in the same way:
     [0] Drop Stone (one, or all 3): 15. drop-stone  16. drop-all-stone
@@ -80,13 +92,12 @@ READING A VIEW
   Then come your gauges. The map shows your layer with the layers above and below it
   beside it, each seen from above: x grows to the east (right), y grows to the south (down the
   page). "@" is you; "?" is a cell you have not seen, which may be rock or open space. While you
-  stand on the surface the map is layer 0 alone, all of it, with "@" drawn on the block you
-  stand on (the surface itself is open air everywhere and is not drawn; --radius N draws it
-  beside layer 0). Underground
+  stand on the surface the map is the whole surface and, beside it, the whole of layer 0, with
+  "@" drawn on the block you stand on as well (--radius N draws less of both). On the surface
+  "Y" is a tree, "," a stump, ":" a dirt path, '"' a meadow and "^" a stone outcrop. Underground
   the map reaches ${DEFAULT_RADIUS} cells each way, and is then trimmed: rows and columns at its edge that are
-  unseen are left out. If you have seen cells below the top layer that are off the map, the
-  "Map:" line says which --radius shows them. It says nothing about the top layer, which you
-  know all of from the start and which always goes on beyond a small map. The legend
+  unseen are left out. If you have seen cells of the drawn layers that are off the map, the
+  "Map:" line says which --radius shows them. The legend
   under the map names every other character in it. Then come known hazards and what ending the
   shift now would do. A line starting "Not on the list:" says why something you might look for
   is not offered: the drop is too long; you have not seen what is under the cell; you are in a
@@ -132,43 +143,63 @@ THE GAME
     if nothing holds you, you fall until something does. A ladder further down the shaft catches
     you, but the fall still counts.
   - There are two kinds of descent. A drop you choose as a move (walking off a ledge, or climbing
-    down off the bottom of a ladder) is free. A fall you did not choose as a move is not: if you
-    mine the block you stand on and no ladder holds you, you lose your footing and it costs
-    health from the first block.
+    down off the bottom of a ladder) is free. Digging down is safe too when you drop ${AVATAR.safeDigDownBlocks} block onto
+    rock: mine the block you stand on and you land on the block that was under it, unhurt. Any
+    other fall is not: if you dig down and there is nothing under the block you mined, you lose
+    your footing, and the whole fall, from where you stood, costs health from the first block.
   - What a fall of that kind costs: ${uncontrolledPerBlock} health for each of the first ${AVATAR.freeFallBlocks} blocks, ${AVATAR.fallDamagePerBlock} health for each
     block beyond that, and a fall of ${AVATAR.fatalFallBlocks} or more kills. So digging straight down under your own
-    feet costs ${uncontrolledPerBlock} health a layer. Nothing in this version of the game gives health back.
+    feet onto rock costs nothing; into an open space below, it costs from the first block. Nothing in this version of the game gives health back.
   - A ladder in your own cell holds you: place a ladder in your cell, then mine below, and you do
     not fall. That, or cutting steps sideways, is the safe way down.
-  - The action list says what mining the block you stand on will cost: how far you will fall and
-    the health you will lose, as far as you have seen the cells below. "1 block" means you have
-    seen where you land and what is under it. "1 block or more" means the cell under your
-    landing is unseen (the list names it): in a shaft one cell wide your lamp shows the floor,
-    not what is under the floor. "FATAL" means it will kill you.
+  - The action list says what mining the block you stand on will do, as far as you know the
+    cells below. You know the block you stand on (you touch it), not what is under it. Until you
+    have seen that cell the list says "you drop at least 1 block; if there is nothing under it
+    you will fall further and be hurt", and names the unseen cell. Once you have seen rock there
+    it says "you drop 1 block, no harm". "FATAL" means it will kill you.
   - After a fall you may stand in a pit with no move on the list: rock on all four sides, too
     high to step onto. A ladder in your cell and one in the cell above let you climb up.
 
   Mining
-  - Your pick reaches the 8 cells around you on your own layer (diagonals too) and the 9 cells
-    of the layer below under those and under you. You cannot mine the block over your head, or
-    anything else on the layer above.
+  - Your pick reaches the blocks that share a face with your cell: north, east, south and west
+    of you, and the block you stand on. No diagonals, and nothing on the layer below except the
+    block under your feet. The block over your head only with a support in your cell (supports
+    cannot be placed yet in this version of the game). To go down, dig the block you stand on;
+    to make a stair, mine the block ahead, walk in, dig down, and so on: you can walk back up it.
   - Each kind of rock costs its own AP (from ${lowestMineCost} for dirt to ${highestMineCost} for hard rock), shown in the list,
     and a block is mined in one action: if it costs more AP than you have left it is not on the
     list, a "Not on the list:" line names it with its cost, and it waits for the next shift.
   - What the block gives goes into your pack. If that would put you over your carry limit, it
     is left lying in the hole instead.
-  - Harder rock and different ores lie deeper. Timber-root, the only source of timber, grows
-    only in the upper layers.
+  - Harder rock and different ores lie deeper. Timber-root grows only in the upper layers;
+    the trees on the surface are the other source of timber.
+
+  The forest
+  - Most of the surface is forest. A tree blocks the way: you cannot walk or step up into it.
+    Dirt paths, meadows and stone outcrops are open ground; an outcrop stands over stone.
+    Some coal always lies in sight of where you start.
+  - Cut a tree beside you (north, east, south or west; ${SURFACE.cutTree.ap} AP) for ${cutYield}. It leaves a
+    stump, which is open ground. Timber too heavy to carry is left lying on the stump.
+  - A tree hides the ground under it: from the surface you see that block only once the tree
+    is cut, and you cannot mine down into it from the surface while the tree stands. From
+    underground you see and mine it like any other block.
+  - A tree grows back on a stump ${SURFACE.regrowShifts} shifts after the cut (the shift of the cut counts), at the
+    end of a shift, if the block under the stump is still there; if you or loose items are on
+    the stump then, it grows once the stump is clear. The block under it stays on your map.
+    The "If you end the shift now" line says where a tree will grow back.
 
   What you can see
-  - You know the whole top layer from the start. Below it you know what your lamp has shown.
+  - At the start you know only what is round you. Everywhere, top layer included, you know
+    what your light has shown: on the surface daylight does the lamp's work, lamp oil or not,
+    but never under a tree.
     Light spreads from you a few steps through open cells: round corners, never through rock.
-    You see every lit cell and every cell touching one.
-  - While your lamp is lit you also know the cells your pick can reach and the cell over your
-    head, and you can look over an edge: beside a drop, or on a ladder, you see far enough down
-    to judge the drop.
-  - Daylight does not shine down a hole: from the surface you see that a hole is there, not
-    what is at its bottom.
+    You see every lit cell and every cell touching one: only faces that open space shows.
+  - You always know the six cells touching your own (north, east, south, west, above, below).
+    Nothing else: not the block behind a wall, not what is under the floor of a cell beside you,
+    not the bottom of a drop your light does not reach.
+  - On the surface daylight spreads from you like your lamp's light: over open ground and down
+    into an open hole near you, a few steps through open cells. It gives no light underground:
+    once you are in the rock, only your lamp and torches light it.
   - What you have seen stays on the map. An unseen cell is "?" whether it is rock or open.
   - A torch lights the cells around it for good, the way your lamp does, and it needs no oil.
     Place it in your own cell or an open cell touching yours. A cell holds one thing: a ladder
@@ -186,19 +217,17 @@ THE GAME
 
   In the dark (lamp oil 0)
   - You learn only the six cells touching yours: north, east, south, west, above and below.
-    Nothing new diagonally, nothing new around the cell below you, and you cannot look down a
-    drop. On the surface daylight still shows you the top layer.
-  - You can mine any block you know. In the dark that is the walls beside you and the floor
-    under you, plus anything you saw earlier or a torch shows: diagonal blocks you saw while
-    the lamp was lit are still on the list.
+    Light shows you nothing more, so you see no further down a drop than the cell below you. On
+    the surface daylight still lights what is round you, as a lit lamp would.
+  - You can mine any block you know that your pick reaches: in the dark that is the walls beside
+    you and the floor under you, the same blocks as with the lamp lit.
   - A move is on the list only when you know every cell it depends on. In the dark you cannot
     walk into a cell unless you know what is under it, step up onto a cell you have not seen,
     or climb down off the foot of a ladder into a drop you have not seen. So you can go back
     the way you came, but a cell you have just dug open beside you cannot be entered: you do
     not know its floor.
-  - Digging straight down still works, but in the dark you do not know what is under the block
-    you stand on: the list says "N blocks or more" with the least health it will cost, and names
-    the unseen cell. The fall may be longer and cost more. A ladder in your own cell holds you while
+  - Digging straight down still works, and as with the lamp lit you do not know what is under the
+    block you stand on until you have seen it: the list says so and names the unseen cell. A ladder in your own cell holds you while
     you mine below, and from it you can feel the cell underneath.
   - You notice no mineral traces in the dark, even on the rock you touch: feeling a block is
     not seeing it. Traces you noticed earlier stay on the map, and a torch's light still shows

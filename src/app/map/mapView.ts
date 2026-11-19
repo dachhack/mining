@@ -9,7 +9,13 @@
 import { BLOCKS, SHIFT, WORLD } from '../../data';
 import type { BlockId } from '../../data';
 import type { Action, GameState } from '../../engine';
-import { choiceName, choiceWarning, describeChoice, layerName } from '../text/describe';
+import {
+  choiceName,
+  choiceWarning,
+  describeChoice,
+  layerName,
+  tapActsAtOnce,
+} from '../text/describe';
 import {
   VIEW_CELLS,
   cellAt,
@@ -26,10 +32,11 @@ import {
   MARK_COLOURS,
   PREVIEW_MAP,
   SURFACE_HAZE,
+  SURFACE_LOOKS,
   UNKNOWN_LOOK,
   UNLIT_BRIGHTNESS,
 } from './palette';
-import type { Pattern } from './palette';
+import type { Pattern, SurfaceMark } from './palette';
 import { actionsForCell } from './targets';
 import { buildLayer, layerContext } from './tiles';
 import type { LayerContext, Tile } from './tiles';
@@ -167,6 +174,64 @@ function drawPattern(
       ctx.fill();
       break;
     }
+    case 'tree':
+      // A fir: a triangle on a short trunk.
+      ctx.beginPath();
+      ctx.moveTo(x + mid, y + 0.12 * c);
+      ctx.lineTo(x + 0.8 * c, y + 0.7 * c);
+      ctx.lineTo(x + 0.2 * c, y + 0.7 * c);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillRect(x + 0.44 * c, y + 0.7 * c, 0.12 * c, 0.18 * c);
+      break;
+    case 'stump':
+      // A cut trunk seen from above: a ring with a dot.
+      ctx.lineWidth = Math.max(1.5, c / 8);
+      ctx.beginPath();
+      ctx.arc(x + mid, y + mid, c * 0.22, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(x + mid, y + mid, dot, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    case 'grass':
+      // Three tufts: little V shapes.
+      ctx.beginPath();
+      for (const [fx, fy] of [
+        [0.25, 0.4],
+        [0.65, 0.3],
+        [0.45, 0.75],
+      ] as const) {
+        ctx.moveTo(x + (fx - 0.08) * c, y + (fy - 0.1) * c);
+        ctx.lineTo(x + fx * c, y + fy * c);
+        ctx.lineTo(x + (fx + 0.08) * c, y + (fy - 0.1) * c);
+      }
+      ctx.stroke();
+      break;
+    case 'track':
+      // Two ruts, dashed, along the tile.
+      ctx.save();
+      ctx.setLineDash([c / 8, c / 10]);
+      ctx.beginPath();
+      for (const f of [0.35, 0.65]) {
+        ctx.moveTo(x + f * c, y + 0.1 * c);
+        ctx.lineTo(x + f * c, y + 0.9 * c);
+      }
+      ctx.stroke();
+      ctx.restore();
+      break;
+    case 'peak':
+      // A rock: an outlined peak.
+      ctx.lineWidth = Math.max(1.5, c / 9);
+      ctx.beginPath();
+      ctx.moveTo(x + 0.15 * c, y + 0.8 * c);
+      ctx.lineTo(x + 0.45 * c, y + 0.25 * c);
+      ctx.lineTo(x + 0.6 * c, y + 0.5 * c);
+      ctx.lineTo(x + 0.7 * c, y + 0.4 * c);
+      ctx.lineTo(x + 0.85 * c, y + 0.8 * c);
+      ctx.closePath();
+      ctx.stroke();
+      break;
     case 'grid':
       ctx.strokeRect(x + 0.2 * c, y + 0.2 * c, 0.6 * c, 0.6 * c);
       ctx.beginPath();
@@ -307,14 +372,27 @@ export function drawTile(
 ): void {
   if (tile.kind === 'unknown') {
     drawUnknown(ctx, x, y, c);
-  } else if (tile.ground !== null) {
-    // A surface cell: the ground under it, seen through pale open air.
-    const look = BLOCK_LOOKS[tile.ground];
-    ctx.fillStyle = look.colour;
+  } else if (tile.surface === 'tree') {
+    // A tree hides the ground under it (issue #70): drawn solid.
+    const look = SURFACE_LOOKS.tree;
+    ctx.fillStyle = look.haze;
     ctx.fillRect(x, y, c, c);
     drawPattern(ctx, look.pattern, x, y, c, look.ink);
-    ctx.fillStyle = SURFACE_HAZE;
+  } else if (tile.ground !== null || tile.surface !== null) {
+    // An open surface cell: the ground under it, seen through a haze of the
+    // cell's own kind, with that kind's pattern on top.
+    if (tile.ground !== null) {
+      const look = BLOCK_LOOKS[tile.ground];
+      ctx.fillStyle = look.colour;
+      ctx.fillRect(x, y, c, c);
+      drawPattern(ctx, look.pattern, x, y, c, look.ink);
+    }
+    const kind = tile.surface === null ? null : SURFACE_LOOKS[tile.surface];
+    ctx.fillStyle = kind === null ? SURFACE_HAZE : kind.haze;
     ctx.fillRect(x, y, c, c);
+    if (kind !== null) {
+      drawPattern(ctx, kind.pattern, x, y, c, kind.ink);
+    }
   } else {
     const look = BLOCK_LOOKS[tile.block ?? 'air'];
     ctx.fillStyle = look.colour;
@@ -352,6 +430,7 @@ function sampleTile(overrides: Partial<Tile>): Tile {
     miner: false,
     minerColumn: false,
     ground: null,
+    surface: null,
     ...overrides,
   };
 }
@@ -408,11 +487,25 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
       ),
     );
   }
+  // The surface kinds (issue #70), in a fixed order.
+  const surfaceLabels: [SurfaceMark, string][] = [
+    ['tree', 'tree (cut it; hides the ground)'],
+    ['stump', 'stump (a tree grows back)'],
+    ['path', 'dirt path'],
+    ['meadow', 'meadow'],
+    ['outcrop', 'stone outcrop'],
+  ];
+  const surfaceKinds = new Set(tiles.map((tile) => tile.surface));
+  for (const [kind, label] of surfaceLabels) {
+    if (surfaceKinds.has(kind)) {
+      entries.push(legendEntry(sampleTile({ kind: 'open', block: null, surface: kind }), label));
+    }
+  }
   if (tiles.some((tile) => tile.ground !== null)) {
     entries.push(
       legendEntry(
-        sampleTile({ kind: 'open', block: null, ground: 'dirt' }),
-        'surface (pale: the ground under it)',
+        sampleTile({ kind: 'open', block: null, ground: 'dirt', surface: 'meadow' }),
+        'open ground (pale: the ground under it)',
       ),
     );
   } else if (open) {
@@ -730,7 +823,9 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
       showHint(emptyTapHint(state, viewZ, cell.x, cell.y));
       return;
     }
-    if (actions.length === 1 && choiceWarning(state, only) === null) {
+    // One choice and nothing to confirm: take it at once. Digging down with
+    // only the "unseen below" note counts too (`tapActsAtOnce`).
+    if (actions.length === 1 && tapActsAtOnce(state, only)) {
       onChoose(only);
       return;
     }

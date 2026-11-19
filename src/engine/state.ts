@@ -15,7 +15,7 @@ import { createRng } from './rng';
 import type { RngState } from './rng';
 
 /** Bumped whenever the shape of GameState changes, so old saves can be told apart. */
-export const STATE_VERSION = 4;
+export const STATE_VERSION = 5;
 
 /** Some loose items lying in a cell. */
 export interface LooseItems {
@@ -112,6 +112,17 @@ export interface GameState {
    * through `showsMineralTraces`, which also checks the rock is still there.
    */
   tracesSeen: Uint8Array;
+
+  // The surface (issue #70; decision note 0020). Each of these has one entry
+  // per surface cell, that is per column of the cube: `size.x * size.y` in
+  // all. Read and change them only through src/engine/surface/state.ts.
+  /** The kind of each surface cell (`SURFACE.kinds` in src/data/surface.ts). 0 is meadow. */
+  surface: Uint8Array;
+  /**
+   * For a stump: how many shifts its count of `SURFACE.regrowShifts` has
+   * reached. 0 everywhere else.
+   */
+  stumpAge: Uint8Array;
 
   avatar: Avatar;
   /** Action points left in this shift. */
@@ -666,7 +677,7 @@ export function endRun(
 
 /**
  * A blank state for a cube of the given size: every cell open and unrevealed,
- * nothing carried, every gauge at 0 (health and air too), no camps, the avatar
+ * the surface open meadow everywhere, nothing carried, every gauge at 0 (health and air too), no camps, the avatar
  * at (0, 0) on the surface.
  * `createRun` and the test helper both start from this and fill it in.
  */
@@ -688,6 +699,10 @@ export function blankState(size: CubeSize, seed: number): GameState {
     cracks: new Uint8Array(cells),
     structures: new Uint8Array(cells),
     tracesSeen: new Uint8Array(cells),
+    // Every surface cell meadow (code 0): open ground, as the whole surface
+    // was before the forest. `createRun` grows the forest.
+    surface: new Uint8Array(size.x * size.y),
+    stumpAge: new Uint8Array(size.x * size.y),
     avatar: { pos: { x: 0, y: 0, z: WORLD.surfaceZ }, health: 0, air: 0, resting: false },
     ap: 0,
     fuel: 0,
@@ -725,6 +740,8 @@ export function cloneState(state: GameState): GameState {
     cracks: state.cracks.slice(),
     structures: state.structures.slice(),
     tracesSeen: state.tracesSeen.slice(),
+    surface: state.surface.slice(),
+    stumpAge: state.stumpAge.slice(),
     avatar: {
       pos: { ...state.avatar.pos },
       health: state.avatar.health,

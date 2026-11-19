@@ -158,4 +158,9 @@ export type GameEvent =
   /** Items went from the inventory into the stash of the camp at `camp`. */
   | { type: 'itemStashed'; camp: Vec3; item: string; count: number }
   /** Items went from the stash of the camp at `camp` into the inventory. */
-  | { type: 'itemUnstashed'; camp: Vec3; item: string; count: number };
+  | { type: 'itemUnstashed'; camp: Vec3; item: string; count: number }
+  // The surface forest (issue #70; decision note 0020).
+  /** The tree in the surface cell `pos` was cut; a stump is left. */
+  | { type: 'treeCut'; pos: Vec3 }
+  /** A tree grew back on the stump in the surface cell `pos`, at the end of a shift. */
+  | { type: 'treeGrew'; pos: Vec3 };

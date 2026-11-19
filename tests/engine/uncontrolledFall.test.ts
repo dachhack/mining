@@ -3,8 +3,12 @@
 //
 // - A chosen drop: walking off a ledge, or climbing down off the bottom of a
 //   ladder. 1 or 2 blocks, free, as before.
-// - An uncontrolled fall: the block under the miner was mined. It costs
-//   health from the first block.
+// - An uncontrolled fall: the block under the miner was mined and it fell
+//   further than the safe one-block drop. It costs health from the first
+//   block, counted from where the miner stood.
+// - Digging down onto footing one block below is the safe one-block drop of
+//   issue #75 (owner: "safe one-block drop", as in Minecraft), which replaces
+//   issue #34's "a single one-block shaft should be dangerous".
 //
 // Every test here goes through `applyAction` with nothing faked, so it also
 // checks that the dispatcher tells gravity which kind of fall it is.
@@ -60,7 +64,23 @@ describe('the data for an uncontrolled fall', () => {
 });
 
 describe('mining the block underfoot with nothing to hold the miner', () => {
-  it.each([1, 2])('costs health for a fall of %i block(s)', (distance) => {
+  it('is a safe drop for a fall of 1 block (issue #75)', () => {
+    expect(AVATAR.safeDigDownBlocks).toBe(1);
+    const { state: after, events } = mineUnderfoot(overVoid(0));
+    expect(after.avatar.pos).toEqual({ x: 1, y: 1, z: 1 });
+    expect(after.avatar.health).toBe(AVATAR.startHealth);
+    expect(events).toContainEqual({
+      type: 'fell',
+      from: { x: 1, y: 1, z: 0 },
+      to: { x: 1, y: 1, z: 1 },
+      distance: 1,
+      kind: 'chosenDrop',
+    });
+    expect(events.filter((event) => event.type === 'damageTaken')).toEqual([]);
+  });
+
+  it('costs health for a fall of 2 blocks', () => {
+    const distance = 2;
     const damage = distance * AVATAR.uncontrolledFallDamagePerBlock;
     expect(damage).toBeGreaterThan(0);
     const state = overVoid(distance - 1);
@@ -107,12 +127,13 @@ describe('mining the block underfoot with nothing to hold the miner', () => {
     },
   );
 
-  it('costs 1, 2, 4, 6 and 8 health for falls of 1 to 5 blocks', () => {
+  it('costs 0, 2, 4, 6 and 8 health for falls of 1 to 5 blocks', () => {
     const lost = [1, 2, 3, 4, 5].map((distance) => {
       const { state: after } = mineUnderfoot(overVoid(distance - 1, { health: 20 }));
       return 20 - after.avatar.health;
     });
-    expect(lost).toEqual([1, 2, 4, 6, 8]);
+    // A fall of 1 is the safe dig-down drop (issue #75); before it cost 1.
+    expect(lost).toEqual([0, 2, 4, 6, 8]);
   });
 
   it('is fatal for a fall of 6 blocks, whatever the health', () => {
@@ -123,8 +144,10 @@ describe('mining the block underfoot with nothing to hold the miner', () => {
     expect(events).toContainEqual({ type: 'runEnded', outcome: 'death', cause: 'fell' });
   });
 
-  it('ends the run with cause "fell" when a 1-block fall takes the last health', () => {
-    const state = overVoid(0, { health: AVATAR.uncontrolledFallDamagePerBlock });
+  it('ends the run with cause "fell" when a 2-block fall takes the last health', () => {
+    // A 2-block fall: the shortest that hurts since issue #75.
+    const lastHealth = 2 * AVATAR.uncontrolledFallDamagePerBlock;
+    const state = overVoid(1, { health: lastHealth });
 
     const { state: after, events } = mineUnderfoot(state);
 
@@ -132,7 +155,7 @@ describe('mining the block underfoot with nothing to hold the miner', () => {
     expect(after.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'fell' });
     expect(events).toContainEqual({
       type: 'damageTaken',
-      amount: AVATAR.uncontrolledFallDamagePerBlock,
+      amount: lastHealth,
       cause: 'fall',
       health: 0,
     });
@@ -230,30 +253,24 @@ describe('a chosen drop', () => {
 });
 
 describe('sinking a bare one-cell shaft by mining underfoot', () => {
-  it('kills in ten layers from full health', () => {
-    const layersToDie = Math.ceil(AVATAR.startHealth / AVATAR.uncontrolledFallDamagePerBlock);
-    expect(layersToDie).toBe(10);
-
+  it('costs nothing: each block dug underfoot is a safe one-block drop (issue #75)', () => {
+    // Before issue #75 this shaft killed in ten layers (issue #34). The owner
+    // replaced that with Minecraft's safe one-block drop.
+    const depth = 10;
     const layers: string[][] = [];
-    for (let z = 0; z < layersToDie + 2; z += 1) {
+    for (let z = 0; z < depth + 2; z += 1) {
       layers.push(SOLID);
     }
     // Plenty of AP: this test is about health, not about shifts.
     let state = buildState({ layers, avatar: { x: 1, y: 1, z: -1 }, ap: 1000 });
     updateReveal(state, []);
 
-    for (let layer = 1; layer < layersToDie; layer += 1) {
+    for (let layer = 0; layer < depth; layer += 1) {
       state = mineUnderfoot(state).state;
-      expect(state.avatar.pos.z).toBe(layer - 1);
-      expect(state.avatar.health).toBe(
-        AVATAR.startHealth - layer * AVATAR.uncontrolledFallDamagePerBlock,
-      );
+      expect(state.avatar.pos.z).toBe(layer);
+      expect(state.avatar.health).toBe(AVATAR.startHealth);
       expect(state.status).toEqual({ kind: 'active' });
     }
-
-    const last = mineUnderfoot(state);
-    expect(last.state.avatar.health).toBe(0);
-    expect(last.state.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'fell' });
   });
 
   it('costs nothing when a ladder is placed in the cell before each block is mined', () => {

@@ -16,10 +16,12 @@ import type { Action } from './actionTypes';
 import { legalCampActions, applyCampAction } from './actions/camp';
 import { legalCampToolActions, applyCampToolAction } from './actions/campTools';
 import { legalCraftActions, applyCraft } from './actions/craft';
+import { legalCutTreeActions, applyCutTree } from './actions/cutTree';
 import { legalGiveUpActions, applyGiveUp } from './actions/giveUp';
 import { legalDropActions, legalPickUpActions, applyDrop, applyPickUp } from './actions/items';
 import { legalLeaveActions, applyLeave } from './actions/leave';
-import { legalMineActions, applyMine } from './actions/mine';
+import { legalMineActions, applyMine, isDigDown } from './actions/mine';
+import { avatarFallDistance } from './footing';
 import { legalMoveActions, applyMove } from './actions/move';
 import { legalPlaceExplosiveActions, applyPlaceExplosive } from './actions/placeExplosive';
 import { legalPlaceLadderActions, applyPlaceLadder } from './actions/placeLadder';
@@ -33,6 +35,8 @@ import { isValidSeed } from './rng';
 import { forecastShift, runCubePhase, runUpkeep } from './shift';
 import type { ShiftForecast } from './shift';
 import { addItem, blankState, cloneState, isRunActive } from './state';
+import { ensureCoalInSight, generateSurface } from './surface/generation';
+import { regrowTrees } from './surface/regrowth';
 import { updateMineralTraces } from './tells';
 import type { GameState } from './state';
 
@@ -74,6 +78,8 @@ export function createRun(seed: number, contractId: string, loadoutId: string): 
   state.contractId = contractId;
   state.loadoutId = loadoutId;
   state.blocks = generateCube(state.size, state.rng);
+  // The forest on the surface (issue #70), drawn from the same generator.
+  generateSurface(state);
 
   state.avatar.pos = { ...WORLD.startPosition };
   state.avatar.health = AVATAR.startHealth;
@@ -85,6 +91,9 @@ export function createRun(seed: number, contractId: string, loadoutId: string): 
   for (const stack of loadout.items) {
     addItem(state, stack.item, stack.count);
   }
+  // Coal in sight at the start (owner's decision on PR #72): needs the miner
+  // on its start cell with its lamp, so it comes after the surface.
+  ensureCoalInSight(state);
 
   // Reveal what can be seen from the start. Nobody is watching yet, so the
   // events are dropped.
@@ -106,6 +115,7 @@ export function legalActions(state: GameState): Action[] {
   }
   const all: Action[] = [
     ...legalMoveActions(state),
+    ...legalCutTreeActions(state),
     ...legalMineActions(state),
     ...legalPlaceLadderActions(state),
     ...legalPlaceTorchActions(state),
@@ -194,15 +204,27 @@ export function applyAction(state: GameState, action: Action): StepResult {
     case 'giveUp':
       applyGiveUp(next, action, events);
       break;
+    case 'cutTree':
+      applyCutTree(next, action, events);
+      break;
   }
 
   // After any action: things fall, then light shows what is newly visible,
   // and any mineral traces on the blocks it falls on.
   // A fall straight after a move is one the player chose from the move list
-  // (a drop of 1 or 2 blocks, shown there). A fall after anything else, in
-  // practice after mining the block underfoot, is uncontrolled and costs
-  // health from the first block (design doc 5.2, decision note 0010).
-  const fallKind: FallKind = action.type === 'move' ? 'chosenDrop' : 'uncontrolled';
+  // (a drop of 1 or 2 blocks, shown there). A fall after anything else is
+  // uncontrolled and costs health from the first block (design doc 5.2,
+  // decision note 0010), except the safe one-block drop of digging down.
+  let fallKind: FallKind = action.type === 'move' ? 'chosenDrop' : 'uncontrolled';
+  // Digging out the block the avatar stands on (owner, issue #75): a drop of
+  // `AVATAR.safeDigDownBlocks` onto footing is safe, as in Minecraft; a longer
+  // fall is uncontrolled, counted from where the avatar stood. The fall is
+  // measured on the true cube, as `settle` does; what the player was told
+  // beforehand depends on known cells only (describe.ts).
+  if (action.type === 'mine' && isDigDown(state, action)) {
+    const distance = avatarFallDistance(next, next.avatar.pos);
+    fallKind = distance <= AVATAR.safeDigDownBlocks ? 'chosenDrop' : 'uncontrolled';
+  }
   settle(next, events, fallKind);
   updateReveal(next, events);
   updateMineralTraces(next, events);
@@ -215,8 +237,9 @@ export function applyAction(state: GameState, action: Action): StepResult {
  * changed. Throws if the run has already ended.
  *
  * The order: the cube phase's steps (a) to (e) (shift.ts); `settle` once (the
- * avatar and loose items fall if the phase took their floor); upkeep, if the
- * avatar is still alive; reveal. The forecast for the next shift is not
+ * avatar and loose items fall if the phase took their floor); if the avatar
+ * is still alive, trees grow back on stumps (surface/regrowth.ts) and then
+ * upkeep; reveal. The forecast for the next shift is not
  * stored: `previewCubePhase` works it out from the new state when asked.
  */
 export function endShift(state: GameState): StepResult {
@@ -232,6 +255,9 @@ export function endShift(state: GameState): StepResult {
   // avatar that step (e) already killed does not fall; loose items still do.
   settle(next, events, 'uncontrolled');
   if (isRunActive(next)) {
+    // Trees grow back on stumps left alone long enough (issue #70; decision
+    // note 0020): after the cube phase, before upkeep.
+    regrowTrees(next, events);
     runUpkeep(next, events);
   }
   // The light radius can change at upkeep (lamp oil running out).
@@ -260,6 +286,7 @@ export type {
   CampAction,
   CampToolAction,
   CraftAction,
+  CutTreeAction,
   DecommissionCampAction,
   DropAction,
   FoundCampAction,
@@ -339,4 +366,15 @@ export { showsMineralTraces, visibleMineralTraces } from './tells';
 // own (a simulator policy, say). They make their own state with `createRng`;
 // `state.rng` belongs to the rules.
 export { createRng, nextInt } from './rng';
+// The surface forest (issue #70): what each surface cell is, for the views
+// and tools. The surface is always seen, so these may be read freely.
+export {
+  hasStump,
+  hasTree,
+  isUnderTree,
+  stumpAgeAt,
+  surfaceCellAbove,
+  surfaceKindAt,
+} from './surface/state';
+export { shiftsUntilRegrowth } from './surface/regrowth';
 export type { RngState } from './rng';

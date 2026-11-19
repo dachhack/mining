@@ -7,6 +7,7 @@ import type { GameEvent } from '../events';
 import { cellBelow, hasLadder, knownFallDistance } from '../footing';
 import { isOpen, isRevealed } from '../state';
 import type { GameState } from '../state';
+import { hasTree } from '../surface/state';
 
 /**
  * The four sideways steps, in the fixed order the action list uses.
@@ -41,6 +42,8 @@ function moveTo(to: Vec3, drop: number): MoveAction {
  *   and has a ladder; climb to the cell below if it is open and either has a
  *   ladder or the avatar would end at most `AVATAR.maxChosenDropBlocks` below
  *   the cell it started in.
+ * - A surface cell with a tree in it is never walked or stepped up into
+ *   (issue #70); the surface is always seen, so this reads nothing hidden.
  * - No diagonal moves. The edge of the surface and of the cube need no check
  *   of their own: `blockAt` answers "bedrock" for everything beyond them.
  * - A move is offered only when every cell it is judged by is revealed
@@ -87,6 +90,10 @@ export function legalMoveActions(state: GameState): MoveAction[] {
       // avatar's are always revealed), but then nothing may be offered.
       continue;
     }
+    if (hasTree(state, beside)) {
+      // A tree blocks walking (issue #70): cut it first.
+      continue;
+    }
     if (isOpen(state, beside)) {
       // Walk. `drop` is 0 when the cell has footing, and `null` when the
       // drop cannot be judged from what the player has seen.
@@ -100,11 +107,15 @@ export function legalMoveActions(state: GameState): MoveAction[] {
       // before its content is read.
       const onTop = cellAbove(beside);
       const overhead = cellAbove(here);
+      // A tree overhead (a hole dug under one from the side) is a roof: no
+      // headroom to step up (review of PR #72).
       if (
         isRevealed(state, onTop) &&
         isOpen(state, onTop) &&
+        !hasTree(state, onTop) &&
         isRevealed(state, overhead) &&
-        isOpen(state, overhead)
+        isOpen(state, overhead) &&
+        !hasTree(state, overhead)
       ) {
         actions.push(moveTo(onTop, 0));
       }

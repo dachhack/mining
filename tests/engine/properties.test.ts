@@ -15,10 +15,13 @@ import {
   ITEMS,
   SHIFT,
   STRUCTURES,
+  TELLS,
+  WORLD,
 } from '../../src/data';
 import {
   applyAction,
   carriedWeight,
+  cellPosition,
   carryCapacity,
   createRun,
   endShift,
@@ -29,6 +32,7 @@ import {
   isRunActive,
   isSolid,
   isSurface,
+  isUnderTree,
   legalActions,
   previewCubePhase,
   serialise,
@@ -36,9 +40,14 @@ import {
 } from '../../src/engine';
 import type { GameState } from '../../src/engine';
 import type { Vec3 } from '../../src/data';
-import { cloneState, setBlock, setStructure } from '../../src/engine/state';
+import { cloneState, setBlock, setRevealed, setStructure } from '../../src/engine/state';
+import { updateReveal } from '../../src/engine/reveal';
+import { buildState } from './helpers';
 import { decisionKey, makePolicy } from '../../tools/policies';
 import { playRun } from '../../tools/simRun';
+import { buildView, renderView } from '../../src/app/text/view';
+import { buildLayer } from '../../src/app/map/tiles';
+import { choiceWarning, describeChoice } from '../../src/app/text/describe';
 
 const CONTRACT = CONTRACT_IDS[0] as string;
 
@@ -174,7 +183,11 @@ describe('property tests: random legal play', () => {
   // The seeds and lengths of the runs below.
   const WANDER_SEEDS = [1, 2, 3, 4, 5, 6];
   const WANDER_DECISIONS = 350;
-  const RANDOM_SEEDS = [101, 102, 103, 104, 105, 106, 107, 108];
+  // Seed 110 was added with the forest (issue #70): seed 107, whose run was
+  // the one still going after 150 decisions, now runs out of fuel at 147.
+  // Seed 123 took the place of seed 108 with issue #75: since then none of
+  // the others is still going after 150 decisions, and 123 is.
+  const RANDOM_SEEDS = [101, 102, 103, 104, 105, 106, 107, 123, 110];
   const RANDOM_DECISIONS = 150;
 
   // `wander` never leaves, so these runs go deep and long: most end out of
@@ -331,8 +344,10 @@ describe('property tests: unrevealed cells do not change the action list (issues
   // of checks asked for below. Without a fuel refill (issue #32) a wander run
   // ends out of fuel after about 120 to 250 decisions. (Issue #41 halved the
   // starting lamp oil, which shortened the runs of seeds 16 and 20 to just
-  // under the number needed, so seeds 19 and 37 took their place.)
-  it.each([11, 19, 37])(
+  // under the number needed, so seeds 19 and 37 took their place. Seed 5
+  // took the place of seed 11 with issue #75, whose run it shortened to 128
+  // decisions.)
+  it.each([5, 19, 37])(
     'with the lamp lit at the start, seed %i',
     (seed) => {
       const { checks } = playAndCheckUnseenCells(seed, null, 300, 4);
@@ -341,7 +356,12 @@ describe('property tests: unrevealed cells do not change the action list (issues
     UNSEEN_CELLS_TIMEOUT_MS,
   );
 
-  it.each([27, 34, 47])(
+  // Seed 23 took the place of seed 27 with the forest (issue #70), which
+  // shortened seed 27's run in the dark to 57 checks; seed 38 took the place
+  // of seed 23 when the top layer stopped being known from the start (73).
+  // Seeds 19 and 44 took the places of seeds 38 and 47 with issue #75, which
+  // shortened their runs in the dark to 75 and 67 checks.
+  it.each([19, 34, 44])(
     'with the lamp out from the start, seed %i',
     (seed) => {
       const { checks, checksWithLampOut } = playAndCheckUnseenCells(seed, 0, 300, 2);
@@ -361,6 +381,201 @@ describe('property tests: unrevealed cells do not change the action list (issues
       const { checks, checksWithLampOut } = playAndCheckUnseenCells(seed, 1, 120, 1);
       expect(checksWithLampOut).toBeGreaterThan(20);
       expect(checks - checksWithLampOut).toBeGreaterThan(5);
+    },
+    UNSEEN_CELLS_TIMEOUT_MS,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// The ground under a tree (issue #70 item 7)
+// ---------------------------------------------------------------------------
+//
+// "The ground under a tree is unrevealed until the tree is cut; nothing
+// offered, shown, forecast, or costed may depend on it." So after each
+// decision of a run, every unrevealed layer-0 block under a tree is changed,
+// all at once, in two ways (to coal; to open space), and the action list,
+// the forecast, the text view and the tap map's tiles of the surface and
+// layer 0 must come out the same as before.
+
+/** Everything the player is offered and shown, as one string. */
+function whatThePlayerGets(state: GameState): string {
+  const view = renderView(buildView(state, { radius: null, layers: 1, deepestZ: 0 }));
+  const window = { x0: 0, y0: 0, size: state.size.x };
+  const tiles = [WORLD.surfaceZ, 0].map((z) => buildLayer(state, z, window));
+  return JSON.stringify({
+    actions: legalActions(state),
+    forecast: isRunActive(state) ? previewCubePhase(state) : null,
+    view,
+    tiles,
+  });
+}
+
+/** A copy of `state` with every unseen block under a tree set to `blockCode`. */
+function withGroundUnderTrees(state: GameState, blockCode: number): GameState {
+  const copy = cloneState(state);
+  for (let y = 0; y < state.size.y; y += 1) {
+    for (let x = 0; x < state.size.x; x += 1) {
+      const ground = { x, y, z: 0 };
+      if (isUnderTree(state, ground) && !isRevealed(state, ground)) {
+        setBlock(copy, ground, blockCode);
+      }
+    }
+  }
+  return copy;
+}
+
+/** Play a run, checking after every `every`-th decision. Returns the number of checks. */
+function playAndCheckGroundUnderTrees(
+  seed: number,
+  policyName: string,
+  maxDecisions: number,
+  every: number,
+): number {
+  const policy = makePolicy(policyName, seed);
+  let state = createRun(seed, CONTRACT, DEFAULT_LOADOUT_ID);
+  let checks = 0;
+  for (let step = 0; step <= maxDecisions && isRunActive(state); step += 1) {
+    if (step % every === 0) {
+      const before = whatThePlayerGets(state);
+      for (const code of [BLOCKS.coalSeam.code, BLOCKS.air.code]) {
+        const label = `seed ${seed}, ${policyName}, decision ${step}, ground set to ${code}`;
+        expect(whatThePlayerGets(withGroundUnderTrees(state, code)) === before, label).toBe(true);
+      }
+      checks += 1;
+    }
+    const decision = policy.decide(state);
+    state = decision === 'endShift' ? endShift(state).state : applyAction(state, decision).state;
+  }
+  return checks;
+}
+
+describe('property tests: the ground under a tree changes nothing the player gets (issue #70)', () => {
+  // Seeds whose wander or random run cuts trees on the surface (182 cuts eight
+  // and sees three grow back: tests/golden), and two that dig near the start.
+  // (Random seed 123 took the place of 110 with issue #75: seed 110's random
+  // run now leaves the cube after 6 decisions.)
+  // (The coal policy now finds coal in sight within a few steps and leaves.)
+  it.each([
+    [182, 'wander'],
+    [46, 'wander'],
+    [3, 'wander'],
+    [123, 'random'],
+  ])(
+    'seed %i, %s policy',
+    (seed, policyName) => {
+      const checks = playAndCheckGroundUnderTrees(seed, policyName, 120, 3);
+      expect(checks).toBeGreaterThan(10);
+    },
+    UNSEEN_CELLS_TIMEOUT_MS,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Only exposed faces are known (issue #75 item 5)
+// ---------------------------------------------------------------------------
+//
+// The pick no longer shows the cells it could reach, the cell overhead or
+// what lies over an edge. So along a dig, every cell the player has not seen
+// is changed, all at once (to open space; to stone), and what the player is
+// offered and shown (the action list with its descriptions and the warnings
+// the tap map asks about, the forecast,
+// the text view and the tap map of the miner's layer and the layers next to
+// it) must come out the same. Ore is left alone: mineral traces on seen rock
+// tell of nearby ore by design (decision note 0012).
+
+/** A copy of `state` with every unseen cell that is not ore set to `blockCode`. */
+function withUnseenCells(state: GameState, blockCode: number): GameState {
+  const copy = cloneState(state);
+  const oreCodes = TELLS.mineralTraces.sourceBlocks.map(
+    (id) => BLOCKS[id as keyof typeof BLOCKS].code,
+  );
+  for (let index = 0; index < state.blocks.length; index += 1) {
+    const pos = cellPosition(state.size, index);
+    if (!isRevealed(state, pos) && !oreCodes.includes(state.blocks[index] as number)) {
+      setBlock(copy, pos, blockCode);
+    }
+  }
+  return copy;
+}
+
+/** What the player gets, with the tap map of the miner's layer and those above and below. */
+function whatThePlayerGetsNearTheMiner(state: GameState): string {
+  const z = state.avatar.pos.z;
+  const window = { x0: 0, y0: 0, size: state.size.x };
+  const layers = [z - 1, z, z + 1].filter(
+    (layer) => layer >= WORLD.surfaceZ && layer < state.size.z,
+  );
+  return JSON.stringify({
+    actions: legalActions(state).map((action) => [
+      action,
+      describeChoice(state, action),
+      choiceWarning(state, action),
+    ]),
+    forecast: isRunActive(state) ? previewCubePhase(state) : null,
+    view: renderView(buildView(state, { radius: 4, layers: 1, deepestZ: z })),
+    tiles: layers.map((layer) => buildLayer(state, layer, window)),
+  });
+}
+
+describe('property tests: unseen cells change nothing the player gets (issue #75)', () => {
+  // A state no policy reaches: the cell under the block underfoot is known
+  // to be open, and the one under that is unseen. The dig-down text then
+  // says "you will fall 2 blocks or more ... unseen", and must not depend on
+  // what the unseen cell holds (review of PR #74).
+  it('a known open cell under the block underfoot, and an unseen one below it', () => {
+    const solid = ['#####', '#####', '#####', '#####', '#####'];
+    const pocket = ['#####', '#####', '##.##', '#####', '#####'];
+    const state = buildState({
+      layers: [solid, pocket, solid, pocket, solid, solid, solid, solid],
+      avatar: { x: 2, y: 2, z: 1 },
+    });
+    updateReveal(state, []);
+    // As if seen earlier from a side tunnel.
+    setRevealed(state, { x: 2, y: 2, z: 3 }, true);
+    expect(isRevealed(state, { x: 2, y: 2, z: 4 })).toBe(false);
+    const before = whatThePlayerGetsNearTheMiner(state);
+    expect(before).toContain('you will fall 2 blocks or more');
+    for (const code of [BLOCKS.air.code, BLOCKS.stone.code]) {
+      expect(whatThePlayerGetsNearTheMiner(withUnseenCells(state, code)) === before).toBe(true);
+    }
+  });
+
+  it.each([
+    [8, 'staircase'],
+    [11, 'staircase'],
+    [9, 'wander'],
+  ])(
+    'seed %i, %s policy',
+    (seed, policyName) => {
+      const policy = makePolicy(policyName, seed);
+      let state = createRun(seed, CONTRACT, DEFAULT_LOADOUT_ID);
+      let checks = 0;
+      let digsDown = 0;
+      for (let step = 0; step <= 90 && isRunActive(state); step += 1) {
+        if (step % 3 === 0) {
+          const before = whatThePlayerGetsNearTheMiner(state);
+          for (const code of [BLOCKS.air.code, BLOCKS.stone.code]) {
+            const label = `seed ${seed}, ${policyName}, decision ${step}, unseen cells set to ${code}`;
+            expect(
+              whatThePlayerGetsNearTheMiner(withUnseenCells(state, code)) === before,
+              label,
+            ).toBe(true);
+          }
+          checks += 1;
+        }
+        const decision = policy.decide(state);
+        if (decision !== 'endShift' && decision.type === 'mine') {
+          const here = state.avatar.pos;
+          if (decision.target.x === here.x && decision.target.y === here.y) {
+            digsDown += 1;
+          }
+        }
+        state =
+          decision === 'endShift' ? endShift(state).state : applyAction(state, decision).state;
+      }
+      expect(checks).toBeGreaterThan(10);
+      // The runs do dig down, so the dig-down text is among what is checked.
+      expect(digsDown).toBeGreaterThan(1);
     },
     UNSEEN_CELLS_TIMEOUT_MS,
   );

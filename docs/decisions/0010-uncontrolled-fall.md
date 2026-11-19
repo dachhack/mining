@@ -2,6 +2,8 @@
 
 Date: 2026-11-18. Status: the direction is the owner's answer to question 42 ("a single one-block shaft should be dangerous"); the form below is the coordinator's assumed default for it (issue #34), for the owner to confirm. It changes decision note 0005 item 7. In design doc 5.2 it rewords the first sentence of the fall bullet ("A chosen drop of 1–2 blocks is free") and adds the sentences on uncontrolled falls and on a ladder preventing the fall.
 
+**Changed by 0022 (owner, issue #75):** digging down onto rock is now a safe one-block drop, as in Minecraft (`AVATAR.safeDigDownBlocks`). A dig down that ends in a longer fall is still uncontrolled, counted from where the miner stood, and costs health from the first block as below. A bare one-cell shaft is no longer dangerous in itself; the danger is digging into an unseen open space.
+
 ## Context
 
 In playtest round m1-r1 (finding 3, issue #23) the fastest way down was a bare one-cell shaft: mine the block underfoot, drop 1 block for free, repeat. It needed no ladders and no steps and carried no risk, because design doc 5.2 made every fall of 1–2 blocks free.
