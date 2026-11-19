@@ -127,7 +127,6 @@ export const UNLIT_BRIGHTNESS = 0.45;
 export const MARK_COLOURS = {
   miner: '#ff5a36',
   minerOutline: '#ffffff',
-  ladder: '#f0c060',
   torch: '#ff9d2e',
   torchCore: '#fff2a8',
   support: '#e8e0d0',

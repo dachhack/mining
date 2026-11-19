@@ -109,7 +109,7 @@ const HEADINGS: Vec3[] = [
 ];
 
 /**
- * A policy that cuts a staircase down to `targetLayer`, climbs back up it,
+ * A policy that cuts a staircase down to `targetLayer`, goes back up it,
  * and leaves from the surface.
  *
  * The pick reaches face neighbours only (issue #75), so a stair is dug the
@@ -124,10 +124,11 @@ const HEADINGS: Vec3[] = [
  *    cell beside is open air). That is also the headroom the avatar needs
  *    to step back up later.
  * 2. Walk into it. Its floor is the next stair.
- * 3. Mine the block underfoot: a safe one-block drop (issue #75). The avatar
+ * 3. Mine the block underfoot: the avatar moves down into it (issue #75). It
  *    is now one layer lower and one cell along.
  *
- * Going back up is then one "step up" move per stair. No ladders are used.
+ * Going back up, it retraces the cells it went down through, one move each
+ * (the miner has no gravity, issue #80: it can move up into any open cell).
  *
  * The surface is a forest (issue #70): the ground under a tree cannot be
  * mined from the surface, and a tree cannot be walked into. So before the
@@ -135,8 +136,8 @@ const HEADINGS: Vec3[] = [
  * there is one. Underground, trees do not matter.
  *
  * At the edge of the cube the staircase turns right (east, south, west,
- * north). It never turns straight back: that would mine the stair the avatar
- * has to climb.
+ * north). It never turns straight back: that would mine the stair it has
+ * just dug.
  *
  * When the action it wants is not legal, the only cause the policy expects
  * is too few AP, so it ends the shift. If the action is still not legal with
@@ -150,6 +151,10 @@ export function makeStaircasePolicy(targetLayer: number): Policy {
   // True once the avatar has walked into the cell of the next stair and has
   // not yet dug down from it.
   let stepped = false;
+  // Every cell the avatar has stood in on the way down, in order, so that it
+  // can go back up the same way. A new cell is noted when `decide` sees the
+  // avatar in it.
+  const trail: Vec3[] = [];
 
   /** Take `wanted` if it is legal; otherwise end the shift, or throw if stuck. */
   function takeOrWait(state: GameState, wanted: Action | undefined, what: string): Decision {
@@ -189,7 +194,7 @@ export function makeStaircasePolicy(targetLayer: number): Policy {
     const here = state.avatar.pos;
     const legal = legalActions(state);
 
-    // 3. Standing on the next stair: dig down (a safe one-block drop).
+    // 3. Standing on the next stair: dig down (the avatar moves down into it).
     if (stepped) {
       const below = { x: here.x, y: here.y, z: here.z + 1 };
       const dig = legal.find((action) => action.type === 'mine' && sameCell(action.target, below));
@@ -214,10 +219,8 @@ export function makeStaircasePolicy(targetLayer: number): Policy {
       );
       return takeOrWait(state, mine, 'mine the block beside the avatar');
     }
-    // 2. Walk onto the next stair (it has a floor: nothing has dug under it).
-    const walk = legal.find(
-      (action) => action.type === 'move' && sameCell(action.to, beside) && action.drop === 0,
-    );
+    // 2. Walk onto the next stair.
+    const walk = legal.find((action) => action.type === 'move' && sameCell(action.to, beside));
     if (walk !== undefined) {
       stepped = true;
     }
@@ -230,13 +233,19 @@ export function makeStaircasePolicy(targetLayer: number): Policy {
       const leave = legalActions(state).find((action) => action.type === 'leave');
       return takeOrWait(state, leave, 'leave from the surface');
     }
-    // Below the top layer exactly one move goes up a layer: the step back
-    // onto the stair the avatar came down from. From the top layer there can
-    // be several ways up onto the surface; the first will do.
-    const stepUp = legalActions(state).find(
-      (action) => action.type === 'move' && action.to.z === here.z - 1,
-    );
-    return takeOrWait(state, stepUp, 'step up the staircase');
+    // Back along the trail: the cell before this one. `trail` ends with the
+    // avatar's own cell (see `decide`), and its first cell is on the surface.
+    if (trail.length >= 2 && sameCell(trail[trail.length - 1] as Vec3, here)) {
+      const previous = trail[trail.length - 2] as Vec3;
+      const back = legalActions(state).find(
+        (action) => action.type === 'move' && sameCell(action.to, previous),
+      );
+      if (back !== undefined) {
+        trail.pop();
+      }
+      return takeOrWait(state, back, 'go back up the staircase');
+    }
+    throw new Error('staircase policy: lost its trail on the way up');
   }
 
   return {
@@ -247,7 +256,12 @@ export function makeStaircasePolicy(targetLayer: number): Policy {
           `staircase target layer must be a whole number from 0 to ${state.size.z - 1}, but is ${targetLayer}`,
         );
       }
-      if (goingDown && state.avatar.pos.z >= targetLayer) {
+      const here = state.avatar.pos;
+      const last = trail[trail.length - 1];
+      if (goingDown && (last === undefined || !sameCell(last, here))) {
+        trail.push({ ...here });
+      }
+      if (goingDown && here.z >= targetLayer) {
         goingDown = false;
       }
       return goingDown ? decideGoingDown(state) : decideGoingUp(state);
@@ -303,9 +317,8 @@ function isKnownCoal(state: GameState, pos: Vec3): boolean {
  * The first known coal block the pick can reach from the cell `stand`, or
  * `undefined` if there is none. The pick reaches face neighbours only
  * (issue #75):
- * - from the surface, the block underfoot (digging it is a safe one-block
- *   drop when the block under it is solid, and the miner is then in the hole
- *   the coal left);
+ * - from the surface, the block underfoot (digging it moves the miner down
+ *   into the hole the coal left);
  * - in a hole, the blocks north, east, south and west of the miner. The
  *   block underfoot is left out there: the policy goes no deeper than one
  *   block, so it can always step back up.
@@ -390,18 +403,19 @@ function routeOverSurface(
  *
  * Each time it is asked, the first of these that applies:
  * 1. It has crafted fuel and the gauge is back to at least what the run
- *    started with: go home (step up out of a hole if it is in one, and leave).
+ *    started with: go home (move up out of a hole if it is in one, and leave).
  * 2. It carries timber (from cutting trees): drop it, so coal always fits.
  *    It carries coal: craft fuel from it.
  * 3. Standing in a hole: mine coal in reach (north, east, south or west of
- *    it), and step back up when none is.
+ *    it), and move back up when none is.
  * 4. On the surface:
- *    a. standing over known coal: dig it out from underfoot (a safe
- *       one-block drop; issue #75), which leaves the miner in the hole;
+ *    a. standing over known coal: dig it out from underfoot (issue #75),
+ *       which leaves the miner in the hole;
  *    b. known coal under open ground can be walked to: take one step
  *       towards the nearest;
  *    c. a hole it has not been down shows coal at the bottom or beside it
- *       from inside: walk to it and step in (a drop of one block);
+ *       from inside: walk to it, onto the surface cell over it, and move
+ *       down into it;
  *    d. no coal in sight (the forest hides much of the top layer; issue
  *       #70): dig a look-hole. Walk onto an open surface cell whose floor is
  *       cheap rock and whose hole would show cells not seen yet, and dig
@@ -414,10 +428,10 @@ function routeOverSurface(
  *    f. otherwise give up and leave.
  *
  * It uses only what a player sees. It digs down only from the surface, into
- * the top layer, so every drop is the safe one-block drop when the block
- * under is solid, and it can always step back up; it uses no ladders. It
- * goes no deeper than one block; that makes it a careful player, not the
- * best one.
+ * the top layer, and goes no deeper than one block; that makes it a careful
+ * player, not the best one. Its walks over the surface keep to cells with a
+ * floor under them, a habit from when the miner could fall (issue #80 took
+ * gravity away); it changes only the route, never what is legal.
  *
  * When the action it wants costs more AP than are left it ends the shift; if
  * the action is missing even with full AP it throws, as the staircase does.
@@ -433,6 +447,9 @@ export function makeCoalPolicy(): Policy {
   // Holes left where it mined top-layer coal, as "x,y": coal comes in veins,
   // so the ground round such a hole is worth a look from inside.
   const coalHoles = new Set<string>();
+  // The surface cell, as "x,y", the miner has just walked onto to move down
+  // into the hole under it (step 4c); `null` when there is none.
+  let enteringHole: string | null = null;
 
   function takeOrWait(state: GameState, wanted: Action | undefined, what: string): Decision {
     if (wanted !== undefined) {
@@ -518,7 +535,9 @@ export function makeCoalPolicy(): Policy {
       const onSurface = isSurface(state.size, here);
       const legal = legalActions(state);
       const leave = legal.find((action) => action.type === 'leave');
-      const stepUp = legal.find((action) => action.type === 'move' && action.to.z === here.z - 1);
+      const moveUp = legal.find(
+        (action) => action.type === 'move' && sameCell(action.to, { ...here, z: here.z - 1 }),
+      );
       const mineCoal = (coal: Vec3 | undefined): Action | undefined => {
         const found = legal.find(
           (action) => action.type === 'mine' && coal !== undefined && sameCell(action.target, coal),
@@ -533,7 +552,7 @@ export function makeCoalPolicy(): Policy {
       if (hasCraftedFuel && state.fuel >= fuelAtStart) {
         return onSurface
           ? takeOrWait(state, leave, 'leave from the surface')
-          : takeOrWait(state, stepUp, 'step up out of the hole');
+          : takeOrWait(state, moveUp, 'move up out of the hole');
       }
       // 2a. Timber from cut trees is no use to this trip and weighs the pack
       // down, so that coal no longer fits: drop it (0 AP).
@@ -561,7 +580,19 @@ export function makeCoalPolicy(): Policy {
         const coal = coalInReach(state, here);
         return coal !== undefined
           ? takeOrWait(state, mineCoal(coal), 'mine the coal in reach')
-          : takeOrWait(state, stepUp, 'step up out of the hole');
+          : takeOrWait(state, moveUp, 'move up out of the hole');
+      }
+      // 4c, second half: standing over the hole it chose, move down into it.
+      if (enteringHole !== null && enteringHole === `${here.x},${here.y}`) {
+        enteringHole = null;
+        const down = legal.find(
+          (action) => action.type === 'move' && sameCell(action.to, floorUnder(here)),
+        );
+        if (down !== undefined || state.ap >= SHIFT.apPerShift) {
+          return takeOrWait(state, down, 'move down into the hole');
+        }
+        enteringHole = `${here.x},${here.y}`;
+        return 'endShift';
       }
       // 4a and 4b. Top-layer coal, worked from the surface.
       const toCoal = routeOverSurface(
@@ -586,7 +617,7 @@ export function makeCoalPolicy(): Policy {
       let route: SurfaceRoute | undefined = isNear(toHole) ? toHole : toCoal;
       if (route === undefined) {
         // 4d. Dig a look-hole at the nearest good spot: walk onto it and dig
-        // down (a safe one-block drop into the hole).
+        // down (the miner moves down into the hole).
         const toSpot =
           lookHolesDug < LOOK_HOLES_MAX && state.lampOil > 0
             ? routeOverSurface(state, (cell: Vec3): boolean => isLookHoleSpot(state, cell))
@@ -594,8 +625,7 @@ export function makeCoalPolicy(): Policy {
         if (toSpot !== undefined && toSpot.firstStep !== undefined) {
           const nextCell = toSpot.firstStep;
           const walk = legal.find(
-            (action) =>
-              action.type === 'move' && sameCell(action.to, nextCell) && action.drop === 0,
+            (action) => action.type === 'move' && sameCell(action.to, nextCell),
           );
           return takeOrWait(state, walk, 'walk towards a look-hole');
         }
@@ -626,8 +656,7 @@ export function makeCoalPolicy(): Policy {
         if (toTree !== undefined && toTree.firstStep !== undefined) {
           const nextCell = toTree.firstStep;
           const walk = legal.find(
-            (action) =>
-              action.type === 'move' && sameCell(action.to, nextCell) && action.drop === 0,
+            (action) => action.type === 'move' && sameCell(action.to, nextCell),
           );
           return takeOrWait(state, walk, 'walk towards a tree');
         }
@@ -645,29 +674,21 @@ export function makeCoalPolicy(): Policy {
         return takeOrWait(state, leave, 'leave from the surface');
       }
       if (route.firstStep === undefined) {
+        // Beside the hole: walk onto the surface cell over it; the next call
+        // moves down into it (4c, second half above). The hole is tried once.
         const hole = holeBeside(state, here);
-        const stepIn = legal.find(
-          (action) =>
-            action.type === 'move' &&
-            hole !== undefined &&
-            sameCell(action.to, hole) &&
-            action.drop === 1,
+        const stepOver = legal.find(
+          (action) => action.type === 'move' && hole !== undefined && sameCell(action.to, hole),
         );
-        if (hole !== undefined && (stepIn !== undefined || state.ap >= SHIFT.apPerShift)) {
-          // Tried once, whether the step in is offered or not: with the lamp
-          // out the drop cannot be seen, and a deeper hole is not a drop of 1.
+        if (hole !== undefined && stepOver !== undefined) {
           holesTried.add(`${hole.x},${hole.y}`);
-          if (stepIn === undefined) {
-            return decide(state);
-          }
+          enteringHole = `${hole.x},${hole.y}`;
         }
-        return takeOrWait(state, stepIn, 'step into the hole');
+        return takeOrWait(state, stepOver, 'walk over the hole');
       }
       // Walk one step along the route (to coal, or to a hole).
       const nextCell = route.firstStep;
-      const walk = legal.find(
-        (action) => action.type === 'move' && sameCell(action.to, nextCell) && action.drop === 0,
-      );
+      const walk = legal.find((action) => action.type === 'move' && sameCell(action.to, nextCell));
       return takeOrWait(state, walk, 'walk over the surface');
     }
   }

@@ -6,7 +6,6 @@
 // in reach, all of them revealed) and from the data tables.
 
 import {
-  AVATAR,
   BLOCKS,
   STRUCTURES,
   SURFACE,
@@ -21,13 +20,9 @@ import {
   blockDefAt,
   canCarry,
   countItem,
-  fallDamage,
-  isFatalFall,
   isRevealed,
-  isSolid,
   looseItemsAt,
   showsMineralTraces,
-  structureAt,
 } from '../../engine';
 import type { Action, GameEvent, GameState } from '../../engine';
 import type { LogEntry } from './log';
@@ -73,107 +68,18 @@ function whereFrom(from: Vec3, to: Vec3): string {
   return `${side}, one layer ${dz < 0 ? 'up' : 'down'}`;
 }
 
+/** True if `target` is the block directly below `here`: mining it is digging down. */
+function isDigDownTarget(here: Vec3, target: Vec3): boolean {
+  return target.x === here.x && target.y === here.y && target.z === here.z + 1;
+}
+
 function blocksText(count: number): string {
   return count === 1 ? '1 block' : `${count} blocks`;
-}
-
-/**
- * What the player knows about the drop that follows mining the block the
- * avatar stands on (digging down; owner, issue #75).
- *
- * Digging down drops the avatar into the cell of the block it mined. If the
- * cell under that one gives footing, that is a safe one-block drop
- * (`AVATAR.safeDigDownBlocks`), as in Minecraft. If not, the avatar keeps
- * falling, and the whole fall, counted from where it stood, is uncontrolled
- * and hurts (decision note 0010).
- *
- * Worked out from revealed cells only. The column under the mined block is
- * walked downwards; at the first cell the player has not seen the answer
- * stops, and says only what could happen, so the text cannot give away what
- * that cell holds (issue #75 item 2).
- */
-function knownFallText(state: GameState): string {
-  const drop = knownDigDownDrop(state);
-  if (drop.kind === 'ladder') {
-    return 'your ladder holds you, you will not fall';
-  }
-  const fall = drop.blocks;
-  if (drop.kind === 'unseen') {
-    const unseen = layerName(drop.unseenZ);
-    if (fall <= AVATAR.safeDigDownBlocks) {
-      return `you drop at least ${blocksText(fall)}; if there is nothing under it (${unseen}, unseen) you will fall further and be hurt`;
-    }
-    const cost = fallDamage('uncontrolled', fall);
-    return `you will fall ${blocksText(fall)} or more and lose at least ${cost} health; the cell under that (${unseen}) is unseen`;
-  }
-  if (fall <= AVATAR.safeDigDownBlocks) {
-    return `you drop ${blocksText(fall)}, no harm`;
-  }
-  // A known fall longer than the safe drop: uncontrolled from the first block.
-  const cost = fallDamage('uncontrolled', fall);
-  const harm =
-    isFatalFall(fall) || cost >= state.avatar.health ? ', FATAL' : ` and lose ${cost} health`;
-  return `you will fall ${blocksText(fall)}${harm}`;
-}
-
-/**
- * What the player knows of the drop that digging down would cause. One of:
- * - `{ kind: 'ladder' }`: a ladder in the avatar's own cell holds it;
- * - `{ kind: 'known', blocks }`: the whole fall is known, `blocks` long;
- * - `{ kind: 'unseen', blocks, unseenZ }`: the avatar falls at least
- *   `blocks`, and the layer `unseenZ` cell that decides whether it falls on
- *   is unseen.
- *
- * Read from revealed cells only. With the block gone the avatar drops into
- * its cell: a fall of 1. It falls on while the cell below is open and has no
- * ladder. The walk stops at the first unseen cell, so nothing here depends on
- * what that cell holds (issue #75 item 2). `knownFallText` and
- * `digDownIsKnownSafe` both use it, so the list and the tap map cannot
- * disagree.
- */
-type DigDownDrop =
-  | { kind: 'ladder' }
-  | { kind: 'known'; blocks: number }
-  | { kind: 'unseen'; blocks: number; unseenZ: number };
-
-function knownDigDownDrop(state: GameState): DigDownDrop {
-  const here = state.avatar.pos;
-  if (structureAt(state, here) === STRUCTURES.ladder.code) {
-    return { kind: 'ladder' };
-  }
-  let fall = 1;
-  for (;;) {
-    const below = { x: here.x, y: here.y, z: here.z + fall + 1 };
-    if (!isRevealed(state, below)) {
-      return { kind: 'unseen', blocks: fall, unseenZ: below.z };
-    }
-    if (isSolid(state, below)) {
-      return { kind: 'known', blocks: fall };
-    }
-    fall += 1;
-    if (structureAt(state, below) === STRUCTURES.ladder.code) {
-      return { kind: 'known', blocks: fall }; // a ladder further down catches the fall
-    }
-  }
-}
-
-/**
- * True if the drop that digging down would cause is known to be safe: a
- * ladder holds the avatar, or the whole drop is known and no longer than
- * `AVATAR.safeDigDownBlocks`. For the tap map: such a dig needs no warning.
- */
-function digDownIsKnownSafe(state: GameState): boolean {
-  const drop = knownDigDownDrop(state);
-  if (drop.kind === 'ladder') {
-    return true;
-  }
-  return drop.kind === 'known' && drop.blocks <= AVATAR.safeDigDownBlocks;
 }
 
 /** What the player is told when the run is over, in words (the engine's ids are not shown). */
 const RUN_END_TEXT: Record<string, string> = {
   left: 'you left the cube alive with what you carried (a "salvage" run)',
-  fell: 'you died of a fall',
   outOfFuel: 'you ran out of fuel and died',
 };
 
@@ -185,7 +91,7 @@ export function runEndText(cause: string): string {
 /**
  * What mining the revealed block at `target` gives: "Stone, mineral traces,
  * gives 1 Stone". `underfoot` is put after the block's name; it is the note
- * about the fall for the block the avatar stands on, and '' otherwise.
+ * for the block the avatar stands on, and '' otherwise.
  */
 function mineOutcomeText(state: GameState, target: Vec3, underfoot: string): string {
   const block = blockDefAt(state, target);
@@ -200,10 +106,9 @@ function mineOutcomeText(state: GameState, target: Vec3, underfoot: string): str
 /**
  * How a choice is worded: `'choice'` for the action list and the chooser,
  * before it is taken; `'result'` for the line that says what was done,
- * after it (see `takeTurn`). The result form leaves out the warning about
- * the fall a dig down may cause: that is a forecast, in the future tense, and
- * once the dig is done the event lines say in the past tense what happened
- * ("You dropped 1 block.", or the fall and the health it cost) (review of
+ * after it (see `takeTurn`). The result form leaves out the note on a dig
+ * down that the miner will move into the dug cell: that is in the future
+ * tense, and the view after the dig shows where the miner is (review of
  * PR #74).
  */
 export type ChoiceForm = 'choice' | 'result';
@@ -212,29 +117,20 @@ function describeAction(state: GameState, action: Action, form: ChoiceForm): str
   const here = state.avatar.pos;
   switch (action.type) {
     case 'move': {
+      // The miner has no gravity (issue #80): a move goes 1 block to any
+      // open face neighbour and ends there.
       const side = compass(action.to.x - here.x, action.to.y - here.y);
-      const landsOn = layerName(action.to.z + action.drop);
-      const drop = action.drop > 0 ? `, then drop ${blocksText(action.drop)} to ${landsOn}` : '';
-      if (side === '') {
-        return action.to.z < here.z
-          ? `Climb up the ladder to ${layerName(action.to.z)}`
-          : `Climb down the ladder${drop === '' ? ` to ${landsOn}` : drop}`;
+      if (side !== '') {
+        return `Move ${side}`;
       }
-      if (action.to.z < here.z) {
-        return `Step up ${side} to ${layerName(action.to.z)}`;
-      }
-      return `Move ${side}${drop}`;
+      return `Move ${action.to.z < here.z ? 'up' : 'down'} to ${layerName(action.to.z)}`;
     }
     case 'mine': {
-      const isUnderfoot = action.target.x === here.x && action.target.y === here.y;
+      const isUnderfoot = isDigDownTarget(here, action.target);
       const underfoot =
-        isUnderfoot && form === 'choice'
-          ? ` (you are standing on it: ${knownFallText(state)})`
-          : '';
+        isUnderfoot && form === 'choice' ? ' (you are standing on it: you move down into it)' : '';
       return `Mine ${whereFrom(here, action.target)}: ${mineOutcomeText(state, action.target, underfoot)}`;
     }
-    case 'placeLadder':
-      return `Place a ladder in ${placeWhere(here, action.target)}`;
     case 'placeTorch':
       return `Place a torch in ${placeWhere(here, action.target)}`;
     case 'craft': {
@@ -343,12 +239,11 @@ function idInLowerCase(id: string): string {
  * a chain (issue #30). It is made from the action alone, never from the cube.
  *
  * The names:
- * - moves: n, e, s, w (a walk or a step up: a direction offers one or the
- *   other, never both), up and down (on a ladder);
+ * - moves: n, e, s, w, up and down (issue #80: any open face neighbour);
  * - mine-n, mine-e, mine-s, mine-w beside you; mine-down for the block
  *   underfoot; mine-up overhead (only with a support, issue #75);
- * - ladder-here, ladder-n, ladder-up, ladder-down; torch- the same;
- * - craft-ladder, craft-lamp-oil, ...: "craft-" and the recipe;
+ * - torch-here, torch-n, torch-up, torch-down, ...: place a torch;
+ * - craft-torch, craft-lamp-oil, ...: "craft-" and the recipe;
  * - take-here-stone, take-n-coal, ...: "take-", where from, and the item;
  * - drop-stone (one) and drop-all-stone (the whole stack);
  * - cut-n, cut-e, cut-s, cut-w: cut the tree in that direction (issue #70);
@@ -368,8 +263,6 @@ export function choiceName(state: GameState, entry: LogEntry): string {
     }
     case 'mine':
       return `mine-${whereShort(here, entry.target)}`;
-    case 'placeLadder':
-      return `ladder-${whereShort(here, entry.target)}`;
     case 'placeTorch':
       return `torch-${whereShort(here, entry.target)}`;
     case 'craft':
@@ -411,8 +304,8 @@ export function choiceName(state: GameState, entry: LogEntry): string {
  *
  * - A mine action: "Mine Stone, gives 1 Stone". Mine actions with the same
  *   words here and the same AP cost differ only in direction (issue #30).
- *   `null` for the block underfoot, whose line says what the fall will cost.
- * - A drop: "Drop Ladder (one, or all 6)". The two drops of an item, one and
+ *   `null` for the block underfoot, whose line says the miner moves into it.
+ * - A drop: "Drop Stone (one, or all 3)". The two drops of an item, one and
  *   the whole stack, share a line (issue #46 item 3). With one carried there
  *   is a single drop, which then has a line of its own.
  */
@@ -424,8 +317,7 @@ export function choiceGroupText(state: GameState, entry: LogEntry): string | nul
   if (entry.type !== 'mine') {
     return null;
   }
-  const here = state.avatar.pos;
-  if (entry.target.x === here.x && entry.target.y === here.y) {
+  if (isDigDownTarget(state.avatar.pos, entry.target)) {
     return null;
   }
   return `Mine ${mineOutcomeText(state, entry.target, '')}`;
@@ -462,7 +354,8 @@ const GAUGE_REASONS: Record<string, string> = {
   crafted: 'crafted',
 };
 
-const DAMAGE_CAUSES: Record<string, string> = { fall: 'the fall' };
+/** Damage causes in words; a cause not listed is shown by its id. */
+const DAMAGE_CAUSES: Record<string, string> = { rockfall: 'a falling block' };
 
 /**
  * What happened in one step, as short sentences. `after` is the state the
@@ -478,13 +371,6 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
     switch (event.type) {
       case 'moved':
         // The new position is in the view; no need to say it twice.
-        break;
-      case 'fell':
-        lines.push(
-          event.kind === 'chosenDrop'
-            ? `You dropped ${blocksText(event.distance)}.`
-            : `You lost your footing and fell ${blocksText(event.distance)}.`,
-        );
         break;
       case 'damageTaken':
         lines.push(
@@ -608,56 +494,23 @@ function signed(value: number): string {
 
 /**
  * True if a tap on the map should take this choice at once, without opening
- * the chooser (coordinator's decision on PR #74): a choice with no warning,
- * and also digging down when all the warning says is that the cell under the
- * block is unseen. That cell is almost never known, so the chooser would
- * open on every dig, and the owner asked for one-at-a-time Minecraft
- * digging. The warning stays in the full action list; after the dig the
- * result line says in the past tense what happened (`ChoiceForm`). Every
- * other warning (a known fall longer
- * than the safe drop, FATAL, too heavy to carry) still opens the chooser.
- * Reads revealed cells only, like `choiceWarning`.
+ * the chooser: a choice with no warning (`choiceWarning`). Since the miner
+ * has no gravity (issue #80) the only warning left on a tap is a yield too
+ * heavy to carry.
  */
 export function tapActsAtOnce(state: GameState, entry: LogEntry): boolean {
-  if (choiceWarning(state, entry) === null) {
-    return true;
-  }
-  if (entry.type !== 'mine') {
-    return false;
-  }
-  const here = state.avatar.pos;
-  const isDigDown =
-    entry.target.x === here.x && entry.target.y === here.y && entry.target.z === here.z + 1;
-  if (!isDigDown) {
-    return false;
-  }
-  const drop = knownDigDownDrop(state);
-  const block = blockDefAt(state, entry.target);
-  const fits = block.yields.every((stack) => canCarry(state, stack.item, stack.count));
-  return drop.kind === 'unseen' && drop.blocks <= AVATAR.safeDigDownBlocks && fits;
+  return choiceWarning(state, entry) === null;
 }
 
 /**
- * The warning a choice carries, or `null` if it carries none: a fall or
- * a drop (which may cost health), or a yield (of mining or of cutting a
- * tree) too heavy to carry. The tap map
- * of the phone preview (src/app/map) acts at once on a tap only for a choice
- * with no warning; one with a warning is shown first, with this text.
- * Worked out from revealed cells only, like the rest of this file.
+ * The warning a choice carries, or `null` if it carries none: a yield (of
+ * mining or of cutting a tree) too heavy to carry. The tap map of the phone
+ * preview (src/app/map) acts at once on a tap only for a choice with no
+ * warning; one with a warning is shown first, with this text. Worked out
+ * from revealed cells only, like the rest of this file.
  */
 export function choiceWarning(state: GameState, entry: LogEntry): string | null {
-  const here = state.avatar.pos;
-  if (entry.type === 'move' && entry.drop > 0) {
-    return `you will drop ${blocksText(entry.drop)} to ${layerName(entry.to.z + entry.drop)}`;
-  }
   if (entry.type === 'mine') {
-    if (entry.target.x === here.x && entry.target.y === here.y && entry.target.z > here.z) {
-      // A dig known to end in the safe one-block drop needs no warning: one
-      // tap digs (issue #75). Otherwise the warning says what could happen.
-      if (!digDownIsKnownSafe(state)) {
-        return `you are standing on it: ${knownFallText(state)}`;
-      }
-    }
     const block = blockDefAt(state, entry.target);
     const fits = block.yields.every((stack) => canCarry(state, stack.item, stack.count));
     if (!fits) {

@@ -9,8 +9,9 @@ import type { GameState } from '../state';
 
 /**
  * Contract for M2-9: one `GiveUpAction` when a search over revealed cells
- * finds no way out the avatar has the ladders for (0014 item 23), otherwise
- * none. `ap` is `ACTION_COSTS.giveUp`. A pure function of the state, and of
+ * finds no way out (0014 item 23), otherwise none. The miner has no gravity
+ * and there are no ladders (issue #80): a way out is a path of open cells,
+ * each a face neighbour of the last, to the surface. `ap` is `ACTION_COSTS.giveUp`. A pure function of the state, and of
  * revealed cells only.
  */
 export function legalGiveUpActions(_state: GameState): GiveUpAction[] {

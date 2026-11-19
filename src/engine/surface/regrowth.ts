@@ -17,9 +17,10 @@
 //
 // So a tree cut in shift N grows at the end of shift N + regrowShifts - 1:
 // the shift of the cut counts as one of the ten. A surface cell never holds a
-// structure (structures are only ever placed in the grid), so "a ladder or
-// other structure" on a stump cannot happen; the ladder that matters stands
-// in the layer-0 cell, which is then open, and rule 1 covers it.
+// structure (structures are only ever placed in the grid), so "a structure"
+// on a stump cannot happen; one in the layer-0 cell under it stands in an
+// open cell, and rule 1 covers it. (Issue #70 named a ladder; ladders are
+// gone since issue #80.)
 //
 // Everything read here is something the player sees: the stump, its layer-0
 // block (revealed when the tree was cut), the miner, and loose items on the

@@ -30,7 +30,7 @@ import type { SurfaceMark } from './palette';
 export type TileKind = 'unknown' | 'open' | 'block';
 
 /** A mark drawn on top of a tile. */
-export type StructureMark = 'ladder' | 'torch' | 'support' | 'other';
+export type StructureMark = 'torch' | 'support' | 'other';
 
 /** One cell of the map, as far as the player knows it. */
 export interface Tile {
@@ -159,7 +159,6 @@ export function knownLitCells(state: GameState): Set<string> {
 }
 
 function structureMark(code: number): StructureMark | null {
-  if (code === STRUCTURES.ladder.code) return 'ladder';
   if (code === STRUCTURES.torch.code) return 'torch';
   if (code === STRUCTURES.support.code) return 'support';
   // Any other structure (M2: vents, pumps, ...) gets a plain mark for now.

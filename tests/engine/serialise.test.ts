@@ -34,12 +34,12 @@ function busyState(): GameState {
     fuel: 11,
     lampOil: 4,
     shift: 9,
-    inventory: { timber: 2, ladder: 5, coal: 0 },
+    inventory: { timber: 2, torch: 5, coal: 0 },
     looseItems: [
       { pos: { x: 1, y: 1, z: 0 }, item: 'stone', count: 2 },
       { pos: { x: 0, y: 0, z: -1 }, item: 'coal', count: 1 },
     ],
-    ladders: [{ x: 1, y: 1, z: 0 }],
+    torches: [{ x: 1, y: 1, z: 0 }],
     seed: 4242,
     // Every field the M2 skeleton added (issue #50), each with something in it.
     air: 6,
@@ -80,7 +80,7 @@ describe('serialise and deserialise', () => {
     const loaded = throughJson(state);
     expect(hashState(loaded)).toBe(hashState(state));
     // Everything except the zero-count inventory entry, which is dropped.
-    expect(loaded.inventory).toEqual({ ladder: 5, timber: 2 });
+    expect(loaded.inventory).toEqual({ timber: 2, torch: 5 });
     expect({ ...loaded, inventory: {}, looseItems: [], camps: [] }).toEqual({
       ...state,
       inventory: {},
@@ -147,9 +147,9 @@ describe('serialise and deserialise', () => {
 
   it('round-trips an ended run', () => {
     const state = busyState();
-    state.status = { kind: 'ended', outcome: 'death', cause: 'fell' };
+    state.status = { kind: 'ended', outcome: 'death', cause: 'outOfFuel' };
     const loaded = throughJson(state);
-    expect(loaded.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'fell' });
+    expect(loaded.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'outOfFuel' });
     expect(hashState(loaded)).toBe(hashState(state));
   });
 
@@ -197,10 +197,10 @@ describe('serialise and deserialise', () => {
 
   it('refuses a save from before the M2 skeleton with a clear error', () => {
     // State version 3 was the last M1 shape (decision note 0012).
-    expect(STATE_VERSION).toBe(5);
+    expect(STATE_VERSION).toBe(6);
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 3 })).toThrow(
-      'Saved state has version 3; this build reads version 5',
+      'Saved state has version 3; this build reads version 6',
     );
   });
 
@@ -208,7 +208,15 @@ describe('serialise and deserialise', () => {
     // State version 4 was the M2 skeleton's shape, with no surface arrays.
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 4 })).toThrow(
-      'Saved state has version 4; this build reads version 5',
+      'Saved state has version 4; this build reads version 6',
+    );
+  });
+
+  it('refuses a save from before ladders were removed with a clear error (issue #80)', () => {
+    // State version 5 could hold a ladder (structure code 1, item 'ladder').
+    const saved = serialise(busyState());
+    expect(() => deserialise({ ...saved, version: 5 })).toThrow(
+      'Saved state has version 5; this build reads version 6',
     );
   });
 });
@@ -277,7 +285,7 @@ describe('hashState', () => {
 
     // The order items were added to the inventory.
     const reordered = cloneState(base);
-    reordered.inventory = { ladder: 5, timber: 2 };
+    reordered.inventory = { torch: 5, timber: 2 };
     expect(hashState(reordered)).toBe(hashState(base));
 
     // The order of the loose-items list.
@@ -292,7 +300,7 @@ describe('hashState', () => {
     m2.camps.reverse();
     for (const camp of m2.camps) {
       if (camp.foundedShift === 7) {
-        camp.stash = { timber: 0, coal: 1, ladder: 0, stone: 3 };
+        camp.stash = { timber: 0, coal: 1, torch: 0, stone: 3 };
       }
     }
     expect(hashState(m2)).toBe(hashState(base));
@@ -318,11 +326,11 @@ describe('hashState', () => {
     const state = buildState({ layers: [['....'], ['####']], avatar: { x: 0, y: 0, z: 0 } });
     addItem(state, 'timber', 1);
     addItem(state, 'coal', 2);
-    addItem(state, 'ladder', 3);
+    addItem(state, 'torch', 3);
     addLooseItems(state, { x: 3, y: 0, z: 0 }, 'stone', 1);
     addLooseItems(state, { x: 1, y: 0, z: 0 }, 'stone', 1);
     addLooseItems(state, { x: 1, y: 0, z: 0 }, 'coal', 1);
-    expect(Object.keys(state.inventory)).toEqual(['timber', 'coal', 'ladder']);
+    expect(Object.keys(state.inventory)).toEqual(['timber', 'coal', 'torch']);
 
     const loaded = throughJson(state);
     expect(hashState(loaded)).toBe(hashState(state));

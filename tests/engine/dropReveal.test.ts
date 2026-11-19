@@ -1,16 +1,17 @@
 // Scenario tests for issue #15: the action list must not show anything the
 // avatar cannot know (pillar 1; agent plan 3.1).
 //
-// A walk off an edge, and a climb down off the bottom of a ladder, are judged
-// by the cells straight below. With the lamp out some of those cells used to
-// be unrevealed, so whether the move was offered, and its `drop` value, gave
-// away what they held.
+// A walk off an edge, and a climb down off the bottom of a ladder, used to be
+// judged by the cells straight below. With the lamp out some of those cells
+// were unrevealed, so whether the move was offered, and its `drop` value,
+// gave away what they held. (Ladders and drops are gone since issue #80.)
 //
 // The first fix (#15) revealed those cells whatever the light. Since issue
 // #33 (decision note 0011) the avatar looks over an edge only with the lamp
-// lit; with it out the cells stay unrevealed and the move is not offered.
-// Either way the action list must not depend on an unrevealed cell, and the
-// general check below is made in both lights.
+// lit. Since issue #80 the miner has no gravity: a move is judged by its
+// target cell alone, which the miner always touches, so nothing under it
+// matters. Either way the action list must not depend on an unrevealed cell,
+// and the general check below is made in both lights.
 
 import { describe, expect, it } from 'vitest';
 import { AVATAR, BLOCKS } from '../../src/data';
@@ -29,22 +30,17 @@ const PLENTY_OF_OIL = 10;
  * that `updateReveal` has run in that light, as it would in play.
  * The fuel default (10) is plenty for one upkeep.
  */
-function stateAfterAShift(
-  lampOil: number,
-  layers: string[][],
-  avatar: Vec3,
-  ladders: Vec3[] = [],
-): GameState {
-  const built = buildState({ layers, avatar, ladders, lampOil, ap: 0 });
+function stateAfterAShift(lampOil: number, layers: string[][], avatar: Vec3): GameState {
+  const built = buildState({ layers, avatar, lampOil, ap: 0 });
   return endShift(built).state;
 }
 
-function stateWithLampOut(layers: string[][], avatar: Vec3, ladders: Vec3[] = []): GameState {
-  return stateAfterAShift(0, layers, avatar, ladders);
+function stateWithLampOut(layers: string[][], avatar: Vec3): GameState {
+  return stateAfterAShift(0, layers, avatar);
 }
 
-function stateWithLampLit(layers: string[][], avatar: Vec3, ladders: Vec3[] = []): GameState {
-  return stateAfterAShift(PLENTY_OF_OIL, layers, avatar, ladders);
+function stateWithLampLit(layers: string[][], avatar: Vec3): GameState {
+  return stateAfterAShift(PLENTY_OF_OIL, layers, avatar);
 }
 
 /**
@@ -89,75 +85,59 @@ function edgeLayers(shaft: string): string[][] {
 const EDGE_AVATAR: Vec3 = { x: 0, y: 0, z: 0 };
 
 describe('issue #15: the move list shows only what is revealed', () => {
-  it('with the lamp lit, reveals the cells a walk off an edge is judged by', () => {
-    // A drop of 1: the move depends on (1,0,1) and (1,0,2).
-    const shallow = stateWithLampLit(edgeLayers('#'), EDGE_AVATAR);
-    expect(findActions(shallow, { type: 'move' })).toEqual([
-      { type: 'move', to: { x: 1, y: 0, z: 0 }, drop: 1, ap: 1 },
-    ]);
-    expect(isRevealed(shallow, { x: 1, y: 0, z: 1 })).toBe(true);
-    expect(isRevealed(shallow, { x: 1, y: 0, z: 2 })).toBe(true);
-
-    // A drop of 2: the move depends on (1,0,3) as well.
-    const deep = stateWithLampLit(edgeLayers('.'), EDGE_AVATAR);
-    expect(findActions(deep, { type: 'move' })).toEqual([
-      { type: 'move', to: { x: 1, y: 0, z: 0 }, drop: 2, ap: 1 },
-    ]);
-    expect(isRevealed(deep, { x: 1, y: 0, z: 1 })).toBe(true);
-    expect(isRevealed(deep, { x: 1, y: 0, z: 2 })).toBe(true);
-    expect(isRevealed(deep, { x: 1, y: 0, z: 3 })).toBe(true);
+  it('offers the walk over the edge in either light: nothing under it matters (issue #80)', () => {
+    for (const shaft of ['#', '.']) {
+      for (const state of [
+        stateWithLampLit(edgeLayers(shaft), EDGE_AVATAR),
+        stateWithLampOut(edgeLayers(shaft), EDGE_AVATAR),
+      ]) {
+        // East over the edge, and up onto the surface.
+        expect(findActions(state, { type: 'move' })).toEqual([
+          { type: 'move', to: { x: 1, y: 0, z: 0 }, ap: 1 },
+          { type: 'move', to: { x: 0, y: 0, z: -1 }, ap: 1 },
+        ]);
+      }
+    }
   });
 
-  it('with the lamp out, does not reveal them and does not offer the walk (issue #33)', () => {
+  it('with the lamp out, does not reveal the cells under the open cell beside (issue #33)', () => {
     for (const shaft of ['#', '.']) {
       const state = stateWithLampOut(edgeLayers(shaft), EDGE_AVATAR);
       // (1,0,1) is under the open cell beside the avatar: not touched, not seen.
       expect(isRevealed(state, { x: 1, y: 0, z: 1 })).toBe(false);
       expect(isRevealed(state, { x: 1, y: 0, z: 2 })).toBe(false);
-      expect(findActions(state, { type: 'move' })).toEqual([]);
     }
   });
 
   // The general form: in each state, no cell the player has not seen may
-  // change the action list. Each entry is a name, then the layers, the
-  // avatar's cell and the ladders; each is tried with the lamp out and lit.
-  type Scene = [string, string[][], Vec3, Vec3[]];
+  // change the action list. Each entry is a name, then the layers and the
+  // avatar's cell; each is tried with the lamp out and lit.
+  type Scene = [string, string[][], Vec3];
   const scenes: Scene[] = [
-    ['an edge with a drop of 1', edgeLayers('#'), EDGE_AVATAR, []],
-    ['an edge with a drop of 2', edgeLayers('.'), EDGE_AVATAR, []],
+    ['an edge with a drop of 1', edgeLayers('#'), EDGE_AVATAR],
+    ['an edge with a drop of 2', edgeLayers('.'), EDGE_AVATAR],
     [
       // The shaft beside the avatar is 4 deep: too far to choose.
       'an edge with a drop too long to choose',
       [['..#'], ['#.#'], ['#.#'], ['#.#'], ['#.#'], ['###']],
       EDGE_AVATAR,
-      [],
     ],
     [
       // The avatar is on the surface, beside a hole in the top layer.
       'the surface beside a hole 2 deep',
       [['#.#'], ['#.#'], ['###'], ['###']],
       { x: 0, y: 0, z: -1 },
-      [],
     ],
     [
       'the surface beside a hole 3 deep',
       [['#.#'], ['#.#'], ['#.#'], ['###']],
       { x: 0, y: 0, z: -1 },
-      [],
     ],
     [
-      // The avatar is on a single ladder at the top of a shaft; the climb
-      // down is a drop of 1 past the ladder's foot.
-      'the bottom of a ladder, floor 2 below',
-      [['#.#'], ['#.#'], ['#.#'], ['###'], ['###']],
-      { x: 1, y: 0, z: 0 },
-      [{ x: 1, y: 0, z: 0 }],
-    ],
-    [
-      'the bottom of a ladder, floor 3 below',
+      // The avatar in mid-air at the top of a shaft (issue #80).
+      'the top of a shaft 3 deep',
       [['#.#'], ['#.#'], ['#.#'], ['#.#'], ['###']],
       { x: 1, y: 0, z: 0 },
-      [{ x: 1, y: 0, z: 0 }],
     ],
     [
       // A wider room, with edges on two sides of the avatar at once.
@@ -170,7 +150,6 @@ describe('issue #15: the move list shows only what is revealed', () => {
         ['#####', '#####', '#####'],
       ],
       { x: 1, y: 1, z: 0 },
-      [],
     ],
     [
       // Headroom and a block to step up onto, two layers down (issue #19):
@@ -178,22 +157,21 @@ describe('issue #15: the move list shows only what is revealed', () => {
       'a step up, under two layers of rock',
       [['###'], ['###'], ['..#'], ['.##'], ['###']],
       { x: 0, y: 0, z: 3 },
-      [],
     ],
   ];
 
   it.each(scenes)(
     'changing an unrevealed cell does not change the action list, lamp out: %s',
-    (_name, layers, avatar, ladders) => {
-      const state = stateWithLampOut(layers, avatar, ladders);
+    (_name, layers, avatar) => {
+      const state = stateWithLampOut(layers, avatar);
       expect(unrevealed(state, cellsThatChangeTheActionList(state))).toEqual([]);
     },
   );
 
   it.each(scenes)(
     'changing an unrevealed cell does not change the action list, lamp lit: %s',
-    (_name, layers, avatar, ladders) => {
-      const state = stateWithLampLit(layers, avatar, ladders);
+    (_name, layers, avatar) => {
+      const state = stateWithLampLit(layers, avatar);
       expect(unrevealed(state, cellsThatChangeTheActionList(state))).toEqual([]);
     },
   );
@@ -230,8 +208,6 @@ describe('no looking over an edge (issue #75): light alone shows a drop', () => 
       expect(isRevealed(state, { x: 1, y: 0, z }), `z${z}`).toBe(true);
     }
     expect(isRevealed(state, { x: 1, y: 0, z: radius + 1 })).toBe(false);
-    // The drop is too long to choose, so the walk is not offered.
-    expect(findActions(state, { type: 'move' })).toEqual([]);
   });
 
   it('sees nothing over an edge with the lamp out (issue #33)', () => {
@@ -246,16 +222,6 @@ describe('no looking over an edge (issue #75): light alone shows a drop', () => 
     const state = stateWithLampLit([['#.#'], ['###'], ['###'], ['###']], { x: 1, y: 0, z: 0 });
     expect(isRevealed(state, { x: 0, y: 0, z: 1 })).toBe(false);
     expect(isRevealed(state, { x: 2, y: 0, z: 1 })).toBe(false);
-  });
-
-  it('on a ladder, light down the shaft shows its floor, and a drop too long is not offered', () => {
-    // A shaft 4 deep at x = 1, the avatar in its top cell on a ladder.
-    const layers = [['#.#'], ['#.#'], ['#.#'], ['#.#'], ['###']];
-    const top = { x: 1, y: 0, z: 0 };
-    const onLadder = stateWithLampLit(layers, top, [top]);
-    expect(isRevealed(onLadder, { x: 1, y: 0, z: 4 })).toBe(true);
-    // The floor is 3 below the ladder's foot: too far, so no climb down.
-    expect(findActions(onLadder, { type: 'move', to: { x: 1, y: 0, z: 1 } })).toEqual([]);
   });
 
   it('emits a blockRevealed event for each cell light shows down the edge', () => {

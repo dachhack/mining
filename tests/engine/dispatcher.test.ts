@@ -32,8 +32,6 @@ const FAKE_LEAVE_COST = 2;
 
 // The fakes record the order they were called in here.
 const calls: string[] = [];
-// The kind of fall each call of the fake `settle` was given.
-const settleKinds: string[] = [];
 // Set by a test to make the fake cube phase end the run.
 let cubePhaseEndsRun = false;
 
@@ -68,11 +66,8 @@ vi.mock('../../src/engine/actions/leave', () => ({
 }));
 
 vi.mock('../../src/engine/gravity', () => ({
-  // The third argument is the kind of fall the dispatcher says this would be
-  // (decision note 0010). The fake only writes it down.
-  settle: (_state: GameState, _events: GameEvent[], fallKind: string): void => {
+  settle: (): void => {
     calls.push('settle');
-    settleKinds.push(fallKind);
   },
 }));
 
@@ -105,8 +100,8 @@ vi.mock('../../src/engine/shift', () => ({
     calls.push('runCubePhase');
     state.blocks.fill(0);
     if (cubePhaseEndsRun) {
-      state.status = { kind: 'ended', outcome: 'death', cause: 'fell' };
-      events.push({ type: 'runEnded', outcome: 'death', cause: 'fell' });
+      state.status = { kind: 'ended', outcome: 'death', cause: 'crushed' };
+      events.push({ type: 'runEnded', outcome: 'death', cause: 'crushed' });
     }
   },
   runUpkeep: (state: GameState, events: GameEvent[]): void => {
@@ -135,7 +130,6 @@ const LEAVE: Action = { type: 'leave', ap: FAKE_LEAVE_COST };
 
 beforeEach(() => {
   calls.length = 0; // empty the list
-  settleKinds.length = 0;
   cubePhaseEndsRun = false;
 });
 
@@ -167,17 +161,10 @@ describe('applyAction', () => {
     expect(calls).toEqual(['applyLeave', 'settle', 'updateReveal', 'updateMineralTraces']);
   });
 
-  it('tells gravity a fall after a move is a chosen drop, and after anything else is not (0010)', () => {
-    // The move module is the real one: a walk east along the surface. A move
-    // is offered only onto a floor the player has seen (issue #33), and the
-    // reveal module is a fake here, so the top layer is revealed by hand.
-    const seen = startState(5);
-    seen.revealed.fill(1);
-    act(seen, { type: 'move', to: { x: 1, y: 0, z: -1 } });
-    expect(settleKinds).toEqual(['chosenDrop']);
-
-    applyAction(startState(5), LEAVE);
-    expect(settleKinds).toEqual(['chosenDrop', 'uncontrolled']);
+  it('calls gravity after a move as after anything else (issue #80: no kinds of fall)', () => {
+    // The move module is the real one: a walk east along the surface.
+    act(startState(5), { type: 'move', to: { x: 1, y: 0, z: -1 } });
+    expect(calls).toEqual(['settle', 'updateReveal', 'updateMineralTraces']);
   });
 
   it('spends the AP of the action and returns the events', () => {
@@ -246,8 +233,6 @@ describe('endShift', () => {
       'updateReveal',
       'updateMineralTraces',
     ]);
-    // Whatever the cube phase does to the avatar's footing, the player did not choose it.
-    expect(settleKinds).toEqual(['uncontrolled']);
   });
 
   it('skips upkeep when the cube phase ends the run', () => {
@@ -255,11 +240,11 @@ describe('endShift', () => {
     const state = startState(5);
     const { state: after, events } = endShift(state);
     expect(calls).toEqual(['runCubePhase', 'settle', 'updateReveal', 'updateMineralTraces']);
-    expect(after.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'fell' });
+    expect(after.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'crushed' });
     // No fuel taken and no new shift: the fake upkeep never ran.
     expect(after.fuel).toBe(state.fuel);
     expect(after.shift).toBe(state.shift);
-    expect(events).toEqual([{ type: 'runEnded', outcome: 'death', cause: 'fell' }]);
+    expect(events).toEqual([{ type: 'runEnded', outcome: 'death', cause: 'crushed' }]);
   });
 
   it('works on a copy of the state', () => {
@@ -296,7 +281,7 @@ describe('previewCubePhase', () => {
 
   it('refuses once the run has ended, as endShift does', () => {
     const state = startState(5);
-    state.status = { kind: 'ended', outcome: 'death', cause: 'fell' };
+    state.status = { kind: 'ended', outcome: 'death', cause: 'crushed' };
     expect(() => previewCubePhase(state)).toThrow('The run has ended');
   });
 });

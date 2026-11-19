@@ -11,7 +11,7 @@ Working title: **Mining Game**. A turn-based roguelike for Android and iOS in wh
 ## 1. Pillars
 
 1. **Every block is a bet.** The player sees only exposed faces. Mining reveals neighbours. Hazards give readable tells, so a death is traceable to a decision.
-2. **The dig is the escape route.** Whatever the player carves on the way down is what they climb out through.
+2. **The dig is the escape route.** Whatever the player carves on the way down is what they climb out through. The miner moves only through cells that are open (section 5.2), so the way out is the way it dug.
 3. **Resources buy options, not power.** Materials become tools, supports, and camps. Nothing makes the avatar simply stronger.
 4. **Deterministic and seeded.** The same seed and the same inputs always produce the same run.
 
@@ -39,9 +39,9 @@ Working title: **Mining Game**. A turn-based roguelike for Android and iOS in wh
   - Not revealed: the cells the pick can reach beyond those six, the cell overhead beyond touch, what lies over an edge or under a floor that no light reaches. (These were revealed with the lamp lit before issue #75: decision note 0005 item 10 and question 40, replaced by 0022.)
 - **Surface:** The layer above `z = 0`, one cell per column, where the avatar starts, at the centre. Reaching the surface is how a run is completed. It is open air for water, gas and air, and mostly forest (owner, issue #70; decision note 0020):
   - **Surface cells [Default]:** each is a *tree*, a *dirt path*, a *meadow* or a *stone outcrop*; about 65% start as trees. Paths, meadows and outcrops are open ground: the avatar walks on them, and daylight round the avatar reveals the layer-0 block under them. A path is worn into dirt (ore under it stays), an outcrop stands over stone, a meadow over whatever is there. The start cell and its eight neighbours are meadow, and winding paths join them to the meadows and to at least two edges of the cube. Coal is always in sight at the start (owner, PR #72): at least one coal block is among the layer-0 blocks the avatar sees from its start cell; generation puts one there if none is.
-  - **Trees:** a tree blocks walking (and stepping up into it) and hides the layer-0 block under it: neither light nor touch from the surface reveals it, and it cannot be mined from the surface. From underground it is seen and mined like any other block.
+  - **Trees:** a tree blocks the way (the miner cannot move into its cell from any side, section 5.2) and hides the layer-0 block under it: neither light nor touch from the surface reveals it, and it cannot be mined from the surface. From underground it is seen and mined like any other block.
   - **Cutting [Default]:** cut a tree in a surface cell beside the avatar (north, east, south or west): 2 AP, gives 2 timber (too heavy to carry is left on the stump, as for mining). It leaves a *stump*, open ground, and the block under it is revealed.
-  - **Regrowth:** a stump grows a tree again after 10 shifts (owner), counting the shift of the cut, at the end of a shift (after the cube phase, before upkeep), if its layer-0 block is still solid; while that block is gone the count goes back to 0. If the avatar or loose items stand on the stump when the count is reached, the tree grows at the end of the first shift the stump is clear. A regrown tree blocks walking again; the block under it stays known. Paths, meadows and outcrops never grow trees.
+  - **Regrowth:** a stump grows a tree again after 10 shifts (owner), counting the shift of the cut, at the end of a shift (after the cube phase, before upkeep), if its layer-0 block is still solid; while that block is gone the count goes back to 0. If the avatar or loose items stand on the stump when the count is reached, the tree grows at the end of the first shift the stump is clear. A regrown tree blocks the way again; the block under it stays known. Paths, meadows and outcrops never grow trees.
 
 ### 3.1 Depth bands [Default]
 
@@ -88,18 +88,17 @@ The player may end the player phase early. [Default] Unspent AP is lost when the
 
 | Action | AP | Other cost |
 |---|---|---|
-| Move 1 block (walk, climb a ladder, step up 1) | 1 | — |
-| Drop down 1–2 blocks | 1 | — |
+| Move 1 block into an open face neighbour (north, east, south, west, up or down) | 1 | — |
 | Mine an adjacent block | Per block type | — |
 | Cut a tree beside you on the surface | 2 | — (gives 2 timber) |
-| Place ladder / support / torch | 1 | Materials |
+| Place support / torch | 1 | Materials |
 | Place pump / vent / sealant | 1 | Crafted item |
 | Scan | 2 | 1 scanner charge |
 | Craft (field or camp) | 1 | Materials |
 | Pick up / drop / stash items | 0 | — |
 | Rest at camp | Whole shift | Restores health and air |
 
-- **Adjacent** means the face neighbours: north, east, south and west on the avatar's own level, and the block it stands on (owner, issue #75: as in Minecraft; no diagonals, nothing else on the level below). The avatar cannot mine the block directly above its head without a support in its own cell first (it would fall on them). Mining the block it stands on is *digging down* (section 5.2). A stair is dug by mining the block ahead, walking in and digging down, and can be walked back up (section 5.2, step up 1).
+- **Adjacent** means the face neighbours: north, east, south and west on the avatar's own level, and the block it stands on (owner, issue #75: as in Minecraft; no diagonals, nothing else on the level below). The avatar cannot mine the block directly above its head without a support in its own cell first (it would fall on them). Mining the block it stands on is *digging down* (section 5.2). The miner moves only into open cells, so a block must be mined before the miner can move into its cell.
 - **Undo:** The player may undo actions within the current player phase as long as no new information was revealed by them.
 
 ## 5. The avatar
@@ -108,26 +107,29 @@ The player may end the player phase early. [Default] Unspent AP is lost when the
 
 | Stat | Start | Lost by | Restored by |
 |---|---|---|---|
-| Health | 10 | Falls, rockfall, burns, explosions | Resting at a camp |
+| Health | 10 | Rockfall, burns, explosions | Resting at a camp |
 | Air | 10 | 1 per shift while in gas or water, or cut off from an air source | Refills fully in connected air |
 | Carry capacity | 20 weight | — | Stashing at a camp; smelting (ingots are lighter) |
 | Light radius | 3 | Lamp oil running out (drops to 0: only the miner's own cell, so it knows just the six cells it touches; decision note 0011) | Lamp oil, torches |
 
 Lamp lit or not, the miner knows the six cells touching its own; light shows the rest (section 3, Visibility).
 
-### 5.2 Movement and gravity
+### 5.2 Movement [Decided]
 
-- The avatar stands on solid blocks, ladders, or camp floors.
-- A chosen drop of 1–2 blocks is free. An uncontrolled fall, any fall that does not directly follow a move (the miner lost its footing for any reason, such as digging down into open space), is not free: it also deals [Default] 1 damage for each of the first 2 blocks. A ladder in the miner's own cell is footing, so it prevents the fall. A fall of 3–5 deals [Default] 2 damage per block beyond 2. A fall of 6 or more is fatal.
-- **Digging down (owner, issue #75):** mining the block the avatar stands on drops it onto the block below that: a safe one-block drop ([Default] `AVATAR.safeDigDownBlocks` = 1), no damage, a chosen drop. If there is nothing under that block the avatar falls on, and the whole fall, counted from where it stood, is uncontrolled. A ladder in its own cell holds it, as ever. Before it digs, the miner is told only what it knows: until it has seen the cell under the block, "you drop at least one block; if there is nothing under it you will fall further and be hurt".
-- Climbing up more than 1 block requires a ladder or cut steps.
+Owner, 2026-11-19 (issue #80; decision note 0023): the miner has no gravity.
+
+- The miner moves 1 block (1 AP) into any open face neighbour: north, east, south, west, up or down. No diagonal moves.
+- It never falls and takes no fall damage, whatever is under it. It needs nothing to stand on: it can stand over an open shaft, go straight up a shaft it dug, and climb out of any hole. There are no ladders or scaffolding.
+- It moves only through open cells. Rock must be mined before the miner can enter its cell, so the way out is the way it dug (pillar 2).
+- **Digging down (owner, issue #75):** mining the block the miner stands on moves it down into that block's cell, in the same action. It goes no further: if the cell under that is open, it stays where it now is.
+- A tree on the surface blocks the way (section 3): the miner cannot move into a tree's cell, from beside it or from a hole under it. Moving up from the top layer onto the surface is an ordinary move into an open cell.
+- Blocks and loose items still fall: cave-ins (section 6.1) and the rule that the block overhead is mined only with a support in the miner's cell (section 4.1) are unchanged. Loose items fall straight down until they rest on rock.
 
 ### 5.3 Ways a run ends in death
 
 - **Crushed:** A falling block hits the avatar and brings health to 0 or below.
 - **Drowned / suffocated:** Air reaches 0.
 - **Burned:** Health reaches 0 from lava or explosion.
-- **Fell:** Fatal fall.
 - **Entombed:** No path to the surface exists and the avatar lacks the fuel and materials to make one. The engine must detect this (conservatively) and offer to end the run; it must never soft-lock.
 - **Out of fuel:** Fuel is already 0 when upkeep comes (section 4).
 
@@ -158,7 +160,7 @@ All hazards are deterministic and advance only in the cube phase. Each active ha
 
 ### 6.4 Lava [Default]
 
-- Flows 1 block every 2 shifts. Destroys ladders, supports, and camp structures. Deals heavy damage on contact and light damage when adjacent.
+- Flows 1 block every 2 shifts. Destroys supports and camp structures. Deals heavy damage on contact and light damage when adjacent.
 - Water meeting lava makes solid stone (which the player can exploit).
 - **Tell:** Warm-glow tint on blocks within 2.
 
@@ -174,7 +176,6 @@ All hazards are deterministic and advance only in the cube phase. Each active ha
 
 | Item | Recipe | Use |
 |---|---|---|
-| Ladder (×3) | 1 timber | Vertical movement |
 | Support | 1 timber + 1 stone | Holds up a ceiling; braces unstable ore |
 | Torch | 1 timber + 1 coal | Fixed light source |
 | Fuel (×3) | 1 coal | Upkeep |

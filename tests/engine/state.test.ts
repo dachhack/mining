@@ -149,8 +149,8 @@ describe('what is at (x, y, z)', () => {
     expect(layerText(state, 0)).toEqual(['#d##', '#..#', '####']);
 
     expect(structureAt(state, pos)).toBe(NO_STRUCTURE);
-    setStructure(state, pos, STRUCTURES.ladder.code);
-    expect(structureAt(state, pos)).toBe(STRUCTURES.ladder.code);
+    setStructure(state, pos, STRUCTURES.torch.code);
+    expect(structureAt(state, pos)).toBe(STRUCTURES.torch.code);
 
     expect(isRevealed(state, pos)).toBe(false);
     setRevealed(state, pos, true);
@@ -169,7 +169,7 @@ describe('what is at (x, y, z)', () => {
     expect(structureAt(state, { x: -1, y: 0, z: 0 })).toBe(NO_STRUCTURE);
     expect(isRevealed(state, { x: 0, y: 0, z: -1 })).toBe(true);
     expect(isRevealed(state, { x: -1, y: 0, z: 0 })).toBe(true);
-    expect(() => setStructure(state, { x: 0, y: 0, z: -1 }, STRUCTURES.ladder.code)).toThrow(
+    expect(() => setStructure(state, { x: 0, y: 0, z: -1 }, STRUCTURES.torch.code)).toThrow(
       'outside the cube',
     );
     expect(() => setBlock(state, { x: 0, y: 0, z: 2 }, BLOCKS.air.code)).toThrow(
@@ -204,11 +204,11 @@ describe('inventoryEntries', () => {
     addItem(state, 'timber', 2);
     addItem(state, 'coal', 1);
     addItem(state, 'stone', 0);
-    addItem(state, 'ladder', 6);
+    addItem(state, 'ironIngot', 6);
     removeItem(state, 'coal', 1);
-    expect(Object.keys(state.inventory)).toEqual(['timber', 'coal', 'stone', 'ladder']);
+    expect(Object.keys(state.inventory)).toEqual(['timber', 'coal', 'stone', 'ironIngot']);
     expect(inventoryEntries(state)).toEqual([
-      { item: 'ladder', count: 6 },
+      { item: 'ironIngot', count: 6 },
       { item: 'timber', count: 2 },
     ]);
   });
@@ -220,11 +220,11 @@ describe('carry weight', () => {
     expect(carriedWeight(state)).toBe(0);
     addItem(state, 'stone', 3);
     addItem(state, 'coal', 2);
-    addItem(state, 'ladder', 6);
-    const expected = 3 * ITEMS.stone.weight + 2 * ITEMS.coal.weight + 6 * ITEMS.ladder.weight;
+    addItem(state, 'torch', 6);
+    const expected = 3 * ITEMS.stone.weight + 2 * ITEMS.coal.weight + 6 * ITEMS.torch.weight;
     expect(carriedWeight(state)).toBe(expected);
-    // With 0005's weights (stone 2, coal 1, ladder 0) that is 8.
-    expect(expected).toBe(8);
+    // With 0005's weights (stone 2, coal 1, torch 1) that is 14.
+    expect(expected).toBe(14);
   });
 
   it('allows carrying exactly the capacity and nothing beyond it', () => {
@@ -239,7 +239,6 @@ describe('carry weight', () => {
     expect(canCarry(state, 'coal', 1)).toBe(true); // exactly full
     expect(canCarry(state, 'coal', 2)).toBe(false);
     expect(canCarry(state, 'stone', 1)).toBe(ITEMS.stone.weight <= coalWeight);
-    expect(canCarry(state, 'ladder', 99)).toBe(true); // ladders weigh nothing
     expect(canCarry(state, 'coal', 0)).toBe(true);
   });
 
@@ -318,10 +317,10 @@ describe('endRun', () => {
   it('ends the run once and keeps the first cause', () => {
     const state = smallState();
     const events: GameEvent[] = [];
-    endRun(state, 'death', 'fell', events);
+    endRun(state, 'death', 'outOfFuel', events);
     endRun(state, 'salvage', 'left', events);
-    expect(state.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'fell' });
-    expect(events).toEqual([{ type: 'runEnded', outcome: 'death', cause: 'fell' }]);
+    expect(state.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'outOfFuel' });
+    expect(events).toEqual([{ type: 'runEnded', outcome: 'death', cause: 'outOfFuel' }]);
   });
 });
 
@@ -332,7 +331,7 @@ describe('cloneState', () => {
       avatar: { x: 1, y: 0, z: 0 },
       inventory: { timber: 2 },
       looseItems: [{ pos: { x: 1, y: 0, z: 0 }, item: 'stone', count: 1 }],
-      ladders: [{ x: 1, y: 0, z: 0 }],
+      torches: [{ x: 1, y: 0, z: 0 }],
       armed: [{ pos: { x: 0, y: 0, z: 0 }, kind: 'unstableOre' }],
       camps: [{ pos: { x: 1, y: 0, z: 0 }, foundedShift: 1, stash: { coal: 2 } }],
     });
@@ -369,7 +368,7 @@ describe('cloneState', () => {
       firstLoose.count = 5;
       firstLoose.pos.x = 0;
     }
-    copy.status = { kind: 'ended', outcome: 'death', cause: 'fell' };
+    copy.status = { kind: 'ended', outcome: 'death', cause: 'outOfFuel' };
 
     expect(hashState(state)).toBe(before);
     expect(state.avatar.pos).toEqual({ x: 1, y: 0, z: 0 });

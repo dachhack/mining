@@ -14,8 +14,13 @@ import type { GameEvent, RunEndCause, RunOutcome } from './events';
 import { createRng } from './rng';
 import type { RngState } from './rng';
 
-/** Bumped whenever the shape of GameState changes, so old saves can be told apart. */
-export const STATE_VERSION = 5;
+/**
+ * Bumped whenever the shape of GameState changes, so old saves can be told
+ * apart. 6: ladders removed (issue #80); a version-5 save may hold a ladder
+ * (structure code 1, item 'ladder') or a miner standing in mid-air after a
+ * fall, so it is not read.
+ */
+export const STATE_VERSION = 6;
 
 /** Some loose items lying in a cell. */
 export interface LooseItems {

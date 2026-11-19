@@ -45,7 +45,8 @@ describe('createRun', () => {
     const state = createRun(1, 'none', 'standard');
     expect(state.fuel).toBe(24);
     expect(state.lampOil).toBe(3);
-    expect(state.inventory).toEqual({ ladder: 6, timber: 2 });
+    // No ladders since issue #80.
+    expect(state.inventory).toEqual({ timber: 2 });
     expect(state.avatar.pos).toEqual({ x: 16, y: 16, z: -1 });
     expect(state.avatar.health).toBe(10);
     expect(state.ap).toBe(5);

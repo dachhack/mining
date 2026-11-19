@@ -45,7 +45,7 @@ describe('simulate', () => {
     expect(total(report.aggregate.outcomes)).toBe(12);
     expect(total(report.aggregate.causes)).toBe(12);
     expect(Object.keys(report.aggregate.outcomes)).toEqual(['salvage', 'death', 'unfinished']);
-    expect(Object.keys(report.aggregate.causes)).toEqual(['left', 'fell', 'outOfFuel', 'shiftCap']);
+    expect(Object.keys(report.aggregate.causes)).toEqual(['left', 'outOfFuel', 'shiftCap']);
   });
 
   it('lists every recipe and every item, so unused ones show as 0', () => {
@@ -59,10 +59,10 @@ describe('simulate', () => {
   });
 
   it('adds the runs up', () => {
-    const crafts = report.runs.reduce((sum, run) => sum + (run.recipesUsed['ladder'] ?? 0), 0);
-    expect(report.aggregate.recipesUsed['ladder']?.crafts).toBe(crafts);
-    // Each ladder craft makes 3 ladders (design doc 7.1).
-    expect(report.aggregate.itemsCrafted['ladder']).toBe(3 * crafts);
+    const crafts = report.runs.reduce((sum, run) => sum + (run.recipesUsed['fuel'] ?? 0), 0);
+    expect(report.aggregate.recipesUsed['fuel']?.crafts).toBe(crafts);
+    // Each fuel craft makes 3 fuel (design doc 7.1).
+    expect(report.aggregate.itemsCrafted['fuel']).toBe(3 * crafts);
     const shifts = report.runs.map((run) => run.shiftsPlayed);
     expect(report.aggregate.shiftsPlayed.min).toBe(Math.min(...shifts));
     expect(report.aggregate.shiftsPlayed.max).toBe(Math.max(...shifts));
@@ -94,9 +94,11 @@ describe('playRun', () => {
     expect(metrics.deepestLayer).toBe(8);
     expect(metrics.blocksMined).toBe(17);
     expect(metrics.shareOfCubeMined).toBeCloseTo(17 / 32768, 10);
-    expect(metrics.shiftsPlayed).toBe(10);
-    // 24 fuel at the start, 1 used at each of the 9 ends of shift.
-    expect(metrics.fuelAtEnd).toBe(15);
+    // 11 since issue #80: the way back up is two moves a stair (up, then
+    // back along), not one step up.
+    expect(metrics.shiftsPlayed).toBe(11);
+    // 24 fuel at the start, 1 used at each of the 10 ends of shift.
+    expect(metrics.fuelAtEnd).toBe(14);
     expect(metrics.shiftsAtZeroFuel).toBe(0);
     // 3 lamp oil lasts 12 shifts; the run is over before then.
     expect(metrics.shiftsInTheDark).toBe(0);

@@ -4,8 +4,8 @@
 // 1. the damage recorded during steps (a) to (d), in the order it happened;
 // 2. air;
 // 3. rest, only if the avatar is still alive.
-// The fall that may follow (`settle`) is the dispatcher's, straight after the
-// cube phase (index.ts), as it was in M1.
+// Loose items that lost their floor fall straight after (`settle`, in the
+// dispatcher in index.ts). The avatar never falls (issue #80).
 //
 // Steps 2 and 3 call one function each from air.ts (M2-4) and camps.ts
 // (M2-7), which do nothing until those tasks fill them in.
@@ -25,7 +25,6 @@ import type { CubePhase, RecordedDamage } from './phase';
  * each damage cause: the compiler rejects this table if one is missing.
  */
 const DEATH_BY_DAMAGE: Record<DamageCause, RunEndCause> = {
-  fall: 'fell',
   rockfall: 'crushed',
   lava: 'burned',
   explosion: 'burned',
@@ -35,7 +34,7 @@ const DEATH_BY_DAMAGE: Record<DamageCause, RunEndCause> = {
  * Apply recorded damage to the avatar, in order (0014 item 2).
  *
  * - Each entry takes its amount off the avatar's health and emits
- *   `damageTaken`. As with a fall (gravity.ts), an entry never takes more than
+ *   `damageTaken`. An entry never takes more than
  *   the health that is left, so a dead avatar has exactly 0 health.
  * - The first entry that brings health to 0 ends the run as a death, with the
  *   cause that entry maps to. The entries after it are not applied: the

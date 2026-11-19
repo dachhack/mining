@@ -21,9 +21,8 @@ function craftable(state: GameState): string[] {
 }
 
 describe('the data these scenarios assume', () => {
-  it('has the five field recipes of design doc 7.1, each 1 AP', () => {
+  it('has the four field recipes of design doc 7.1, each 1 AP (no ladder: issue #80)', () => {
     expect(FIELD_RECIPES.map((recipe) => recipe.id)).toEqual([
-      'ladder',
       'support',
       'torch',
       'fuel',
@@ -35,17 +34,6 @@ describe('the data these scenarios assume', () => {
 });
 
 describe('crafting each recipe', () => {
-  it('ladder: 1 timber becomes 3 ladders, for 1 AP', () => {
-    const state = surfaceState({ ap: 5, inventory: { timber: 2, ladder: 1 } });
-    const { state: after, events } = act(state, { type: 'craft', recipe: 'ladder' });
-    expect(after.inventory).toEqual({ timber: 1, ladder: 4 });
-    expect(after.ap).toBe(4);
-    expect(events).toEqual([
-      { type: 'crafted', recipe: 'ladder' },
-      { type: 'itemGained', item: 'ladder', count: 3 },
-    ]);
-  });
-
   it('support: 1 timber and 1 stone become 1 support, for 1 AP', () => {
     const state = surfaceState({ ap: 5, inventory: { timber: 1, stone: 2 } });
     const { state: after, events } = act(state, { type: 'craft', recipe: 'support' });
@@ -105,22 +93,19 @@ describe('crafting each recipe', () => {
 describe('when a craft is legal', () => {
   it('lists every recipe the avatar has the materials for, in recipe order', () => {
     const state = surfaceState({ inventory: { timber: 1, stone: 1, coal: 1 } });
-    expect(craftable(state)).toEqual(['ladder', 'support', 'torch', 'fuel', 'lampOil']);
+    expect(craftable(state)).toEqual(['support', 'torch', 'fuel', 'lampOil']);
   });
 
   it('refuses each recipe without its materials', () => {
     expect(craftable(surfaceState({ inventory: {} }))).toEqual([]);
     // Timber only: no stone for a support, no coal for a torch.
-    expect(craftable(surfaceState({ inventory: { timber: 1 } }))).toEqual(['ladder']);
+    expect(craftable(surfaceState({ inventory: { timber: 1 } }))).toEqual([]);
     // Coal only: the two gauge recipes.
     expect(craftable(surfaceState({ inventory: { coal: 1 } }))).toEqual(['fuel', 'lampOil']);
     // Stone only: nothing.
     expect(craftable(surfaceState({ inventory: { stone: 3 } }))).toEqual([]);
     // Timber and stone: no coal, so no torch, fuel or lamp oil.
-    expect(craftable(surfaceState({ inventory: { timber: 1, stone: 1 } }))).toEqual([
-      'ladder',
-      'support',
-    ]);
+    expect(craftable(surfaceState({ inventory: { timber: 1, stone: 1 } }))).toEqual(['support']);
     // A count of 0 is not "having" the item.
     expect(craftable(surfaceState({ inventory: { timber: 0, coal: 0 } }))).toEqual([]);
   });
@@ -155,8 +140,8 @@ describe('when a craft is legal', () => {
   it('refuses a craft whose result is over the carry limit', () => {
     // No M1 recipe makes the load heavier, so the limit can only refuse a
     // craft when the avatar is already over it. 10 stone (20) + 1 timber + 1
-    // coal + 1 more coal = 23; after a torch, 22; after a support, 22; after a
-    // ladder, 22; after fuel or lamp oil, 22. All over 20.
+    // coal + 1 more coal = 23; after a torch, 22; after a support, 22; after
+    // fuel or lamp oil, 22. All over 20.
     const over = surfaceState({ inventory: { stone: 10, timber: 1, coal: 2 } });
     expect(carriedWeight(over)).toBe(23);
     expect(craftable(over)).toEqual([]);
@@ -166,9 +151,9 @@ describe('when a craft is legal', () => {
 
     // One over the limit, where the craft brings the load back to the limit:
     // 9 stone (18) + 1 timber + 2 coal = 21. Torch: 21 - 2 + 1 = 20, fits.
-    // Ladder: 21 - 1 + 0 = 20, fits. Fuel: 21 - 1 = 20, fits.
+    // Support: 21 - 3 + 2 = 20, fits. Fuel: 21 - 1 = 20, fits.
     const justOver = surfaceState({ inventory: { stone: 9, timber: 1, coal: 2 } });
     expect(carriedWeight(justOver)).toBe(21);
-    expect(craftable(justOver)).toEqual(['ladder', 'support', 'torch', 'fuel', 'lampOil']);
+    expect(craftable(justOver)).toEqual(['support', 'torch', 'fuel', 'lampOil']);
   });
 });

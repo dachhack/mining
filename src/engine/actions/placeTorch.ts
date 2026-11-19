@@ -12,11 +12,9 @@ import type { GameState } from '../state';
  * Every `PlaceTorchAction` the player could take now.
  *
  * - One action for each cell a torch may go in, if the avatar carries a
- *   torch. Those are the same cells as for a ladder (0005 item 19): the
- *   avatar's own cell or a face neighbour, which must be open, inside the
- *   grid (so not on the surface; owner question 28), and hold no structure
- *   yet. A cell holds one structure, so a torch cannot share a cell with a
- *   ladder.
+ *   torch (0005 item 19): the avatar's own cell or a face neighbour, which
+ *   must be open, inside the grid (so not on the surface; owner question
+ *   28), and hold no structure yet. A cell holds one structure.
  * - Order: the avatar's cell, then the neighbours in the order of
  *   `FACE_OFFSETS`.
  * - `ap` is `ACTION_COSTS.placeTorch`.

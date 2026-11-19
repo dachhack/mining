@@ -276,21 +276,7 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
       ctx.fill();
     }
   }
-  if (tile.structure === 'ladder') {
-    // Two rails and three rungs.
-    ctx.strokeStyle = MARK_COLOURS.ladder;
-    ctx.lineWidth = Math.max(1.5, c / 10);
-    ctx.beginPath();
-    ctx.moveTo(x + 0.3 * c, y + 0.1 * c);
-    ctx.lineTo(x + 0.3 * c, y + 0.9 * c);
-    ctx.moveTo(x + 0.7 * c, y + 0.1 * c);
-    ctx.lineTo(x + 0.7 * c, y + 0.9 * c);
-    for (const fy of [0.3, 0.5, 0.7]) {
-      ctx.moveTo(x + 0.3 * c, y + fy * c);
-      ctx.lineTo(x + 0.7 * c, y + fy * c);
-    }
-    ctx.stroke();
-  } else if (tile.structure === 'torch') {
+  if (tile.structure === 'torch') {
     // A flame: an orange disc with a pale core.
     ctx.fillStyle = MARK_COLOURS.torch;
     ctx.beginPath();
@@ -527,7 +513,6 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
     entries.push(legendEntry(sampleTile({ traced: true }), 'mineral traces'));
   }
   const markLabels: [string, Partial<Tile>, string][] = [
-    ['ladder', { structure: 'ladder' }, 'ladder'],
     ['torch', { structure: 'torch' }, 'torch'],
     ['support', { structure: 'support' }, 'support'],
     ['other', { structure: 'other' }, 'other structure'],
