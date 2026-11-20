@@ -88,6 +88,25 @@ describe('the map and its notes', () => {
   });
 });
 
+describe('armed ore that sealant has buried (review of PR #105)', () => {
+  it('leaves the Hazards line: the player is not told of a blast that will not happen', () => {
+    const state = pit(
+      ['111', '111'],
+      { armed: [{ pos: { x: 1, y: 0, z: 1 }, kind: 'unstableOre' }], stockpile: { sealant: 1 } },
+      ['#U#', '###'],
+    );
+    expect(buildView(state, { deepestDepth: 1 }).hazards.join(' ')).toContain(
+      'the unstable ore on x1 y0 is ARMED',
+    );
+    const session = sessionOn(state);
+    expect(takeChoices(session, ['seal 1,0']).refused).toBeNull();
+    const view = buildView(session.state, { deepestDepth: 1 });
+    expect(view.hazards).toEqual([]);
+    expect(view.forecast ?? '').not.toContain('GOES OFF');
+    expect(view.notes.join(' ')).not.toContain('ARMED');
+  });
+});
+
 describe('the forecast says what gas and charges will do (design doc 11)', () => {
   it('names the squares gas will reach, and then says that it did', () => {
     const state = pit(['222']);

@@ -27,7 +27,9 @@ import type { GameState } from './state';
  *   the foot of its slide path), or `null` while the countdown is stopped.
  * - `unstableOre`: the armed unstable ore block at `pos` (design doc 6.6).
  * - `explosive`: the placed explosive on the top block at `pos`.
- *   Both go off in the coming cube phase: `inShifts` is always 1.
+ *   Both go off in the coming cube phase: `inShifts` is always 1. Every
+ *   entry listed does go off, unless a hazard of that same cube phase reaches
+ *   it first (lava on a charge, rubble on the ore).
  *
  * `inShifts` is how many cube phases from now: 1 means "in the coming cube
  * phase". For a cracked block it is the stored timer plus 1, the number the
@@ -50,7 +52,9 @@ export type CountdownForecast =
  * After the cracks come the armed charges (armed unstable ore and placed
  * explosives), in the order of `state.armed`; only ones on a block the
  * player has seen, which every one is: ore is armed only while known, and an
- * explosive is placed on a top block.
+ * explosive is placed on a top block. Armed ore that is no longer its
+ * square's top block (sealed rock was placed on it) is left out: it is
+ * smothered and will not go off.
  * Does not change `state`.
  */
 export function forecastCountdowns(state: GameState): CountdownForecast[] {
@@ -74,9 +78,20 @@ export function forecastCountdowns(state: GameState): CountdownForecast[] {
     }
   }
   for (const charge of state.armed) {
-    if (isRevealed(state, charge.pos)) {
-      countdowns.push({ kind: charge.kind, pos: { ...charge.pos }, inShifts: 1 });
+    if (!isRevealed(state, charge.pos)) {
+      continue;
     }
+    // Armed ore goes off only while it is its square's top block: the same
+    // test step (c) makes (`setOffCharges` in cube/gas.ts). Ore that sealed
+    // rock has buried in this player phase will not go off, so it is not
+    // listed (review of PR #105). Depths are always seen.
+    if (
+      charge.kind === 'unstableOre' &&
+      depthIn(map, charge.pos.x, charge.pos.y) !== charge.pos.z
+    ) {
+      continue;
+    }
+    countdowns.push({ kind: charge.kind, pos: { ...charge.pos }, inShifts: 1 });
   }
   return countdowns;
 }

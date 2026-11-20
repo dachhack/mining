@@ -514,8 +514,12 @@ describe('explosions and the camp-made tools (issues #103 and #104)', () => {
       ['#U'],
     );
     expect(ofType(previewCubePhase(state).gas, 'exploded')).toHaveLength(1);
+    expect(previewCubePhase(state).countdowns).toHaveLength(1);
     const sealed = act(state, { type: 'seal', x: 1, y: 0 }).state;
     expect(ofType(previewCubePhase(sealed).gas, 'exploded')).toEqual([]);
+    // Nor is it on the list of countdowns: the two halves of the forecast
+    // agree (review of PR #105).
+    expect(previewCubePhase(sealed).countdowns).toEqual([]);
   });
 
   it('sealing a gassy square destroys its gas, so a later blast finds nothing to light', () => {

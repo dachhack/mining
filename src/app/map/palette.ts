@@ -170,6 +170,12 @@ export const MARK_COLOURS = {
   chargeInk: '#fff3c4',
   /** A square that will be in an explosion when the shift ends: a dashed frame. */
   blast: '#ffd21f',
+  /**
+   * The blast a tap would cause (a charge about to be placed, ore a mine
+   * would arm): a solid orange outline, so that it does not run together
+   * with the dashed yellow frames of explosions already coming.
+   */
+  blastPreview: '#ff8a1f',
   /** The dark edge under the numbers and marks of water and lava. */
   fluidOutline: 'rgba(0, 0, 0, 0.8)',
   /** The outline of a square a mine would make unstable. */

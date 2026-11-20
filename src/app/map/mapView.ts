@@ -1195,7 +1195,7 @@ export function createTapMap(
     }
     // The blast of a charge about to be placed, or of ore a mine would arm.
     for (const square of marks.blast) {
-      outline(ctx, square.x, square.y, c, MARK_COLOURS.blast);
+      outline(ctx, square.x, square.y, c, MARK_COLOURS.blastPreview);
     }
     // The range of a pump or of a scan, in light blue.
     for (const square of marks.range) {
