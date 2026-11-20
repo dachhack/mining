@@ -173,19 +173,15 @@ describe('playRun', () => {
     expect(finalState.status.kind).toBe('active');
   });
 
-  it('counts a shift that begins with no fuel, and the shifts begun with the lamp out', () => {
+  it('counts a shift that begins with no fuel', () => {
     // The random policy on seed 9 crafts nothing. So its 24 fuel last 24
-    // shifts, the 25th begins at 0, and its upkeep ends the run. Its 3 lamp
-    // oil burn at the ends of shifts 4, 8 and 12, so every shift from 13 on
-    // begins with the lamp out (which changes nothing since issue #86).
+    // shifts, the 25th begins at 0, and its upkeep ends the run.
     const metrics = run('random', 9);
     expect(metrics.cause).toBe('outOfFuel');
     expect(metrics.recipesUsed['fuel']).toBe(0);
-    expect(metrics.recipesUsed['lampOil']).toBe(0);
     expect(metrics.fuelAtEnd).toBe(0);
     expect(metrics.shiftsPlayed).toBe(25);
     expect(metrics.shiftsAtZeroFuel).toBe(1);
-    expect(metrics.shiftsInTheDark).toBe(25 - 12);
     // The random policy never leaves, and hardly ever goes a second level down.
     expect(metrics.deepestSquare).toBeGreaterThanOrEqual(1);
   });

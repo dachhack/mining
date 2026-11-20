@@ -80,7 +80,6 @@ export function createRun(seed: number, contractId: string, loadoutId: string): 
   state.shift = SHIFT.firstShiftNumber;
   state.ap = SHIFT.apPerShift;
   state.fuel = loadout.fuel;
-  state.lampOil = loadout.lampOil;
   for (const stack of loadout.items) {
     addItem(state, stack.item, stack.count);
   }
@@ -161,7 +160,6 @@ export function applyAction(state: GameState, action: Action): StepResult {
     // same module, which looks at `action.type` itself.
     case 'placePump':
     case 'placeVent':
-    case 'placeSafetyLamp':
     case 'seal':
     case 'scan':
       applyCampToolAction(next, action, events);
@@ -223,7 +221,7 @@ export function endShift(state: GameState): StepResult {
 /**
  * What ending the shift now would do, for the end-shift preview (0014 item
  * 4): the countdowns and flows the player can work out from what it sees
- * (both empty until M2-6), and upkeep's effect on fuel and lamp oil. Does not
+ * (both empty until M2-6), and upkeep's effect on fuel. Does not
  * change `state`. Throws if the run has already ended, as `endShift` does.
  */
 export function previewCubePhase(state: GameState): ShiftForecast {
@@ -247,7 +245,6 @@ export type {
   MineAction,
   PlaceExplosiveAction,
   PlacePumpAction,
-  PlaceSafetyLampAction,
   PlaceSupportAction,
   PlaceVentAction,
   RestAction,

@@ -5,7 +5,7 @@
   "loadoutId": "standard",
   "recordedWith": "random",
   "expectedStatus": "ended: death, outOfFuel",
-  "expectedHash": "ad1f508b90d05514",
+  "expectedHash": "f66010ea089904c4",
   "decisions": [
     "cutTree 7,27 ap 2",
     "cutTree 30,8 ap 2",

@@ -77,13 +77,6 @@ export interface PlaceVentAction {
   ap: number;
 }
 
-/** Place a safety lamp from the inventory into the cell `target` (0014 items 14 and 31). */
-export interface PlaceSafetyLampAction {
-  type: 'placeSafetyLamp';
-  target: Vec3;
-  ap: number;
-}
-
 /** Use one sealant to turn the open cell `target` into sealed rock (0014 item 12). */
 export interface SealAction {
   type: 'seal';
@@ -147,8 +140,7 @@ export interface CutTreeAction {
 }
 
 /** The actions of actions/campTools.ts (M2-8). */
-export type CampToolAction =
-  PlacePumpAction | PlaceVentAction | PlaceSafetyLampAction | SealAction | ScanAction;
+export type CampToolAction = PlacePumpAction | PlaceVentAction | SealAction | ScanAction;
 
 /** The actions of actions/camp.ts (M2-7). */
 export type CampAction =
@@ -186,7 +178,6 @@ export function actionKey(action: Action): string {
     case 'placeExplosive':
     case 'placePump':
     case 'placeVent':
-    case 'placeSafetyLamp':
     case 'seal':
       // The type, the cell, the cost.
       return `${action.type} ${vecKey(action.target)} ap ${action.ap}`;

@@ -13,9 +13,13 @@ const BESIDE = { x: 2, y: 0, z: 0 };
 
 describe('destroyStructure', () => {
   it('removes the structure at once and says what it was', () => {
-    const state = buildState({ layers: [['....'], ['####']], torches: [HERE], supports: [BESIDE] });
+    const state = buildState({
+      layers: [['....'], ['####']],
+      structures: [{ pos: HERE, structure: 'pump' }],
+      supports: [BESIDE],
+    });
     const events: GameEvent[] = [];
-    expect(destroyStructure(state, HERE, 'rockfall', events)).toBe(STRUCTURES.torch.code);
+    expect(destroyStructure(state, HERE, 'rockfall', events)).toBe(STRUCTURES.pump.code);
     // Gone now: a later step of the same cube phase does not find it.
     expect(structureAt(state, HERE)).toBe(NO_STRUCTURE);
     expect(structureAt(state, BESIDE)).toBe(STRUCTURES.support.code);
@@ -23,7 +27,7 @@ describe('destroyStructure', () => {
       {
         type: 'structureDestroyed',
         pos: HERE,
-        structure: STRUCTURES.torch.code,
+        structure: STRUCTURES.pump.code,
         cause: 'rockfall',
       },
     ]);

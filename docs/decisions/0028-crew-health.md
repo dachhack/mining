@@ -1,4 +1,4 @@
-# 0027 — T5: crew health, worked squares, air removed
+# 0028 — T5: crew health, worked squares, air removed
 
 Date: 2026-11-20. Status: accepted for the code as it stands (issue #90, task T5 of decision note 0025). It builds design doc v0.2 section 5, which the owner chose ("Keep a 'crew' health bar") and whose numbers are [Default] (question 83). The readings below are the developer's, made where section 5 leaves a detail open. None changes a [Decided] item.
 
@@ -16,7 +16,7 @@ After T2 the state still held `avatar: { health, air, resting }`, damage was rec
 4. **Once per kind, by the largest amount.** The phase's notes hold at most one entry for each kind of hazard. A second record of the same kind does not add an entry; it raises the amount if it is larger. The entry keeps the place where the kind was first met.
 5. **Applied in step (e)**, in the order of the notes; the first entry that brings health to 0 names the loss: buried (slump), drowned (water), burned (lava, gas explosion, explosion), poisoned (gas). Then rest (still a stub: T12), then the worked squares are cleared, also when the run was just lost.
 6. **Numbers** (`CREW.damage`, all [Default]): slump 3, water 1, lava on 5, lava beside 1, gas 1, gas explosion 3, explosion 6. The old numbers they replace are removed from `HAZARDS` (rockfall 4, explosion 6, lava 5 / 1), so each number is in one place.
-7. **Removed:** `avatar.air`, `HAZARDS.air`, `air.ts`, `airLine.ts`, `CAMPS.airLineMaxBadStretch`, the `airChanged` event; the `giveUp` action, its cost and the `entombed` cause (design doc 5.4: no entombment and no "give up"); the causes `crushed` and `suffocated`. `STATE_VERSION` is 8; a version-7 save is refused with the usual version error. `ENGINE_VERSION` stays 0.4.0 (the batch T2–T15).
+7. **Removed:** `avatar.air`, `HAZARDS.air`, `air.ts`, `airLine.ts`, `CAMPS.airLineMaxBadStretch`, the `airChanged` event; the `giveUp` action, its cost and the `entombed` cause (design doc 5.4: no entombment and no "give up"); the causes `crushed` and `suffocated`. `STATE_VERSION` is 9 (T3 took 8); a version-8 save is refused with the usual version error. `ENGINE_VERSION` stays 0.4.0 (the batch T2–T15).
 
 ### Readings where section 5 is silent
 

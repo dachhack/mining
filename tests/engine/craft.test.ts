@@ -21,13 +21,8 @@ function craftable(state: GameState): string[] {
 }
 
 describe('the data these scenarios assume', () => {
-  it('has the four field recipes of design doc 7.1, each 1 AP (no ladder: issue #80)', () => {
-    expect(FIELD_RECIPES.map((recipe) => recipe.id)).toEqual([
-      'support',
-      'torch',
-      'fuel',
-      'lampOil',
-    ]);
+  it('has the two field recipes of design doc 7.1, each 1 AP (no torch or lamp oil: issue #89)', () => {
+    expect(FIELD_RECIPES.map((recipe) => recipe.id)).toEqual(['support', 'fuel']);
     expect(ACTION_COSTS.craft).toBe(1);
     expect(AVATAR.carryCapacity).toBe(20);
   });
@@ -45,40 +40,15 @@ describe('crafting each recipe', () => {
     ]);
   });
 
-  it('torch: 1 timber and 1 coal become 1 torch, for 1 AP', () => {
-    const state = surfaceState({ ap: 5, inventory: { timber: 1, coal: 1 } });
-    const { state: after, events } = act(state, { type: 'craft', recipe: 'torch' });
-    expect(after.inventory).toEqual({ timber: 0, coal: 0, torch: 1 });
-    expect(after.ap).toBe(4);
-    expect(events).toEqual([
-      { type: 'crafted', recipe: 'torch' },
-      { type: 'itemGained', item: 'torch', count: 1 },
-    ]);
-  });
-
   it('fuel: 1 coal adds 3 to the fuel gauge, for 1 AP, and no item', () => {
-    const state = surfaceState({ ap: 5, fuel: 4, lampOil: 2, inventory: { coal: 2 } });
+    const state = surfaceState({ ap: 5, fuel: 4, inventory: { coal: 2 } });
     const { state: after, events } = act(state, { type: 'craft', recipe: 'fuel' });
     expect(after.inventory).toEqual({ coal: 1 });
     expect(after.fuel).toBe(7);
-    expect(after.lampOil).toBe(2);
     expect(after.ap).toBe(4);
     expect(events).toEqual([
       { type: 'crafted', recipe: 'fuel' },
       { type: 'fuelChanged', delta: 3, fuel: 7, reason: 'crafted' },
-    ]);
-  });
-
-  it('lamp oil: 1 coal adds 2 to the lamp-oil gauge, for 1 AP, and no item', () => {
-    const state = surfaceState({ ap: 5, fuel: 4, lampOil: 2, inventory: { coal: 2 } });
-    const { state: after, events } = act(state, { type: 'craft', recipe: 'lampOil' });
-    expect(after.inventory).toEqual({ coal: 1 });
-    expect(after.lampOil).toBe(4);
-    expect(after.fuel).toBe(4);
-    expect(after.ap).toBe(4);
-    expect(events).toEqual([
-      { type: 'crafted', recipe: 'lampOil' },
-      { type: 'lampOilChanged', delta: 2, lampOil: 4, reason: 'crafted' },
     ]);
   });
 
@@ -93,18 +63,18 @@ describe('crafting each recipe', () => {
 describe('when a craft is legal', () => {
   it('lists every recipe the avatar has the materials for, in recipe order', () => {
     const state = surfaceState({ inventory: { timber: 1, stone: 1, coal: 1 } });
-    expect(craftable(state)).toEqual(['support', 'torch', 'fuel', 'lampOil']);
+    expect(craftable(state)).toEqual(['support', 'fuel']);
   });
 
   it('refuses each recipe without its materials', () => {
     expect(craftable(surfaceState({ inventory: {} }))).toEqual([]);
-    // Timber only: no stone for a support, no coal for a torch.
+    // Timber only: no stone for a support.
     expect(craftable(surfaceState({ inventory: { timber: 1 } }))).toEqual([]);
-    // Coal only: the two gauge recipes.
-    expect(craftable(surfaceState({ inventory: { coal: 1 } }))).toEqual(['fuel', 'lampOil']);
+    // Coal only: fuel.
+    expect(craftable(surfaceState({ inventory: { coal: 1 } }))).toEqual(['fuel']);
     // Stone only: nothing.
     expect(craftable(surfaceState({ inventory: { stone: 3 } }))).toEqual([]);
-    // Timber and stone: no coal, so no torch, fuel or lamp oil.
+    // Timber and stone: no coal, so no fuel.
     expect(craftable(surfaceState({ inventory: { timber: 1, stone: 1 } }))).toEqual(['support']);
     // A count of 0 is not "having" the item.
     expect(craftable(surfaceState({ inventory: { timber: 0, coal: 0 } }))).toEqual([]);
@@ -122,7 +92,7 @@ describe('when a craft is legal', () => {
 
   it('applyAction throws for a recipe whose materials are missing', () => {
     const state = surfaceState({ inventory: { timber: 1 } });
-    expect(() => applyAction(state, { type: 'craft', recipe: 'torch', ap: 1 })).toThrow(
+    expect(() => applyAction(state, { type: 'craft', recipe: 'support', ap: 1 })).toThrow(
       'Not a legal action',
     );
   });
@@ -133,6 +103,6 @@ describe('when a craft is legal', () => {
     // + 2 coal = 23, over the limit of 20.
     const over = surfaceState({ inventory: { stone: 10, timber: 1, coal: 2 } });
     expect(carriedWeight(over)).toBe(23);
-    expect(craftable(over)).toEqual(['support', 'torch', 'fuel', 'lampOil']);
+    expect(craftable(over)).toEqual(['support', 'fuel']);
   });
 });

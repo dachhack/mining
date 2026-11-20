@@ -98,7 +98,6 @@ function describeAction(state: GameState, action: Action): string {
     case 'placeExplosive':
     case 'placePump':
     case 'placeVent':
-    case 'placeSafetyLamp':
     case 'seal':
       return `${action.type} at ${squareText(action.target.x, action.target.y)}`;
     case 'scan':
@@ -113,7 +112,7 @@ function describeAction(state: GameState, action: Action): string {
   }
 }
 
-/** "lampOil" -> "lamp-oil": an id from src/data in the lower case a choice is typed in. */
+/** "placeSupport" -> "place-support": an id from src/data in the lower case a choice is typed in. */
 function idInLowerCase(id: string): string {
   return id.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
 }
@@ -126,7 +125,7 @@ function idInLowerCase(id: string): string {
  * The names:
  * - "mine 3,4": mine the top block of the square x 3, y 4;
  * - "cut 3,4": cut the tree on that square;
- * - craft-fuel, craft-lamp-oil, ...: "craft-" and the recipe;
+ * - craft-fuel, craft-support, ...: "craft-" and the recipe;
  * - leave, and end for "end the shift".
  */
 export function choiceName(entry: LogEntry): string {
@@ -146,7 +145,6 @@ export function choiceName(entry: LogEntry): string {
     case 'placeExplosive':
     case 'placePump':
     case 'placeVent':
-    case 'placeSafetyLamp':
     case 'seal':
       return `${idInLowerCase(entry.type)} ${entry.target.x},${entry.target.y}`;
     case 'scan':
@@ -283,11 +281,6 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
       case 'fuelChanged':
         lines.push(
           `Fuel ${signed(event.delta)} (${GAUGE_REASONS[event.reason] ?? event.reason}), now ${event.fuel}.`,
-        );
-        break;
-      case 'lampOilChanged':
-        lines.push(
-          `Lamp oil ${signed(event.delta)} (${GAUGE_REASONS[event.reason] ?? event.reason}), now ${event.lampOil}.`,
         );
         break;
       case 'runEnded':

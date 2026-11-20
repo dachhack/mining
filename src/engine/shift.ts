@@ -25,10 +25,6 @@ export interface UpkeepForecast {
   fuelConsumed: number;
   /** Fuel after upkeep. */
   fuelAfter: number;
-  /** Lamp oil burned. */
-  lampOilBurned: number;
-  /** Lamp oil after upkeep. */
-  lampOilAfter: number;
   /** If ending the shift will end the run, why; otherwise `null`. */
   runEnds: RunEndCause | null;
 }
@@ -128,15 +124,13 @@ export function runCubePhase(state: GameState, events: GameEvent[]): void {
  */
 function computeUpkeep(state: GameState): UpkeepForecast {
   // Unspent AP plays no part here: it is lost when the shift ends (design
-  // doc 4; issue #32). So upkeep depends only on the gauges and the shift.
+  // doc 4; issue #32). So upkeep depends only on the fuel gauge.
 
   // 1. No fuel: the run ends and nothing else happens.
   if (state.fuel <= 0) {
     return {
       fuelConsumed: 0,
       fuelAfter: state.fuel,
-      lampOilBurned: 0,
-      lampOilAfter: state.lampOil,
       runEnds: 'outOfFuel',
     };
   }
@@ -145,17 +139,9 @@ function computeUpkeep(state: GameState): UpkeepForecast {
   //    below 0 if `fuelPerShift` is ever tuned above 1.
   const fuelConsumed = Math.min(SHIFT.fuelPerShift, state.fuel);
 
-  // 3. Lamp oil burns at the upkeep that ends every Nth shift of the run,
-  //    counting the first shift as 1 (owner question 29).
-  const shiftsPlayed = state.shift - SHIFT.firstShiftNumber + 1;
-  const burnIsDue = shiftsPlayed % SHIFT.lampOilBurnEveryShifts === 0;
-  const lampOilBurned = burnIsDue ? Math.min(SHIFT.lampOilPerBurn, state.lampOil) : 0;
-
   return {
     fuelConsumed,
     fuelAfter: state.fuel - fuelConsumed,
-    lampOilBurned,
-    lampOilAfter: state.lampOil - lampOilBurned,
     runEnds: null,
   };
 }
@@ -170,16 +156,12 @@ function computeUpkeep(state: GameState): UpkeepForecast {
  *    player may finish a shift on 0 fuel and survive only by crafting fuel
  *    before the next upkeep.
  * 2. Otherwise consume the shift's fuel (`fuelChanged`, reason `upkeep`).
- * 3. Burn lamp oil when it is due (`lampOilChanged`, reason `upkeep`): at the
- *    upkeep that ends every `lampOilBurnEveryShifts`-th shift of the run,
- *    counting the first shift as 1 (so with 4, at the end of the 4th, 8th,
- *    ... shift), and only if there is oil left.
- * 4. Start the next shift: add 1 to `state.shift`, reset `state.ap`, and emit
+ * 3. Start the next shift: add 1 to `state.shift`, reset `state.ap`, and emit
  *    `shiftEnded`. Unspent AP is lost: it does not carry over and does not
  *    become fuel.
  *
- * Reveal is not this function's job: `endShift` calls `updateReveal` after
- * it, which is how the light shrinks when the oil runs out.
+ * There is no lamp oil to burn: light is gone (design doc v0.2).
+ * Reveal is not this function's job: `endShift` calls `updateReveal` after it.
  */
 export function runUpkeep(state: GameState, events: GameEvent[]): void {
   const upkeep = computeUpkeep(state);
@@ -201,18 +183,7 @@ export function runUpkeep(state: GameState, events: GameEvent[]): void {
     });
   }
 
-  // 3. Lamp oil.
-  if (upkeep.lampOilBurned > 0) {
-    state.lampOil -= upkeep.lampOilBurned;
-    events.push({
-      type: 'lampOilChanged',
-      delta: -upkeep.lampOilBurned,
-      lampOil: state.lampOil,
-      reason: 'upkeep',
-    });
-  }
-
-  // 4. The next shift begins, with fresh AP whatever was left unspent.
+  // 3. The next shift begins, with fresh AP whatever was left unspent.
   const endedShift = state.shift;
   state.shift = endedShift + 1;
   state.ap = SHIFT.apPerShift;
@@ -221,7 +192,7 @@ export function runUpkeep(state: GameState, events: GameEvent[]): void {
 
 /**
  * What ending the shift now would do (0014 item 4): the countdowns and flows
- * the player can work out, and upkeep's effect on the gauges.
+ * the player can work out, and upkeep's effect on fuel.
  * `previewCubePhase` in index.ts returns this.
  *
  * - Does not change `state`, and is a function of what the player sees

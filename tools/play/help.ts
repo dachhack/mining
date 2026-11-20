@@ -98,7 +98,6 @@ THE GAME
     Nothing refills fuel except crafting it. The "If you end the shift now" line says exactly
     what will happen, including when it would end the run. So with fuel at 0 you may still play
     one shift: that line warns you ("FUEL WILL BE 0") at the end of the shift before it.
-  - Lamp oil is still counted and still burns, but nothing needs light any more: ignore it.
 
   Mining
   - Only a square's top block can be mined. Mining it takes the block, gives what the block
@@ -150,8 +149,8 @@ THE GAME
 
   Crafting (${ACTION_COSTS.craft} AP each)
 ${recipes}
-    Supports and torches can be made but have no use yet in this version of the game, and
-    lamp oil has none either. Fuel is the one that matters.
+    Supports can be made but have no use yet in this version of the game. Fuel is the one
+    that matters.
 
   Crew health
   - Your crew starts with ${CREW.startHealth} health ("Crew health" among the gauges). The crew is not on the map.

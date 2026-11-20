@@ -48,7 +48,7 @@ export interface BlockDef {
   /** The number stored in the cube's typed array for this block. 0 to 255. */
   code: number;
   name: string;
-  /** Solid blocks hold the avatar up and stop light. Air is the only non-solid block. */
+  /** Air is the only non-solid block. */
   solid: boolean;
   /** AP to mine it. `null` means it cannot be mined (air, bedrock). */
   mineCost: number | null;
@@ -70,13 +70,13 @@ export interface BlockDef {
   shaftLimit: number | null;
 }
 
-/** One kind of carried item. Fuel and lamp oil are gauges, not items (0005 item 18). */
+/** One kind of carried item. Fuel is a gauge, not an item (0005 item 18). */
 export interface ItemDef {
   name: string;
   weight: number;
 }
 
-/** Something placed in a cell that is not a block: a torch, a support, a pump, ... */
+/** Something placed in a cell that is not a block: a support, a pump, a vent, ... */
 export interface StructureDef {
   /** The number stored in the cube's structure array. 0 means "nothing here". */
   code: number;
@@ -125,12 +125,6 @@ export interface CrewData {
 
 export interface AvatarData {
   carryCapacity: number;
-  /** Light radius while there is lamp oil (design doc 5.1). */
-  lightRadiusWithOil: number;
-  /** Light radius once lamp oil has run out. */
-  lightRadiusWithoutOil: number;
-  /** Light radius of a placed torch (0005 item 13). */
-  torchLightRadius: number;
 }
 
 export interface ShiftData {
@@ -139,15 +133,11 @@ export interface ShiftData {
   apPerShift: number;
   /** Fuel consumed at each upkeep (design doc 4). */
   fuelPerShift: number;
-  /** The lamp burns oil once every this many shifts (0005 item 15). */
-  lampOilBurnEveryShifts: number;
-  lampOilPerBurn: number;
 }
 
 /** AP cost of each action whose cost does not depend on a block (design doc 4.1). */
 export interface ActionCostData {
   move: number;
-  placeTorch: number;
   craft: number;
   pickUp: number;
   drop: number;
@@ -156,7 +146,6 @@ export interface ActionCostData {
   placeExplosive: number;
   placePump: number;
   placeVent: number;
-  placeSafetyLamp: number;
   /** Using sealant on a cell (0014 item 12). */
   seal: number;
   scan: number;
@@ -171,7 +160,6 @@ export interface ActionCostData {
 export interface LoadoutDef {
   name: string;
   fuel: number;
-  lampOil: number;
   items: ItemStack[];
 }
 

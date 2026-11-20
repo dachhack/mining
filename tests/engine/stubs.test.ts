@@ -21,14 +21,13 @@ describe('actionKey and sameAction', () => {
   const actions: Action[] = [
     { type: 'mine', x: 1, y: 2, ap: 2 },
     { type: 'cutTree', x: 1, y: 2, ap: 2 },
-    { type: 'craft', recipe: 'torch', ap: 1 },
+    { type: 'craft', recipe: 'support', ap: 1 },
     { type: 'leave', ap: 0 },
     // The M2 actions (decision note 0015).
     { type: 'placeSupport', target: { x: 1, y: 2, z: 3 }, ap: 1 },
     { type: 'placeExplosive', target: { x: 1, y: 2, z: 3 }, ap: 1 },
     { type: 'placePump', target: { x: 1, y: 2, z: 3 }, ap: 1 },
     { type: 'placeVent', target: { x: 1, y: 2, z: 3 }, ap: 1 },
-    { type: 'placeSafetyLamp', target: { x: 1, y: 2, z: 3 }, ap: 1 },
     { type: 'seal', target: { x: 1, y: 2, z: 3 }, ap: 1 },
     { type: 'scan', centre: { x: 1, y: 2, z: 3 }, ap: 2 },
     { type: 'foundCamp', ap: 5 },
@@ -54,7 +53,7 @@ describe('actionKey and sameAction', () => {
     expect(sameAction(mine, { ...mine, y: 1 })).toBe(false);
     // The same square, another kind of action.
     expect(sameAction(mine, { ...mine, type: 'cutTree' })).toBe(false);
-    const craft: Action = { type: 'craft', recipe: 'torch', ap: 1 };
+    const craft: Action = { type: 'craft', recipe: 'support', ap: 1 };
     expect(sameAction(craft, { ...craft, recipe: 'fuel' })).toBe(false);
     const scan: Action = { type: 'scan', centre: { x: 1, y: 2, z: 3 }, ap: 2 };
     expect(sameAction(scan, { ...scan, centre: { x: 1, y: 2, z: 4 } })).toBe(false);
@@ -73,7 +72,7 @@ describe('the M2 action modules are stubs (decision note 0015)', () => {
   const state = buildState({
     layers: [['#.#'], ['###']],
     revealAll: true,
-    inventory: { support: 2, explosive: 1, pump: 1, vent: 1, safetyLamp: 1, sealant: 1 },
+    inventory: { support: 2, explosive: 1, pump: 1, vent: 1, sealant: 1 },
   });
 
   it('placeSupport offers nothing (until M2-3)', async () => {

@@ -1,5 +1,5 @@
 // Scenario tests for the end of a shift: AP reset, unspent AP being lost,
-// fuel upkeep, lamp oil, running out of fuel, and the end-shift preview
+// fuel upkeep, running out of fuel, and the end-shift preview
 // (design doc 4; 0005 item 15; issue #32 "no fuel refill"; owner question 29).
 //
 // Every test uses a tiny hand-built cube with the avatar on the surface. The
@@ -26,13 +26,11 @@ function eventsOfType(events: GameEvent[], type: GameEvent['type']): GameEvent[]
 }
 
 describe('the data these scenarios assume', () => {
-  it('is 5 AP per shift, 1 fuel per shift, 1 oil every 4 shifts, and nothing about banking', () => {
+  it('is 5 AP per shift, 1 fuel per shift, and nothing about banking or lamp oil', () => {
     expect(SHIFT).toEqual({
       firstShiftNumber: 1,
       apPerShift: 5,
       fuelPerShift: 1,
-      lampOilBurnEveryShifts: 4,
-      lampOilPerBurn: 1,
     });
   });
 });
@@ -52,12 +50,11 @@ describe('endShift', () => {
   });
 
   it('emits the events of an ordinary upkeep in order', () => {
-    // 4 unspent AP, which are simply lost: no event for them. Shift 4, so oil burns.
-    const state = surfaceState({ ap: 4, fuel: 7, lampOil: 5, shift: 4 });
+    // 4 unspent AP, which are simply lost: no event for them.
+    const state = surfaceState({ ap: 4, fuel: 7, shift: 4 });
     const { events } = endShift(state);
     expect(events).toEqual([
       { type: 'fuelChanged', delta: -1, fuel: 6, reason: 'upkeep' },
-      { type: 'lampOilChanged', delta: -1, lampOil: 4, reason: 'upkeep' },
       { type: 'shiftEnded', shift: 4, nextShift: 5 },
     ]);
   });
@@ -172,25 +169,6 @@ describe('fuel upkeep', () => {
   });
 });
 
-describe('lamp oil', () => {
-  it('burns 1 oil at the upkeep that ends the 4th and the 8th shift, and at no other', () => {
-    let state = surfaceState({ ap: 0, fuel: 20, lampOil: 6 });
-    const oilAfterShift: number[] = [];
-    for (let i = 0; i < 9; i += 1) {
-      state = endShift({ ...state, ap: 0 }).state;
-      oilAfterShift.push(state.lampOil);
-    }
-    // After shifts 1..9.
-    expect(oilAfterShift).toEqual([6, 6, 6, 5, 5, 5, 5, 4, 4]);
-  });
-
-  it('burns nothing, and emits nothing, when there is no oil left', () => {
-    const { state: after, events } = endShift(surfaceState({ lampOil: 0, shift: 4 }));
-    expect(after.lampOil).toBe(0);
-    expect(eventsOfType(events, 'lampOilChanged')).toEqual([]);
-  });
-});
-
 describe('after the run has ended', () => {
   // Documented choice: `endShift` (and `previewCubePhase`) throw.
   const ended = surfaceState({ status: { kind: 'ended', outcome: 'salvage', cause: 'left' } });
@@ -225,10 +203,7 @@ describe('previewCubePhase', () => {
     { name: 'out of fuel', options: { ap: 2, fuel: 0 } },
     { name: 'out of fuel with 5 unspent AP', options: { ap: 5, fuel: 0 } },
     { name: 'last fuel consumed', options: { ap: 0, fuel: 1 } },
-    { name: 'oil burns (shift 4)', options: { ap: 0, lampOil: 6, shift: 4 } },
-    { name: 'oil burns (shift 8)', options: { ap: 0, lampOil: 1, shift: 8 } },
-    { name: 'oil due but none left', options: { ap: 0, lampOil: 0, shift: 4 } },
-    { name: 'oil not due (shift 5)', options: { ap: 0, lampOil: 6, shift: 5 } },
+    { name: 'a later shift (shift 4)', options: { ap: 0, shift: 4 } },
   ];
 
   for (const { name, options } of cases) {
@@ -244,17 +219,9 @@ describe('previewCubePhase', () => {
       const { state: after, events } = endShift(state);
       const upkeep = forecast.upkeep;
 
-      // The forecast has exactly these fields: nothing about banked AP.
-      expect(Object.keys(upkeep).sort()).toEqual([
-        'fuelAfter',
-        'fuelConsumed',
-        'lampOilAfter',
-        'lampOilBurned',
-        'runEnds',
-      ]);
+      // The forecast has exactly these fields: nothing about banked AP or lamp oil.
+      expect(Object.keys(upkeep).sort()).toEqual(['fuelAfter', 'fuelConsumed', 'runEnds']);
       expect(upkeep.fuelAfter).toBe(after.fuel);
-      expect(upkeep.lampOilAfter).toBe(after.lampOil);
-      expect(upkeep.lampOilBurned).toBe(state.lampOil - after.lampOil);
       expect(upkeep.fuelConsumed).toBe(state.fuel - after.fuel);
 
       // The forecast's fuel matches the events: every change to fuel at

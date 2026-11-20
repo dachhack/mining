@@ -9,7 +9,7 @@
 // A tree is not a block: `blockAt` still answers "open air" for every surface
 // cell, so water, gas and air paths treat the forest as open air, as they
 // treated the bare surface. What a tree changes is said where it matters:
-// walking (actions/move.ts), light and reveal (reveal.ts), mining the ground
+// reveal (reveal.ts), mining the ground
 // under it (actions/mine.ts), and cutting (actions/cutTree.ts).
 
 import { SURFACE, WORLD } from '../../data';

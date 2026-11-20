@@ -31,14 +31,13 @@ function busyState(): GameState {
     health: 7,
     ap: 3,
     fuel: 11,
-    lampOil: 4,
     shift: 9,
-    inventory: { timber: 2, torch: 5, coal: 0 },
+    inventory: { timber: 2, vent: 5, coal: 0 },
     looseItems: [
       { pos: { x: 1, y: 1, z: 0 }, item: 'stone', count: 2 },
       { pos: { x: 0, y: 0, z: -1 }, item: 'coal', count: 1 },
     ],
-    torches: [{ x: 1, y: 1, z: 0 }],
+    supports: [{ x: 1, y: 1, z: 0 }],
     seed: 4242,
     // Every field the M2 skeleton added (issue #50), each with something in it.
     worked: [{ x: 2, y: 1 }],
@@ -79,7 +78,7 @@ describe('serialise and deserialise', () => {
     const loaded = throughJson(state);
     expect(hashState(loaded)).toBe(hashState(state));
     // Everything except the zero-count inventory entry, which is dropped.
-    expect(loaded.inventory).toEqual({ timber: 2, torch: 5 });
+    expect(loaded.inventory).toEqual({ timber: 2, vent: 5 });
     expect({ ...loaded, inventory: {}, looseItems: [], camps: [] }).toEqual({
       ...state,
       inventory: {},
@@ -193,10 +192,10 @@ describe('serialise and deserialise', () => {
 
   it('refuses a save from before the M2 skeleton with a clear error', () => {
     // State version 3 was the last M1 shape (decision note 0012).
-    expect(STATE_VERSION).toBe(8);
+    expect(STATE_VERSION).toBe(9);
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 3 })).toThrow(
-      'Saved state has version 3; this build reads version 8',
+      'Saved state has version 3; this build reads version 9',
     );
   });
 
@@ -204,7 +203,7 @@ describe('serialise and deserialise', () => {
     // State version 4 was the M2 skeleton's shape, with no surface arrays.
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 4 })).toThrow(
-      'Saved state has version 4; this build reads version 8',
+      'Saved state has version 4; this build reads version 9',
     );
   });
 
@@ -212,7 +211,15 @@ describe('serialise and deserialise', () => {
     // State version 5 could hold a ladder (structure code 1, item 'ladder').
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 5 })).toThrow(
-      'Saved state has version 5; this build reads version 8',
+      'Saved state has version 5; this build reads version 9',
+    );
+  });
+
+  it('refuses a save from before light was removed with a clear error (issue #89)', () => {
+    // State version 7 held `lampOil`, and could hold a torch or a safety lamp.
+    const saved = serialise(busyState());
+    expect(() => deserialise({ ...saved, version: 7 })).toThrow(
+      'Saved state has version 7; this build reads version 9',
     );
   });
 
@@ -221,15 +228,15 @@ describe('serialise and deserialise', () => {
     // followed the light rule.
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 6 })).toThrow(
-      'Saved state has version 6; this build reads version 8',
+      'Saved state has version 6; this build reads version 9',
     );
   });
 
   it('refuses a save from before crew health with a clear error (issue #90)', () => {
-    // State version 7 held `avatar` (health and air) and no worked squares.
+    // State version 8 held `avatar` (health and air) and no worked squares.
     const saved = serialise(busyState());
-    expect(() => deserialise({ ...saved, version: 7 })).toThrow(
-      'Saved state has version 7; this build reads version 8',
+    expect(() => deserialise({ ...saved, version: 8 })).toThrow(
+      'Saved state has version 8; this build reads version 9',
     );
   });
 });
@@ -276,7 +283,6 @@ describe('hashState', () => {
       'a camp stash': (s) => ((s.camps[1] as Camp).stash['coal'] = 2),
       ap: (s) => (s.ap -= 1),
       fuel: (s) => (s.fuel -= 1),
-      'lamp oil': (s) => (s.lampOil -= 1),
       shift: (s) => (s.shift += 1),
       inventory: (s) => (s.inventory['timber'] = 3),
       'loose items': (s) => s.looseItems.pop(),
@@ -299,7 +305,7 @@ describe('hashState', () => {
 
     // The order items were added to the inventory.
     const reordered = cloneState(base);
-    reordered.inventory = { torch: 5, timber: 2 };
+    reordered.inventory = { vent: 5, timber: 2 };
     expect(hashState(reordered)).toBe(hashState(base));
 
     // The order of the loose-items list.
@@ -314,7 +320,7 @@ describe('hashState', () => {
     m2.camps.reverse();
     for (const camp of m2.camps) {
       if (camp.foundedShift === 7) {
-        camp.stash = { timber: 0, coal: 1, torch: 0, stone: 3 };
+        camp.stash = { timber: 0, coal: 1, vent: 0, stone: 3 };
       }
     }
     expect(hashState(m2)).toBe(hashState(base));
@@ -340,11 +346,11 @@ describe('hashState', () => {
     const state = buildState({ layers: [['....'], ['####']] });
     addItem(state, 'timber', 1);
     addItem(state, 'coal', 2);
-    addItem(state, 'torch', 3);
+    addItem(state, 'vent', 3);
     addLooseItems(state, { x: 3, y: 0, z: 0 }, 'stone', 1);
     addLooseItems(state, { x: 1, y: 0, z: 0 }, 'stone', 1);
     addLooseItems(state, { x: 1, y: 0, z: 0 }, 'coal', 1);
-    expect(Object.keys(state.inventory)).toEqual(['timber', 'coal', 'torch']);
+    expect(Object.keys(state.inventory)).toEqual(['timber', 'coal', 'vent']);
 
     const loaded = throughJson(state);
     expect(hashState(loaded)).toBe(hashState(state));

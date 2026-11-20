@@ -48,7 +48,7 @@ export type DestructionCause = 'rockfall' | 'water' | 'lava' | 'explosion' | 'no
 export type RemovalReason =
   'pumped' | 'vented' | 'burnt' | 'reachedSurface' | 'buried' | 'sealed' | 'turnedToStone';
 
-/** Why a gauge (fuel or lamp oil) changed. */
+/** Why the fuel gauge changed. */
 export type GaugeChangeReason = 'upkeep' | 'crafted';
 
 export type GameEvent =
@@ -93,8 +93,6 @@ export type GameEvent =
   | { type: 'shiftEnded'; shift: number; nextShift: number }
   /** Fuel changed by `delta` (negative when used) and is now `fuel`. */
   | { type: 'fuelChanged'; delta: number; fuel: number; reason: GaugeChangeReason }
-  /** Lamp oil changed by `delta` and is now `lampOil`. */
-  | { type: 'lampOilChanged'; delta: number; lampOil: number; reason: GaugeChangeReason }
   /** The run is over. */
   | { type: 'runEnded'; outcome: RunOutcome; cause: RunEndCause }
 

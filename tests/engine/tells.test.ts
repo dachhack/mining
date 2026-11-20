@@ -41,7 +41,6 @@ interface StripOptions {
   /** The character of the rock everything else is made of. Default stone. */
   rock?: string;
   surface?: string[];
-  lampOil?: number;
 }
 
 function strip(options: StripOptions = {}): GameState {
@@ -50,7 +49,6 @@ function strip(options: StripOptions = {}): GameState {
   return buildState({
     layers: [[rock.repeat(5)], [rock + ore + rock.repeat(3)], [rock.repeat(5)]],
     surface: options.surface ?? ['.....'],
-    lampOil: options.lampOil ?? 10,
     ap: 100,
   });
 }
@@ -80,11 +78,6 @@ describe('mineral traces', () => {
       ],
     });
     expect(visibleMineralTraces(state)).toEqual([{ x: 1, y: 1, z: 0 }]);
-  });
-
-  it('needs no light: it shows with no lamp oil at all (decision note 0026)', () => {
-    const state = strip({ lampOil: 0 });
-    expect(showsMineralTraces(state, top(1))).toBe(true);
   });
 
   it('comes from iron ore, copper ore and crystal', () => {
