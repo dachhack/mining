@@ -216,8 +216,8 @@ export function endShift(state: GameState): StepResult {
 
 /**
  * What ending the shift now would do, for the end-shift preview (0014 item
- * 4): the cracks and their countdowns, what will slump and crack, the flows
- * (empty until T10 and T11), and upkeep's effect on fuel. Does not
+ * 4): the cracks and their countdowns, what will slump and crack, where
+ * water and lava will flow (gas: T11), and upkeep's effect on fuel. Does not
  * change `state`. Throws if the run has already ended, as `endShift` does.
  */
 export function previewCubePhase(state: GameState): ShiftForecast {

@@ -618,6 +618,29 @@ describe('M2 data (decision note 0014)', () => {
     }
   });
 
+  it('reports bad water and lava flow numbers (decision note 0032)', () => {
+    const problems = problemsAfter((data) => {
+      // A drop of 1 would let a unit of water swap back and forth for ever.
+      data.hazards.water.flowMinDrop = 1;
+      data.hazards.water.floodedMineExtraAp = -1;
+      data.hazards.lava.sourceUnitsPerStep = 0;
+      // A cell with no lava is never a source, so a source keeps at least 1.
+      data.hazards.lava.sourceKeepsUnits = 0;
+    });
+    expect(problems).toHaveLength(4);
+    for (const part of [
+      'hazards.water.flowMinDrop must be a whole number of at least 2',
+      'hazards.water.floodedMineExtraAp',
+      'hazards.lava.sourceUnitsPerStep',
+      'hazards.lava.sourceKeepsUnits',
+    ]) {
+      expect(
+        problems.some((p) => p.includes(part)),
+        `no problem mentions ${part}`,
+      ).toBe(true);
+    }
+  });
+
   it('reports bad camp numbers and unknown camp items', () => {
     const problems = problemsAfter((data) => {
       data.camps.kitItem = 'tent';

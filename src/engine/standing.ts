@@ -1,5 +1,5 @@
 // Water and lava standing on squares: reading and writing them (design doc
-// v0.2 sections 6.3 and 6.4; issue #99, task T10; decision note 0031).
+// v0.2 sections 6.3 and 6.4; issue #99, task T10; decision note 0032).
 //
 // WHERE IT IS STORED. The state keeps water and lava cell by cell. What
 // stands ON a square is what the open cells above its top block hold, added

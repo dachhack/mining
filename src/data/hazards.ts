@@ -21,7 +21,7 @@ export const HAZARDS: HazardData = {
     // Must be at least 2, or a slumping block would not move down.
     steepStep: 2,
   },
-  // Water: design doc 6.3; decision note 0031.
+  // Water: design doc 6.3; decision note 0032.
   water: {
     unitsPerCell: 1,
     // Extra AP to mine a square that water stands on (design doc 4.2;

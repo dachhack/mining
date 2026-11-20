@@ -1,5 +1,5 @@
 // Water and lava on squares (design doc v0.2 sections 4.2, 5.2, 6.2, 6.3 and
-// 6.4; issue #99, task T10; decision note 0031). One group of tests for each
+// 6.4; issue #99, task T10; decision note 0032). One group of tests for each
 // rule, each on a small hand-built pit.
 //
 // A pit is drawn as a grid of depths, one digit per square, row y = 0 first:
@@ -28,9 +28,12 @@ import { isLavaSourceOn, lavaOn, setLavaOn, setWaterOn, waterOn } from '../../sr
 import {
   blockAt,
   crackTimerAt,
+  setBlock,
   setCrackTimer,
+  setLava,
   setStructure,
   structureAt,
+  setWater,
   waterAt,
 } from '../../src/engine/state';
 import { act, buildState, depthText, terrainLayers } from './helpers';
@@ -1072,5 +1075,122 @@ describe('property: water and lava are conserved, apart from the named sources a
       }
       expect(quiet, `seed ${seed}`).toBe(true);
     }
+  });
+});
+
+describe('a pinned flood (in place of a golden run that floods)', () => {
+  // No recorded run reaches a water pocket yet: pockets start 8 levels down,
+  // and no policy digs that deep (tests/golden/README.md). Until one does,
+  // this scenario pins the flow rule the way a golden run would: a fixed
+  // pit, two breaches through `applyAction`, twelve ends of shift, and the
+  // hash of the final state. If the hash changes, the rule changed: say so
+  // in the PR, as for a golden run.
+  //
+  // The pit is hard rock, terraced down to a 5 x 3 floor 2 levels deep.
+  // Under the west of the floor lies a pocket of 6 water cells, under the
+  // east a pocket of 9 lava cells (a source: more than 8).
+  function basin(): GameState {
+    const depths = [
+      '000000000',
+      '011111110',
+      '012222210',
+      '012222210',
+      '012222210',
+      '011111110',
+      '000000000',
+    ];
+    const hardRock = depths.map((row) => 'H'.repeat(row.length));
+    const state = buildState({
+      layers: terrainLayers(depths, hardRock, 7),
+      shift: 1,
+      ap: 20,
+      fuel: 20,
+      health: 40,
+    });
+    // The pockets: open cells in layers 3 and 4, under the floor's top blocks.
+    const waterCells = [
+      { x: 2, y: 2, z: 3 },
+      { x: 3, y: 2, z: 3 },
+      { x: 2, y: 3, z: 3 },
+      { x: 3, y: 3, z: 3 },
+      { x: 2, y: 4, z: 3 },
+      { x: 3, y: 4, z: 3 },
+    ];
+    const lavaCells = [
+      { x: 5, y: 2, z: 3 },
+      { x: 6, y: 2, z: 3 },
+      { x: 5, y: 3, z: 3 },
+      { x: 6, y: 3, z: 3 },
+      { x: 5, y: 4, z: 3 },
+      { x: 6, y: 4, z: 3 },
+      { x: 5, y: 2, z: 4 },
+      { x: 5, y: 3, z: 4 },
+      { x: 6, y: 3, z: 4 },
+    ];
+    for (const cell of waterCells) {
+      setBlock(state, cell, BLOCKS.air.code);
+      setWater(state, cell, HAZARDS.water.unitsPerCell);
+    }
+    for (const cell of lavaCells) {
+      setBlock(state, cell, BLOCKS.air.code);
+      setLava(state, cell, HAZARDS.lava.unitsPerCell);
+    }
+    return state;
+  }
+
+  it('plays out the same way every time, to a recorded hash', () => {
+    let state = basin();
+    // Break into the water pocket, then into the lava pocket.
+    state = act(state, { type: 'mine', x: 3, y: 3 }).state;
+    expect(waterOn(state, 3, 3)).toBe(6);
+    state = act(state, { type: 'mine', x: 5, y: 3 }).state;
+    expect(lavaOn(state, 5, 3)).toBe(9);
+    expect(isLavaSourceOn(state, 5, 3)).toBe(true);
+
+    const seen = new Set<string>();
+    for (let n = 0; n < 12; n += 1) {
+      const step = endShift(state);
+      state = step.state;
+      for (const event of step.events) {
+        seen.add(event.type);
+      }
+    }
+    // The run met everything the step does.
+    for (const type of ['fluidMoved', 'fluidRemoved', 'lavaPoured', 'stoneFormed', 'damageTaken']) {
+      expect([...seen], type).toContain(type);
+    }
+    expect(state.status).toEqual({ kind: 'active' });
+    // Where it ended: the lava source fills its hole and has spread one
+    // square each way; the water hole met lava and is stone, one level up.
+    expect(depthText(state)).toEqual([
+      '000000000',
+      '011111110',
+      '012222210',
+      '012223210',
+      '012222210',
+      '011111110',
+      '000000000',
+    ]);
+    expect(waterMap(state)).toEqual([
+      '000000000',
+      '000000000',
+      '000100000',
+      '000100000',
+      '000000000',
+      '000000000',
+      '000000000',
+    ]);
+    expect(lavaMap(state)).toEqual([
+      '000000000',
+      '000000000',
+      '000001000',
+      '000013100',
+      '000001000',
+      '000000000',
+      '000000000',
+    ]);
+    // The lava breach burned the crew once (5), on the square it had mined.
+    expect(state.crew.health).toBe(40 - CREW.damage.lavaOn);
+    expect(hashState(state)).toBe('09526538cce51c62');
   });
 });
