@@ -51,6 +51,7 @@ import {
   crackFallsText,
   depthName,
   describeChoice,
+  describeForecastFlows,
   describeForecastSlumps,
   runEndText,
   tellNames,
@@ -58,15 +59,17 @@ import {
 import { END_SHIFT, listedChoices } from './log';
 import type { LogEntry } from './log';
 import { tooLittleApNote } from './missing';
-import { SUPPORT_AP, patchText, squareText } from './squares';
+import { FLOODED_EXTRA_AP, SUPPORT_AP, patchText, squareText } from './squares';
 import {
   MARK_GROUND,
   MARK_STUMP,
   MARK_UNSEEN,
   SYMBOL_CAMP,
   SYMBOL_FLOOR,
+  SYMBOL_LAVA,
   SYMBOL_TRACES,
   SYMBOL_TREE,
+  SYMBOL_WATER,
   blockSymbol,
   depthMark,
   tracedSymbol,
@@ -182,8 +185,10 @@ function blockMeaning(code: number): string {
  * The two map characters of a square, from what `knownSquare` says of it.
  *
  * - First character: `Y` for a tree; `X` for a square with no block left;
- *   `A` for a camp square (`isCamp`); otherwise the top block's character
- *   (its "traced" character if the map shows mineral traces on it).
+ *   `A` for a camp square (`isCamp`); `!` for a square with lava on it and
+ *   `~` for one with water on it (the notes under the map name the block
+ *   under it); otherwise the top block's character (its "traced" character
+ *   if the map shows mineral traces on it).
  * - Second character: for a dug square, its depth (`depthMark`). At ground
  *   level there is no depth to show, so it is a space for open ground and
  *   `,` for a stump. Under a tree it is what is known of the ground: a space
@@ -217,6 +222,23 @@ function squareCell(square: KnownSquare, bottomDepth: number, isCamp: boolean): 
       text: SYMBOL_CAMP + mark,
       symbol: SYMBOL_CAMP,
       meaning: 'camp square (cannot be mined while the camp stands)',
+    };
+  }
+  // Lava and water are drawn over the block: where they are matters most.
+  if (square.contents.lava > 0) {
+    return {
+      text: SYMBOL_LAVA + mark,
+      symbol: SYMBOL_LAVA,
+      meaning: 'lava stands on the square: it cannot be mined (the notes say how much)',
+    };
+  }
+  if (square.contents.water > 0) {
+    return {
+      text: SYMBOL_WATER + mark,
+      symbol: SYMBOL_WATER,
+      meaning:
+        `water stands on the square: mining it costs ${FLOODED_EXTRA_AP} AP more ` +
+        '(the notes say how much water, and which block is under it)',
     };
   }
   const code = square.top.block;
@@ -267,6 +289,10 @@ function onTopNote(square: KnownSquare, crackRunning: boolean): string | null {
     return null;
   }
   const things: string[] = contentsNames(square);
+  // The map draws the water or lava in place of the block, so name the block.
+  if (square.contents.water > 0 || square.contents.lava > 0) {
+    things.push(`over ${blockMeaning(top.block)}`);
+  }
   // The countdown: 1 means "falls when this shift ends". A stopped one is
   // said to be stopped; the Hazards line says where the block would land.
   if (top.crackTimer !== null) {
@@ -502,6 +528,10 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     }
     // What step (a) of the cube phase will do: slumps, then new cracks.
     for (const sentence of describeForecastSlumps(preview.slumps)) {
+      forecast += ` ${sentence}`;
+    }
+    // What step (b) will do: water and lava flow (design doc 6.3 and 6.4).
+    for (const sentence of describeForecastFlows(preview.flows)) {
       forecast += ` ${sentence}`;
     }
     if (preview.regrowth.length > 0) {

@@ -21,6 +21,6 @@ Every gameplay number and recipe from the design doc lives here, as plain TypeSc
 | `validate.ts`   | `validateData()`: checks the tables against each other      | 0005 item 24            |
 | `index.ts`      | Re-exports everything, plus `GAME_DATA` and lookups by id   |                         |
 
-"0005" is `docs/decisions/0005-m1-assumed-defaults.md` and "0014" is `docs/decisions/0014-m2-assumed-defaults.md`.
+"0005" is `docs/decisions/0005-m1-assumed-defaults.md` and "0014" is `docs/decisions/0014-m2-assumed-defaults.md`. The water and lava numbers are explained in `docs/decisions/0033-water-and-lava-on-squares.md`.
 
 `validateData()` returns a list of problems (an empty list means the data is good). A unit test runs it on the real data in CI, and the tools will run it at start-up. Generation numbers (vein and space sizes and frequencies) are in `generation.ts`; decision note 0030 has the survey of what they give.

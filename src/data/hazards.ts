@@ -21,11 +21,17 @@ export const HAZARDS: HazardData = {
     // Must be at least 2, or a slumping block would not move down.
     steepStep: 2,
   },
-  // Water: design doc 6.2; 0014 item 12.
+  // Water: design doc 6.3; decision note 0033.
   water: {
     unitsPerCell: 1,
-    // Extra AP to move into a flooded cell.
-    floodedMoveExtraAp: 1,
+    // Extra AP to mine a square that water stands on (design doc 4.2;
+    // owner question 91).
+    floodedMineExtraAp: 1,
+    // Water (and lava) moves from a square to a neighbour only when the
+    // neighbour's level is at least this many levels lower. With 2, one unit
+    // on a flat floor stays where it is, and a pit ends up level to within 1.
+    // Must be at least 2: with 1, a unit would swap back and forth for ever.
+    flowMinDrop: 2,
     pumpUnitsPerShift: 3,
     // A pump reaches water within this many steps through open cells.
     pumpReach: 2,
@@ -44,6 +50,11 @@ export const HAZARDS: HazardData = {
     flowEveryShifts: 2,
     // Every cell of a generated pocket of more than this many cells is a source.
     sourcePocketCellsOver: 8,
+    // A lava source gives this many units on every lava step (design doc 6.2).
+    sourceUnitsPerStep: 1,
+    // A source square always keeps this many units of lava: the vent is
+    // never dry, so the player always sees where the source is.
+    sourceKeepsUnits: 1,
   },
   // The forecast: 0014 item 4. In the copy of the cube the forecast is run
   // on, every unrevealed cell is this block with nothing in it.

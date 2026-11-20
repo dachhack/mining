@@ -739,7 +739,7 @@ describe('the help text', () => {
     expect(help).toContain(
       `warm glow      a lava pocket lies within ${TELLS.hazards.warmGlowDistance} steps`,
     );
-    expect(help).toContain('they do\n    not spread, and they do not hurt the crew');
+    expect(help).toContain('Gas that comes out of a pocket stays on the square');
     expect(help).toContain('goes straight into the stockpile');
     expect(help).toContain('The stockpile has no limit');
     expect(help).toContain('close-mine               close the mine (ends the run alive)');

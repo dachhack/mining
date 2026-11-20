@@ -1,10 +1,11 @@
 // The hazard parts of the end-shift forecast (design doc 11; 0014 item 4).
 //
-// The cracks and the slumps are built (issue #94). The flows are empty until
-// water, lava and gas are (T10, T11). `forecastShift` in shift.ts calls these
-// functions and adds the upkeep part.
+// The cracks and the slumps are built (issue #94), and the flows of water and
+// lava (issue #99). Gas joins with T11. `forecastShift` in shift.ts calls
+// these functions and adds the upkeep part.
 
 import type { Vec3 } from '../data';
+import { stepFluids } from './cube/fluids';
 import { newCubePhase } from './cube/phase';
 import { stepSlumps } from './cube/slumps';
 import type { GameEvent } from './events';
@@ -83,14 +84,27 @@ export function forecastSlumps(state: GameState): GameEvent[] {
 }
 
 /**
- * Contract for T10 and T11: part 2 of the forecast, the flows.
+ * Part 2 of the forecast, the flows: what step (b) of the coming cube phase
+ * will do to the water and lava the player sees (design doc 6 and 11).
  *
- * - Run steps (b) and (c) of the cube phase (`stepFluids`, then `stepGas`) on
- *   `knownCube(state)`, the copy in which every unrevealed cell is plain rock
- *   with nothing in it, with a fresh `newCubePhase()`, and return the events
- *   they emit.
+ * - Runs steps (a) and (b) of the cube phase (`stepSlumps`, then
+ *   `stepFluids`) on `knownCube(state)`, the copy in which every unrevealed
+ *   cell is plain rock with nothing in it, and returns the events step (b)
+ *   emits: `fluidMoved` for each unit that will move, `fluidRemoved`,
+ *   `lavaPoured`, `stoneFormed`, and what lava or water will destroy. Step
+ *   (a) runs first because a slump changes the pit the water then flows in;
+ *   its own events are `forecastSlumps`.
+ * - Everything the flow rule reads is seen (depths, and what stands on the
+ *   squares), so this is what will happen, as exactly as the slumps are
+ *   forecast (`ShiftForecast.slumps` in shift.ts).
+ * - Gas (step (c), `stepGas`) joins with T11.
  * - Does not change `state`.
  */
-export function forecastFlows(_state: GameState): GameEvent[] {
-  return [];
+export function forecastFlows(state: GameState): GameEvent[] {
+  const copy = knownCube(state);
+  const phase = newCubePhase();
+  stepSlumps(copy, [], phase); // its events are not part of the flows
+  const events: GameEvent[] = [];
+  stepFluids(copy, events, phase);
+  return events;
 }

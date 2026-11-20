@@ -13,10 +13,9 @@
 //   holds its square anyway);
 // - the square has no block left (bedrock never slumps);
 // - the square already holds a structure (at most one a square);
+// - lava stands on the square (design doc 4.1: nothing is placed on lava);
 // - a camp stands on the square (design doc 4.1: nothing is placed on a camp
 //   square; issue #100).
-//
-// Not here yet, because it is not built: nothing is placed on lava (task T10).
 
 import { ACTION_COSTS, NO_STRUCTURE, STRUCTURES } from '../../data';
 import type { PlaceSupportAction } from '../actionTypes';
@@ -24,6 +23,7 @@ import { campAtSquare } from '../camps';
 import { markWorked } from '../crew';
 import type { GameEvent } from '../events';
 import { structureOnSquare, topCellOf } from '../heightmap';
+import { lavaOn } from '../standing';
 import { countItem, removeItem, setStructure } from '../state';
 import type { GameState } from '../state';
 import { hasTree, surfaceCellAbove } from '../surface/state';
@@ -38,6 +38,8 @@ export type SupportRefusalReason =
   | 'bottom'
   /** The square already holds a structure. */
   | 'occupied'
+  /** Lava stands on the square. */
+  | 'lava'
   /** A camp stands on the square. */
   | 'camp';
 
@@ -61,8 +63,8 @@ function refused(refusal: SupportRefusalReason): SupportCheck {
  * too much.
  *
  * Everything read here is something the player sees: the stockpile, the tree,
- * the square's depth, the structure on it and the camps. The top block is not
- * read.
+ * the square's depth, the structure on it, the lava standing on it and the
+ * camps. The top block is not read.
  *
  * Throws if (x, y) is not a square. Does not change `state`.
  */
@@ -80,6 +82,9 @@ export function supportCheck(state: GameState, x: number, y: number): SupportChe
   }
   if (structureOnSquare(state, x, y) !== NO_STRUCTURE) {
     return refused('occupied');
+  }
+  if (lavaOn(state, x, y) > 0) {
+    return refused('lava');
   }
   if (campAtSquare(state, x, y) !== null) {
     return refused('camp');

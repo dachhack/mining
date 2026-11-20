@@ -59,12 +59,13 @@ export interface ShiftForecast {
    */
   slumps: GameEvent[];
   /**
-   * Part 2, flows: the events that steps (b) and (c) of the cube phase emit
-   * when they are run on `knownCube(state)`, the copy of the cube in which
-   * every unrevealed cell is plain rock. They are ordinary engine events
-   * (`fluidMoved`, `gasMoved`, `exploded`, `structureDestroyed`, ...), in the
-   * order they would happen. A flow can turn out differently when something
-   * unseen takes part.
+   * Part 2, flows: the events that step (b) of the cube phase emits when it
+   * is run, after step (a), on `knownCube(state)`, the copy of the cube in
+   * which every unrevealed cell is plain rock. They are ordinary engine
+   * events (`fluidMoved`, `fluidRemoved`, `lavaPoured`, `stoneFormed`,
+   * `structureDestroyed`, ...), in the order they would happen. Water and
+   * lava stand in the open, so this is what will happen, as exactly as
+   * `slumps` is. Gas (step (c)) joins with T11.
    */
   flows: GameEvent[];
   /** What upkeep will do to the gauges. */
@@ -88,7 +89,7 @@ export interface ShiftForecast {
 // the tasks building the hazards do not edit the same file:
 //
 //   (a) cube/slumps.ts         cracked blocks slump, unstable squares crack
-//   (b) cube/fluids.ts         water, then lava, then water beside lava
+//   (b) cube/fluids.ts         water flows, then lava; water meeting lava makes stone
 //   (c) cube/gas.ts            gas spreads, vents, charges go off, ignition
 //   (d) cube/timers.ts         crack countdowns tick
 //   (e) cube/crewEffects.ts    recorded damage, rest, worked squares cleared
@@ -121,8 +122,7 @@ export const CUBE_PHASE_STEPS: CubePhaseStep[] = [
  * cube phase uses the RNG (0014 item 1).
  *
  * Runs the steps of `CUBE_PHASE_STEPS` in order, handing each the same
- * `CubePhase` notes. Steps (b) and (c) are empty until their tasks (T10 and
- * T11).
+ * `CubePhase` notes. Step (c) is empty until its task (T11).
  */
 export function runCubePhase(state: GameState, events: GameEvent[]): void {
   const phase = newCubePhase();
@@ -223,8 +223,8 @@ export function runUpkeep(state: GameState, events: GameEvent[]): void {
  * - Does not change `state`, and is a function of what the player sees
  *   (0014 item 3) and nothing else: changing any unrevealed cell must not
  *   change the result.
- * - `countdowns`, `slumps` and `flows` come from forecast.ts; `flows` is
- *   empty until water, lava and gas are built (T10, T11).
+ * - `countdowns`, `slumps` and `flows` come from forecast.ts; gas joins
+ *   `flows` with T11.
  * - `upkeep` agrees with what `runUpkeep` then does when the cube phase does
  *   not end the run first (both use `computeUpkeep`).
  * - Throws if the run has already ended, as `endShift` does.

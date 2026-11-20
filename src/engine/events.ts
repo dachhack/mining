@@ -31,7 +31,7 @@ export type RunEndCause = 'mineClosed' | 'outOfFuel' | 'buried' | 'drowned' | 'b
  */
 export type DamageCause = 'slump' | 'water' | 'lava' | 'gas' | 'gasExplosion' | 'explosion';
 
-/** The two fluids. They flow by the same rules (0014 items 12 and 16). */
+/** The two fluids. They flow by the same rule (design doc 6.3 and 6.4). */
 export type FluidKind = 'water' | 'lava';
 
 /**
@@ -123,12 +123,29 @@ export type GameEvent =
    * ore going off, or rock beside an explosive (0014 items 15 and 17).
    */
   | { type: 'blockDestroyed'; pos: Vec3; block: number }
-  /** One unit of water or lava moved from one cell to another. */
+  /**
+   * One unit of water or lava moved from one square to a square beside it
+   * (design doc 6.3). `from` and `to` are the cells directly above the two
+   * squares' top blocks: their x and y name the squares.
+   */
   | { type: 'fluidMoved'; fluid: FluidKind; from: Vec3; to: Vec3 }
-  /** The water or lava in the cell `pos` is gone. */
-  | { type: 'fluidRemoved'; fluid: FluidKind; pos: Vec3; reason: RemovalReason }
-  /** Water met lava at `pos`, and the cell is now stone (0014 item 16). */
+  /**
+   * `units` of the water or lava on a square are gone. `pos` is the cell
+   * directly above the square's top block (for a square at ground level, the
+   * surface cell above it). 'reachedSurface': it stood above ground level and
+   * drained away; 'turnedToStone': water met lava.
+   */
+  | { type: 'fluidRemoved'; fluid: FluidKind; pos: Vec3; units: number; reason: RemovalReason }
+  /**
+   * Water met lava on a square: one unit of each became the stone block now
+   * in the cell `pos`, the square's new top (design doc 6.4).
+   */
   | { type: 'stoneFormed'; pos: Vec3 }
+  /**
+   * The lava source on a square gave `units` more lava (design doc 6.2).
+   * `pos` is the cell directly above the square's top block.
+   */
+  | { type: 'lavaPoured'; pos: Vec3; units: number }
   /** `units` of gas moved from one cell to another (0014 item 13). */
   | { type: 'gasMoved'; from: Vec3; to: Vec3; units: number }
   /** `units` of gas in the cell `pos` are gone. */

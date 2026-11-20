@@ -305,7 +305,107 @@ export function drawTile(
   }
 }
 
-/** The marks drawn over a tile: a camp, cheaper mining, mineral traces, a structure and a crack. */
+/**
+ * Water or lava on a tile (design doc 6.3 and 6.4): a wash of colour over the
+ * block, a pattern (waves for water, flames for lava, so the two never differ
+ * by colour alone), and the number of units in the top-left corner. A lava
+ * source has a ring round its number.
+ */
+function drawStanding(
+  ctx: CanvasRenderingContext2D,
+  fluid: 'water' | 'lava',
+  units: number,
+  source: boolean,
+  x: number,
+  y: number,
+  c: number,
+): void {
+  const ink = fluid === 'water' ? MARK_COLOURS.waterInk : MARK_COLOURS.lavaInk;
+  ctx.save();
+  ctx.fillStyle = fluid === 'water' ? MARK_COLOURS.water : MARK_COLOURS.lava;
+  ctx.fillRect(x, y, c, c);
+  ctx.strokeStyle = ink;
+  ctx.fillStyle = ink;
+  ctx.lineWidth = Math.max(1, c / 14);
+  if (fluid === 'water') {
+    // Two wave lines across the lower half.
+    for (const fy of [0.62, 0.84]) {
+      ctx.beginPath();
+      ctx.moveTo(x + 0.1 * c, y + fy * c);
+      ctx.quadraticCurveTo(x + 0.3 * c, y + (fy - 0.12) * c, x + 0.5 * c, y + fy * c);
+      ctx.quadraticCurveTo(x + 0.7 * c, y + (fy + 0.12) * c, x + 0.9 * c, y + fy * c);
+      ctx.stroke();
+    }
+  } else {
+    // Three small flames along the bottom edge.
+    for (const fx of [0.25, 0.5, 0.75]) {
+      ctx.beginPath();
+      ctx.moveTo(x + (fx - 0.1) * c, y + 0.9 * c);
+      ctx.lineTo(x + fx * c, y + 0.6 * c);
+      ctx.lineTo(x + (fx + 0.1) * c, y + 0.9 * c);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  // The units, top left (the depth number is bottom right, a crack's top right).
+  ctx.font = `bold ${Math.max(8, Math.round(c * 0.42))}px sans-serif`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.lineWidth = Math.max(2, c / 10);
+  ctx.strokeStyle = MARK_COLOURS.fluidOutline;
+  ctx.strokeText(String(units), x + 2, y + 1);
+  ctx.fillStyle = ink;
+  ctx.fillText(String(units), x + 2, y + 1);
+  if (source) {
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = Math.max(1.5, c / 12);
+    ctx.beginPath();
+    ctx.arc(x + 0.24 * c, y + 0.26 * c, c * 0.24, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * The mark for "water (or lava) flows onto this square when the shift ends":
+ * an arrow head pointing down into the square, in the fluid's colour, with a
+ * wave or a flame tip so that the two differ by shape as well.
+ */
+function drawComing(
+  ctx: CanvasRenderingContext2D,
+  fluid: 'water' | 'lava',
+  x: number,
+  y: number,
+  c: number,
+): void {
+  // Water's mark sits left of the middle and lava's right, so a square that
+  // both will reach shows both.
+  const cx = x + (fluid === 'water' ? 0.3 : 0.7) * c;
+  const cy = y + 0.5 * c;
+  const r = c * 0.2;
+  ctx.save();
+  ctx.lineWidth = Math.max(1, c / 16);
+  ctx.strokeStyle = MARK_COLOURS.fluidOutline;
+  ctx.fillStyle = fluid === 'water' ? MARK_COLOURS.waterInk : MARK_COLOURS.lavaInk;
+  ctx.beginPath();
+  if (fluid === 'water') {
+    // A drop: a point at the top, round at the bottom.
+    ctx.moveTo(cx, cy - r);
+    ctx.quadraticCurveTo(cx + r, cy + r * 0.2, cx, cy + r);
+    ctx.quadraticCurveTo(cx - r, cy + r * 0.2, cx, cy - r);
+  } else {
+    // A flame: a triangle standing on its base.
+    ctx.moveTo(cx, cy - r);
+    ctx.lineTo(cx + r, cy + r);
+    ctx.lineTo(cx - r, cy + r);
+    ctx.closePath();
+  }
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** The marks drawn over a tile: a camp, cheaper mining, water and lava, mineral traces, a structure and a crack. */
 function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number, c: number) {
   const mid = c / 2;
   if (tile.camp) {
@@ -338,6 +438,18 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
     ctx.lineTo(x + 0.22 * c, y + 0.88 * c);
     ctx.lineTo(x + 0.42 * c, y + 0.6 * c);
     ctx.stroke();
+  }
+  if (tile.water > 0) {
+    drawStanding(ctx, 'water', tile.water, false, x, y, c);
+  }
+  if (tile.lava > 0) {
+    drawStanding(ctx, 'lava', tile.lava, tile.lavaSource, x, y, c);
+  }
+  if (tile.waterComing) {
+    drawComing(ctx, 'water', x, y, c);
+  }
+  if (tile.lavaComing) {
+    drawComing(ctx, 'lava', x, y, c);
   }
   if (tile.traced) {
     // Three small gold dots along the top edge: mineral traces seen on this rock.
@@ -418,6 +530,11 @@ function sampleTile(overrides: Partial<Tile>): Tile {
     structure: null,
     crack: null,
     crackRunning: false,
+    water: 0,
+    lava: 0,
+    lavaSource: false,
+    waterComing: false,
+    lavaComing: false,
     surface: null,
     higher: { north: false, east: false, south: false, west: false },
     camp: false,
@@ -458,11 +575,21 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
   let traced = false;
   let cracked = false;
   let stoppedCrack = false;
+  let water = false;
+  let lava = false;
+  let lavaSource = false;
+  let waterComing = false;
+  let lavaComing = false;
   let camp = false;
   let cheaper = false;
   for (const tile of tiles) {
     if (tile.camp) camp = true;
     if (tile.cheaper) cheaper = true;
+    if (tile.water > 0) water = true;
+    if (tile.lava > 0) lava = true;
+    if (tile.lavaSource) lavaSource = true;
+    if (tile.waterComing) waterComing = true;
+    if (tile.lavaComing) lavaComing = true;
     if (tile.crack !== null && tile.crackRunning) cracked = true;
     if (tile.crack !== null && !tile.crackRunning) stoppedCrack = true;
     if (tile.kind === 'block' && tile.block !== null) blocks.add(tile.block);
@@ -529,6 +656,46 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
       legendEntry(
         sampleTile({ block: 'dirt', crack: 1, crackRunning: true }),
         'crack: the block slumps into the pit; the number is its countdown (1 = when this shift ends)',
+      ),
+    );
+  }
+  if (water) {
+    entries.push(
+      legendEntry(
+        sampleTile({ depth: 2, water: 2 }),
+        'water: the number is its units; mining there costs 1 AP more',
+      ),
+    );
+  }
+  if (lava) {
+    entries.push(
+      legendEntry(
+        sampleTile({ depth: 2, lava: 2 }),
+        'lava: the number is its units; the square cannot be mined',
+      ),
+    );
+  }
+  if (lavaSource) {
+    entries.push(
+      legendEntry(
+        sampleTile({ depth: 2, lava: 2, lavaSource: true }),
+        'ringed number: a lava source, which keeps pouring',
+      ),
+    );
+  }
+  if (waterComing) {
+    entries.push(
+      legendEntry(
+        sampleTile({ depth: 2, waterComing: true }),
+        'drop: water flows here when this shift ends',
+      ),
+    );
+  }
+  if (lavaComing) {
+    entries.push(
+      legendEntry(
+        sampleTile({ depth: 2, lavaComing: true }),
+        'flame: lava flows here when this shift ends',
       ),
     );
   }
@@ -669,6 +836,24 @@ export function createTapMap(onTap: (x: number, y: number) => void): TapMap {
       }
     }
     legend.replaceChildren(...legendFor(drawn));
+    // What the canvas shows of water and lava, as text, for the tests: the
+    // squares in view with their units ("3,4:2"), and the squares each will
+    // flow onto when the shift ends.
+    const list = (pick: (tile: Tile) => string | null): string => {
+      const parts: string[] = [];
+      for (const tile of drawn) {
+        const part = pick(tile);
+        if (part !== null) {
+          parts.push(part);
+        }
+      }
+      return parts.join(' ');
+    };
+    const at = (tile: Tile): string => `${tile.x},${tile.y}`;
+    canvas.dataset['water'] = list((t) => (t.water > 0 ? `${at(t)}:${t.water}` : null));
+    canvas.dataset['lava'] = list((t) => (t.lava > 0 ? `${at(t)}:${t.lava}` : null));
+    canvas.dataset['waterComing'] = list((t) => (t.waterComing ? at(t) : null));
+    canvas.dataset['lavaComing'] = list((t) => (t.lavaComing ? at(t) : null));
 
     // After a tap that was not taken: the tapped square in yellow, the
     // neighbours that are too high for the level rule in red, and the squares

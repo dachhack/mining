@@ -30,6 +30,8 @@ import {
 } from '../../src/engine';
 import type { GameEvent, GameState } from '../../src/engine';
 import { contentsOn } from '../../src/engine/breach';
+import { newCubePhase } from '../../src/engine/cube/phase';
+import { stepSlumps } from '../../src/engine/cube/slumps';
 import { blockAt, crackTimerAt, setBlock, setWater, waterAt } from '../../src/engine/state';
 import { act, buildState, depthText, findActions, terrainLayers } from './helpers';
 import type { BuildStateOptions } from './helpers';
@@ -361,7 +363,11 @@ describe('cracks and the slump (design doc 6.1)', () => {
     expect(blockAt(after, { x: 1, y: 0, z: 1 })).toBe(BLOCKS.rubble.code);
     expect(blockAt(after, { x: 2, y: 0, z: 1 })).toBe(BLOCKS.rubble.code);
     expect(depthText(after)).toEqual(['210']);
-    expect(contentsOn(after, 1, 0).water).toBe(2);
+    // Step (b) of the same cube phase (cube/fluids.ts): the square is 1 deep,
+    // so 1 of the 2 units is over the brim and drains; the other runs down
+    // into the hole beside it.
+    expect(contentsOn(after, 1, 0).water).toBe(0);
+    expect(contentsOn(after, 0, 0).water).toBe(1);
   });
 
   it('a space opened from the side stays sealed (owner question 102)', () => {
@@ -398,12 +404,14 @@ describe('cracks and the slump (design doc 6.1)', () => {
     setWater(state, { x: 1, y: 0, z: 1 }, 3);
     const before = contentsOn(state, 1, 0);
     expect(before).toEqual({ water: 3, lava: 1, lavaSource: true, gas: 4 });
-    const after = endShift(state).state;
-    expect(depthText(after)).toEqual(['11']);
+    // Step (a) alone: the steps after it would let the water and lava flow
+    // and meet (tests/engine/fluids.test.ts).
+    stepSlumps(state, [], newCubePhase());
+    expect(depthText(state)).toEqual(['11']);
     // Nothing is buried: the same contents stand on the square, one level up.
-    expect(contentsOn(after, 1, 0)).toEqual(before);
+    expect(contentsOn(state, 1, 0)).toEqual(before);
     // The cell the rubble is in holds none.
-    expect(waterAt(after, { x: 1, y: 0, z: 1 })).toBe(0);
+    expect(waterAt(state, { x: 1, y: 0, z: 1 })).toBe(0);
   });
 });
 

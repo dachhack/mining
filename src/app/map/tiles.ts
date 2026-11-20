@@ -9,7 +9,15 @@
 
 import { BLOCKS, STRUCTURES, SURFACE } from '../../data';
 import type { BlockId } from '../../data';
-import { campAtSquare, isSquare, knownSquare, mineDiscountAt, slumpCheck } from '../../engine';
+import {
+  campAtSquare,
+  isRunActive,
+  isSquare,
+  knownSquare,
+  mineDiscountAt,
+  previewCubePhase,
+  slumpCheck,
+} from '../../engine';
 import type { GameState } from '../../engine';
 import { PREVIEW_MAP } from './palette';
 import type { SurfaceMark } from './palette';
@@ -56,6 +64,16 @@ export interface Tile {
    * stable or held now (it is drawn pale; it goes on if that changes).
    */
   crackRunning: boolean;
+  /** Units of water standing on the square (design doc 6.3); 0 for none. */
+  water: number;
+  /** Units of lava standing on the square (design doc 6.4); 0 for none. */
+  lava: number;
+  /** True if that lava is a source, which keeps pouring (design doc 6.2). */
+  lavaSource: boolean;
+  /** True if water will flow onto the square when this shift ends. */
+  waterComing: boolean;
+  /** True if lava will flow onto the square when this shift ends. */
+  lavaComing: boolean;
   /**
    * What is on the surface of a square at ground level: a tree (it hides the
    * block), or a stump, a path, a meadow or an outcrop (drawn faintly over
@@ -119,9 +137,53 @@ function isHigher(state: GameState, x: number, y: number, depth: number): boolea
   return isSquare(state, x, y) && knownSquare(state, x, y).depth < depth;
 }
 
-/** The tile of the square (x, y). Throws if it is not a square of the map. */
-export function buildTile(state: GameState, x: number, y: number): Tile {
+/**
+ * The squares water and lava will flow onto when this shift ends, as sets of
+ * "x,y" keys (design doc 11: the map shows where they flow next).
+ */
+export interface ComingFlows {
+  water: Set<string>;
+  lava: Set<string>;
+}
+
+/**
+ * Where water and lava will flow in the coming cube phase, from the engine's
+ * own forecast (`previewCubePhase`), which reads only what the player sees.
+ * Both sets are empty once the run has ended: there is no shift to forecast.
+ */
+export function comingFlows(state: GameState): ComingFlows {
+  const coming: ComingFlows = { water: new Set(), lava: new Set() };
+  if (!isRunActive(state)) {
+    return coming;
+  }
+  for (const event of previewCubePhase(state).flows) {
+    if (event.type === 'fluidMoved') {
+      coming[event.fluid].add(`${event.to.x},${event.to.y}`);
+    }
+  }
+  return coming;
+}
+
+/**
+ * The tile of the square (x, y). Throws if it is not a square of the map.
+ * `flows` is `comingFlows(state)`; a caller that builds many tiles works it
+ * out once and passes it in.
+ */
+export function buildTile(
+  state: GameState,
+  x: number,
+  y: number,
+  flows: ComingFlows = comingFlows(state),
+): Tile {
   const square = knownSquare(state, x, y);
+  // What stands on the square is in the open, so it is seen (design doc 3.4).
+  const standing = {
+    water: square.contents.water,
+    lava: square.contents.lava,
+    lavaSource: square.contents.lavaSource,
+    waterComing: flows.water.has(`${x},${y}`),
+    lavaComing: flows.lava.has(`${x},${y}`),
+  };
   const higher: HigherSides = {
     north: isHigher(state, x, y - 1, square.depth),
     east: isHigher(state, x + 1, y, square.depth),
@@ -143,6 +205,7 @@ export function buildTile(state: GameState, x: number, y: number): Tile {
       crackRunning: false,
       surface: 'tree',
       higher,
+      ...standing,
       camp: false,
       cheaper: false,
     };
@@ -163,6 +226,7 @@ export function buildTile(state: GameState, x: number, y: number): Tile {
       crackRunning: false,
       surface: null,
       higher,
+      ...standing,
       camp: false,
       cheaper: false,
     };
@@ -183,6 +247,7 @@ export function buildTile(state: GameState, x: number, y: number): Tile {
     crackRunning: square.top.crackTimer !== null && slumpCheck(state, x, y).unstable,
     surface,
     higher,
+    ...standing,
     camp,
     cheaper: !camp && mineDiscountAt(state, x, y) > 0,
   };
@@ -194,11 +259,12 @@ export function buildTile(state: GameState, x: number, y: number): Tile {
  */
 export function buildTiles(state: GameState, window: TileWindow): Tile[][] {
   const rows: Tile[][] = [];
+  const flows = comingFlows(state);
   for (let y = window.y0; y < window.y0 + window.size; y += 1) {
     const row: Tile[] = [];
     for (let x = window.x0; x < window.x0 + window.size; x += 1) {
       if (isSquare(state, x, y)) {
-        row.push(buildTile(state, x, y));
+        row.push(buildTile(state, x, y, flows));
       }
     }
     rows.push(row);

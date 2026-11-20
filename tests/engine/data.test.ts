@@ -426,12 +426,20 @@ describe('M2 data (decision note 0014)', () => {
   it('has the hazard numbers of the note', () => {
     expect(GAME_DATA.hazards).toEqual({
       slump: { crackCountdown: 2, steepStep: 2 },
-      water: { unitsPerCell: 1, floodedMoveExtraAp: 1, pumpUnitsPerShift: 3, pumpReach: 2 },
+      water: {
+        unitsPerCell: 1,
+        floodedMineExtraAp: 1,
+        flowMinDrop: 2,
+        pumpUnitsPerShift: 3,
+        pumpReach: 2,
+      },
       gas: { pocketUnitsPerCell: 4, ventReach: 2 },
       lava: {
         unitsPerCell: 1,
         flowEveryShifts: 2,
         sourcePocketCellsOver: 8,
+        sourceUnitsPerStep: 1,
+        sourceKeepsUnits: 1,
       },
       forecast: { unseenBlock: 'stone' },
     });
@@ -606,6 +614,29 @@ describe('M2 data (decision note 0014)', () => {
       'hazards.lava.flowEveryShifts',
       'hazards.forecast.unseenBlock',
       'tells.hazards.warmGlowDistance',
+    ]) {
+      expect(
+        problems.some((p) => p.includes(part)),
+        `no problem mentions ${part}`,
+      ).toBe(true);
+    }
+  });
+
+  it('reports bad water and lava flow numbers (decision note 0033)', () => {
+    const problems = problemsAfter((data) => {
+      // A drop of 1 would let a unit of water swap back and forth for ever.
+      data.hazards.water.flowMinDrop = 1;
+      data.hazards.water.floodedMineExtraAp = -1;
+      data.hazards.lava.sourceUnitsPerStep = 0;
+      // A cell with no lava is never a source, so a source keeps at least 1.
+      data.hazards.lava.sourceKeepsUnits = 0;
+    });
+    expect(problems).toHaveLength(4);
+    for (const part of [
+      'hazards.water.flowMinDrop must be a whole number of at least 2',
+      'hazards.water.floodedMineExtraAp',
+      'hazards.lava.sourceUnitsPerStep',
+      'hazards.lava.sourceKeepsUnits',
     ]) {
       expect(
         problems.some((p) => p.includes(part)),

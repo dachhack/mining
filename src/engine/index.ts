@@ -216,8 +216,8 @@ export function endShift(state: GameState): StepResult {
 
 /**
  * What ending the shift now would do, for the end-shift preview (0014 item
- * 4): the cracks and their countdowns, what will slump and crack, the flows
- * (empty until T10 and T11), and upkeep's effect on fuel. Does not
+ * 4): the cracks and their countdowns, what will slump and crack, where
+ * water and lava will flow (gas: T11), and upkeep's effect on fuel. Does not
  * change `state`. Throws if the run has already ended, as `endShift` does.
  */
 export function previewCubePhase(state: GameState): ShiftForecast {
@@ -285,6 +285,8 @@ export type { KnownCell, KnownSquare } from './known';
 // What stands on a square in the open (water, lava, gas), and the hazard
 // tells a known block shows. Views read both through `knownSquare`.
 export type { SquareContents } from './breach';
+// True in the cube phase of a shift in which lava flows (design doc 6.4).
+export { isLavaStep } from './cube/fluids';
 export type { HazardTells } from './tells';
 // The mine action's own check, with the reason for a refusal: what a tap on
 // a square the rules forbid shows the player (design doc 4.2).

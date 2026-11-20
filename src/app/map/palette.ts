@@ -142,6 +142,14 @@ export const MARK_COLOURS = {
   selected: '#ffe14d',
   /** The outline of a neighbour that is too high for the level rule. */
   tooHigh: '#ff4a3a',
+  /** Water standing on a square: a blue wash with wave lines, and its units. */
+  water: 'rgba(40, 120, 230, 0.6)',
+  waterInk: '#d6ecff',
+  /** Lava standing on a square: an orange wash with flames, and its units. */
+  lava: 'rgba(255, 96, 16, 0.75)',
+  lavaInk: '#fff0a0',
+  /** The dark edge under the numbers and marks of water and lava. */
+  fluidOutline: 'rgba(0, 0, 0, 0.8)',
   /** The outline of a square a mine would make unstable. */
   unstable: '#ff9a2e',
   /** The outline of a square that stops a camp being founded on its patch. */

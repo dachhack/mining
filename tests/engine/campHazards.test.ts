@@ -1,13 +1,14 @@
 // What hazards do to a camp (design doc v0.2 section 8, "Vulnerability";
-// issue #100). Only slumps are built so far (task T8); water, lava and
-// explosions call the same `destroyCampsAt` when their tasks build them
-// (T10, T11), and tests/engine/destroy.test.ts pins that function.
+// issues #100 and #99). Slumps (task T8), water and lava (T10) are built;
+// explosions call the same `destroyCampsAt` when their task builds them
+// (T11), and tests/engine/destroy.test.ts pins that function.
 
 import { describe, expect, it } from 'vitest';
 import { CREW } from '../../src/data';
 import { endShift, mineCheck } from '../../src/engine';
 import type { GameState } from '../../src/engine';
 import { supportCheck } from '../../src/engine/actions/placeSupport';
+import { lavaOn, setLavaOn, setWaterOn, waterOn } from '../../src/engine/standing';
 import { act, buildState, findActions } from './helpers';
 import type { BuildStateOptions } from './helpers';
 
@@ -107,6 +108,92 @@ describe('a crew resting at a camp that a slump reaches', () => {
     // The camp's squares are worked squares only while the crew rests there.
     const { state: after } = endShift(wallOverCamp({ health: 8 }));
     expect(after.crew.health).toBe(8);
+  });
+});
+
+/**
+ * A 5 x 3 strip. The camp stands on x = 1..3, on a floor 2 levels deep. The
+ * square (4, 1) east of it is a hole 3 deep, between two squares of ground:
+ * whatever is put in the hole can only flow west, onto the camp square (3, 1).
+ */
+function holeBesideCamp(options: Partial<BuildStateOptions> = {}): GameState {
+  return buildState({
+    layers: [
+      ['....#', '.....', '....#'],
+      ['#...#', '#....', '#...#'],
+      ['#####', '####.', '#####'],
+      rows('#####'),
+      rows('#####'),
+    ],
+    camps: [{ pos: { x: 2, y: 1, z: 2 }, foundedShift: 1 }],
+    ...options,
+  });
+}
+
+describe('water and lava destroy a camp (design doc 6.3, 6.4 and 8)', () => {
+  it('water that flows onto a camp square destroys the camp', () => {
+    const state = holeBesideCamp();
+    setWaterOn(state, 4, 1, 3); // full: its surface is 2 above the camp's floor
+    const { state: after, events } = endShift(state);
+    expect(waterOn(after, 3, 1)).toBe(1);
+    expect(after.camps).toEqual([]);
+    expect(events).toContainEqual({
+      type: 'campDestroyed',
+      pos: { x: 2, y: 1, z: 2 },
+      cause: 'water',
+    });
+    expect(mineCheck(after, 2, 1).refusal).not.toBe('camp');
+  });
+
+  it('water that stays beside the camp leaves it standing', () => {
+    const state = holeBesideCamp();
+    setWaterOn(state, 4, 1, 1); // its surface is level with the camp's floor
+    const { state: after, events } = endShift(state);
+    expect(after.camps).toHaveLength(1);
+    expect(events.filter((event) => event.type === 'campDestroyed')).toEqual([]);
+  });
+
+  it('lava that flows onto a camp square destroys the camp, in a shift in which lava flows', () => {
+    const odd = holeBesideCamp({ shift: 1 });
+    setLavaOn(odd, 4, 1, 3, false);
+    expect(endShift(odd).state.camps).toHaveLength(1);
+
+    const even = holeBesideCamp({ shift: 2 });
+    setLavaOn(even, 4, 1, 3, false);
+    const { state: after, events } = endShift(even);
+    expect(lavaOn(after, 3, 1)).toBe(1);
+    expect(after.camps).toEqual([]);
+    expect(events).toContainEqual({
+      type: 'campDestroyed',
+      pos: { x: 2, y: 1, z: 2 },
+      cause: 'lava',
+    });
+  });
+
+  it('a crew resting at a camp that lava reaches is burned and gets no rest', () => {
+    const state = holeBesideCamp({ shift: 2, health: 8 });
+    setLavaOn(state, 4, 1, 3, false);
+    const rested = act(state, { type: 'rest', x: 2, y: 1 }).state;
+    const { state: after, events } = endShift(rested);
+    expect(after.camps).toEqual([]);
+    // The camp's squares are worked while the crew rests: lava on one takes 5.
+    expect(events).toContainEqual({
+      type: 'damageTaken',
+      amount: CREW.damage.lavaOn,
+      cause: 'lava',
+      health: 8 - CREW.damage.lavaOn,
+    });
+    expect(events.filter((event) => event.type === 'healthRestored')).toEqual([]);
+  });
+
+  it('a crew resting at a camp that water reaches loses 1 and gets no rest', () => {
+    const state = holeBesideCamp({ health: 8 });
+    setWaterOn(state, 4, 1, 3);
+    const rested = act(state, { type: 'rest', x: 2, y: 1 }).state;
+    const { state: after, events } = endShift(rested);
+    expect(after.camps).toEqual([]);
+    expect(after.crew.health).toBe(8 - CREW.damage.water);
+    expect(events.filter((event) => event.type === 'healthRestored')).toEqual([]);
   });
 });
 
