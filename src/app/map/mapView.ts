@@ -38,7 +38,8 @@ export interface TapMap {
   legend: HTMLElement;
   /**
    * Show `state`, with `marks` drawn over it (the square a refused tap was
-   * on, and the neighbours that are too high). `fresh` is true for a new or
+   * on, the neighbours that are too high, the squares a mine would make
+   * unstable). `fresh` is true for a new or
    * resumed run: the map then centres on the middle.
    */
   show(state: GameState, fresh: boolean, marks: MapMarks): void;
@@ -304,7 +305,7 @@ export function drawTile(
   }
 }
 
-/** The marks drawn over a tile: mineral traces and a structure. */
+/** The marks drawn over a tile: mineral traces, a structure and a crack. */
 function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number, c: number) {
   const mid = c / 2;
   if (tile.traced) {
@@ -331,6 +332,43 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
     ctx.lineWidth = Math.max(1.5, c / 10);
     ctx.strokeRect(x + 0.25 * c, y + 0.25 * c, 0.5 * c, 0.5 * c);
   }
+  if (tile.crack !== null) {
+    // A jagged line from corner to corner, dark underneath so that it shows
+    // on any rock, and the countdown in the top-right corner. Red while the
+    // countdown is running; pale grey when it has stopped.
+    const crackColour = tile.crackRunning ? MARK_COLOURS.crack : MARK_COLOURS.crackStopped;
+    const zigzag: [number, number][] = [
+      [0.1, 0.15],
+      [0.42, 0.4],
+      [0.3, 0.58],
+      [0.7, 0.7],
+      [0.9, 0.92],
+    ];
+    for (const [colour, width] of [
+      [MARK_COLOURS.crackOutline, Math.max(3, c / 6)],
+      [crackColour, Math.max(1.5, c / 11)],
+    ] as const) {
+      ctx.strokeStyle = colour;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      zigzag.forEach(([fx, fy], index) => {
+        if (index === 0) {
+          ctx.moveTo(x + fx * c, y + fy * c);
+        } else {
+          ctx.lineTo(x + fx * c, y + fy * c);
+        }
+      });
+      ctx.stroke();
+    }
+    ctx.font = `bold ${Math.max(8, Math.round(c * 0.42))}px sans-serif`;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.lineWidth = Math.max(2, c / 10);
+    ctx.strokeStyle = MARK_COLOURS.crackOutline;
+    ctx.strokeText(String(tile.crack), x + c - 2, y + 1);
+    ctx.fillStyle = crackColour;
+    ctx.fillText(String(tile.crack), x + c - 2, y + 1);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -347,6 +385,8 @@ function sampleTile(overrides: Partial<Tile>): Tile {
     block: 'stone',
     traced: false,
     structure: null,
+    crack: null,
+    crackRunning: false,
     surface: null,
     higher: { north: false, east: false, south: false, west: false },
     ...overrides,
@@ -383,7 +423,11 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
   let floor = false;
   let dug = false;
   let traced = false;
+  let cracked = false;
+  let stoppedCrack = false;
   for (const tile of tiles) {
+    if (tile.crack !== null && tile.crackRunning) cracked = true;
+    if (tile.crack !== null && !tile.crackRunning) stoppedCrack = true;
     if (tile.kind === 'block' && tile.block !== null) blocks.add(tile.block);
     if (tile.kind === 'floor') floor = true;
     if (tile.surface !== null) surfaceKinds.add(tile.surface);
@@ -434,6 +478,22 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
   }
   if (structures.has('other')) {
     entries.push(legendEntry(sampleTile({ structure: 'other' }), 'other structure'));
+  }
+  if (cracked) {
+    entries.push(
+      legendEntry(
+        sampleTile({ block: 'dirt', crack: 1, crackRunning: true }),
+        'crack: the block slumps into the pit; the number is its countdown (1 = when this shift ends)',
+      ),
+    );
+  }
+  if (stoppedCrack) {
+    entries.push(
+      legendEntry(
+        sampleTile({ block: 'dirt', crack: 1, crackRunning: false }),
+        'pale crack: countdown stopped (the square is stable or held); it goes on if that changes',
+      ),
+    );
   }
   return entries;
 }
@@ -565,10 +625,14 @@ export function createTapMap(onTap: (x: number, y: number) => void): TapMap {
     }
     legend.replaceChildren(...legendFor(drawn));
 
-    // After a refused tap: the tapped square in yellow, and the neighbours
-    // that are too high for the level rule in red.
+    // After a tap that was not taken: the tapped square in yellow, the
+    // neighbours that are too high for the level rule in red, and the squares
+    // a risky mine would make unstable in orange.
     for (const square of marks.tooHigh) {
       outline(ctx, square.x, square.y, c, MARK_COLOURS.tooHigh);
+    }
+    for (const square of marks.unstable) {
+      outline(ctx, square.x, square.y, c, MARK_COLOURS.unstable);
     }
     if (marks.selected !== null) {
       outline(ctx, marks.selected.x, marks.selected.y, c, MARK_COLOURS.selected);
@@ -588,6 +652,9 @@ export function createTapMap(onTap: (x: number, y: number) => void): TapMap {
     canvas.dataset['selected'] =
       marks.selected === null ? '' : `${marks.selected.x},${marks.selected.y}`;
     canvas.dataset['tooHigh'] = marks.tooHigh.map((square) => `${square.x},${square.y}`).join(' ');
+    canvas.dataset['unstable'] = marks.unstable
+      .map((square) => `${square.x},${square.y}`)
+      .join(' ');
   }
 
   /** A tap (not a drag) at (px, py) pixels from the map's top-left corner. */

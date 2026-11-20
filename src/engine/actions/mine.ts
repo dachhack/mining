@@ -13,13 +13,18 @@
 // that water stands on costs 1 AP more, and a square with lava on it cannot
 // be mined at all.
 //
-// Not here yet, because their rules are not built: a camp's squares cannot be
-// mined (T12), and mining takes a support away (T8).
+// Not here yet, because its rule is not built: a camp's squares cannot be
+// mined (T12).
+//
+// A support (or any other structure) on the square is stored with its top
+// block, so mining the block takes it away and it is lost (owner question 82;
+// issue #94).
 
 import { BLOCKS, HAZARDS, SURFACE } from '../../data';
 import type { MineAction } from '../actionTypes';
 import { collapseSpaceUnder, contentsOn } from '../breach';
 import { markWorked } from '../crew';
+import { destroyStructure } from '../destroy';
 import type { GameEvent } from '../events';
 import { depthAt, mayMine } from '../heightmap';
 import type { HigherNeighbour } from '../heightmap';
@@ -138,6 +143,8 @@ export function legalMineActions(state: GameState): MineAction[] {
  * Carry out `action`, which the dispatcher has already checked is in the
  * legal list.
  *
+ * - A structure on the square (a support) goes with the block and is lost:
+ *   `structureDestroyed`, cause `mined`, before the `blockMined`.
  * - Opens the square's top cell and emits `blockMined`. The square is now 1
  *   level deeper.
  * - The square is a worked square until the end of the shift (design doc
@@ -163,6 +170,7 @@ export function applyMine(state: GameState, action: MineAction, events: GameEven
   const minedCode = blockAt(state, target);
   const yields = blockDefAt(state, target).yields;
 
+  destroyStructure(state, target, 'mined', events);
   setBlock(state, target, BLOCKS.air.code);
   events.push({ type: 'blockMined', pos: { ...target }, block: minedCode });
   markWorked(state, x, y);

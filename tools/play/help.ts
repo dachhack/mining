@@ -10,6 +10,7 @@ import {
   BLOCKS,
   CREW,
   FIELD_RECIPES,
+  HAZARDS,
   SHIFT,
   SURFACE,
   TELLS,
@@ -31,6 +32,12 @@ export function helpText(): string {
   const lowestMineCost = BLOCKS.dirt.mineCost ?? 0;
   const highestMineCost = BLOCKS.hardRock.mineCost ?? 0;
   const rubbleCost = BLOCKS.rubble.mineCost ?? 0;
+  // Pit walls slump (design doc 6.1): the numbers of the rule.
+  const weakLimit = BLOCKS.dirt.slumpLimit ?? 0;
+  const rockLimit = BLOCKS.stone.slumpLimit ?? 0;
+  const hardLimit = BLOCKS.hardRock.slumpLimit ?? 0;
+  const steepStep = HAZARDS.slump.steepStep;
+  const crackCountdown = HAZARDS.slump.crackCountdown;
 
   return `Mining game: text play interface
 
@@ -53,8 +60,12 @@ CHOICES
   There is no miner to move. You act on the map by naming a square:
     mine X,Y                 mine the top block of the square x X, y Y ("mine 3,4")
     cut X,Y                  cut down the tree on that square
+    support X,Y              place a support on that square (you need one: craft-support)
+    mine! X,Y                mine a square although it would make others unstable (see below)
   Any square of the map may be named; nothing has to be near anything. A square that cannot be
-  mined or cut is refused with the reason, and nothing is done.
+  mined, cut or supported is refused with the reason, and nothing is done.
+  A mine that would make other squares unstable is not done the first time: you get a warning
+  that names those squares, and nothing happens. Type it as "mine! X,Y" to do it all the same.
   Everything else you may do is a line of the action list, with a number and a name. --do and
   the prompt take either:
     craft-fuel, craft-support, ...     craft; the list shows each name
@@ -80,16 +91,19 @@ READING A VIEW
     level, then 1 to 9, then letters (a is 10, b is 11, ...). At ground level a "," there marks
     a stump. Straight after a tree's "Y" it is blank (the ground under it is hidden), or the
     block you saw there before the tree grew back.
-  Under the map: the legend, and notes on stumps. Then known hazards and what ending the shift
-  now would do. A line starting "Not possible now:" says what costs more AP than you have left.
-  Last comes how to mine and cut, with how many squares can be mined and trees cut now, and
-  the list of everything else you may do, each with its number, its name and its cost in AP.
+  Under the map: the legend, then notes: what lies on a square that two characters cannot
+  show (a crack and its countdown, a support), and the stumps. Then "Hazards": every cracked
+  square, when it falls and where its block will land. Then what ending the shift now would
+  do, including which blocks slump and which squares crack. A line starting "Not possible now:" says what costs more AP than you have left.
+  Last comes how to mine, cut and place a support, with how many squares can be mined and
+  trees cut now, and the list of everything else you may do, each with its number, its name and its cost in AP.
 
 THE GAME
   You look down on a cube of rock ${WORLD.size.x} squares by ${WORLD.size.y} and ${WORLD.size.z} blocks deep (x 0 to ${lastX}, y 0 to ${lastY}),
   and mine it from the top: you choose a square and its top block is taken. There is no miner
   on the map and nothing walks. Collect what the rock gives. The run ends alive only when you
   choose to close the mine. It is lost if you run out of fuel, or if crew health reaches 0.
+  The walls of the pit you dig can slump: see "Pit walls slump".
 
   Shifts and action points (AP)
   - Time passes in shifts. Each shift you get ${SHIFT.apPerShift} AP. Each action costs AP; one you cannot afford
@@ -124,6 +138,39 @@ THE GAME
   - Harder rock and different ores lie deeper. Timber-root grows only in the upper layers;
     the trees on the surface are the other source of timber.
   - A square mined all the way down shows the bedrock floor and cannot be mined further.
+  Pit walls slump
+  - The level rule lets you dig a slope of 1-level steps, but a slope that is too tall for its
+    material does not hold. Picture a loose block on a square: it slides to the lowest square
+    beside it (if several are equally low: north first, then east, south, west) as long as
+    that one is deeper, and again from there, until it reaches a square with no deeper
+    neighbour: the FOOT. The square's FALL is how many levels deeper its foot is.
+  - A square is UNSTABLE when its fall is more than its top block holds: dirt and rubble hold a
+    fall of ${weakLimit}, most rock and ore ${rockLimit}, hard rock and crystal ${hardLimit}. So in dirt every step down needs
+    a level bench before the next step; in stone every second step; in hard rock every third.
+    A square ${steepStep} or more levels above a neighbour is unstable whatever it is made of; you cannot
+    dig such a step, but a slump can leave one.
+  - When a shift ends, each unstable square CRACKS and shows a countdown of ${crackCountdown}. The countdown
+    goes down by 1 at the end of each later shift while the square is still unstable. When a
+    shift ends with the countdown at 1, the block falls: it slides to the foot and lies there
+    as rubble. The square is then 1 deeper and the foot 1 higher. Whatever the block was, ore
+    too, is lost. A slump can make other squares unstable; they crack in their turn.
+  - If the square stops being unstable (you make the slope gentler, or rubble fills the hole
+    below it), its countdown stops where it is. It goes on from there if the square becomes
+    unstable again. A stopped crack reads "a crack, stopped at N" in the notes, and the
+    Hazards line says its countdown is stopped. Mind one stopped at 1: it falls at the end of
+    the shift in which the square becomes unstable again.
+  - Mining a cracked block removes it, crack and all, like any other block.
+  - A tree holds its square: a square with a tree never cracks. Cutting the tree ends that.
+  - A SUPPORT holds the square it is placed on, and only that square: it does not crack, and a
+    crack already on it stops counting down. Placing one costs ${ACTION_COSTS.placeSupport} AP and uses up the support.
+    A square holds one support; none goes on a tree or on a square with no block left. If you
+    mine the square, the support goes with the block and is lost. Rubble that lands on a
+    supported square buries the support, and it is lost too.
+  - Everything this rule reads is on your map: depths, top blocks, trees and supports. Before
+    a mine is done you are told which squares it would make unstable (see CHOICES). The one
+    thing you cannot know is what a mine or a cut uncovers: a weaker block than the one that
+    was on top may turn out too weak for the slope it now tops, and the ground under a tree
+    you cut may be too weak for the pit beside it.
 
   The forest
   - Most of the surface is forest. The rest is open ground (meadow, dirt paths, stone
@@ -166,8 +213,7 @@ THE GAME
 
   Crafting (${ACTION_COSTS.craft} AP each)
 ${recipes}
-    Supports can be made but have no use yet in this version of the game. Fuel is the one
-    that matters.
+    Fuel keeps the run going. A support holds one square of a pit wall: see "Pit walls slump".
 
   Crew health
   - Your crew starts with ${CREW.startHealth} health ("Crew health" among the gauges). The crew is not on the map.
@@ -175,6 +221,10 @@ ${recipes}
     on, or built on since the shift began. When the shift ends, each kind of hazard that
     reaches such a square takes health once. Squares you left alone this shift are safe for
     the crew.
+  - A slump takes ${CREW.damage.slump} health if the block falls from a square the crew worked this shift, or
+    comes to rest on one. Several slumps in one end of shift still take ${CREW.damage.slump} in all. The Hazards
+    line says which squares are about to slump and where the blocks will land, so you can
+    keep the crew off them in the shift they fall.
   - At 0 crew health the run is lost.
 
   Closing the mine
@@ -186,7 +236,7 @@ ${recipes}
   - Water, lava and gas that come out of a pocket stay on the square they came out on: they do
     not spread, and they do not hurt the crew or stop you mining yet. Unstable ore does not
     explode yet: it is mined like any ore.
-  - Pit walls that slump, supports that hold a wall, camps and contracts are not built yet. So
-    nothing takes crew health today; the only way to lose the run is to run out of fuel.
+  - Camps and contracts are not built yet. So a slumping pit wall is the only thing that
+    takes crew health today.
 `;
 }

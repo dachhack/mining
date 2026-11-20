@@ -1,73 +1,110 @@
-// The two hazard parts of the end-shift forecast (0014 item 4).
+// The hazard parts of the end-shift forecast (design doc 11; 0014 item 4).
 //
-// The flows of water and lava are built (issue #99). The countdowns are empty
-// until their tasks fill them in. `forecastShift` in shift.ts calls both
-// functions and adds the upkeep part.
+// The cracks and the slumps are built (issue #94), and the flows of water and
+// lava (issue #99). Gas joins with T11. `forecastShift` in shift.ts calls
+// these functions and adds the upkeep part.
 
 import type { Vec3 } from '../data';
 import { stepFluids } from './cube/fluids';
 import { newCubePhase } from './cube/phase';
+import { stepSlumps } from './cube/slumps';
 import type { GameEvent } from './events';
-import { knownCube } from './known';
+import { depthIn, depthMapOf } from './heightmap';
+import { knownCube, knownSquare } from './known';
+import { stabilityIn } from './slump';
 import type { GameState } from './state';
 
 /**
- * One countdown the player can read (0014 item 4, part 1): something that is
- * certain to happen in a coming cube phase, because nothing unseen can change
- * it. Three kinds:
+ * One countdown the player can read. Three kinds:
  *
- * - `fallingBlock`: the revealed, cracked block at `pos` whose countdown is
- *   running. `path` is the cells it will fall through and the cell it stops
- *   in, top first, down to the first unrevealed cell and no further;
- *   `pathEndsUnseen` is true if the path was cut short there.
- * - `unstableOre`: the armed unstable ore at `pos`.
- * - `explosive`: the placed explosive at `pos`.
+ * - `slump`: the cracked top block at `pos` (design doc 6.1). `running` is
+ *   true while its square is unstable; a stopped countdown keeps its number
+ *   and goes on if the square becomes unstable again. `to` is the cell where
+ *   the block would come to rest if it fell as the pit stands now (on top of
+ *   the foot of its slide path), or `null` while the countdown is stopped.
+ * - `unstableOre`: the armed unstable ore at `pos` (T11).
+ * - `explosive`: the placed explosive at `pos` (T11).
  *
- * `inShifts` is how many shifts from now: 1 means "in the coming cube phase".
- * For a cracked block it is the stored timer plus 1, the number the player
- * is shown on the block (0014 item 7).
+ * `inShifts` is how many cube phases from now: 1 means "in the coming cube
+ * phase". For a cracked block it is the stored timer plus 1, the number the
+ * player is shown on the block.
  *
  * This is a tagged union, like `Action`: `kind` says which fields there are.
  */
 export type CountdownForecast =
-  | { kind: 'fallingBlock'; pos: Vec3; inShifts: number; path: Vec3[]; pathEndsUnseen: boolean }
+  | { kind: 'slump'; pos: Vec3; inShifts: number; running: boolean; to: Vec3 | null }
   | { kind: 'unstableOre'; pos: Vec3; inShifts: number }
   | { kind: 'explosive'; pos: Vec3; inShifts: number };
 
 /**
- * Contract for M2-6: part 1 of the forecast, the countdowns.
+ * Part 1 of the forecast, the countdowns: every cracked top block the player
+ * sees, row by row (y, then x).
  *
- * - Every revealed block whose countdown is running and shows 1 (stored timer
- *   0), every armed unstable ore, and every placed explosive, in cell order
- *   (z, then y, then x).
- * - A falling block's path is reported down to the first unrevealed cell and
- *   no further.
- * - Read cells only through `knownCell` (known.ts), so that the result cannot
- *   depend on an unrevealed cell. New cracks are not forecast.
- * - Does not change `state`.
+ * A square is read through `knownSquare`, and whether its countdown is
+ * running through `stabilityIn`, which reads depths, trees, supports and
+ * seen top blocks only. So the result cannot depend on anything hidden.
+ * Armed unstable ore and placed explosives join the list with T11.
+ * Does not change `state`.
  */
-export function forecastCountdowns(_state: GameState): CountdownForecast[] {
-  return [];
+export function forecastCountdowns(state: GameState): CountdownForecast[] {
+  const map = depthMapOf(state);
+  const countdowns: CountdownForecast[] = [];
+  for (let y = 0; y < state.size.y; y += 1) {
+    for (let x = 0; x < state.size.x; x += 1) {
+      const square = knownSquare(state, x, y);
+      if (square.top === null || square.top.crackTimer === null) {
+        continue;
+      }
+      const check = stabilityIn(state, map, x, y);
+      const footDepth = depthIn(map, check.foot.x, check.foot.y);
+      countdowns.push({
+        kind: 'slump',
+        pos: { x, y, z: square.depth },
+        inShifts: square.top.crackTimer + 1,
+        running: check.unstable,
+        to: check.unstable ? { x: check.foot.x, y: check.foot.y, z: footDepth - 1 } : null,
+      });
+    }
+  }
+  return countdowns;
+}
+
+/**
+ * What step (a) of the coming cube phase will do: run `stepSlumps` on
+ * `knownCube(state)`, the copy in which every unseen cell is plain rock with
+ * nothing in it, and return the events it emits (`blockFell`, `blockCracked`,
+ * `structureDestroyed`, ...). See `ShiftForecast.slumps` in shift.ts for how
+ * exact this is. Does not change `state`.
+ */
+export function forecastSlumps(state: GameState): GameEvent[] {
+  const copy = knownCube(state);
+  const events: GameEvent[] = [];
+  stepSlumps(copy, events, newCubePhase());
+  return events;
 }
 
 /**
  * Part 2 of the forecast, the flows: what step (b) of the coming cube phase
  * will do to the water and lava the player sees (design doc 6 and 11).
  *
- * - Runs `stepFluids` on `knownCube(state)`, the copy in which every
- *   unrevealed cell is plain rock with nothing in it, with a fresh
- *   `newCubePhase()`, and returns the events it emits: `fluidMoved` for each
- *   unit that will move, `fluidRemoved`, `lavaPoured`, `stoneFormed`, and
- *   what lava or water will destroy.
+ * - Runs steps (a) and (b) of the cube phase (`stepSlumps`, then
+ *   `stepFluids`) on `knownCube(state)`, the copy in which every unrevealed
+ *   cell is plain rock with nothing in it, and returns the events step (b)
+ *   emits: `fluidMoved` for each unit that will move, `fluidRemoved`,
+ *   `lavaPoured`, `stoneFormed`, and what lava or water will destroy. Step
+ *   (a) runs first because a slump changes the pit the water then flows in;
+ *   its own events are `forecastSlumps`.
  * - Everything the flow rule reads is seen (depths, and what stands on the
- *   squares), so this is what will happen, unless a slump in step (a) changes
- *   the pit first.
+ *   squares), so this is what will happen, as exactly as the slumps are
+ *   forecast (`ShiftForecast.slumps` in shift.ts).
  * - Gas (step (c), `stepGas`) joins with T11.
  * - Does not change `state`.
  */
 export function forecastFlows(state: GameState): GameEvent[] {
   const copy = knownCube(state);
+  const phase = newCubePhase();
+  stepSlumps(copy, [], phase); // its events are not part of the flows
   const events: GameEvent[] = [];
-  stepFluids(copy, events, newCubePhase());
+  stepFluids(copy, events, phase);
   return events;
 }

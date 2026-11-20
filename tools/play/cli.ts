@@ -20,7 +20,12 @@ import {
   replayLog,
 } from '../../src/app/text/log';
 import type { LogEntry, PlayLog, Session } from '../../src/app/text/log';
-import { cutChoice, mineChoice, parseSquareChoice } from '../../src/app/text/squares';
+import {
+  cutChoice,
+  mineChoice,
+  parseSquareChoice,
+  supportChoice,
+} from '../../src/app/text/squares';
 import { takeTurn } from '../../src/app/text/turn';
 import { buildView, renderView } from '../../src/app/text/view';
 
@@ -105,14 +110,14 @@ export function parseArgs(args: string[]): CliOptions {
  * "mine 3,4, cut 5,6,end" -> ["mine 3,4", "cut 5,6", "end"].
  *
  * A square is written with a comma too ("mine 3,4"), so a comma that stands
- * between the two numbers of a mine or a cut is not a break. A semicolon is
+ * between the two numbers of a mine, a cut or a support is not a break. A semicolon is
  * always a break, for anyone who would rather not rely on that.
  */
 export function splitChoices(text: string): string[] {
   // The pattern matches, from left to right, either a whole square choice
   // ("mine 3 , 4") or a run of characters with no comma or semicolon in it.
   // The `g` flag makes `match` return every match, not just the first.
-  const pieces = text.toLowerCase().match(/ *(?:mine|cut)[ -]*\d+ *, *\d+|[^,;]+/g) ?? [];
+  const pieces = text.toLowerCase().match(/ *(?:mine!?|cut|support)[ -]*\d+ *, *\d+|[^,;]+/g) ?? [];
   return pieces.map((piece) => piece.trim()).filter((piece) => piece !== '');
 }
 
@@ -126,9 +131,11 @@ export interface ResolvedChoice {
 /**
  * The entry a typed choice stands for, or the reason it is refused.
  *
- * - "mine 3,4" and "cut 3,4" name a square. A refused one says why (a tree,
- *   the level rule and which neighbours are too high, too little AP, ...):
- *   see squares.ts.
+ * - "mine 3,4", "cut 3,4" and "support 3,4" name a square. A refused one
+ *   says why (a tree, the level rule and which neighbours are too high, too
+ *   little AP, ...): see squares.ts.
+ * - A mine that would make squares unstable is refused the first time, with
+ *   a warning that names them; "mine! 3,4" takes it all the same.
  * - 1, 2, ... are the lines of the action list in order, and 0 ends the
  *   shift.
  * - A name ("craft-fuel", "close-mine", "end") is the line of the list that has
@@ -141,9 +148,24 @@ export function resolveChoice(state: GameState, choice: string): ResolvedChoice 
   }
   const square = parseSquareChoice(choice);
   if (square !== null) {
-    return square.kind === 'mine'
-      ? mineChoice(state, square.x, square.y)
-      : cutChoice(state, square.x, square.y);
+    if (square.kind === 'cut') {
+      return cutChoice(state, square.x, square.y);
+    }
+    if (square.kind === 'support') {
+      return supportChoice(state, square.x, square.y);
+    }
+    const mine = mineChoice(state, square.x, square.y);
+    if (mine.entry !== null && mine.warning !== null && !square.confirmed) {
+      // A risky mine is not taken at the first asking (design doc 11): the
+      // warning is the answer, and "mine!" takes it.
+      return {
+        entry: null,
+        refusal:
+          `${mine.warning} Nothing was done. To mine it all the same, ` +
+          `type "mine! ${square.x},${square.y}".`,
+      };
+    }
+    return mine;
   }
   const listed = listedChoices(state);
   // "End shift" is the last entry of `listed`; the numbered lines are the rest.
@@ -164,7 +186,7 @@ export function resolveChoice(state: GameState, choice: string): ResolvedChoice 
   return {
     entry: null,
     refusal:
-      'It is not a choice as things stand now. Type "mine X,Y" or "cut X,Y" for a square, ' +
+      'It is not a choice as things stand now. Type "mine X,Y", "cut X,Y" or "support X,Y" for a square, ' +
       `a number from 1 to ${numbered.length} or a name from the list, or 0 / end to end the shift.`,
   };
 }

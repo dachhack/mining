@@ -6,19 +6,34 @@
 // `knownSquare`, and the numbers on the HUD. It never reads a block below a
 // square's top.
 //
-// Two policies (issue #86; the walking policies `staircase`, `wander` and
+// The policies (issue #86; the walking policies `staircase`, `wander` and
 // `coal` went with the miner):
 // - `random`: every legal action except closing the mine, and "end the
 //   shift", are equally likely. It never closes the mine; see
 //   `makeRandomPolicy` for why.
 // - `pit`: digs a terraced pit round the middle of the map, cutting the trees
 //   in its way, and keeps itself in fuel from the coal it finds. It closes
-//   the mine when the fuel is about to run out.
-// Neither is how a person plays. Task T15 adds a terracing policy and a depth
+//   the mine when the fuel is about to run out. Since pit walls slump (issue
+//   #94) it never takes a mine that would make a square unstable, and when a
+//   square is unstable all the same it mines it down or holds it with a support.
+// - `greedy`: the pit policy with its eyes shut to slumps: it digs the
+//   steepest pit the level rule allows and deals with nothing. Its walls
+//   crack and slump, and the crew is hurt when it works where they fall. It
+//   is here so that the simulator and the golden runs exercise the slump rule.
+// None is how a person plays. Task T15 adds a terracing policy and a depth
 // survey.
 
 import { BLOCKS, SHIFT } from '../src/data';
-import { actionKey, countItem, createRng, knownSquare, legalActions, nextInt } from '../src/engine';
+import {
+  actionKey,
+  countItem,
+  createRng,
+  knownSquare,
+  legalActions,
+  nextInt,
+  unstableAfterMine,
+  unstableSquares,
+} from '../src/engine';
 import type { Action, CutTreeAction, GameState, MineAction } from '../src/engine';
 
 /** What a policy chooses: a legal action, or the string 'endShift'. */
@@ -34,7 +49,7 @@ export interface Policy {
 }
 
 /** The names `makePolicy` accepts. */
-export const POLICY_NAMES = ['random', 'pit'];
+export const POLICY_NAMES = ['random', 'pit', 'greedy'];
 
 /**
  * A short, readable form of a decision, used in logs and golden files:
@@ -87,6 +102,8 @@ export function makeRandomPolicy(seed: number): Policy {
 
 /** The id of the field recipe that turns coal into fuel (src/data/recipes.ts). */
 export const FUEL_RECIPE_ID = 'fuel';
+/** The id of the field recipe that makes a support (src/data/recipes.ts). */
+export const SUPPORT_RECIPE_ID = 'support';
 
 /**
  * The pit policy's own numbers. They are how this scripted player behaves,
@@ -123,6 +140,41 @@ function isBetterCandidate(a: PitCandidate, b: PitCandidate): boolean {
 }
 
 /**
+ * True if taking this candidate would make no square unstable (design doc
+ * 6.1). A cut never does. `unstableAfterMine` reads only what the player
+ * sees.
+ */
+function isSafeCandidate(state: GameState, candidate: PitCandidate, heedSlumps: boolean): boolean {
+  if (!heedSlumps) {
+    return true; // the greedy policy takes any legal square
+  }
+  if (candidate.action.type !== 'mine') {
+    return true;
+  }
+  return unstableAfterMine(state, candidate.action.x, candidate.action.y).length === 0;
+}
+
+/**
+ * The best candidate that is safe to take, or `undefined` if none is.
+ * Candidates are tried from the best down, so the check that costs the most
+ * (`isSafeCandidate`) is run on a few squares and not on a thousand.
+ */
+function bestSafeCandidate(
+  state: GameState,
+  candidates: PitCandidate[],
+  heedSlumps: boolean,
+): PitCandidate | undefined {
+  // `[...list]` copies the list; `sort` would otherwise reorder the caller's.
+  // The sort is stable: equally good candidates stay in row order.
+  const ranked = [...candidates].sort((a, b) => {
+    if (isBetterCandidate(a, b)) return -1;
+    if (isBetterCandidate(b, a)) return 1;
+    return 0;
+  });
+  return ranked.find((candidate) => isSafeCandidate(state, candidate, heedSlumps));
+}
+
+/**
  * A policy that digs a terraced pit round the middle of the map.
  *
  * Each time it is asked, the first of these that applies:
@@ -130,14 +182,22 @@ function isBetterCandidate(a: PitCandidate, b: PitCandidate): boolean {
  *    stockpile: craft fuel.
  * 2. Fuel is at or below `closeMineAtOrBelow`, with no coal to craft: close
  *    the mine, and take the salvage, before the fuel runs out.
- * 3. Fuel is below `fetchCoalBelow` and a legal mine would take a coal block
- *    the player can see: mine the best such square.
- * 4. Otherwise work on the best square there is a legal action for: the
- *    deepest, and among equally deep ones the nearest to the centre. A
+ * 3. A square is unstable (it is cracked, or will crack when the shift ends):
+ *    lay the slope back by mining that square, if that is legal and safe;
+ *    otherwise place a support on it; with none in the stockpile, craft one.
+ *    This happens when a cut tree stops holding weak ground, or a block
+ *    turns out weaker than the one that was above it: rule 5 never makes a
+ *    square unstable knowingly.
+ * 4. Fuel is below `fetchCoalBelow` and a safe, legal mine would take a coal
+ *    block the player can see: mine the best such square.
+ * 5. Otherwise work on the best square there is a safe, legal action for:
+ *    the deepest, and among equally deep ones the nearest to the centre. A
  *    square with a tree on it counts as a square at depth 0, and its action
  *    is to cut the tree: so a tree is cut exactly when its square is the next
- *    the pit needs.
- * 5. Nothing to mine or cut that the AP left pay for: end the shift.
+ *    the pit needs. "Safe" means the mine would make no square unstable
+ *    (design doc 6.1), so the pit grows the level benches its material needs:
+ *    wide ones in dirt, narrower ones in rock.
+ * 6. Nothing to mine or cut that the AP left pay for: end the shift.
  *
  * Why this digs a terraced pit: the level rule only lets a square be mined
  * when no neighbour is higher. "Deepest first" takes the middle down a level
@@ -150,8 +210,12 @@ function isBetterCandidate(a: PitCandidate, b: PitCandidate): boolean {
  * costs the pit little.
  *
  * It uses no random numbers: the same state always gives the same decision.
+ *
+ * `heedSlumps` false makes the `greedy` policy: rule 3 is skipped and every
+ * legal square counts as safe, so it digs the plain cone of 1-level steps and
+ * lets its walls slump (design doc 6.1).
  */
-export function makePitPolicy(): Policy {
+export function makePitPolicy(heedSlumps = true): Policy {
   function decide(state: GameState): Decision {
     const legal = legalActions(state);
     const centreX = Math.floor(state.size.x / 2);
@@ -188,38 +252,64 @@ export function makePitPolicy(): Policy {
       });
     }
 
-    // 3. Low on fuel: take coal the player can see, if a mine is legal there.
-    if (state.fuel < PIT_POLICY.fetchCoalBelow) {
-      let bestCoal: PitCandidate | undefined = undefined;
-      for (const candidate of candidates) {
-        if (candidate.action.type !== 'mine') {
-          continue;
-        }
-        const top = knownSquare(state, candidate.action.x, candidate.action.y).top;
-        if (top === null || top.block !== BLOCKS.coalSeam.code) {
-          continue;
-        }
-        if (bestCoal === undefined || isBetterCandidate(candidate, bestCoal)) {
-          bestCoal = candidate;
+    // 3. Deal with an unstable square. The first square in row order that a
+    //    way works for is the one dealt with; laying the slope back is tried
+    //    for every square before a support is spent on any.
+    const unstable = heedSlumps ? unstableSquares(state) : [];
+    if (unstable.length > 0) {
+      for (const square of unstable) {
+        const mine = candidates.find(
+          (candidate) =>
+            candidate.action.type === 'mine' &&
+            candidate.action.x === square.x &&
+            candidate.action.y === square.y &&
+            isSafeCandidate(state, candidate, heedSlumps),
+        );
+        if (mine !== undefined) {
+          return mine.action;
         }
       }
+      for (const square of unstable) {
+        const place = legal.find(
+          (action) =>
+            action.type === 'placeSupport' && action.x === square.x && action.y === square.y,
+        );
+        if (place !== undefined) {
+          return place;
+        }
+      }
+      if (countItem(state, 'support') === 0) {
+        const craft = legal.find(
+          (action) => action.type === 'craft' && action.recipe === SUPPORT_RECIPE_ID,
+        );
+        if (craft !== undefined) {
+          return craft;
+        }
+      }
+    }
+
+    // 4. Low on fuel: take coal the player can see, if a safe mine is legal there.
+    if (state.fuel < PIT_POLICY.fetchCoalBelow) {
+      const coal = candidates.filter((candidate) => {
+        if (candidate.action.type !== 'mine') {
+          return false;
+        }
+        const top = knownSquare(state, candidate.action.x, candidate.action.y).top;
+        return top !== null && top.block === BLOCKS.coalSeam.code;
+      });
+      const bestCoal = bestSafeCandidate(state, coal, heedSlumps);
       if (bestCoal !== undefined) {
         return bestCoal.action;
       }
     }
 
-    // 4. Dig the pit.
-    let best: PitCandidate | undefined = undefined;
-    for (const candidate of candidates) {
-      if (best === undefined || isBetterCandidate(candidate, best)) {
-        best = candidate;
-      }
-    }
+    // 5. Dig the pit.
+    const best = bestSafeCandidate(state, candidates, heedSlumps);
     if (best !== undefined) {
       return best.action;
     }
 
-    // 5. Nothing the AP left pay for.
+    // 6. Nothing the AP left pay for.
     if (state.ap >= SHIFT.apPerShift) {
       // Even a full shift's AP buy nothing: the whole map is mined out or
       // blocked. A scripted policy that waited for ever would hide that.
@@ -228,7 +318,7 @@ export function makePitPolicy(): Policy {
     return 'endShift';
   }
 
-  return { name: 'pit', decide };
+  return { name: heedSlumps ? 'pit' : 'greedy', decide };
 }
 
 /**
@@ -241,6 +331,9 @@ export function makePolicy(name: string, seed: number): Policy {
   }
   if (name === 'pit') {
     return makePitPolicy();
+  }
+  if (name === 'greedy') {
+    return makePitPolicy(false);
   }
   throw new Error(`Unknown policy "${name}"; the policies are ${POLICY_NAMES.join(', ')}`);
 }

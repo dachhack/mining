@@ -28,38 +28,36 @@ import { isLavaSourceOn, lavaOn, setLavaOn, setWaterOn, waterOn } from '../../sr
 import {
   blockAt,
   crackTimerAt,
-  setBlock,
   setCrackTimer,
   setStructure,
   structureAt,
   waterAt,
 } from '../../src/engine/state';
-import { act, buildState } from './helpers';
+import { act, buildState, depthText, terrainLayers } from './helpers';
 import type { BuildStateOptions } from './helpers';
+
+/** What stone costs to mine. `?? 0`: the data gives every minable block a cost. */
+const STONE_AP = BLOCKS.stone.mineCost ?? 0;
 
 /** A shift in which lava flows, and one in which it does not. */
 const LAVA_SHIFT = 2;
 const NO_LAVA_SHIFT = 3;
 
 /**
- * Build a stone pit from a grid of depths (one digit per square). The cube is
+ * Build a pit from a grid of depths (one digit per square): stone unless
+ * `materials` says otherwise (see `terrainLayers` in helpers.ts). The cube is
  * two layers deeper than its deepest square, so no square is at the bottom.
  */
-function pit(depths: string[], options: Omit<BuildStateOptions, 'layers'> = {}): GameState {
-  let deepest = 0;
-  for (const row of depths) {
-    for (const char of row) {
-      deepest = Math.max(deepest, Number(char));
-    }
-  }
-  const layers: string[][] = [];
-  for (let z = 0; z < deepest + 2; z += 1) {
-    // A cell is open if it lies above its square's top block.
-    layers.push(
-      depths.map((row) => [...row].map((char) => (z < Number(char) ? '.' : '#')).join('')),
-    );
-  }
-  return buildState({ layers, shift: NO_LAVA_SHIFT, ...options });
+function pit(
+  depths: string[],
+  options: Omit<BuildStateOptions, 'layers'> = {},
+  materials?: string[],
+): GameState {
+  return buildState({
+    layers: terrainLayers(depths, materials),
+    shift: NO_LAVA_SHIFT,
+    ...options,
+  });
 }
 
 /** The water on every square, as rows of digits like the depths of `pit`. */
@@ -82,19 +80,6 @@ function lavaMap(state: GameState): string[] {
     let row = '';
     for (let x = 0; x < state.size.x; x += 1) {
       row += String(lavaOn(state, x, y));
-    }
-    rows.push(row);
-  }
-  return rows;
-}
-
-/** The depth of every square, as rows of digits. */
-function depthMap(state: GameState): string[] {
-  const rows: string[] = [];
-  for (let y = 0; y < state.size.y; y += 1) {
-    let row = '';
-    for (let x = 0; x < state.size.x; x += 1) {
-      row += String(depthAt(state, x, y));
     }
     rows.push(row);
   }
@@ -392,15 +377,15 @@ describe('lava flows like water, on even-numbered shifts only (design doc 6.4)',
   });
 
   it('through endShift: lava moves in every second cube phase', () => {
-    let state = pit(['1234'], { shift: 1, fuel: 20 });
+    let state = pit(['123'], { shift: 1, fuel: 20 });
     setLavaOn(state, 0, 0, 1, false);
     const seen: string[] = [];
-    for (let n = 0; n < 6; n += 1) {
+    for (let n = 0; n < 4; n += 1) {
       state = endShift(state).state;
       seen.push(lavaMap(state).join(''));
     }
-    // Shifts 1 to 6 end; lava moves at the end of shifts 2, 4 and 6.
-    expect(seen).toEqual(['1000', '0100', '0100', '0010', '0010', '0001']);
+    // Shifts 1 to 4 end; lava moves at the end of shifts 2 and 4.
+    expect(seen).toEqual(['100', '010', '010', '001']);
   });
 
   it('spreads by the same rule as water', () => {
@@ -554,7 +539,7 @@ describe('water meets lava: stone (design doc 6.4)', () => {
     setLavaOn(state, 1, 0, 1, false);
     const { events } = runStep(state);
     expect(moves(events, 'water')).toEqual(['0,0>1,0']);
-    expect(depthMap(state)).toEqual(['22']);
+    expect(depthText(state)).toEqual(['22']);
     expect(total(waterMap(state)) + total(lavaMap(state))).toBe(0);
   });
 
@@ -724,20 +709,20 @@ describe('mining with water or lava on the square (design doc 4.2; question 91)'
     const dry = mineCheck(state, 0, 0);
     setWaterOn(state, 0, 0, 1);
     const flooded = mineCheck(state, 0, 0);
-    expect(dry.ap).toBe(BLOCKS.stone.mineCost);
+    expect(dry.ap).toBe(STONE_AP);
     expect(flooded.allowed).toBe(true);
-    expect(flooded.ap).toBe(BLOCKS.stone.mineCost + HAZARDS.water.floodedMineExtraAp);
+    expect(flooded.ap).toBe(STONE_AP + HAZARDS.water.floodedMineExtraAp);
 
     const before = state.ap;
     const after = act(state, { type: 'mine', x: 0, y: 0 }).state;
-    expect(before - after.ap).toBe(BLOCKS.stone.mineCost + HAZARDS.water.floodedMineExtraAp);
+    expect(before - after.ap).toBe(STONE_AP + HAZARDS.water.floodedMineExtraAp);
     // The water stays on the square, which is now 1 deeper.
     expect(depthAt(after, 0, 0)).toBe(2);
     expect(waterOn(after, 0, 0)).toBe(1);
   });
 
   it('a flooded block that then costs more than the AP left is not offered', () => {
-    const state = pit(['11', '11'], { ap: BLOCKS.stone.mineCost });
+    const state = pit(['11', '11'], { ap: STONE_AP });
     setWaterOn(state, 0, 0, 1);
     const offered = legalActions(state).filter((action) => action.type === 'mine');
     expect(
@@ -776,67 +761,76 @@ describe('mining with water or lava on the square (design doc 4.2; question 91)'
   });
 });
 
-describe('water and lava under a block that lands on their square (issue #99)', () => {
-  /** Put a rubble block on the square, as a slump does: in the open cell above its top. */
-  function landRubble(state: GameState, x: number, y: number): void {
-    setBlock(state, { x, y, z: depthAt(state, x, y) - 1 }, BLOCKS.rubble.code);
+describe('water and lava under a block that slumps onto their square (issue #99)', () => {
+  // Square x=0 is dirt at ground level, with a crack that is due; x=1 is a
+  // hole beside it. The dirt block slumps into the hole in step (a), which
+  // lifts what stands there onto the rubble (`liftContents` in
+  // cube/slumps.ts). Step (b) then finds it one level higher.
+  function slumpInto(holeDepth: number, options: Omit<BuildStateOptions, 'layers'>): GameState {
+    return pit(
+      [`0${holeDepth}`],
+      { cracks: [{ pos: { x: 0, y: 0, z: 0 }, timer: 0 }], fuel: 10, ...options },
+      ['d#'],
+    );
   }
 
   it('the water is pushed up: the square rises by 1 and keeps all of it', () => {
-    const state = pit(['4']);
-    setWaterOn(state, 0, 0, 2);
-    landRubble(state, 0, 0);
-    // Until step (b) runs, the water sits in the cell the rubble is in.
-    expect(waterOn(state, 0, 0)).toBe(0);
-    const { events } = runStep(state);
-    expect(events).toEqual([]);
-    expect(depthAt(state, 0, 0)).toBe(3);
-    expect(waterOn(state, 0, 0)).toBe(2);
-    expect(waterAt(state, { x: 0, y: 0, z: 3 })).toBe(0); // nothing left in the rubble
+    const state = slumpInto(4, {});
+    setWaterOn(state, 1, 0, 2);
+    const { state: after, events } = endShift(state);
+    expect(events.some((event) => event.type === 'blockFell')).toBe(true);
+    expect(depthText(after)).toEqual(['13']);
+    expect(waterOn(after, 1, 0)).toBe(2);
+    expect(events.some((event) => event.type === 'fluidRemoved')).toBe(false);
+    // Nothing is left in the cell the rubble is in.
+    expect(blockAt(after, { x: 1, y: 0, z: 3 })).toBe(BLOCKS.rubble.code);
+    expect(waterAt(after, { x: 1, y: 0, z: 3 })).toBe(0);
   });
 
-  it('what is pushed above ground level drains', () => {
-    const state = pit(['2']);
-    setWaterOn(state, 0, 0, 2);
-    landRubble(state, 0, 0);
-    const { events } = runStep(state);
-    expect(events).toEqual([
-      {
-        type: 'fluidRemoved',
-        fluid: 'water',
-        pos: { x: 0, y: 0, z: 0 },
-        units: 1,
-        reason: 'reachedSurface',
-      },
-    ]);
-    expect(waterOn(state, 0, 0)).toBe(1);
-  });
-
-  it('two blocks landing on the same square push it up twice', () => {
-    const state = pit(['5']);
-    setWaterOn(state, 0, 0, 2);
-    landRubble(state, 0, 0);
-    landRubble(state, 0, 0);
-    runStep(state);
-    expect(depthAt(state, 0, 0)).toBe(3);
-    expect(waterOn(state, 0, 0)).toBe(2);
-  });
-
-  it('lava is pushed up the same way, and a buried source is still a source', () => {
-    const state = pit(['4'], { shift: NO_LAVA_SHIFT });
-    setLavaOn(state, 0, 0, 2, true);
-    landRubble(state, 0, 0);
-    runStep(state);
-    expect(lavaOn(state, 0, 0)).toBe(2);
-    expect(isLavaSourceOn(state, 0, 0)).toBe(true);
+  it('what is pushed above ground level drains in the same cube phase', () => {
+    const state = slumpInto(2, {});
+    setWaterOn(state, 1, 0, 2); // full to the brim
+    const { state: after, events } = endShift(state);
+    expect(depthText(after)).toEqual(['11']);
+    expect(events).toContainEqual({
+      type: 'fluidRemoved',
+      fluid: 'water',
+      pos: { x: 1, y: 0, z: 0 },
+      units: 1,
+      reason: 'reachedSurface',
+    });
+    expect(waterOn(after, 1, 0)).toBe(1);
   });
 
   it('pushed-up water then flows like any other', () => {
-    const state = pit(['44']);
-    setWaterOn(state, 0, 0, 1);
-    landRubble(state, 0, 0);
-    // Now 3 deep with 1 unit: level 2, two above the dry square beside it.
-    expect(moves(runStep(state).events, 'water')).toEqual(['0,0>1,0']);
+    // The hole is 3 deep with 2 units (level 1). The rubble lifts it to
+    // level 0, two above the square the block left (now 1 deep and dry)...
+    const state = slumpInto(3, {});
+    setWaterOn(state, 1, 0, 2);
+    const { state: after, events } = endShift(state);
+    expect(depthText(after)).toEqual(['12']);
+    // ...but a drop of 1 is not enough: it stays.
+    expect(moves(events, 'water')).toEqual([]);
+    expect(waterMap(after)).toEqual(['02']);
+  });
+
+  it('lava is pushed up the same way, and a buried source is still a source', () => {
+    const state = slumpInto(4, { shift: NO_LAVA_SHIFT });
+    setLavaOn(state, 1, 0, 2, true);
+    const after = endShift(state).state;
+    expect(depthText(after)).toEqual(['13']);
+    expect(lavaOn(after, 1, 0)).toBe(2);
+    expect(isLavaSourceOn(after, 1, 0)).toBe(true);
+  });
+
+  it('the forecast of the flows takes the slump into account', () => {
+    const state = slumpInto(2, {});
+    setWaterOn(state, 1, 0, 2);
+    const forecast = previewCubePhase(state);
+    const fluidTypes = ['fluidMoved', 'fluidRemoved', 'lavaPoured', 'stoneFormed'];
+    const happened = endShift(state).events.filter((event) => fluidTypes.includes(event.type));
+    expect(happened).toHaveLength(1);
+    expect(forecast.flows).toEqual(happened);
   });
 
   it('water in a pocket under the surface is left alone', () => {

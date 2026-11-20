@@ -91,6 +91,8 @@ describe('tiles', () => {
       block: 'coalSeam',
       traced: false,
       structure: null,
+      crack: null,
+      crackRunning: false,
       surface: 'meadow',
       higher: NO_HIGHER,
     });
@@ -203,6 +205,7 @@ describe('a tap', () => {
       entry: { type: 'mine', x: 0, y: 0, ap: BLOCKS.dirt.mineCost },
       lines: [],
       marks: NO_MARKS,
+      needsConfirm: false,
     });
   });
 
@@ -234,6 +237,7 @@ describe('a tap', () => {
         { x: 2, y: 1 }, // east
         { x: 1, y: 2 }, // south
       ],
+      unstable: [],
     });
     expect(outcome.lines[0]).toBe('x1 y1, depth 1: Stone, gives 1 Stone.');
     expect(outcome.lines[1]).toContain('The level rule');
@@ -248,7 +252,7 @@ describe('a tap', () => {
     const outcome = tapOutcome(state, 0, 0);
     expect(outcome.entry).toBeNull();
     expect(outcome.lines[1]).toContain('costs 2 AP and you have 1 left');
-    expect(outcome.marks).toEqual({ selected: { x: 0, y: 0 }, tooHigh: [] });
+    expect(outcome.marks).toEqual({ selected: { x: 0, y: 0 }, tooHigh: [], unstable: [] });
   });
 
   it('a tree with too little AP is refused as a cut, with no neighbour marked', () => {
@@ -272,7 +276,12 @@ describe('a tap', () => {
     expect(tapOutcome(state, 5, 5).marks).toEqual(NO_MARKS);
     state.status = { kind: 'ended', outcome: 'salvage', cause: 'mineClosed' };
     const outcome = tapOutcome(state, 0, 0);
-    expect(outcome).toEqual({ entry: null, lines: ['The run has ended.'], marks: NO_MARKS });
+    expect(outcome).toEqual({
+      entry: null,
+      lines: ['The run has ended.'],
+      marks: NO_MARKS,
+      needsConfirm: false,
+    });
   });
 
   it('every action a tap gives is one the engine takes, all over a real map', () => {

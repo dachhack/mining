@@ -49,11 +49,10 @@
 //   each becomes one stone block (`stoneFormed`). Pumps and sealant are T13.
 //
 // UNDER RUBBLE. A block that comes to rest on a square (a slump, design doc
-// 6.1) lands in the cell that held the square's water or lava. The square
-// comes up 1 level and keeps all of it: the water or lava is pushed up, and
-// what would then stand above ground level drains. Nothing is buried.
-// `readPit` below does this, at the start of the step, for whatever step (a)
-// buried.
+// 6.1) lands in the cell that held the square's water or lava. The slump
+// lifts them onto the rubble (`liftContents` in cube/slumps.ts): the square
+// comes up 1 level and keeps all of it, and what would then stand above
+// ground level drains here, in step (b) of the same cube phase.
 
 import { BLOCKS, CREW, HAZARDS } from '../../data';
 import type { Vec3 } from '../../data';
@@ -62,12 +61,9 @@ import type { FluidKind, GameEvent } from '../events';
 import { SQUARE_STEPS, depthAt } from '../heightmap';
 import { setLavaOn, setWaterOn } from '../standing';
 import {
-  cellCount,
-  cellPosition,
   clearCrack,
   inGrid,
   isLavaSource,
-  isSolid,
   lavaAt,
   setBlock,
   setLava,
@@ -102,15 +98,7 @@ interface Move {
   to: number;
 }
 
-/**
- * Read the pit from the cube.
- *
- * Also the rule for contents under rubble (see the top of this file): water
- * or lava found in a SOLID cell was buried by a block that landed on its
- * square. It is taken out of that cell and counted as standing on the square.
- * A buried source stays a source. This is the one place the step changes the
- * cube before its end.
- */
+/** Read the pit from the cube. Does not change `state`. */
 function readPit(state: GameState): Pit {
   const width = state.size.x;
   const height = state.size.y;
@@ -135,29 +123,6 @@ function readPit(state: GameState): Pit {
       pit.lava.push(lava);
       pit.source.push(source);
     }
-  }
-
-  // Buried water and lava. The two arrays are read directly here, one entry
-  // per cell, because this runs every shift over the whole cube and almost
-  // every entry is 0; a cell that holds something is then handled through
-  // the functions of state.ts like everywhere else.
-  const cells = cellCount(state.size);
-  for (let index = 0; index < cells; index += 1) {
-    if (state.water[index] === 0 && state.lava[index] === 0) {
-      continue;
-    }
-    const cell = cellPosition(state.size, index);
-    if (!isSolid(state, cell)) {
-      continue; // an open cell: on a square (read above) or in a pocket
-    }
-    const square = cell.x + width * cell.y;
-    pit.water[square] = (pit.water[square] as number) + waterAt(state, cell);
-    pit.lava[square] = (pit.lava[square] as number) + lavaAt(state, cell);
-    if (isLavaSource(state, cell)) {
-      pit.source[square] = true;
-    }
-    setWater(state, cell, 0);
-    setLava(state, cell, 0);
   }
   return pit;
 }

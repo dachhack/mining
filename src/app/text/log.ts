@@ -108,12 +108,14 @@ export function menuChoices(state: GameState): LogEntry[] {
 
 /**
  * The choices that are printed as a list, in menu order: every legal action
- * that is not a mine or a cut of a square (crafting, closing the mine), then "end
- * shift". Mines and cuts are named by their square instead ("mine 3,4"; see
- * squares.ts). Empty once the run has ended.
+ * that does not name a square (crafting, closing the mine), then "end shift". Mines,
+ * cuts and supports are named by their square instead ("mine 3,4",
+ * "support 3,4"; see squares.ts). Empty once the run has ended.
  */
 export function listedChoices(state: GameState): LogEntry[] {
-  return menuChoices(state).filter((entry) => entry.type !== 'mine' && entry.type !== 'cutTree');
+  return menuChoices(state).filter(
+    (entry) => entry.type !== 'mine' && entry.type !== 'cutTree' && entry.type !== 'placeSupport',
+  );
 }
 
 /**

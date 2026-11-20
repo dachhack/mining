@@ -287,7 +287,9 @@ describe('breaking into a pocket: the contents come out onto the mined square', 
     // Water stands on the square: the mine costs 1 AP more (design doc 4.2).
     const before = state.ap;
     state = act(state, { type: 'mine', x: 2, y: 0 }).state;
-    expect(before - state.ap).toBe(BLOCKS.rubble.mineCost + HAZARDS.water.floodedMineExtraAp);
+    expect(before - state.ap).toBe(
+      (BLOCKS.rubble.mineCost ?? 0) + HAZARDS.water.floodedMineExtraAp,
+    );
     expect(depthAt(state, 2, 0)).toBe(2);
     expect(contentsOn(state, 2, 0).water).toBe(3);
   });
