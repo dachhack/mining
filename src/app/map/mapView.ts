@@ -408,8 +408,7 @@ function drawComing(
 /**
  * Gas on a tile (design doc 6.5): a green-yellow wash, three small rings
  * (bubbles: neither waves nor flames, so gas never differs from water and
- * lava by colour alone), and the units half-way down the left edge, under
- * the place where water or lava shows its number.
+ * lava by colour alone), and the units half-way down the left edge.
  */
 function drawGas(
   ctx: CanvasRenderingContext2D,

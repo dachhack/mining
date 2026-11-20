@@ -4,9 +4,9 @@
 // only for a hazard on a worked square, once for each kind of hazard, and
 // applied in (e), where "the first cause names the loss".
 //
-// Steps (a) to (d) are empty until their tasks (T8 to T11). So the tests that
-// need a hazard put a stand-in in a step's place: a function that records
-// damage the way a real slump or explosion will, with `recordDamage`.
+// The steps' own rules are tested with their tasks (T8 to T11). The tests
+// here that need a hazard put a stand-in in a step's place: a function that
+// records damage the way a real slump or explosion does, with `recordDamage`.
 
 import { describe, expect, it } from 'vitest';
 import { CREW } from '../../src/data';
@@ -185,7 +185,7 @@ describe('the order of the cube phase (0014 item 1)', () => {
     expect(phases[5]).not.toBe(phases[0]);
   });
 
-  it('with the real, empty steps an end of shift is upkeep and nothing else', () => {
+  it('with the real steps and no hazard in the pit, an end of shift is upkeep and nothing else', () => {
     const state = tunnelState({ fuel: 7, shift: 1 });
     const { state: after, events } = endShift(state);
     expect(events).toEqual([
@@ -195,7 +195,7 @@ describe('the order of the cube phase (0014 item 1)', () => {
     expect(after.crew).toEqual(state.crew);
   });
 
-  it('uses no randomness: the RNG is where it was', () => {
+  it('uses no randomness unless a relic is in a blast: the RNG is where it was', () => {
     const state = tunnelState();
     expect(endShift(state).state.rng).toEqual(state.rng);
   });
