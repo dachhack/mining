@@ -12,7 +12,8 @@
 //   seal x,y        one sealant puts a block of sealed rock on top of the
 //                   square: the square comes up 1 level, and the water, lava
 //                   and gas standing on it are destroyed. A dam, or a plug
-//                   for a lava source.
+//                   for a lava source. Not at ground level, and not where it
+//                   would leave the square 2 levels above a neighbour.
 //   scan x,y        one scanner charge reveals the 3 blocks under the top
 //                   block of the square and of the 8 squares round it.
 //
@@ -33,7 +34,6 @@ import type { BlockId, StructureId, Vec3 } from '../../data';
 import type {
   CampToolAction,
   PlacePumpAction,
-  PlaceVentAction,
   ScanAction,
   SealAction,
 } from '../actionTypes';
@@ -41,7 +41,7 @@ import { contentsOn } from '../breach';
 import { campAtSquare } from '../camps';
 import { markWorked } from '../crew';
 import type { GameEvent } from '../events';
-import { depthAt, isSquare, structureOnSquare, topCellOf } from '../heightmap';
+import { SQUARE_STEPS, depthAt, isSquare, structureOnSquare, topCellOf } from '../heightmap';
 import type { Square } from '../heightmap';
 import { lavaOn, setLavaOn, setWaterOn } from '../standing';
 import {
@@ -180,13 +180,24 @@ export type SealRefusalReason =
   /** A camp stands on the square. */
   | 'camp'
   /** The square holds a structure, which the block would bury. */
-  | 'occupied';
+  | 'occupied'
+  /**
+   * A face neighbour is already deeper than the square, so the sealed rock
+   * would stand 2 levels above it. Only a hazard may make a step of 2
+   * (design doc 4.2 and 6.1); the player's own actions never do.
+   */
+  | 'neighbourDeeper';
 
 /** The answer of `sealCheck`. */
 export interface SealCheck {
   allowed: boolean;
   /** Why not; `null` when `allowed` is true. */
   refusal: SealRefusalReason | null;
+  /**
+   * The face neighbours that are deeper than the square, in the order north,
+   * east, south, west. Empty unless `refusal` is 'neighbourDeeper'.
+   */
+  deeperNeighbours: Square[];
   /** What sealing costs in AP; `null` when it is not allowed. */
   ap: number | null;
 }
@@ -199,13 +210,20 @@ export interface SealCheck {
  * with no block left may be sealed: the sealed rock stands on the bedrock
  * floor.
  *
+ * The sealed rock raises the square by 1. That must not leave it 2 levels
+ * above a neighbour, so a square with a deeper face neighbour is refused:
+ * like mining under the level rule, sealing only ever leaves steps of 1.
+ *
+ * When more than one thing stops it, the reason given is the first of: no
+ * sealant, ground level, a camp, a structure, a deeper neighbour.
+ *
  * Everything read here is something the player sees: the stockpile, the
- * square's depth, the structure on it and the camps. Does not look at the AP
+ * depths of the square and its neighbours, the structure on it and the camps. Does not look at the AP
  * left. Throws if (x, y) is not a square. Does not change `state`.
  */
 export function sealCheck(state: GameState, x: number, y: number): SealCheck {
-  function refused(refusal: SealRefusalReason): SealCheck {
-    return { allowed: false, refusal, ap: null };
+  function refused(refusal: SealRefusalReason, deeperNeighbours: Square[] = []): SealCheck {
+    return { allowed: false, refusal, deeperNeighbours, ap: null };
   }
   const depth = depthAt(state, x, y); // first: throws for a bad square
   if (countItem(state, CAMP_TOOLS.sealantItem) < 1) {
@@ -220,7 +238,19 @@ export function sealCheck(state: GameState, x: number, y: number): SealCheck {
   if (structureOnSquare(state, x, y) !== NO_STRUCTURE) {
     return refused('occupied');
   }
-  return { allowed: true, refusal: null, ap: ACTION_COSTS.seal };
+  const deeperNeighbours: Square[] = [];
+  for (const step of SQUARE_STEPS) {
+    const nx = x + step.dx;
+    const ny = y + step.dy;
+    // The cube's wall is not a neighbour (owner question 84).
+    if (isSquare(state, nx, ny) && depthAt(state, nx, ny) > depth) {
+      deeperNeighbours.push({ x: nx, y: ny });
+    }
+  }
+  if (deeperNeighbours.length > 0) {
+    return refused('neighbourDeeper', deeperNeighbours);
+  }
+  return { allowed: true, refusal: null, deeperNeighbours: [], ap: ACTION_COSTS.seal };
 }
 
 /**

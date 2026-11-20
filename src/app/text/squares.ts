@@ -85,7 +85,8 @@ export interface SquareChoice {
   /**
    * For a refused "camp x,y": the squares of the 3 x 3 patch that are in the
    * way (the ones with a tree, the ones off the level, ...), so that a map
-   * can mark them. Empty for everything else.
+   * can mark them. For a refused "seal x,y": the deeper neighbours. Empty
+   * for everything else.
    */
   blockedSquares: Square[];
 }
@@ -364,6 +365,18 @@ export function sealChoice(state: GameState, x: number, y: number): SquareChoice
   if (check.refusal === 'occupied') {
     return refused(
       `Something is placed on ${where}, and the sealed rock would bury it: a square that holds something cannot be sealed.`,
+    );
+  }
+  if (check.refusal === 'neighbourDeeper') {
+    const deeper = check.deeperNeighbours.map(
+      (square) =>
+        `${squareText(square.x, square.y)} (depth ${knownSquare(state, square.x, square.y).depth})`,
+    );
+    return refused(
+      `${where} is at depth ${knownSquare(state, x, y).depth}, and the sealed rock would leave it ` +
+        `2 levels above ${joinWithAnd(deeper)}: a square can be sealed only when no square beside it is deeper. ` +
+        'Seal the deeper square first.',
+      check.deeperNeighbours,
     );
   }
   if (check.ap === null) {
