@@ -31,12 +31,7 @@
 
 import { ACTION_COSTS, BLOCKS, CAMP_TOOLS, NO_STRUCTURE, STRUCTURES } from '../../data';
 import type { BlockId, StructureId, Vec3 } from '../../data';
-import type {
-  CampToolAction,
-  PlacePumpAction,
-  ScanAction,
-  SealAction,
-} from '../actionTypes';
+import type { CampToolAction, PlacePumpAction, ScanAction, SealAction } from '../actionTypes';
 import { contentsOn } from '../breach';
 import { campAtSquare } from '../camps';
 import { markWorked } from '../crew';

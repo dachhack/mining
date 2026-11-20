@@ -75,5 +75,4 @@ describe('the M2 action modules are stubs (decision note 0015)', () => {
     const { legalPlaceExplosiveActions } = await import('../../src/engine/actions/placeExplosive');
     expect(legalPlaceExplosiveActions(state)).toEqual([]);
   });
-
 });
