@@ -216,7 +216,13 @@ function leakedBelowTops(
  * play scans, seals and pumps (a random player never gets as far as crafting
  * them: a scanner charge needs crystal from the deep band).
  */
-const TOOL_KIT: Record<string, number> = { scannerCharge: 4, sealant: 4, pump: 2, drill: 1 };
+const TOOL_KIT: Record<string, number> = {
+  scannerCharge: 4,
+  sealant: 4,
+  pump: 2,
+  vent: 2,
+  drill: 1,
+};
 
 /** What a random player does next: one legal action, or end the shift. */
 type Decision = Action | 'endShift';
@@ -335,6 +341,7 @@ describe('property tests: random legal play', () => {
       expect(taken.has('scan')).toBe(true);
       expect(taken.has('seal')).toBe(true);
       expect(taken.has('placePump')).toBe(true);
+      expect(taken.has('placeVent')).toBe(true);
     },
     60000,
   );

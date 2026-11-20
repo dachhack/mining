@@ -174,8 +174,8 @@ function describeAction(state: GameState, action: Action): string {
       );
     case 'placeVent':
       return (
-        `Place a vent on ${squareText(action.x, action.y)}: each shift it clears the gas ` +
-        `within ${HAZARDS.gas.ventReach} steps`
+        `Place a vent on ${squareText(action.x, action.y)}: when a shift ends it clears all the gas ` +
+        `on the squares within ${HAZARDS.gas.ventReach} steps, before the gas can burn or poison`
       );
     case 'seal':
       return (
@@ -495,6 +495,11 @@ function explosionDamage(
  */
 export function describeForecastGas(state: GameState, gas: GameEvent[]): string[] {
   const sentences: string[] = [];
+  // What the vents will clear comes first: it is the good news, and it
+  // explains why gas that "will spread" below is not there afterwards.
+  if (gas.some((event) => event.type === 'gasRemoved' && event.reason === 'vented')) {
+    sentences.push(`The vents will clear gas: ${ventedText(gas)}.`);
+  }
 
   // Gas: only the squares it has not reached yet. Settled gas goes on
   // shifting a unit or two between level squares for ever; saying so every
@@ -702,6 +707,8 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
   // The same for gas reaching new squares, and for the blocks a blast took.
   let gasSaid = false;
   let blastedSaid = false;
+  // Vented gas: said once for a step.
+  let ventedSaid = false;
   for (const event of events) {
     if (isFlowEvent(event)) {
       if (!flowsSaid) {
@@ -831,8 +838,14 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
         }
         break;
       case 'gasRemoved':
-        // Burnt gas is said by its explosion.
-        if (event.reason === 'reachedSurface') {
+        // Burnt gas is said by its explosion. Vented gas is said once for
+        // the step, at its first event.
+        if (event.reason === 'vented') {
+          if (!ventedSaid) {
+            ventedSaid = true;
+            lines.push(`The vents cleared gas: ${ventedText(events)}.`);
+          }
+        } else if (event.reason === 'reachedSurface') {
           lines.push(
             `${event.units} gas on ${squareText(event.pos.x, event.pos.y)} came up to ground level and blew away.`,
           );
@@ -892,6 +905,17 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
     }
   }
   return lines;
+}
+
+/** "4 from x3 y4; 2 from x4 y4": what the vents cleared, from a step's events. */
+function ventedText(events: GameEvent[]): string {
+  const parts: string[] = [];
+  for (const event of events) {
+    if (event.type === 'gasRemoved' && event.reason === 'vented') {
+      parts.push(`${event.units} from ${squareText(event.pos.x, event.pos.y)}`);
+    }
+  }
+  return parts.join('; ');
 }
 
 /**

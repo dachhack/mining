@@ -85,6 +85,7 @@ CHOICES
     rest X,Y                 rest the crew at the camp whose centre square that is
     decommission X,Y         take that camp down
     pump X,Y                 place a pump on that square (made at a camp: see "Camp tools")
+    vent X,Y                 place a vent on that square (made at a camp)
     seal X,Y                 put a block of sealed rock on that square (uses 1 sealant)
     scan X,Y                 scan under that square and the 8 round it (uses 1 scanner charge)
     look X,Y                 list what you know of that square; costs nothing and does nothing
@@ -245,6 +246,13 @@ THE GAME
     on a tree, on lava, on a camp square or on a square with no block left. A pump is lost if
     you mine its square, if a block slumps from its square or onto it, or if lava reaches it.
     Water does it no harm.
+  - VENT. "vent X,Y" (${ACTION_COSTS.placeVent} AP) places a vent on a square. When a shift ends, after the gas has
+    spread and before anything explodes, each vent clears ALL the gas on the squares within
+    ${HAZARDS.gas.ventReach} steps of it, its own square included. So gas in a vent's reach cannot be lit and does
+    not poison the crew there. Gas further off is left, and spreads back in on later shifts:
+    a vent in the middle of the gassy part of a pit clears it in a few shifts. A vent goes
+    where a pump may go (gas on the square does not matter) and is lost the same ways; an
+    explosion on its square or beside it destroys it too.
   - SEALANT. "seal X,Y" (${ACTION_COSTS.seal} AP, 1 sealant) puts a block of sealed rock on top of a square: the
     square comes up 1 level, and all the water, lava and gas standing on it are destroyed.
     Use it as a dam (water and lava flow only across a drop of ${HAZARDS.water.flowMinDrop} or more), or to plug a lava
@@ -344,9 +352,8 @@ ${recipes}
   Camp recipes (${ACTION_COSTS.campCraft} AP each; on the list only while a camp stands)
 ${campRecipes}
     Raw ore is smelted into ingots, and the other recipes take ingots. A camp kit founds another
-    camp. The drill, pump, scanner charge and sealant are explained under "Camp tools". An
-    explosive is placed with "explosive X,Y" (see "Gas, unstable ore and explosives"). The
-    vent can be made but does nothing yet (see "Not in this version").
+    camp. The drill, pump, vent, scanner charge and sealant are explained under "Camp tools". An
+    explosive is placed with "explosive X,Y" (see "Gas, unstable ore and explosives").
 
   Crew health
   - Your crew starts with ${CREW.startHealth} health ("Crew health" among the gauges). The crew is not on the map.
@@ -414,8 +421,6 @@ ${campRecipes}
     finish alive, and a closed mine cannot be opened again.
 
   Not in this version of the game
-  - The vent, which is made at a camp, cannot be used yet. So nothing takes gas away but
-    burning it, or sealing the square it stands on.
   - Contracts are not built yet, and relics and keystones are not in the cube yet.
 `;
 }

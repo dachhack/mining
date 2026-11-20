@@ -367,7 +367,14 @@ export { blastSquares, oreArmedByMine } from './explosions';
 // The same for the camp-made tools (design doc 7.2; issue #104): placing a
 // pump, sealing a square, scanning; and the squares and cells a scan covers.
 // All of it reads only what the player sees.
-export { pumpCheck, scanCells, scanCheck, scanSquares, sealCheck } from './actions/campTools';
+export {
+  pumpCheck,
+  scanCells,
+  scanCheck,
+  scanSquares,
+  sealCheck,
+  ventCheck,
+} from './actions/campTools';
 export type {
   PlacedTool,
   ScanCheck,

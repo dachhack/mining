@@ -66,6 +66,8 @@ import {
   EXPLOSIVE_AP,
   FLOODED_EXTRA_AP,
   PUMP_AP,
+  VENT_AP,
+  VENT_REACH,
   PUMP_REACH,
   PUMP_UNITS,
   SCAN_AP,
@@ -146,6 +148,7 @@ export interface SquareChoicesView {
   campSites: number;
   /** The camp-made tools in the stockpile (design doc 7.2). */
   pumpsHeld: number;
+  ventsHeld: number;
   sealantHeld: number;
   scanChargesHeld: number;
   /** True if the stockpile holds a drill. */
@@ -463,6 +466,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   const tells: string[] = [];
   // Pumps, and what is known under the tops (design doc 7.2).
   const pumps: string[] = [];
+  const vents: string[] = [];
   const underOre: string[] = [];
   const underPocket: string[] = [];
   const underCavern: string[] = [];
@@ -495,6 +499,9 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       if (square.top !== null && square.top.structure === STRUCTURES.pump.code) {
         pumps.push(squareText(x, y));
       }
+      if (square.top !== null && square.top.structure === STRUCTURES.vent.code) {
+        vents.push(squareText(x, y));
+      }
       const marks = belowMarksOf(square);
       if (marks.any) anyBelow = true;
       if (marks.ore) underOre.push(squareText(x, y));
@@ -519,6 +526,12 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   if (stumps.length > 0) {
     notes.push(
       `Stumps, and the shifts until a tree grows back (1 is the end of this shift): ${stumps.join('; ')}`,
+    );
+  }
+  if (vents.length > 0) {
+    notes.push(
+      `Vents on ${vents.join(', ')}: when a shift ends each clears all the gas on the squares ` +
+        `within ${VENT_REACH} steps of it, after the gas has spread and before it can burn or poison.`,
     );
   }
   if (pumps.length > 0) {
@@ -719,6 +732,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       campKitsHeld: countItem(state, CAMPS.kitItem),
       campSites,
       pumpsHeld: countItem(state, STRUCTURES.pump.placedFromItem),
+      ventsHeld: countItem(state, STRUCTURES.vent.placedFromItem),
       sealantHeld: countItem(state, CAMP_TOOLS.sealantItem),
       scanChargesHeld: countItem(state, CAMP_TOOLS.scanChargeItem),
       hasDrill: countItem(state, CAMP_TOOLS.drillItem) > 0,
@@ -835,6 +849,12 @@ export function squareChoiceLines(view: PlayerView): string[] {
     tools.push(
       `    pump X,Y     [${PUMP_AP}] Place a pump on square x X, y Y: each shift it takes up to ` +
         `${PUMP_UNITS} water from the squares within ${PUMP_REACH} steps. You have ${squares.pumpsHeld}.`,
+    );
+  }
+  if (squares.ventsHeld > 0) {
+    tools.push(
+      `    vent X,Y     [${VENT_AP}] Place a vent on square x X, y Y: when a shift ends it clears all ` +
+        `the gas on the squares within ${VENT_REACH} steps. You have ${squares.ventsHeld}.`,
     );
   }
   if (squares.sealantHeld > 0) {

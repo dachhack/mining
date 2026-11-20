@@ -35,10 +35,12 @@ import { contentsNames, depthName, topBlockText } from '../text/describe';
 import {
   PUMP_REACH,
   PUMP_UNITS,
+  VENT_REACH,
   SCAN_DEPTH,
   campChoice,
   explosiveChoice,
   pumpChoice,
+  ventChoice,
   scanChoice,
   sealChoice,
   squareText,
@@ -62,11 +64,13 @@ export interface MapSquare {
  * - 'explosive': place an explosive on the square (issue #103). The first
  *   tap shows the blast; a second tap on the same square places it;
  * - 'pump': place a pump on the square (issue #104);
+ * - 'vent': place a vent on the square (issue #107);
  * - 'seal': use sealant on the square;
  * - 'scan': aim a scan at the square;
  * - 'look': change nothing; list what is known of the square.
  */
-export type MapTool = 'dig' | 'support' | 'camp' | 'explosive' | 'pump' | 'seal' | 'scan' | 'look';
+export type MapTool =
+  'dig' | 'support' | 'camp' | 'explosive' | 'pump' | 'vent' | 'seal' | 'scan' | 'look';
 
 /**
  * What the map marks after a tap that was not taken: one the rules refused,
@@ -115,6 +119,13 @@ export function pumpRange(state: GameState, x: number, y: number): MapSquare[] {
   );
 }
 
+/** The squares a vent on the square (x, y) reaches: within `VENT_REACH` steps, itself included. */
+export function ventRange(state: GameState, x: number, y: number): MapSquare[] {
+  return squaresWithinSteps(state.size.x, state.size.y, x, y, HAZARDS.gas.ventReach).map(
+    (square) => ({ x: square.x, y: square.y }),
+  );
+}
+
 /**
  * Holding a square, or tapping it with the look tool: what the player knows
  * of it, as lines, and what to mark. Nothing is done. The lines are the
@@ -134,6 +145,13 @@ export function lookOutcome(state: GameState, x: number, y: number): TapOutcome 
         `(within ${PUMP_REACH} steps).`,
     );
     range = pumpRange(state, x, y);
+  }
+  if (square.top !== null && square.top.structure === STRUCTURES.vent.code) {
+    lines.push(
+      `A vent stands here: when a shift ends it clears all the gas on the marked squares ` +
+        `(within ${VENT_REACH} steps).`,
+    );
+    range = ventRange(state, x, y);
   }
   const below = belowLines(square);
   if (below.length === 0) {
@@ -248,6 +266,8 @@ export function tapOutcome(
     choice = campChoice(state, x, y);
   } else if (tool === 'pump') {
     choice = pumpChoice(state, x, y);
+  } else if (tool === 'vent') {
+    choice = ventChoice(state, x, y);
   } else if (tool === 'seal') {
     choice = sealChoice(state, x, y);
   } else if (tool === 'scan') {
@@ -255,18 +275,35 @@ export function tapOutcome(
   } else if (tool === 'look') {
     return lookOutcome(state, x, y);
   }
-  // A pump or a scan that is allowed, tapped once: show its range and wait.
-  if (choice.entry !== null && !confirmed && (tool === 'pump' || tool === 'scan')) {
-    const range =
-      tool === 'pump'
-        ? pumpRange(state, x, y)
-        : scanSquares(state, x, y).map((square) => ({ x: square.x, y: square.y }));
-    const what =
-      tool === 'pump'
-        ? `A pump here takes up to ${PUMP_UNITS} water a shift from the ${range.length} marked squares ` +
-          `(within ${PUMP_REACH} steps). Tap the square again to place it.`
-        : `A scan here shows the ${SCAN_DEPTH} blocks under the top block of each of the ` +
-          `${range.length} marked squares. Tap the square again to scan.`;
+  // A pump, a vent or a scan that is allowed, tapped once: show its range and wait.
+  if (
+    choice.entry !== null &&
+    !confirmed &&
+    (tool === 'pump' || tool === 'vent' || tool === 'scan')
+  ) {
+    let range: MapSquare[];
+    let what: string;
+    if (tool === 'pump') {
+      range = pumpRange(state, x, y);
+      what =
+        `A pump here takes up to ${PUMP_UNITS} water a shift from the ${range.length} marked squares ` +
+        `(within ${PUMP_REACH} steps). Tap the square again to place it.`;
+    } else if (tool === 'vent') {
+      range = ventRange(state, x, y);
+      // How many of those squares are gassy now: what the vent would clear first.
+      const gassy = range.filter(
+        (square) => knownSquare(state, square.x, square.y).contents.gas > 0,
+      ).length;
+      what =
+        `A vent here clears all the gas on the ${range.length} marked squares (within ${VENT_REACH} steps) ` +
+        `each time a shift ends; ${gassy} of them ${gassy === 1 ? 'has' : 'have'} gas on now. ` +
+        'Tap the square again to place it.';
+    } else {
+      range = scanSquares(state, x, y).map((square) => ({ x: square.x, y: square.y }));
+      what =
+        `A scan here shows the ${SCAN_DEPTH} blocks under the top block of each of the ` +
+        `${range.length} marked squares. Tap the square again to scan.`;
+    }
     return {
       entry: null,
       lines: [`${squareSummary(state, x, y)}.`, what],

@@ -899,7 +899,7 @@ describe('isLegalAction: one action checked without building the list', () => {
     for (const action of offMap) {
       expect(isLegalAction(state, action), actionKey(action)).toBe(false);
     }
-    // Not at ground level; no tree there; the vent is not built yet.
+    // Not at ground level; no tree there; no vent is held.
     expect(isLegalAction(state, { type: 'seal', x: 1, y: 1, ap: 1 })).toBe(false);
     expect(isLegalAction(state, { type: 'cutTree', x: 1, y: 1, ap: 2 })).toBe(false);
     expect(isLegalAction(state, { type: 'placeVent', x: 1, y: 1, ap: 1 })).toBe(false);

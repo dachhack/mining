@@ -29,7 +29,13 @@
 //      spreads onto one. Gas blows away only when its own square comes up to
 //      ground level (`liftGasOutOf` in standing.ts).
 //
-// 2. VENTS ACT. Task T13 builds vents; the place is marked below.
+// 2. VENTS ACT (6.5; issue #107; decision note 0036). A vent on a square
+//    clears ALL the gas on the squares within `HAZARDS.gas.ventReach` (2)
+//    steps of it, its own square included (`gasRemoved`, reason 'vented').
+//    This comes after the spread and before anything goes off or burns, so
+//    gas that has just spread into a vent's range is gone before it can be
+//    lit, and the crew is not poisoned there. Gas beyond the range is left,
+//    and spreads back in on later shifts until it has thinned out.
 //
 // 3. CHARGES AND ARMED ORE GO OFF (6.6): every entry of `state.armed`, in the
 //    list's order (by layer, then row by row). explosions.ts does the blast.
@@ -56,20 +62,21 @@
 // - in: a breach puts a pocket's gas on a square (breach.ts), in the player
 //   phase or when a blast or a slump takes the roof off a pocket;
 // - out: gas that burns; gas on a square that comes up to ground level.
-//   Vents and sealant are T13.
+//   gas a vent clears; gas on a square that is sealed (actions/campTools.ts).
 //
 // RANDOMNESS. Parts 1, 2, 4 and 5 use none. Part 3 draws from the seeded RNG
 // in the state only when a relic or keystone is in a charge's blast
 // (explosions.ts), and never in the forecast.
 
-import { BLOCKS, CREW } from '../../data';
+import { BLOCKS, CREW, HAZARDS, STRUCTURES } from '../../data';
 import type { Vec3 } from '../../data';
 import { destroyCampsAt, destroyStructure } from '../destroy';
 import type { GameEvent } from '../events';
 import { explodeCharge, explodeOre } from '../explosions';
-import { SQUARE_STEPS, depthAt, topCellOf } from '../heightmap';
+import { SQUARE_STEPS, depthAt, structureOnSquare, topCellOf } from '../heightmap';
 import type { Square } from '../heightmap';
-import { lavaOn, setGasOn } from '../standing';
+import { gasOn, lavaOn, setGasOn } from '../standing';
+import { squaresWithinSteps } from './fluids';
 import { armedAt, blockAt, disarmCharge, gasAt } from '../state';
 import type { GameState } from '../state';
 import { recordDamage, recordDamageBeside } from './phase';
@@ -370,6 +377,39 @@ function explodeGasPatch(
 }
 
 /**
+ * Part 2: vents (see the top of this file). Vents are visited row by row;
+ * each clears every gassy square within its reach, nearest first, and emits
+ * one `gasRemoved` (reason 'vented') for each. Returns true if any gas went.
+ */
+function runVents(state: GameState, events: GameEvent[]): boolean {
+  let vented = false;
+  for (let y = 0; y < state.size.y; y += 1) {
+    for (let x = 0; x < state.size.x; x += 1) {
+      if (structureOnSquare(state, x, y) !== STRUCTURES.vent.code) {
+        continue;
+      }
+      const reach = HAZARDS.gas.ventReach;
+      for (const near of squaresWithinSteps(state.size.x, state.size.y, x, y, reach)) {
+        const units = gasOn(state, near.x, near.y);
+        if (units === 0) {
+          continue;
+        }
+        setGasOn(state, near.x, near.y, 0);
+        events.push({
+          type: 'gasRemoved',
+          // The cell directly above the square's top block, as for every gas event.
+          pos: { x: near.x, y: near.y, z: depthAt(state, near.x, near.y) - 1 },
+          units,
+          reason: 'vented',
+        });
+        vented = true;
+      }
+    }
+  }
+  return vented;
+}
+
+/**
  * Step (c). Changes `state` in place and appends to `events`. The five parts
  * are described at the top of this file.
  *
@@ -389,8 +429,10 @@ export function stepGas(state: GameState, events: GameEvent[], phase: CubePhase)
     writeGas(state, table);
   }
 
-  // 2. T13: vents act here, on the gas standing on the squares
-  //    (`gasOn` and `setGasOn` in standing.ts), before anything goes off.
+  // 2. Vents clear the gas within their reach, before anything goes off.
+  if (anyGas) {
+    runVents(state, events);
+  }
 
   // 3. Charges and armed unstable ore go off.
   const blasted = setOffCharges(state, events, phase);

@@ -7,11 +7,11 @@
 import { describe, expect, it } from 'vitest';
 import { endShift } from '../../src/engine';
 import type { GameState } from '../../src/engine';
-import { setLavaOn, setWaterOn } from '../../src/engine/standing';
+import { setGasOn, setLavaOn, setWaterOn } from '../../src/engine/standing';
 import { describeEvents } from '../../src/app/text/describe';
 import { newSession } from '../../src/app/text/log';
 import type { Session } from '../../src/app/text/log';
-import { pumpChoice, scanChoice, sealChoice } from '../../src/app/text/squares';
+import { pumpChoice, scanChoice, sealChoice, ventChoice } from '../../src/app/text/squares';
 import { takeTurnLines } from '../../src/app/text/turn';
 import { buildView, lookLines, renderView } from '../../src/app/text/view';
 import { resolveChoice, runCli, splitChoices, takeChoices } from '../../tools/play/cli';
@@ -90,6 +90,41 @@ describe('pump X,Y', () => {
     expect(forecast).toContain('The pumps will take water: 1 from x1 y0.');
     const { state: after, events } = endShift(state);
     expect(describeEvents(after, events)).toContain('The pumps took water: 1 from x1 y0.');
+  });
+});
+
+describe('vent X,Y (issue #107)', () => {
+  it('places a vent; the notes say where it stands and what it does', () => {
+    const session = sessionOn(pit(['222'], { stockpile: { vent: 1 } }));
+    const result = takeChoices(session, ['vent 1,0']);
+    expect(result.refused).toBeNull();
+    expect(result.lines.join('\n')).toContain('Placed a vent.');
+    const view = buildView(session.state, { deepestDepth: 2 });
+    expect(view.notes).toContain('On x1 y0: a vent');
+    expect(view.notes.join('\n')).toContain(
+      'Vents on x1 y0: when a shift ends each clears all the gas on the squares within 2 steps of it',
+    );
+  });
+
+  it('is on offer only while a vent is held, and a refusal says why', () => {
+    expect(viewText(pit(['222']))).not.toContain('vent X,Y');
+    expect(viewText(pit(['222'], { stockpile: { vent: 1 } }))).toContain(
+      'vent X,Y     [1] Place a vent on square x X, y Y: when a shift ends it clears all the gas ' +
+        'on the squares within 2 steps. You have 1.',
+    );
+    expect(ventChoice(pit(['222']), 1, 0).refusal).toContain('You have no vent to place');
+    const state = pit(['222'], { stockpile: { vent: 1 }, supports: [{ x: 0, y: 0, z: 2 }] });
+    expect(ventChoice(state, 0, 0).refusal).toContain('Something is already placed on x0 y0');
+    expect(splitChoices('vent 3,4, end')).toEqual(['vent 3,4', 'end']);
+  });
+
+  it('the forecast says what the vents will clear, and the next view that they did', () => {
+    const state = pit(['333'], { structures: [{ pos: { x: 0, y: 0, z: 3 }, structure: 'vent' }] });
+    setGasOn(state, 2, 0, 1);
+    const forecast = buildView(state, { deepestDepth: 3 }).forecast ?? '';
+    expect(forecast).toContain('The vents will clear gas: 1 from x2 y0.');
+    const { state: after, events } = endShift(state);
+    expect(describeEvents(after, events)).toContain('The vents cleared gas: 1 from x2 y0.');
   });
 });
 
@@ -291,6 +326,9 @@ describe('--help', () => {
     expect(help).toContain('seal X,Y');
     expect(help).toContain('scan X,Y');
     expect(help).toContain('look X,Y');
+    expect(help).toContain('vent X,Y');
+    expect(help).toContain('each vent clears ALL the gas on the squares within');
+    expect(help).not.toContain('cannot be used yet');
     expect(help).toContain(
       'each pump takes up to 3 units of water from the squares within 2 steps',
     );

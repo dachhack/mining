@@ -44,7 +44,8 @@ export const HAZARDS: HazardData = {
   gas: {
     // Units in each cell of a generated pocket.
     pocketUnitsPerCell: 4,
-    // A vent removes gas within this many steps through open cells.
+    // A vent clears all the gas on the squares within this many steps of its
+    // own square (design doc 6.5). A step is to a face neighbour, as for a pump.
     ventReach: 2,
   },
   // Explosions of a placed charge or of unstable ore: design doc 6.6. What an

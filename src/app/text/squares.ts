@@ -42,6 +42,7 @@ import {
   supportCheck,
   unstableAfterMine,
   unstableAfterSeal,
+  ventCheck,
 } from '../../engine';
 import type {
   Camp,
@@ -393,6 +394,9 @@ export const EXPLOSIVE_AP = ACTION_COSTS.placeExplosive;
 
 /** What placing a pump costs in AP, and what one does, for the lines that say how to. */
 export const PUMP_AP = ACTION_COSTS.placePump;
+/** What placing a vent costs in AP, and how far it reaches (design doc 6.5; issue #107). */
+export const VENT_AP = ACTION_COSTS.placeVent;
+export const VENT_REACH = HAZARDS.gas.ventReach;
 export const PUMP_UNITS = HAZARDS.water.pumpUnitsPerShift;
 export const PUMP_REACH = HAZARDS.water.pumpReach;
 /** What sealing a square costs in AP. */
@@ -443,6 +447,48 @@ export function pumpChoice(state: GameState, x: number, y: number): SquareChoice
     return refused(`Placing a pump costs ${check.ap} AP and you have ${state.ap} left this shift.`);
   }
   return allowed({ type: 'placePump', x, y, ap: check.ap });
+}
+
+/**
+ * "vent x,y": the action that places a vent on the square (x, y), or why it
+ * is refused: the same reasons as for a pump. Gas on the square does not
+ * stop it.
+ */
+export function ventChoice(state: GameState, x: number, y: number): SquareChoice {
+  if (!isRunActive(state)) {
+    return refused('The run has ended.');
+  }
+  const offMap = offMapRefusal(state, x, y);
+  if (offMap !== null) {
+    return refused(offMap);
+  }
+  const where = squareText(x, y);
+  const check = ventCheck(state, x, y);
+  if (check.refusal === 'noItem') {
+    return refused('You have no vent to place: one is crafted at a camp ("craft-vent").');
+  }
+  if (check.refusal === 'tree') {
+    return refused(`A tree stands on ${where}: nothing is placed on a tree.`);
+  }
+  if (check.refusal === 'bottom') {
+    return refused(`${where} has no block left to stand a vent on: it is at the bedrock floor.`);
+  }
+  if (check.refusal === 'occupied') {
+    return refused(`Something is already placed on ${where}: a square holds one thing.`);
+  }
+  if (check.refusal === 'lava') {
+    return refused(`Lava stands on ${where}: nothing is placed on lava.`);
+  }
+  if (check.refusal === 'camp') {
+    return refused(`A camp stands on ${where}: nothing is placed on a camp square.`);
+  }
+  if (check.ap === null) {
+    return refused(`A vent cannot be placed on ${where}.`);
+  }
+  if (check.ap > state.ap) {
+    return refused(`Placing a vent costs ${check.ap} AP and you have ${state.ap} left this shift.`);
+  }
+  return allowed({ type: 'placeVent', x, y, ap: check.ap });
 }
 
 /**
@@ -755,6 +801,7 @@ export const SQUARE_CHOICE_KINDS = [
   'rest',
   'decommission',
   'pump',
+  'vent',
   'seal',
   'scan',
 ] as const;
@@ -769,7 +816,7 @@ const SQUARE_CHOICE_PATTERN = new RegExp(
 /**
  * Read a typed choice as a square action: "mine 3,4", "cut 3,4",
  * "support 3,4", "explosive 3,4", "camp 3,4", "rest 3,4", "decommission 3,4",
- * "pump 3,4", "seal 3,4" or "scan 3,4" (a space or a dash after the word, a
+ * "pump 3,4", "vent 3,4", "seal 3,4" or "scan 3,4" (a space or a dash after the word, a
  * comma between the numbers). "mine! 3,4" (or "seal! 3,4") is one the player has confirmed: it is taken even
  * if it would make squares unstable. `null` if the text is not of that form;
  * then it is something else (a listed choice, or a mistake).

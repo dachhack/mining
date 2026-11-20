@@ -168,6 +168,7 @@ export function mountPreview(root: HTMLElement): void {
   const campTool = toolButton('tool-camp');
   const explosiveTool = toolButton('tool-explosive');
   const pumpTool = toolButton('tool-pump');
+  const ventTool = toolButton('tool-vent');
   const sealTool = toolButton('tool-seal');
   const scanTool = toolButton('tool-scan');
   const lookTool = toolButton('tool-look');
@@ -178,6 +179,7 @@ export function mountPreview(root: HTMLElement): void {
     campTool,
     explosiveTool,
     pumpTool,
+    ventTool,
     sealTool,
     scanTool,
     lookTool,
@@ -301,6 +303,7 @@ export function mountPreview(root: HTMLElement): void {
       explosivesHeld > 0 || tool === 'explosive',
     );
     showTool(pumpTool, 'pump', `Place pump (${held.pumps})`, held.pumps > 0);
+    showTool(ventTool, 'vent', `Place vent (${held.vents})`, held.vents > 0);
     showTool(sealTool, 'seal', `Seal (${held.sealant})`, held.sealant > 0);
     showTool(scanTool, 'scan', `Scan (${held.charges})`, held.charges > 0);
     showTool(lookTool, 'look', 'Inspect', true);
@@ -316,6 +319,9 @@ export function mountPreview(root: HTMLElement): void {
     } else if (tool === 'pump') {
       toolHint.textContent =
         'Tap a square to see what a pump there would reach; tap it again to place the pump.';
+    } else if (tool === 'vent') {
+      toolHint.textContent =
+        'Tap a square to see which squares a vent there would clear of gas; tap it again to place the vent.';
     } else if (tool === 'seal') {
       toolHint.textContent =
         'A tap puts a block of sealed rock on a dug square: it comes up 1 level, and the water, lava and gas on it are destroyed.';
@@ -366,8 +372,9 @@ export function mountPreview(root: HTMLElement): void {
   }
 
   /** How many of each camp-made tool the stockpile holds. */
-  function heldTools(): { pumps: number; sealant: number; charges: number } {
+  function heldTools(): { pumps: number; vents: number; sealant: number; charges: number } {
     return {
+      vents: countItem(session.state, STRUCTURES.vent.placedFromItem),
       pumps: countItem(session.state, STRUCTURES.pump.placedFromItem),
       sealant: countItem(session.state, CAMP_TOOLS.sealantItem),
       charges: countItem(session.state, CAMP_TOOLS.scanChargeItem),
@@ -400,7 +407,7 @@ export function mountPreview(root: HTMLElement): void {
       return;
     }
     // A second tap in a row on the same square confirms a risky mine, and
-    // takes a pump or a scan whose range the first tap showed.
+    // takes a pump, a vent or a scan whose range the first tap showed.
     const confirmed = pending !== null && pending.x === x && pending.y === y;
     const outcome = tapOutcome(session.state, x, y, tool, confirmed);
     if (outcome.entry !== null) {
@@ -444,6 +451,7 @@ export function mountPreview(root: HTMLElement): void {
       (tool === 'explosive' &&
         countItem(session.state, STRUCTURES.explosive.placedFromItem) === 0) ||
       (tool === 'pump' && held.pumps === 0) ||
+      (tool === 'vent' && held.vents === 0) ||
       (tool === 'seal' && held.sealant === 0) ||
       (tool === 'scan' && held.charges === 0)
     ) {
@@ -479,6 +487,7 @@ export function mountPreview(root: HTMLElement): void {
     [campTool, 'camp'],
     [explosiveTool, 'explosive'],
     [pumpTool, 'pump'],
+    [ventTool, 'vent'],
     [sealTool, 'seal'],
     [scanTool, 'scan'],
     [lookTool, 'look'],
