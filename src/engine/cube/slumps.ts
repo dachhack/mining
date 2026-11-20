@@ -14,7 +14,9 @@
 // part 1 the list of blocks that are due is made first; then each is looked at
 // in that order, at that moment: a block whose square is no longer unstable
 // (an earlier slump filled the hole it would have fallen into) stays where it
-// is. A block falls at most once in a cube phase.
+// is, and so does a square whose due block an earlier slump buried. A block
+// falls at most once in a cube phase, and only a block that showed a crack
+// with its countdown at 1 before the phase began ever falls.
 //
 // WHY A CASCADE ALWAYS ENDS (design doc 6.1). An unstable square's foot is at
 // least 2 levels deeper than the square: "steep" means a neighbour is 2 or
@@ -185,8 +187,20 @@ export function stepSlumps(state: GameState, events: GameEvent[], phase: CubePha
     }
   }
   for (const square of due) {
-    // Looked at now, not when the list was made: an earlier slump may have
-    // made this square stable (its countdown has stopped) or moved its foot.
+    // Looked at now, not when the list was made. First: is the block that was
+    // due still the top block? If an earlier slump landed on this square, the
+    // due block is buried (and its crack with it), and the top block is fresh
+    // rubble with no crack. That rubble must not fall in its place: it has had
+    // no warning, and a block moves at most once in a cube phase.
+    const depth = depthIn(map, square.x, square.y);
+    if (depth >= state.size.z) {
+      continue;
+    }
+    if (crackTimerAt(state, { x: square.x, y: square.y, z: depth }) !== 0) {
+      continue;
+    }
+    // Second: an earlier slump may have made this square stable (its
+    // countdown has stopped) or moved its foot.
     const check = stabilityIn(state, map, square.x, square.y);
     if (check.unstable) {
       slumpBlock(state, map, square, check.foot, events, phase);
