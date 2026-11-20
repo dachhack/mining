@@ -738,6 +738,12 @@ export interface GoldenRun {
   expectedStatus: string;
   /** `hashState` of the state after the last decision. */
   expectedHash: string;
+  /**
+   * Items the run started with on top of its loadout: the sim-only tool kit
+   * (tools/simKit.ts). Left out of the file for a run that had none, which
+   * is every run but the ones recorded with `--kit`.
+   */
+  extraItems?: Record<string, number>;
   /** Every decision in order: 'endShift', or the engine's `actionKey` of an action. */
   decisions: string[];
 }

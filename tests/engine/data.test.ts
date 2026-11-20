@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   GAME_DATA,
+  TELLS,
   blockDefByCode,
   findCampRecipe,
   findRecipe,
@@ -387,6 +388,30 @@ describe('data lookups', () => {
 // The tables the M2 skeleton added (issue #50): the numbers of decision note
 // 0014, checked against the note so that a typo in src/data shows here, and
 // the validator's checks on them.
+describe('the tells table (design doc 3.7)', () => {
+  // The whole table, pinned (issue #88 item 5). The tells are how the game
+  // keeps its first pillar ("a loss is traceable to a decision"): a change to
+  // how far a tell reaches changes what the player can know before a mine.
+  // If this test fails, the table in design doc 3.7 must change with it.
+  it('is the table of design doc 3.7 and decision note 0012', () => {
+    expect(TELLS).toEqual({
+      mineralTraces: {
+        // "within 2 steps of iron ore, copper ore or crystal", on plain rock.
+        distance: 2,
+        sourceBlocks: ['ironOre', 'copperOre', 'crystal'],
+        shownOnBlocks: ['dirt', 'stone', 'hardRock'],
+      },
+      hazards: {
+        // "Blocks within 1 of a water pocket" and "of a gas pocket";
+        // "blocks within 2 of lava".
+        dampStoneDistance: 1,
+        pittedRockDistance: 1,
+        warmGlowDistance: 2,
+      },
+    });
+  });
+});
+
 describe('M2 data (decision note 0014)', () => {
   it('gives every block that can be dug its slump limit (design doc 3.5)', () => {
     const limits: Record<string, number | null> = {};

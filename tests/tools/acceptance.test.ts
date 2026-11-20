@@ -77,6 +77,21 @@ describe('every policy plays whole runs without breaking a rule', () => {
   }
 });
 
+describe('breaking into a cavern on a generated cube (issue #88 item 2)', () => {
+  it(
+    'the square drops exactly 1 level and the level rule holds, on every mine of the run',
+    () => {
+      // Seed 24: the pit policy takes the roof off two caverns (the golden
+      // run pit-seed-24-caverns). The checker looks at every mine of the run,
+      // the two breaches among them.
+      const { result, problems } = checkedRun('pit', 24, false);
+      expect(result.metrics.hazards.cavernsBroken).toBeGreaterThan(0);
+      expect(problems).toEqual([]);
+    },
+    WHOLE_RUNS_TIMEOUT_MS,
+  );
+});
+
 describe('the random policy', () => {
   it(
     'uses every kind of action the standard loadout allows',
@@ -107,7 +122,7 @@ describe('the random policy', () => {
   );
 
   it(
-    'with the tool kit it also blasts, pumps, seals and scans, and still breaks no rule',
+    'with the tool kit it also blasts, pumps, vents, seals and scans, and still breaks no rule',
     () => {
       const seen = new Set<string>();
       for (const seed of [1, 2, 3]) {
@@ -118,7 +133,7 @@ describe('the random policy', () => {
           seen.add(type);
         }
       }
-      for (const type of ['placeExplosive', 'placePump', 'seal', 'scan']) {
+      for (const type of ['placeExplosive', 'placePump', 'placeVent', 'seal', 'scan']) {
         expect(seen, type).toContain(type);
       }
     },

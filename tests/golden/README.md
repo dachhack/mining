@@ -12,8 +12,11 @@ Recorded runs: seed + list of decisions → expected state hash. `golden.test.ts
 | `pit-seed-24-caverns.json`      | The pit policy on a seed where its pit breaks into two caverns: each collapses to rubble at once and the square drops exactly 1 level                                                                                                                   | 121       | salvage, mine closed   | `6e3d6e04d48b202e` |
 | `camp-seed-10-rest.json`        | The camp policy (the greedy digger with a camp): it founds a camp near the middle with its starting kit, mines more cheaply near it, pays its upkeep, and rests there each time a slump has hurt the crew                                               | 117       | salvage, mine closed   | `a23b356bd3ad1b3f` |
 | `camp-seed-25-destroyed.json`   | The camp policy on a seed where the pit reaches the camp: the crew rests there twice, then a slump destroys the camp and the crew is buried                                                                                                             | 121       | lost, buried           | `6591a782488d9c54` |
-| `random-seed-9-forest.json`     | Random legal actions, never closing the mine, until the fuel runs out. It cuts trees: some grow back, and none on a stump whose square was mined                                                                                                        | 104       | lost, out of fuel      | `673e0c473f817f0c` |
-| `random-seed-27-cut-short.json` | Random legal actions, stopped after 60 decisions with the run still going                                                                                                                                                                               | 60        | still going (`active`) | `6cb4571b7eedad0d` |
+| `random-seed-22-forest.json`    | The random policy (a kind of action at random, then one legal action of that kind; never closing the mine) until the fuel runs out. It cuts trees: some grow back, and none on a stump whose square was mined                                           | 72        | lost, out of fuel      | `caec32e10ed14e7c` |
+| `random-seed-27-cut-short.json` | The random policy, stopped after 60 decisions with the run still going                                                                                                                                                                                  | 60        | still going (`active`) | `bf54cba72209b6b7` |
+| `terrace-seed-4.json`           | The terracing policy: plans a pit 6 deep in a corner, digs it layer by layer, makes supports and places them on the wall squares before their cracks fall, and closes the mine when the pit is finished. Nothing slumps                                 | 160       | salvage, mine closed   | `f512f9e5edc71508` |
+| `terrace-8-seed-8-traces.json`  | The terracing policy with a pit planned 8 deep, on a seed where it finishes: its corner square reaches layer 8, the first of the middle band; it breaks into a cavern and sees mineral traces                                                           | 294       | salvage, mine closed   | `a6f52657a4db1778` |
+| `random-kit-seed-27-blast.json` | The random policy with the sim-only tool kit (`extraItems` in the file): it places explosives, pumps and vents, seals squares and scans, and is hurt by one of its own blasts                                                                           | 92        | lost, out of fuel      | `2ab00c050d63d9ba` |
 
 Each file holds:
 
@@ -21,6 +24,7 @@ Each file holds:
 - `decisions`: every decision in order. `"endShift"` ends the shift; anything else is the engine's `actionKey` of an action (for example `"mine 17,16 ap 1"`: mine the top block of square (17, 16)), and the replay takes the legal action with that key.
 - `expectedHash`: `hashState` of the state after the last decision.
 - `expectedStatus`: `active`, or `ended: <outcome>, <cause>`. The hash already covers it; it is there so a person can read how the run ended.
+- `extraItems` (one file only): items the run started with on top of its loadout, the sim-only tool kit of `tools/simKit.ts`. A replay puts them in the stockpile before the first decision.
 - `description` and `recordedWith`: for the reader. A replay uses only the decisions, so changing a policy in `tools/policies.ts` does not change a golden run.
 
 ## When a golden test fails
@@ -48,6 +52,7 @@ If the rules, the data in `src/data`, cube generation, the RNG, `serialise` or t
    ```bash
    npm run golden -- --record pit-seed-11 --seed 11 --policy pit
    npm run golden -- --record random-seed-27-cut-short --seed 27 --policy random --max-decisions 60
+   npm run golden -- --record random-kit-seed-27-blast --seed 27 --policy random --kit
    ```
 
    Add `--description "..."` to keep a sentence about the run.
@@ -73,3 +78,9 @@ Nothing was re-hashed or recorded again for issue #104 (camp tools; decision not
 Nothing was recorded again for issue #103 (gas, ignition, unstable ore and explosives; decision note 0035): no recorded run meets gas, unstable ore or an explosive, and the state's shape did not change, so `npm run golden -- --rehash` reports every hash unchanged. Until a policy digs to the gas (task T15), step (c) of the cube phase is pinned by a fixed scenario with a recorded hash, "a pinned blast" in `tests/engine/explosions.test.ts`. Treat a change of that hash like a change of a golden hash.
 
 Nothing was re-hashed for issue #107 (the vent; decision note 0036) either: no recorded run holds a vent.
+
+For issue #108 (task T15: every way a run ends, the sim policies, acceptance, the depth survey; decision note 0037) no rule changed, and the six `pit`, `greedy` and `camp` files are untouched: `npm run golden -- --rehash` reports their hashes unchanged. What changed:
+
+- **The two `random` files were recorded again, because the policy changed and not the rules.** The `random` policy now picks a kind of action first and then an action of that kind, so that it crafts, places and founds as well as mines. `--record-all` would no longer have produced the old files, so they were recorded with the new policy. `random-seed-9-forest` became `random-seed-22-forest`: on seed 9 the new policy mines no stump, so that seed no longer covered "no regrowth once mined".
+- **Three files are new.** `terrace-seed-4` pins the terracing policy and supports placed in time. `terrace-8-seed-8-traces` brings mineral traces back into a golden run (they left with `pit-seed-31-traces` in issue #94) and is the deepest golden run: its corner square reaches layer 8. `random-kit-seed-27-blast` pins explosives, pumps, vents, sealant and scans on a generated cube; it starts with the sim-only tool kit because no run with the standard loadout gets the iron, copper and crystal those need.
+- **Still no golden run meets water, gas, lava or unstable ore.** The issue asked for "a run that meets a hazard if any seed and policy can". None can with the standard loadout: on seeds 1 to 1000 no policy releases water, gas or lava or sees unstable ore (`docs/surveys/depth-survey.md`, table 4). Slumps and caverns are the hazards the golden runs meet. The fixed scenarios "a pinned flood" (`tests/engine/fluids.test.ts`) and "a pinned blast" (`tests/engine/explosions.test.ts`) still pin the flow and gas rules by hash, and `tests/engine/runEnds.test.ts` plays each hazard through to the crew's loss on a hand-built cube.

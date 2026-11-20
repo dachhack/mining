@@ -1,0 +1,34 @@
+# 0037 — T15: every way a run ends, the sim policies, acceptance, and the depth survey
+
+Date: 2026-11-20. Status: accepted for the code as it stands (issue #108, task T15 of decision note 0025; it replaces #59). No rule and no number of the game changes, and `ENGINE_VERSION` stays 0.4.0. The survey's findings and the choice they leave to the owner are in `docs/surveys/depth-survey.md` and questions 126 to 128 of `docs/owner-questions.md`.
+
+## What was built
+
+1. **Scenario tests** (`tests/engine/runEnds.test.ts`): one per hazard and one per way a run ends, each played from a small hand-built cube through `applyAction` and `endShift` only. Slump (buried), water (drowned), lava (burned), gas (poisoned), a gas explosion, a charge and unstable ore (all burned), out of fuel, the mine closed, and the outcomes that exist before contracts: salvage and lost.
+2. **The `random` policy picks a kind of action first** (mine, cut, craft, place a support, found a camp, ..., or end the shift) and then one legal action of that kind. Before, it picked evenly among all legal actions, of which over a thousand are mines and cuts, so it hardly ever crafted, placed or founded anything.
+3. **A sim-only tool kit** (`tools/simKit.ts`; `npm run sim -- --kit`). Pumps, vents, sealant, scanner charges and explosives need iron, copper and crystal, which no scripted run reaches (the survey's main finding). So that the acceptance runs exercise those rules all the same, a run may start with the items in its stockpile. It is not a loadout, the game offers it to nobody, and the survey never uses it. It is the one place where a tool reaches past the engine's public surface (`addItem`), and the file says so.
+4. **The `terrace` policy** (`tools/terracePolicy.ts`): the nearest thing to a careful player. It plans a pit to a target depth in a corner of the map, digs it layer by layer so that every wall square is at its final depth before it needs holding, makes its supports before the mine that needs them and places them before the crack falls, and takes every coal block it sees. `terrace:8` plans a pit 8 deep; `terrace:8:camp` also founds a camp beside it. With today's numbers no block ever slumps on it and its crew is never hurt.
+5. **The acceptance check** (`npm run sim -- --acceptance --runs 1000`; `tools/invariants.ts`): every policy, and `random` with the tool kit, with these checked after every step: the level rule on every mine; nothing above ground level; water, lava and gas appear and disappear only as the events say; AP, fuel and health stay in range; and every run replays to the same hash. CI runs it on 8 seeds; the full check is run by hand.
+6. **The depth survey** (`npm run sim -- --survey depth --runs 1000`; `tools/survey.ts`), with the report in `docs/surveys/depth-survey.md`.
+7. **Runs on several cores** (`tools/parallel.ts`, `tools/simWorker.ts`): the acceptance check and the survey cut the seeds into batches for worker processes and put the answers back in seed order, so the result does not depend on how many workers there were.
+8. **Golden runs:** `terrace-seed-4`, `terrace-8-seed-8-traces` and `random-kit-seed-27-blast` are new; the two `random` files were recorded again because the policy changed. See `tests/golden/README.md`.
+
+## Readings and choices
+
+- **The terracing policy digs in a corner.** The bedrock sides do not count for the level rule (question 84, assumed), so a corner pit costs about a third of a pit in the middle. A careful player would find this, so the policy uses it; question 127 asks the owner whether it is wanted.
+- **The terracing policy has a target depth and stops there.** A support is lost when its square is mined, so a pit cannot be deepened without losing every support on its wall. The policy therefore plans the whole pit first. The survey tries targets 4 to 10 and reports each; the plain `terrace` uses 6, the deepest target that most runs finish.
+- **What-if trials change the data in memory, not in `src/data`.** The issue asked for the owner's three options to be modelled "on paper". The survey does that (table 6 is arithmetic) and also plays each option: a worker process changes the numbers in its own copy of the data tables (`tools/whatIf.ts`) and plays the same seeds. This measures the effect instead of predicting it, and nothing in the repository's data changes.
+- **"Nothing above ground level" as checked:** after every cube phase no square holds more water, or more lava, than it is deep, and a square at ground level holds no gas. Between a breach and the next cube phase a square may hold more (the pocket's contents are put on it and what is over drains in step (b)), so the check runs after the cube phase only.
+- **Conservation as checked:** the totals on the map are counted after every cube phase and compared with the last count plus what the events since then say came and went (`spaceCollapsed`, `lavaPoured`, `fluidRemoved`, `gasRemoved`). The property tests of T10 and T11 check single cube phases on random pits; this checks whole runs on generated cubes.
+
+## The leftover follow-ups of issue #88
+
+- **Item 2** (the roof rule on generated cubes): covered. The golden run `pit-seed-24-caverns` (issue #95) breaks into two caverns; the acceptance check now looks at the level rule on every mine of every run, and about one run in eight breaks into a cavern; `tests/tools/acceptance.test.ts` pins seed 24 with the checker on.
+- **Item 5** (the tells data-table snapshot): restored in `tests/engine/data.test.ts`: the whole `TELLS` table is pinned.
+- **Item 6** (the sim is slow): PR #106 stopped `applyAction` building the whole action list. What is left has no single hot spot (a profile shows the time spread over the tells, the depth map and the camp sites), so this task did not change the engine for speed. Instead the two long jobs use every core: on the 4-core cloud machine 1,000 runs of every policy with the checks on take about 8 minutes.
+
+## Consequences
+
+- **No scripted run with the standard loadout meets water, gas, lava or unstable ore.** That is the finding the owner asked the survey for, and the M2 playtest round should expect the same: a playtester will meet slumps and caverns and nothing else unless the numbers change first.
+- The rules for water, lava, gas and explosions are therefore still exercised only by unit, scenario and property tests on hand-built cubes, plus the `random` policy with the tool kit for explosives, pumps, vents, sealant and scans. When the owner's choice makes runs reach the hazards, record golden runs that meet them and drop the "pinned flood" and "pinned blast" stand-ins.
+- `npm run sim -- --json` has new fields (`damageByCause`, `tracesSeen`, `hazards`, `tellsSeen`) and lists every way a run can end under `causes`; the evaluator's brief can use them as they are.
