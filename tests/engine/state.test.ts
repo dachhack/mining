@@ -150,8 +150,8 @@ describe('what is at (x, y, z)', () => {
     expect(layerText(state, 0)).toEqual(['#d##', '#..#', '####']);
 
     expect(structureAt(state, pos)).toBe(NO_STRUCTURE);
-    setStructure(state, pos, STRUCTURES.torch.code);
-    expect(structureAt(state, pos)).toBe(STRUCTURES.torch.code);
+    setStructure(state, pos, STRUCTURES.support.code);
+    expect(structureAt(state, pos)).toBe(STRUCTURES.support.code);
 
     expect(isRevealed(state, pos)).toBe(false);
     setRevealed(state, pos, true);
@@ -170,7 +170,7 @@ describe('what is at (x, y, z)', () => {
     expect(structureAt(state, { x: -1, y: 0, z: 0 })).toBe(NO_STRUCTURE);
     expect(isRevealed(state, { x: 0, y: 0, z: -1 })).toBe(true);
     expect(isRevealed(state, { x: -1, y: 0, z: 0 })).toBe(true);
-    expect(() => setStructure(state, { x: 0, y: 0, z: -1 }, STRUCTURES.torch.code)).toThrow(
+    expect(() => setStructure(state, { x: 0, y: 0, z: -1 }, STRUCTURES.support.code)).toThrow(
       'outside the cube',
     );
     expect(() => setBlock(state, { x: 0, y: 0, z: 2 }, BLOCKS.air.code)).toThrow(
@@ -221,10 +221,10 @@ describe('carry weight', () => {
     expect(carriedWeight(state)).toBe(0);
     addItem(state, 'stone', 3);
     addItem(state, 'coal', 2);
-    addItem(state, 'torch', 6);
-    const expected = 3 * ITEMS.stone.weight + 2 * ITEMS.coal.weight + 6 * ITEMS.torch.weight;
+    addItem(state, 'timber', 6);
+    const expected = 3 * ITEMS.stone.weight + 2 * ITEMS.coal.weight + 6 * ITEMS.timber.weight;
     expect(carriedWeight(state)).toBe(expected);
-    // With 0005's weights (stone 2, coal 1, torch 1) that is 14.
+    // With 0005's weights (stone 2, coal 1, timber 1) that is 14.
     expect(expected).toBe(14);
   });
 
@@ -331,7 +331,7 @@ describe('cloneState', () => {
       layers: [['#.'], ['##']],
       inventory: { timber: 2 },
       looseItems: [{ pos: { x: 1, y: 0, z: 0 }, item: 'stone', count: 1 }],
-      torches: [{ x: 1, y: 0, z: 0 }],
+      supports: [{ x: 1, y: 0, z: 0 }],
       armed: [{ pos: { x: 0, y: 0, z: 0 }, kind: 'unstableOre' }],
       camps: [{ pos: { x: 1, y: 0, z: 0 }, foundedShift: 1, stash: { coal: 2 } }],
     });

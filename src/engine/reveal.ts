@@ -8,8 +8,8 @@
 //
 // `state.revealed` holds the result, one flag per cell, and a revealed cell
 // stays revealed: a tree that grows back hides the block under it on the map,
-// but the block stays known. There is no light any more; lamp oil and torches
-// are still in the state and do nothing until task T3 removes them.
+// but the block stays known. There is no light: lamp oil, torches and the
+// safety lamp are removed (issue #89).
 
 import type { Vec3 } from '../data';
 import type { GameEvent } from './events';

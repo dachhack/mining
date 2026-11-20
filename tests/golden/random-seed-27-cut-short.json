@@ -5,7 +5,7 @@
   "loadoutId": "standard",
   "recordedWith": "random",
   "expectedStatus": "active",
-  "expectedHash": "c4323aa0100f8296",
+  "expectedHash": "986f0c5dc5e22383",
   "decisions": [
     "cutTree 5,22 ap 2",
     "cutTree 10,6 ap 2",

@@ -50,9 +50,6 @@
 //       "shiftsAtZeroFuel": spread+,   shifts that began with 0 fuel (fuel was 0
 //                                      after the upkeep before them), per run
 //       "runsWithAShiftAtZeroFuel": n,
-//       "shiftsInTheDark":  spread+,   shifts that began with the lamp out (lamp oil
-//                                      was 0 after the upkeep before them), per run
-//       "runsWithAShiftInTheDark": n,
 //       "finalInventoryMean": { "<item id>": mean count, ... }   every item
 //     },
 //     "runs": [                     one entry per run, in seed order
@@ -71,8 +68,8 @@
 //         "recipesUsed": { "<recipe id>": crafts, ... },
 //         "itemsCrafted": { "<item or gauge id>": amount, ... },
 //         "structuresPlaced": { "<structure id>": n, ... },   every structure
-//         "damageTaken": n, "healthAtEnd": n, "fuelAtEnd": n, "lampOilAtEnd": n,
-//         "shiftsAtZeroFuel": n, "shiftsInTheDark": n,
+//         "damageTaken": n, "healthAtEnd": n, "fuelAtEnd": n,
+//         "shiftsAtZeroFuel": n,
 //         "finalInventory": { "<item id>": count, ... },   every item
 //         "finalHash": "16 hex digits"                      hashState of the final state
 //       }, ...

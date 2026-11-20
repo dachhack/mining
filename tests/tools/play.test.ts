@@ -212,7 +212,7 @@ describe('the top-down map', () => {
     const view = buildView(state, { deepestDepth: 3 });
     expect(view.hud[0]).toContain(`AP ${SHIFT.apPerShift}/${SHIFT.apPerShift}`);
     expect(view.hud[0]).toContain(`Fuel ${state.fuel}`);
-    expect(view.hud[0]).toContain('Lamp oil');
+    expect(view.hud[0]).not.toContain('Lamp oil');
     expect(view.hud[0]).toContain(`Health ${AVATAR.startHealth}/${AVATAR.startHealth}`);
     expect(view.hud[1]).toBe('Deepest square so far: depth 3');
     expect(view.hud[2]).toBe('You have: 2 Timber');
@@ -251,7 +251,7 @@ describe('the action list', () => {
     state = mined(state, 0, 0);
     const names = buildView(state, { deepestDepth: 1 }).choices.map((choice) => choice.name);
     expect(names).toContain('craft-fuel');
-    expect(names).toContain('craft-lamp-oil');
+    expect(names).not.toContain('craft-lamp-oil');
     const byName = resolveChoice(state, 'craft-fuel');
     expect(byName.entry).toEqual({ type: 'craft', recipe: 'fuel', ap: 1 });
     const number = names.indexOf('craft-fuel') + 1;

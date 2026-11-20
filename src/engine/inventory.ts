@@ -17,7 +17,7 @@ export function stackWeight(item: string, count: number): number {
 
 /**
  * The total weight the avatar carries: for each item, its count times its
- * weight from `ITEMS`. Fuel and lamp oil are gauges and weigh nothing.
+ * weight from `ITEMS`. Fuel is a gauge and weighs nothing.
  */
 export function carriedWeight(state: GameState): number {
   let total = 0;

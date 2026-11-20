@@ -41,8 +41,6 @@ const FAKE_FORECAST: ShiftForecast = {
   upkeep: {
     fuelConsumed: 1,
     fuelAfter: 9,
-    lampOilBurned: 0,
-    lampOilAfter: 10,
     runEnds: null,
   },
   regrowth: [],

@@ -289,13 +289,6 @@ export function validateData(data: GameData): string[] {
   if (!Number.isFinite(avatar.carryCapacity) || avatar.carryCapacity < 0) {
     problems.push(`avatar.carryCapacity is negative or invalid (${avatar.carryCapacity})`);
   }
-  requireWholeAtLeast(avatar.lightRadiusWithoutOil, 0, 'avatar.lightRadiusWithoutOil');
-  requireWholeAtLeast(
-    avatar.lightRadiusWithOil,
-    Math.max(0, avatar.lightRadiusWithoutOil),
-    'avatar.lightRadiusWithOil (at least the radius without oil)',
-  );
-  requireWholeAtLeast(avatar.torchLightRadius, 0, 'avatar.torchLightRadius');
 
   // --- Tells ---
   const traces = data.tells.mineralTraces;
@@ -407,8 +400,6 @@ export function validateData(data: GameData): string[] {
   requireWholeAtLeast(shift.firstShiftNumber, 0, 'shift.firstShiftNumber');
   requireWholeAtLeast(shift.apPerShift, 1, 'shift.apPerShift');
   requireWholeAtLeast(shift.fuelPerShift, 0, 'shift.fuelPerShift');
-  requireWholeAtLeast(shift.lampOilBurnEveryShifts, 1, 'shift.lampOilBurnEveryShifts');
-  requireWholeAtLeast(shift.lampOilPerBurn, 0, 'shift.lampOilPerBurn');
 
   // --- Action costs ---
   for (const [actionName, cost] of Object.entries(data.actionCosts)) {
@@ -424,7 +415,6 @@ export function validateData(data: GameData): string[] {
   for (const [loadoutId, loadout] of Object.entries(data.loadouts)) {
     const where = `loadout "${loadoutId}"`;
     requireWholeAtLeast(loadout.fuel, 0, `${where}: fuel`);
-    requireWholeAtLeast(loadout.lampOil, 0, `${where}: lamp oil`);
     checkStacks(loadout.items, `${where}: items`);
     let weight = 0;
     for (const stack of loadout.items) {

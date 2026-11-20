@@ -76,12 +76,6 @@ describe('knownCell (0014 item 3)', () => {
     expect(knownCell(state, { x: 1, y: 0, z: 1 })).toBeNull();
   });
 
-  it('does not depend on light: a revealed cell in the dark is still seen', () => {
-    const state = halfSeenState();
-    state.lampOil = 0;
-    expect(knownCell(state, SEEN)?.gas).toBe(3);
-  });
-
   it('knows the surface and the bedrock, which hold nothing', () => {
     const state = halfSeenState();
     const empty = {
@@ -158,7 +152,7 @@ describe('knownCube (0014 item 4)', () => {
       'no lava': (s) => setLava(s, { x: 1, y: 0, z: 1 }, 0),
       'lava that is not a source': (s) => setLava(s, { x: 1, y: 0, z: 1 }, 1, false),
       'a crack': (s) => setCrackTimer(s, { x: 2, y: 0, z: 2 }, 0),
-      'another structure': (s) => setStructure(s, UNSEEN, STRUCTURES.torch.code),
+      'another structure': (s) => setStructure(s, UNSEEN, STRUCTURES.pump.code),
       'no armed charges': (s) => {
         s.armed = s.armed.filter((charge) => charge.pos.x === 0);
       },

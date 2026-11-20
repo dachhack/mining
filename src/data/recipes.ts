@@ -1,12 +1,14 @@
 import type { RecipeDef } from './types';
 
-export type GaugeId = 'fuel' | 'lampOil';
+// Lamp oil was the second gauge; it is gone with light (design doc 7.1).
+export type GaugeId = 'fuel';
 
 /** The gauges a recipe may fill. They are numbers on the state, not carried items. */
-export const GAUGES: GaugeId[] = ['fuel', 'lampOil'];
+export const GAUGES: GaugeId[] = ['fuel'];
 
 // Field recipes, design doc 7.1. Craftable anywhere. The ladder recipe is
-// gone with ladders (owner, issue #80).
+// gone with ladders (owner, issue #80); the torch and lamp-oil recipes are
+// gone with light (design doc v0.2, 7.1).
 export const FIELD_RECIPES: RecipeDef[] = [
   {
     id: 'support',
@@ -18,30 +20,16 @@ export const FIELD_RECIPES: RecipeDef[] = [
     output: { kind: 'item', item: 'support', count: 1 },
   },
   {
-    id: 'torch',
-    name: 'Torch',
-    inputs: [
-      { item: 'timber', count: 1 },
-      { item: 'coal', count: 1 },
-    ],
-    output: { kind: 'item', item: 'torch', count: 1 },
-  },
-  {
     id: 'fuel',
     name: 'Fuel (x3)',
     inputs: [{ item: 'coal', count: 1 }],
     output: { kind: 'gauge', gauge: 'fuel', amount: 3 },
   },
-  {
-    id: 'lampOil',
-    name: 'Lamp oil (x2)',
-    inputs: [{ item: 'coal', count: 1 }],
-    output: { kind: 'gauge', gauge: 'lampOil', amount: 2 },
-  },
 ];
 
 // Camp recipes, design doc 7.2. Craftable only in a camp cell (0014 item 27).
-// Nothing reads this table until the camps task (M2-7).
+// Nothing reads this table until the camps task (M2-7). The safety lamp is
+// removed with light (design doc v0.2, 7.2).
 //
 // "Iron" and "copper" in 7.2 are read as ingots: raw ore must be smelted
 // first. Smelting 2 raw ore + 1 coal makes 2 ingots (0014 item 31).
@@ -89,15 +77,6 @@ export const CAMP_RECIPES: RecipeDef[] = [
       { item: 'timber', count: 1 },
     ],
     output: { kind: 'item', item: 'vent', count: 1 },
-  },
-  {
-    id: 'safetyLamp',
-    name: 'Safety lamp',
-    inputs: [
-      { item: 'ironIngot', count: 1 },
-      { item: 'copperIngot', count: 1 },
-    ],
-    output: { kind: 'item', item: 'safetyLamp', count: 1 },
   },
   {
     id: 'scannerCharge',

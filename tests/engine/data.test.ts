@@ -40,7 +40,7 @@ describe('validateData', () => {
         id: 'broken',
         name: 'Broken',
         inputs: [{ item: 'unobtainium', count: 1 }],
-        output: { kind: 'item', item: 'torch', count: 1 },
+        output: { kind: 'item', item: 'support', count: 1 },
       });
     });
     expect(problems).toHaveLength(1);
@@ -87,10 +87,10 @@ describe('validateData', () => {
   it('reports a recipe with no inputs, a zero count, or a repeated id', () => {
     const problems = problemsAfter((data) => {
       data.recipes.push({
-        id: 'torch',
-        name: 'Free torches',
+        id: 'support',
+        name: 'Free supports',
         inputs: [],
-        output: { kind: 'item', item: 'torch', count: 0 },
+        output: { kind: 'item', item: 'support', count: 0 },
       });
     });
     expect(problems.some((p) => p.includes('used more than once'))).toBe(true);
@@ -184,26 +184,22 @@ describe('validateData', () => {
 
   it('reports a structure placed from an unknown item, or using code 0', () => {
     const problems = problemsAfter((data) => {
-      const torch = entry(data.structures, 'torch');
-      torch.placedFromItem = 'candle';
-      torch.code = 0;
+      const support = entry(data.structures, 'support');
+      support.placedFromItem = 'candle';
+      support.code = 0;
     });
     expect(problems.some((p) => p.includes('unknown item "candle"'))).toBe(true);
-    expect(problems.some((p) => p.includes('structure "torch" has code 0'))).toBe(true);
+    expect(problems.some((p) => p.includes('structure "support" has code 0'))).toBe(true);
   });
 
   it('reports bad avatar and shift numbers', () => {
     const problems = problemsAfter((data) => {
       data.avatar.startHealth = 0;
-      data.avatar.torchLightRadius = -1;
       data.shift.apPerShift = 0;
-      data.shift.lampOilBurnEveryShifts = 0;
       data.actionCosts.move = -1;
     });
     expect(problems.some((p) => p.includes('avatar.startHealth'))).toBe(true);
-    expect(problems.some((p) => p.includes('avatar.torchLightRadius'))).toBe(true);
     expect(problems.some((p) => p.includes('shift.apPerShift'))).toBe(true);
-    expect(problems.some((p) => p.includes('shift.lampOilBurnEveryShifts'))).toBe(true);
     expect(problems.some((p) => p.includes('actionCosts.move'))).toBe(true);
   });
 
@@ -478,7 +474,6 @@ describe('M2 data (decision note 0014)', () => {
       'drill',
       'pump',
       'vent',
-      'safetyLamp',
       'explosive',
       'sealant',
       'scannerCharge',
@@ -492,7 +487,6 @@ describe('M2 data (decision note 0014)', () => {
       drill: 3,
       pump: 3,
       vent: 2,
-      safetyLamp: 1,
       explosive: 1,
       sealant: 1,
       scannerCharge: 1,
@@ -519,7 +513,6 @@ describe('M2 data (decision note 0014)', () => {
       'drill: 3 ironIngot -> 1 drill',
       'pump: 2 ironIngot + 1 copperIngot -> 1 pump',
       'vent: 2 copperIngot + 1 timber -> 1 vent',
-      'safetyLamp: 1 ironIngot + 1 copperIngot -> 1 safetyLamp',
       'scannerCharge: 1 copperIngot + 1 crystal -> 1 scannerCharge',
       'sealant: 1 stone + 1 coal -> 1 sealant',
       'explosive: 2 coal + 1 ironIngot -> 1 explosive',
@@ -530,7 +523,11 @@ describe('M2 data (decision note 0014)', () => {
       expect(fieldIds).not.toContain(recipe.id);
     }
     expect(findCampRecipe('pump')?.name).toBe('Pump');
-    expect(findCampRecipe('torch')).toBeUndefined();
+    expect(findCampRecipe('support')).toBeUndefined();
+    // Removed with light (issue #89).
+    expect(findCampRecipe('safetyLamp')).toBeUndefined();
+    expect(findRecipe('torch')).toBeUndefined();
+    expect(findRecipe('lampOil')).toBeUndefined();
     // Camp recipes are not field recipes: nothing can craft them yet.
     expect(findRecipe('pump')).toBeUndefined();
   });
@@ -541,13 +538,12 @@ describe('M2 data (decision note 0014)', () => {
       codes[structureId] = structure.code;
       expect(structure.placedFromItem).toBe(structureId);
     }
-    // Code 1 was the ladder (removed, issue #80); it is not given to anything else.
+    // Code 1 was the ladder (removed, issue #80); 2 and 6 were the torch and the
+    // safety lamp (removed, issue #89). They are not given to anything else.
     expect(codes).toEqual({
-      torch: 2,
       support: 3,
       vent: 4,
       pump: 5,
-      safetyLamp: 6,
       explosive: 7,
     });
   });
@@ -579,14 +575,14 @@ describe('M2 data (decision note 0014)', () => {
   it('reports a camp recipe that reuses a field recipe id or names an unknown item', () => {
     const problems = problemsAfter((data) => {
       data.campRecipes.push({
-        id: 'torch',
+        id: 'support',
         name: 'Clash',
         inputs: [{ item: 'adamantium', count: 1 }],
-        output: { kind: 'item', item: 'torch', count: 1 },
+        output: { kind: 'item', item: 'support', count: 1 },
       });
     });
     expect(problems).toHaveLength(2);
-    expect(problems[0]).toContain('recipe id "torch" is used more than once');
+    expect(problems[0]).toContain('recipe id "support" is used more than once');
     expect(problems[1]).toContain('unknown item "adamantium"');
   });
 

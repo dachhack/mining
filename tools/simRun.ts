@@ -79,15 +79,8 @@ export interface RunMetrics {
   damageTaken: number;
   healthAtEnd: number;
   fuelAtEnd: number;
-  lampOilAtEnd: number;
   /** Shifts that began with 0 fuel, that is, fuel was 0 after the upkeep before them. */
   shiftsAtZeroFuel: number;
-  /**
-   * Shifts that began with the lamp out, that is, lamp oil was 0 after the
-   * upkeep before them. The lamp does nothing since issue #86; task T3
-   * removes it and this number.
-   */
-  shiftsInTheDark: number;
   /** Item id -> count carried at the end. Every item is listed, so absent ones show 0. */
   finalInventory: Record<string, number>;
   /** `hashState` of the final state. */
@@ -217,7 +210,6 @@ export function playRun(options: PlayOptions): RunResult {
   let damageTaken = 0;
   let actionsTaken = 0;
   let shiftsAtZeroFuel = 0;
-  let shiftsInTheDark = 0;
   let deepestSquare = 0;
   let treesCut = 0;
   let atPhaseStart = true;
@@ -285,9 +277,6 @@ export function playRun(options: PlayOptions): RunResult {
       if (isRunActive(state) && state.fuel === 0) {
         shiftsAtZeroFuel += 1;
       }
-      if (isRunActive(state) && state.lampOil === 0) {
-        shiftsInTheDark += 1;
-      }
     } else {
       const result = applyAction(state, decision);
       state = result.state;
@@ -336,9 +325,7 @@ export function playRun(options: PlayOptions): RunResult {
     damageTaken,
     healthAtEnd: state.avatar.health,
     fuelAtEnd: state.fuel,
-    lampOilAtEnd: state.lampOil,
     shiftsAtZeroFuel,
-    shiftsInTheDark,
     finalInventory,
     finalHash: hashState(state),
   };
@@ -380,10 +367,6 @@ export interface AggregateMetrics {
   shiftsAtZeroFuel: SpreadWithMedian;
   /** Runs with at least one shift at 0 fuel. */
   runsWithAShiftAtZeroFuel: number;
-  /** Shifts begun with the lamp out, per run. */
-  shiftsInTheDark: SpreadWithMedian;
-  /** Runs with at least one shift begun with the lamp out. */
-  runsWithAShiftInTheDark: number;
   /** Item id -> mean count carried at the end of a run. */
   finalInventoryMean: Record<string, number>;
 }
@@ -472,8 +455,6 @@ export function aggregate(runs: RunMetrics[]): AggregateMetrics {
     fuelAtEnd: spreadWithMedianOf(runs.map((run) => run.fuelAtEnd)),
     shiftsAtZeroFuel: spreadWithMedianOf(runs.map((run) => run.shiftsAtZeroFuel)),
     runsWithAShiftAtZeroFuel: runs.filter((run) => run.shiftsAtZeroFuel > 0).length,
-    shiftsInTheDark: spreadWithMedianOf(runs.map((run) => run.shiftsInTheDark)),
-    runsWithAShiftInTheDark: runs.filter((run) => run.shiftsInTheDark > 0).length,
     finalInventoryMean,
   };
 }
@@ -563,7 +544,6 @@ export function formatSummary(report: SimReport): string {
     `structures placed:  ${countsLine(a.structuresPlaced)}`,
     `fuel at end:        ${spreadLine(a.fuelAtEnd, 1)}`,
     `shifts at 0 fuel:   ${spreadLine(a.shiftsAtZeroFuel, 2)}; runs with at least one: ${a.runsWithAShiftAtZeroFuel}`,
-    `shifts in the dark: ${spreadLine(a.shiftsInTheDark, 2)}; runs with at least one: ${a.runsWithAShiftInTheDark}   (shifts begun with the lamp out; the lamp does nothing since issue #86)`,
     `final inventory (mean per run): ${Object.entries(a.finalInventoryMean)
       .map(([item, mean]) => `${item} ${fixed(mean, 2)}`)
       .join(', ')}`,
