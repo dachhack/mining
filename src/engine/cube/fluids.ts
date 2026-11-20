@@ -46,7 +46,17 @@
 //   step (`lavaPoured`); a breach puts a pocket's contents on a square
 //   (breach.ts, in the player phase);
 // - out: what drains at ground level; water meeting lava, where one unit of
-//   each becomes one stone block (`stoneFormed`). Pumps and sealant are T13.
+//   each becomes one stone block (`stoneFormed`); what a pump takes
+//   (`fluidRemoved`, reason 'pumped'); what sealant destroys (player phase,
+//   actions/campTools.ts).
+//
+// PUMPS (6.3; issue #104). A pump on a square takes up to
+// `HAZARDS.water.pumpUnitsPerShift` (3) units of water a shift from the
+// squares within `HAZARDS.water.pumpReach` (2) steps of it, its own square
+// included. It empties the nearest square first (ties: the lower y, then the
+// lower x) and goes on to the next until it has its 3 units. Pumps act one
+// after another, row by row, after the water above ground level has drained
+// and before the water flows. A pump does nothing to lava.
 //
 // UNDER RUBBLE. A block that comes to rest on a square (a slump, design doc
 // 6.1) lands in the cell that held the square's water or lava. The slump
@@ -54,11 +64,11 @@
 // comes up 1 level and keeps all of it, and what would then stand above
 // ground level drains here, in step (b) of the same cube phase.
 
-import { BLOCKS, CREW, HAZARDS } from '../../data';
+import { BLOCKS, CREW, HAZARDS, STRUCTURES } from '../../data';
 import type { Vec3 } from '../../data';
 import { destroyCampsAt, destroyStructure } from '../destroy';
 import type { FluidKind, GameEvent } from '../events';
-import { SQUARE_STEPS, depthAt } from '../heightmap';
+import { SQUARE_STEPS, depthAt, structureOnSquare } from '../heightmap';
 import { setLavaOn, setWaterOn } from '../standing';
 import {
   clearCrack,
@@ -294,6 +304,74 @@ function formStone(state: GameState, pit: Pit, events: GameEvent[]): void {
   }
 }
 
+/**
+ * The squares within `reach` steps of the square (x, y), that square
+ * included, nearest first; among squares equally far, row by row (the lower
+ * y first, then the lower x). A step is to a face neighbour, so the distance
+ * is |dx| + |dy|. Squares off the map are left out.
+ *
+ * Pumps use this here, and the views use it to draw a pump's range.
+ */
+export function squaresWithinSteps(
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  reach: number,
+): { x: number; y: number; steps: number }[] {
+  const found: { x: number; y: number; steps: number }[] = [];
+  for (let steps = 0; steps <= reach; steps += 1) {
+    for (let dy = -steps; dy <= steps; dy += 1) {
+      const across = steps - Math.abs(dy);
+      // The one or two squares of this row that are exactly `steps` away.
+      const dxs = across === 0 ? [0] : [-across, across];
+      for (const dx of dxs) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+          found.push({ x: nx, y: ny, steps });
+        }
+      }
+    }
+  }
+  return found;
+}
+
+/**
+ * Pumps (see the top of this file). Reads where the pumps are from `state`
+ * and takes the water out of the pit table. Emits one `fluidRemoved` (reason
+ * 'pumped') for each square a pump takes water from.
+ */
+function runPumps(state: GameState, pit: Pit, events: GameEvent[]): void {
+  for (let square = 0; square < pit.water.length; square += 1) {
+    const x = squareX(pit, square);
+    const y = squareY(pit, square);
+    if (structureOnSquare(state, x, y) !== STRUCTURES.pump.code) {
+      continue;
+    }
+    let left = HAZARDS.water.pumpUnitsPerShift;
+    for (const near of squaresWithinSteps(pit.width, pit.height, x, y, HAZARDS.water.pumpReach)) {
+      if (left === 0) {
+        break;
+      }
+      const from = near.x + pit.width * near.y;
+      const taken = Math.min(left, pit.water[from] as number);
+      if (taken === 0) {
+        continue;
+      }
+      pit.water[from] = (pit.water[from] as number) - taken;
+      left -= taken;
+      events.push({
+        type: 'fluidRemoved',
+        fluid: 'water',
+        pos: cellAbove(pit, from),
+        units: taken,
+        reason: 'pumped',
+      });
+    }
+  }
+}
+
 /** Write the pit's water and lava back to the cube (standing.ts says where). */
 function writePit(state: GameState, pit: Pit): void {
   for (let square = 0; square < pit.depth.length; square += 1) {
@@ -316,7 +394,8 @@ export function isLavaStep(shift: number): boolean {
  * Step (b). Changes `state` in place and appends to `events`; uses no
  * randomness. In this order:
  *
- * 1. Water: what stands above ground level drains; then water flows. Water
+ * 1. Water: what stands above ground level drains; pumps take their share;
+ *    then water flows. Water
  *    that enters a square destroys a camp there and hurts the crew if the
  *    square was worked this shift (design doc 5.2: "water enters a worked
  *    square").
@@ -343,7 +422,9 @@ export function stepFluids(state: GameState, events: GameEvent[], phase: CubePha
 
   // 1. Water.
   drainAboveGround(pit, 'water', events);
-  // T13: pumps act here, on `pit.water`, before the water flows.
+  if (anyWater) {
+    runPumps(state, pit, events);
+  }
   for (const move of flow(pit, 'water')) {
     events.push({
       type: 'fluidMoved',

@@ -467,10 +467,12 @@ describe('M2 data (decision note 0014)', () => {
     expect(GAME_DATA.campTools).toEqual({
       drillItem: 'drill',
       sealantItem: 'sealant',
+      sealedBlock: 'sealed',
       scanChargeItem: 'scannerCharge',
       scanChargesPerScan: 1,
-      scanReach: 3,
-      scanRegionRadius: 1,
+      // 3 x 3 squares, 3 blocks under each top (owner question 93).
+      scanHalfWidth: 1,
+      scanDepth: 3,
     });
   });
 
@@ -651,14 +653,16 @@ describe('M2 data (decision note 0014)', () => {
       data.camps.mineMinAp = 0;
       data.camps.upkeepEveryShifts = 0;
       data.campTools.scanChargeItem = 'battery';
-      data.campTools.scanReach = -1;
+      data.campTools.scanDepth = 0;
+      data.campTools.sealedBlock = 'air';
     });
-    expect(problems).toHaveLength(5);
+    expect(problems).toHaveLength(6);
     expect(problems[0]).toContain('unknown item "tent"');
     expect(problems[1]).toContain('camps.upkeepEveryShifts');
     expect(problems[2]).toContain('camps.mineMinAp');
     expect(problems[3]).toContain('unknown item "battery"');
-    expect(problems[4]).toContain('campTools.scanReach');
+    expect(problems[4]).toContain('campTools.scanDepth');
+    expect(problems[5]).toContain('campTools.sealedBlock');
   });
 
   it('reports a bad cost for an M2 action', () => {

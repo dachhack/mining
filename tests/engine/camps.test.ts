@@ -271,6 +271,7 @@ describe('camp squares cannot be mined while the camp stands (design doc 8)', ()
       higherNeighbours: [],
       ap: null,
       campDiscount: null,
+      drillSaving: null,
     });
     const mineable = findActions(state, { type: 'mine' });
     expect(mineable).toHaveLength(49 - 9);

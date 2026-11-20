@@ -1,5 +1,6 @@
 // The rule modules were stubs until M1 tasks 2 to 5, and the M2 action
-// modules are stubs until their tasks (placing a support is built: issue #94). This file pins the one
+// modules are stubs until their tasks (placing a support is built: issue #94;
+// the camp tools: issue #104). This file pins the one
 // thing every later task relies on in the meantime: that the stubs keep the
 // engine usable (nothing legal, nothing thrown), so tasks can be built and
 // tested one at a time in any order.
@@ -27,10 +28,10 @@ describe('actionKey and sameAction', () => {
     { type: 'closeMine', ap: 0 },
     // The M2 actions (decision note 0015).
     { type: 'placeExplosive', target: { x: 1, y: 2, z: 3 }, ap: 1 },
-    { type: 'placePump', target: { x: 1, y: 2, z: 3 }, ap: 1 },
-    { type: 'placeVent', target: { x: 1, y: 2, z: 3 }, ap: 1 },
-    { type: 'seal', target: { x: 1, y: 2, z: 3 }, ap: 1 },
-    { type: 'scan', centre: { x: 1, y: 2, z: 3 }, ap: 2 },
+    { type: 'placePump', x: 1, y: 2, ap: 1 },
+    { type: 'placeVent', x: 1, y: 2, ap: 1 },
+    { type: 'seal', x: 1, y: 2, ap: 1 },
+    { type: 'scan', x: 1, y: 2, ap: 2 },
     { type: 'foundCamp', x: 1, y: 2, ap: 5 },
     { type: 'rest', x: 1, y: 2, ap: 5 },
     { type: 'decommissionCamp', x: 1, y: 2, ap: 1 },
@@ -54,8 +55,8 @@ describe('actionKey and sameAction', () => {
     expect(sameAction(mine, { ...mine, type: 'cutTree' })).toBe(false);
     const craft: Action = { type: 'craft', recipe: 'support', ap: 1 };
     expect(sameAction(craft, { ...craft, recipe: 'fuel' })).toBe(false);
-    const scan: Action = { type: 'scan', centre: { x: 1, y: 2, z: 3 }, ap: 2 };
-    expect(sameAction(scan, { ...scan, centre: { x: 1, y: 2, z: 4 } })).toBe(false);
+    const scan: Action = { type: 'scan', x: 1, y: 2, ap: 2 };
+    expect(sameAction(scan, { ...scan, y: 3 })).toBe(false);
   });
 });
 
@@ -75,8 +76,4 @@ describe('the M2 action modules are stubs (decision note 0015)', () => {
     expect(legalPlaceExplosiveActions(state)).toEqual([]);
   });
 
-  it('campTools offers nothing (until M2-8)', async () => {
-    const { legalCampToolActions } = await import('../../src/engine/actions/campTools');
-    expect(legalCampToolActions(state)).toEqual([]);
-  });
 });

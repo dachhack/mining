@@ -19,8 +19,13 @@
 //
 // Camps (design doc 8; issue #100): a camp's 9 squares cannot be mined while
 // it stands, and a mine near a camp costs 1 AP less (camps.ts).
+//
+// The drill (design doc 3.5 and 7.2; issue #104): while the stockpile holds
+// a drill, a block with a `mineCostWithDrill` (hard rock: 2) costs that. The
+// drill is not used up. The camp discount and the flooded-square surcharge
+// are then applied to that cost, as to any other.
 
-import { BLOCKS, HAZARDS, SURFACE } from '../../data';
+import { BLOCKS, CAMP_TOOLS, HAZARDS, SURFACE } from '../../data';
 import type { MineAction } from '../actionTypes';
 import { collapseSpaceUnder, contentsOn } from '../breach';
 import { campAtSquare, discountedMineCost } from '../camps';
@@ -29,7 +34,7 @@ import { destroyStructure } from '../destroy';
 import type { GameEvent } from '../events';
 import { depthAt, mayMine } from '../heightmap';
 import type { HigherNeighbour } from '../heightmap';
-import { addItem, blockAt, blockDefAt, setBlock } from '../state';
+import { addItem, blockAt, blockDefAt, countItem, setBlock } from '../state';
 import type { GameState } from '../state';
 import { hasStump, hasTree, setStumpAge, setSurfaceKind, surfaceCellAbove } from '../surface/state';
 
@@ -70,6 +75,27 @@ export interface MineCheck {
    * `null` when the mine is not allowed.
    */
   campDiscount: number | null;
+  /**
+   * How many AP the drill took off (design doc 3.5: hard rock costs 2 with a
+   * drill): 0 without a drill, and 0 for a block the drill makes no
+   * difference to. `null` when the mine is not allowed.
+   */
+  drillSaving: number | null;
+}
+
+/** The answer for a mine that is refused. */
+function refusedMine(
+  refusal: MineRefusalReason,
+  higherNeighbours: HigherNeighbour[] = [],
+): MineCheck {
+  return {
+    allowed: false,
+    refusal,
+    higherNeighbours,
+    ap: null,
+    campDiscount: null,
+    drillSaving: null,
+  };
 }
 
 /**
@@ -78,7 +104,8 @@ export interface MineCheck {
  *
  * Everything read here is something the player sees: the tree, the depths of
  * the square and its neighbours, the camps, the top block (which is known
- * whenever no tree hides it), and the water and lava standing on the square.
+ * whenever no tree hides it), the water and lava standing on the square, and
+ * whether the stockpile holds a drill.
  * Nothing below a top block is read.
  *
  * When more than one thing stops the mine, the reason given is the first of:
@@ -91,42 +118,35 @@ export function mineCheck(state: GameState, x: number, y: number): MineCheck {
   // A tree is asked about first, so that the answer for a square under a tree
   // never depends on the block the tree hides.
   if (hasTree(state, surfaceCellAbove({ x, y, z: 0 }))) {
-    return { allowed: false, refusal: 'tree', higherNeighbours: [], ap: null, campDiscount: null };
+    return refusedMine('tree');
   }
   // A camp's squares cannot be mined while it stands. Camps are always seen.
   if (campAtSquare(state, x, y) !== null) {
-    return { allowed: false, refusal: 'camp', higherNeighbours: [], ap: null, campDiscount: null };
+    return refusedMine('camp');
   }
   const level = mayMine(state, x, y);
   if (level.refusal === 'bottom') {
-    return {
-      allowed: false,
-      refusal: 'bottom',
-      higherNeighbours: [],
-      ap: null,
-      campDiscount: null,
-    };
+    return refusedMine('bottom');
   }
   // What stands on the square, in the open: the player sees it.
   const contents = contentsOn(state, x, y);
   if (contents.lava > 0) {
-    return { allowed: false, refusal: 'lava', higherNeighbours: [], ap: null, campDiscount: null };
+    return refusedMine('lava');
   }
   if (!level.allowed) {
-    return {
-      allowed: false,
-      refusal: level.refusal,
-      higherNeighbours: level.higherNeighbours,
-      ap: null,
-      campDiscount: null,
-    };
+    // 'bottom' was answered above, so what is left is the level rule.
+    return refusedMine('neighbourHigher', level.higherNeighbours);
   }
-  const cost = blockDefAt(state, { x, y, z: depth }).mineCost;
-  if (cost === null) {
+  const block = blockDefAt(state, { x, y, z: depth });
+  const plainCost = block.mineCost;
+  if (plainCost === null) {
     // No block with a top face has no mine cost today (only open space and
     // bedrock have none, and neither is ever a top block above the floor).
     throw new Error(`The top block of square (${x}, ${y}) has no mine cost`);
   }
+  // The drill: the stockpile is the player's own, so reading it tells nothing.
+  const hasDrill = countItem(state, CAMP_TOOLS.drillItem) >= 1;
+  const cost = hasDrill && block.mineCostWithDrill !== null ? block.mineCostWithDrill : plainCost;
   // Mining near a camp is cheaper (design doc 4.2 and 8). The camp discount
   // comes first, and its floor of the least a mine may cost; the extra AP for
   // a flooded square is added after it (owner question 107).
@@ -138,20 +158,20 @@ export function mineCheck(state: GameState, x: number, y: number): MineCheck {
     higherNeighbours: [],
     ap: discounted + floodedExtraAp,
     campDiscount: cost - discounted,
+    drillSaving: plainCost - cost,
   };
 }
 
 /**
  * Every `MineAction` the player could take now: one for each square
  * `mineCheck` allows, row by row (y, then x), with `ap` set to the top
- * block's mine cost from `BLOCKS`, less the camp discount near a camp, plus
- * 1 on a flooded square.
+ * block's mine cost from `BLOCKS` (its cost with a drill, if the stockpile
+ * holds one), less the camp discount near a camp, plus 1 on a flooded square.
  *
  * - Does not change `state`. Lists actions as if AP were unlimited; the
  *   dispatcher in index.ts removes the ones that cost too much, which is what
  *   makes a block that costs more than the AP left not mineable this shift
  *   (0005 item 12).
- * - The drill (`mineCostWithDrill`) is not built, so the plain cost is used.
  */
 export function legalMineActions(state: GameState): MineAction[] {
   const actions: MineAction[] = [];

@@ -51,7 +51,7 @@ export interface BlockDef {
   solid: boolean;
   /** AP to mine it. `null` means it cannot be mined (air, bedrock). */
   mineCost: number | null;
-  /** AP to mine it when the avatar has a drill. `null` means the drill makes no difference. */
+  /** AP to mine it while the stockpile holds a drill. `null` means the drill makes no difference. */
   mineCostWithDrill: number | null;
   /** Items the block gives when mined. Empty for none. */
   yields: ItemStack[];
@@ -137,7 +137,7 @@ export interface ActionCostData {
   placeExplosive: number;
   placePump: number;
   placeVent: number;
-  /** Using sealant on a cell (0014 item 12). */
+  /** Using sealant on a square (design doc 4.1). */
   seal: number;
   scan: number;
   /** One camp recipe (0014 item 27). */
@@ -313,15 +313,17 @@ export interface CampData {
   mineDiscountMaxDeeper: number;
 }
 
-/** Numbers of the camp-made tools (0014 item 31). See camps.ts. */
+/** Numbers of the camp-made tools (design doc 7.2). See camps.ts for what each means. */
 export interface CampToolData {
   /** Item ids. */
   drillItem: string;
   sealantItem: string;
+  /** A block id: the block sealant places. */
+  sealedBlock: string;
   scanChargeItem: string;
   scanChargesPerScan: number;
-  scanReach: number;
-  scanRegionRadius: number;
+  scanHalfWidth: number;
+  scanDepth: number;
 }
 
 /** Everything in `src/data`, gathered so that it can be validated in one go. */

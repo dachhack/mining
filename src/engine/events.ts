@@ -41,7 +41,8 @@ export type FluidKind = 'water' | 'lava';
  * - `water`, `lava`: the fluid entered the cell;
  * - `explosion`: the cell exploded, or was beside one that did;
  * - `noHold`: a support with nothing left to stand against (0014 item 6);
- * - `sealed`: sealant turned the cell to rock (0014 item 12).
+ * - `sealed`: kept for old logs; sealant is refused on a square that holds a
+ *   structure, so nothing emits it today.
  */
 export type DestructionCause =
   'rockfall' | 'mined' | 'water' | 'lava' | 'explosion' | 'noHold' | 'sealed';
@@ -133,7 +134,8 @@ export type GameEvent =
    * `units` of the water or lava on a square are gone. `pos` is the cell
    * directly above the square's top block (for a square at ground level, the
    * surface cell above it). 'reachedSurface': it stood above ground level and
-   * drained away; 'turnedToStone': water met lava.
+   * drained away; 'turnedToStone': water met lava; 'pumped': a pump took it
+   * (design doc 6.3); 'sealed': sealant was put on the square (7.2).
    */
   | { type: 'fluidRemoved'; fluid: FluidKind; pos: Vec3; units: number; reason: RemovalReason }
   /**
@@ -156,10 +158,18 @@ export type GameEvent =
   | { type: 'exploded'; cells: Vec3[] }
   /** The structure (its code is `structure`) in the cell `pos` was destroyed. */
   | { type: 'structureDestroyed'; pos: Vec3; structure: number; cause: DestructionCause }
-  /** The open cell `pos` was sealed with sealant and is now solid (0014 item 12). */
+  /**
+   * Sealant was used on a square: the cell `pos`, which was the open cell
+   * directly above its top block, is now sealed rock and the square's new
+   * top (design doc 7.2). The `fluidRemoved` and `gasRemoved` events for what
+   * stood on the square come just before it.
+   */
   | { type: 'cellSealed'; pos: Vec3 }
-  /** The scanner revealed the region centred on `centre` (0014 item 31). */
-  | { type: 'scanned'; centre: Vec3 }
+  /**
+   * A scan was aimed at the square (`x`, `y`) (design doc 7.2). `cells` is
+   * how many blocks it newly revealed; a `blockRevealed` for each follows.
+   */
+  | { type: 'scanned'; x: number; y: number; cells: number }
   /** Crew health was restored by `amount` (resting at a camp) and is now `health`. */
   | { type: 'healthRestored'; amount: number; health: number }
   /**

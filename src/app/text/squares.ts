@@ -1,6 +1,7 @@
-// Acting on a square of the map: "mine x,y", "cut x,y", "support x,y", and
-// the camp actions "camp x,y", "rest x,y" and "decommission x,y", which name
-// a camp by its centre square (issues #86, #94 and #100).
+// Acting on a square of the map: "mine x,y", "cut x,y", "support x,y", the
+// camp actions "camp x,y", "rest x,y" and "decommission x,y", which name a
+// camp by its centre square, and the camp-made tools "pump x,y", "seal x,y"
+// and "scan x,y" (issues #86, #94, #100 and #104).
 //
 // There is no miner: the player names any square. With some 1,700 squares to
 // choose from, these actions are not lines of a list; the play tool takes
@@ -13,7 +14,15 @@
 // view.ts, a square is read only through `knownSquare`, so a sentence can
 // never tell something below a top block.
 
-import { ACTION_COSTS, CAMPS, HAZARDS, SURFACE, blockDefByCode, itemDef } from '../../data';
+import {
+  ACTION_COSTS,
+  CAMPS,
+  CAMP_TOOLS,
+  HAZARDS,
+  SURFACE,
+  blockDefByCode,
+  itemDef,
+} from '../../data';
 import {
   campAtSquare,
   campCentredAt,
@@ -22,6 +31,9 @@ import {
   isSquare,
   knownSquare,
   mineCheck,
+  pumpCheck,
+  scanCheck,
+  sealCheck,
   supportCheck,
   unstableAfterMine,
 } from '../../engine';
@@ -33,8 +45,12 @@ import type {
   GameState,
   CutTreeAction,
   MineAction,
+  PlacePumpAction,
   PlaceSupportAction,
+  PlaceVentAction,
   RestAction,
+  ScanAction,
+  SealAction,
   Square,
   UnstableSquare,
 } from '../../engine';
@@ -44,6 +60,10 @@ export type SquareEntry =
   | MineAction
   | CutTreeAction
   | PlaceSupportAction
+  | PlacePumpAction
+  | PlaceVentAction
+  | SealAction
+  | ScanAction
   | FoundCampAction
   | RestAction
   | DecommissionCampAction;
@@ -257,6 +277,133 @@ export function supportChoice(state: GameState, x: number, y: number): SquareCho
   return allowed({ type: 'placeSupport', x, y, ap: check.ap });
 }
 
+// ---------------------------------------------------------------------------
+// Camp-made tools: pump, sealant, scanner (design doc 7.2; issue #104)
+// ---------------------------------------------------------------------------
+
+/** What placing a pump costs in AP, and what one does, for the lines that say how to. */
+export const PUMP_AP = ACTION_COSTS.placePump;
+export const PUMP_UNITS = HAZARDS.water.pumpUnitsPerShift;
+export const PUMP_REACH = HAZARDS.water.pumpReach;
+/** What sealing a square costs in AP. */
+export const SEAL_AP = ACTION_COSTS.seal;
+/** What a scan costs in AP, and how far down it looks. */
+export const SCAN_AP = ACTION_COSTS.scan;
+export const SCAN_DEPTH = CAMP_TOOLS.scanDepth;
+/** How many squares a scan is wide: 3 for a 3 x 3 patch. */
+export const SCAN_WIDTH = 2 * CAMP_TOOLS.scanHalfWidth + 1;
+
+/**
+ * "pump x,y": the action that places a pump on the square (x, y), or why it
+ * is refused: off the map, no pump to place, a tree, no block left,
+ * something already placed there, lava, a camp, or too little AP.
+ */
+export function pumpChoice(state: GameState, x: number, y: number): SquareChoice {
+  if (!isRunActive(state)) {
+    return refused('The run has ended.');
+  }
+  const offMap = offMapRefusal(state, x, y);
+  if (offMap !== null) {
+    return refused(offMap);
+  }
+  const where = squareText(x, y);
+  const check = pumpCheck(state, x, y);
+  if (check.refusal === 'noItem') {
+    return refused('You have no pump to place: one is crafted at a camp ("craft-pump").');
+  }
+  if (check.refusal === 'tree') {
+    return refused(`A tree stands on ${where}: nothing is placed on a tree.`);
+  }
+  if (check.refusal === 'bottom') {
+    return refused(`${where} has no block left to stand a pump on: it is at the bedrock floor.`);
+  }
+  if (check.refusal === 'occupied') {
+    return refused(`Something is already placed on ${where}: a square holds one thing.`);
+  }
+  if (check.refusal === 'lava') {
+    return refused(`Lava stands on ${where}: nothing is placed on lava.`);
+  }
+  if (check.refusal === 'camp') {
+    return refused(`A camp stands on ${where}: nothing is placed on a camp square.`);
+  }
+  if (check.ap === null) {
+    return refused(`A pump cannot be placed on ${where}.`);
+  }
+  if (check.ap > state.ap) {
+    return refused(`Placing a pump costs ${check.ap} AP and you have ${state.ap} left this shift.`);
+  }
+  return allowed({ type: 'placePump', x, y, ap: check.ap });
+}
+
+/**
+ * "seal x,y": the action that uses one sealant on the square (x, y), or why
+ * it is refused: off the map, no sealant, a square at ground level, a camp,
+ * something placed there, or too little AP.
+ */
+export function sealChoice(state: GameState, x: number, y: number): SquareChoice {
+  if (!isRunActive(state)) {
+    return refused('The run has ended.');
+  }
+  const offMap = offMapRefusal(state, x, y);
+  if (offMap !== null) {
+    return refused(offMap);
+  }
+  const where = squareText(x, y);
+  const check = sealCheck(state, x, y);
+  if (check.refusal === 'noSealant') {
+    return refused('You have no sealant: it is crafted at a camp ("craft-sealant").');
+  }
+  if (check.refusal === 'groundLevel') {
+    return refused(
+      `${where} is at ground level: sealant puts a block on top of a square, and nothing stands above ground level.`,
+    );
+  }
+  if (check.refusal === 'camp') {
+    return refused(`A camp stands on ${where}: a camp square cannot be sealed.`);
+  }
+  if (check.refusal === 'occupied') {
+    return refused(
+      `Something is placed on ${where}, and the sealed rock would bury it: a square that holds something cannot be sealed.`,
+    );
+  }
+  if (check.ap === null) {
+    return refused(`${where} cannot be sealed.`);
+  }
+  if (check.ap > state.ap) {
+    return refused(
+      `Sealing a square costs ${check.ap} AP and you have ${state.ap} left this shift.`,
+    );
+  }
+  return allowed({ type: 'seal', x, y, ap: check.ap });
+}
+
+/**
+ * "scan x,y": the action that aims a scan at the square (x, y), or why it is
+ * refused: off the map, no scanner charge, or too little AP.
+ */
+export function scanChoice(state: GameState, x: number, y: number): SquareChoice {
+  if (!isRunActive(state)) {
+    return refused('The run has ended.');
+  }
+  const offMap = offMapRefusal(state, x, y);
+  if (offMap !== null) {
+    return refused(offMap);
+  }
+  const check = scanCheck(state, x, y);
+  if (check.refusal === 'noCharge') {
+    return refused(
+      'You have no scanner charge: one is crafted at a camp ("craft-scanner-charge"). A scan uses one up.',
+    );
+  }
+  if (check.ap === null) {
+    return refused(`A scan cannot be aimed at ${squareText(x, y)}.`);
+  }
+  if (check.ap > state.ap) {
+    return refused(`A scan costs ${check.ap} AP and you have ${state.ap} left this shift.`);
+  }
+  return allowed({ type: 'scan', x, y, ap: check.ap });
+}
+
 /** The extra AP a mine costs on a square that water stands on (design doc 4.2). */
 export const FLOODED_EXTRA_AP = HAZARDS.water.floodedMineExtraAp;
 
@@ -460,6 +607,9 @@ export const SQUARE_CHOICE_KINDS = [
   'camp',
   'rest',
   'decommission',
+  'pump',
+  'seal',
+  'scan',
 ] as const;
 
 /** One of the words above. `(typeof X)[number]` is "any one element of the list X". */
@@ -471,8 +621,9 @@ const SQUARE_CHOICE_PATTERN = new RegExp(
 
 /**
  * Read a typed choice as a square action: "mine 3,4", "cut 3,4",
- * "support 3,4", "camp 3,4", "rest 3,4" or "decommission 3,4" (a space or a
- * dash after the word, a comma between the numbers). "mine! 3,4" is a mine the player has confirmed: it is taken even
+ * "support 3,4", "camp 3,4", "rest 3,4", "decommission 3,4", "pump 3,4",
+ * "seal 3,4" or "scan 3,4" (a space or a dash after the word, a comma
+ * between the numbers). "mine! 3,4" is a mine the player has confirmed: it is taken even
  * if it would make squares unstable. `null` if the text is not of that form;
  * then it is something else (a listed choice, or a mistake).
  */

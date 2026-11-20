@@ -22,6 +22,7 @@
 
 import {
   CAMPS,
+  CAMP_TOOLS,
   CREW,
   NO_STRUCTURE,
   SHIFT,
@@ -31,6 +32,7 @@ import {
   blockDefByCode,
   itemDef,
 } from '../../data';
+import { belowLines, belowMarksOf } from '../below';
 import {
   campAtSquare,
   campUpkeepIsDue,
@@ -59,7 +61,19 @@ import {
 import { END_SHIFT, listedChoices } from './log';
 import type { LogEntry } from './log';
 import { tooLittleApNote } from './missing';
-import { FLOODED_EXTRA_AP, SUPPORT_AP, patchText, squareText } from './squares';
+import {
+  FLOODED_EXTRA_AP,
+  PUMP_AP,
+  PUMP_REACH,
+  PUMP_UNITS,
+  SCAN_AP,
+  SCAN_DEPTH,
+  SCAN_WIDTH,
+  SEAL_AP,
+  SUPPORT_AP,
+  patchText,
+  squareText,
+} from './squares';
 import {
   MARK_GROUND,
   MARK_STUMP,
@@ -120,6 +134,12 @@ export interface SquareChoicesView {
   campKitsHeld: number;
   /** How many centre squares a camp can be founded round now. */
   campSites: number;
+  /** The camp-made tools in the stockpile (design doc 7.2). */
+  pumpsHeld: number;
+  sealantHeld: number;
+  scanChargesHeld: number;
+  /** True if the stockpile holds a drill. */
+  hasDrill: boolean;
 }
 
 /** The summary printed once the run is over. */
@@ -404,6 +424,12 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   const stumps: string[] = [];
   // Squares whose top block shows a hazard tell: "x3 y4 damp".
   const tells: string[] = [];
+  // Pumps, and what is known under the tops (design doc 7.2).
+  const pumps: string[] = [];
+  const underOre: string[] = [];
+  const underPocket: string[] = [];
+  const underCavern: string[] = [];
+  let anyBelow = false;
   let anyDug = false;
   let anyStump = false;
   let mines = 0;
@@ -429,6 +455,14 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       if (tellsHere.length > 0) {
         tells.push(`${squareText(x, y)} ${tellsHere.join(', ')}`);
       }
+      if (square.top !== null && square.top.structure === STRUCTURES.pump.code) {
+        pumps.push(squareText(x, y));
+      }
+      const marks = belowMarksOf(square);
+      if (marks.any) anyBelow = true;
+      if (marks.ore) underOre.push(squareText(x, y));
+      if (marks.pocket) underPocket.push(squareText(x, y));
+      if (marks.cavern) underCavern.push(squareText(x, y));
       // A stump: say when its tree grows back, which the map cannot show.
       const shifts = shiftsUntilRegrowth(state, { x, y, z: WORLD.surfaceZ });
       if (shifts !== null) {
@@ -447,6 +481,24 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   if (stumps.length > 0) {
     notes.push(
       `Stumps, and the shifts until a tree grows back (1 is the end of this shift): ${stumps.join('; ')}`,
+    );
+  }
+  if (pumps.length > 0) {
+    notes.push(
+      `Pumps on ${pumps.join(', ')}: each takes up to ${PUMP_UNITS} water a shift from the squares ` +
+        `within ${PUMP_REACH} steps of it (the nearest first), before the water flows.`,
+    );
+  }
+  if (anyBelow) {
+    // The marks: what a scan (or a buried top) has shown under the tops.
+    const marked: string[] = [];
+    if (underOre.length > 0) marked.push(`ore under ${underOre.join(', ')}`);
+    if (underPocket.length > 0) marked.push(`a pocket under ${underPocket.join(', ')}`);
+    if (underCavern.length > 0) marked.push(`a cavern under ${underCavern.join(', ')}`);
+    notes.push(
+      'Known under the tops (scanned, or buried after you saw it): ' +
+        `${marked.length === 0 ? 'plain rock only' : marked.join('; ')}. ` +
+        '"look X,Y" lists what you know under a square.',
     );
   }
   notes.push(...campNotes(state));
@@ -608,6 +660,10 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       supportAp: SUPPORT_AP,
       campKitsHeld: countItem(state, CAMPS.kitItem),
       campSites,
+      pumpsHeld: countItem(state, STRUCTURES.pump.placedFromItem),
+      sealantHeld: countItem(state, CAMP_TOOLS.sealantItem),
+      scanChargesHeld: countItem(state, CAMP_TOOLS.scanChargeItem),
+      hasDrill: countItem(state, CAMP_TOOLS.drillItem) > 0,
     },
     choices,
   };
@@ -705,15 +761,83 @@ export function squareChoiceLines(view: PlayerView): string[] {
     squares.campKitsHeld === 0
       ? 'You have no camp kit.'
       : `You have ${squares.campKitsHeld} camp kit${squares.campKitsHeld === 1 ? '' : 's'}; ${siteCount} can take a camp now.`;
+  // The camp-made tools are shown once the player holds one, so that a new
+  // run's list stays short.
+  const tools: string[] = [];
+  if (squares.pumpsHeld > 0) {
+    tools.push(
+      `    pump X,Y     [${PUMP_AP}] Place a pump on square x X, y Y: each shift it takes up to ` +
+        `${PUMP_UNITS} water from the squares within ${PUMP_REACH} steps. You have ${squares.pumpsHeld}.`,
+    );
+  }
+  if (squares.sealantHeld > 0) {
+    tools.push(
+      `    seal X,Y     [${SEAL_AP}] Put a block of sealed rock on square x X, y Y (not at ground level): ` +
+        `it comes up 1 level, and the water, lava and gas on it are destroyed. You have ${squares.sealantHeld} sealant.`,
+    );
+  }
+  if (squares.scanChargesHeld > 0) {
+    tools.push(
+      `    scan X,Y     [${SCAN_AP}] Show the ${SCAN_DEPTH} blocks under each top block of the ` +
+        `${SCAN_WIDTH} x ${SCAN_WIDTH} squares round x X, y Y. You have ${squares.scanChargesHeld} ` +
+        `scanner charge${squares.scanChargesHeld === 1 ? '' : 's'}.`,
+    );
+  }
+  const drill = squares.hasDrill ? ' You have a drill: Hard rock costs 2.' : '';
   return [
     `    mine X,Y     [AP by block: see the legend] Mine the top block of square x X, y Y. ` +
-      `${mineCount} can be mined now.`,
+      `${mineCount} can be mined now.${drill}`,
     `    cut X,Y      [${squares.cutAp}] Cut the tree on square x X, y Y. ${cutCount} can be cut now.`,
     `    support X,Y  [${squares.supportAp}] Place a support on square x X, y Y: ` +
       `it holds that square against slumping. ${held}`,
     `    camp X,Y     [all AP left] Found a camp on the flat 3 x 3 patch whose centre is square x X, y Y ` +
       `(no tree, water, lava, gas or structure on it). ${kits}`,
+    ...tools,
+    '    look X,Y     [-] List what you know of square x X, y Y: its top, and any blocks known under it.',
   ];
+}
+
+/**
+ * "look X,Y": everything the player knows of one square, as lines. This is
+ * the play tool's "hold a square" (design doc 7.2): the top, what stands on
+ * it, and the blocks known under it, which a scan reveals. Read through
+ * `knownSquare` only.
+ */
+export function lookLines(state: GameState, x: number, y: number): string[] {
+  const square = knownSquare(state, x, y);
+  const where = squareText(x, y);
+  let top: string;
+  if (square.tree) {
+    top =
+      square.top === null
+        ? 'a tree; the ground under it is not known'
+        : `a tree, over ${blockMeaning(square.top.block)} (seen before the tree grew back)`;
+  } else if (square.top === null) {
+    top = 'no block left: the bedrock floor';
+  } else {
+    top = blockMeaning(square.top.block);
+  }
+  const lines = [`${where} (${depthName(square.depth)}): ${top}.`];
+  const crackRunning =
+    square.top !== null && square.top.crackTimer !== null && slumpCheck(state, x, y).unstable;
+  const onTop = onTopNote(square, crackRunning);
+  if (onTop !== null) {
+    lines.push(`  ${onTop}.`);
+  }
+  const shown = [...(square.traces ? ['mineral traces'] : []), ...tellNames(square)];
+  if (shown.length > 0) {
+    lines.push(`  The top block shows: ${shown.join(', ')}.`);
+  }
+  const below = belowLines(square);
+  if (below.length === 0) {
+    lines.push('  Nothing is known under the top block: only a scan shows what is below.');
+  } else {
+    lines.push('  Known under the top block:');
+    for (const line of below) {
+      lines.push(`    ${line}`);
+    }
+  }
+  return lines;
 }
 
 /** Turn a view into the text one step prints. Sees the view only, never the state. */
