@@ -112,7 +112,7 @@ describe('the support tool', () => {
     const outcome = tapOutcome(pit(['01'], ['dd']), 1, 0, 'support');
     expect(outcome.entry).toBeNull();
     expect(outcome.lines[1]).toBe(
-      'You have no support to place: craft one first ("Craft Support" on the list of actions).',
+      'You have no support to place: craft one first ("Craft Support" under "Other actions").',
     );
     expect(outcome.marks).toEqual({
       selected: { x: 1, y: 0 },

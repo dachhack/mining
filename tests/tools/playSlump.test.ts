@@ -64,7 +64,7 @@ describe('"support x,y"', () => {
 
   it('is refused with the reason', () => {
     expect(supportChoice(pit(['00']), 0, 0).refusal).toBe(
-      'You have no support to place: craft one first ("Craft Support" on the list of actions).',
+      'You have no support to place: craft one first ("craft-support").',
     );
     const state = buildState({
       layers: [['##.#']],

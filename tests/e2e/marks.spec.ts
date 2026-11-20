@@ -35,7 +35,7 @@ test('every mark is on the map together, at the default zoom and on the whole ma
   const legend = page.getByTestId('map-legend');
   for (const words of [
     'damp stone (blue drips): water under or beside',
-    'pitted rock (dark pits): gas under or beside',
+    'pitted rock (a row of black pits): gas under or beside',
     'warm glow (orange heat lines): lava within 2',
     'hairline glow (pale ring): unstable ore',
     'white corners: the crew worked here this shift',

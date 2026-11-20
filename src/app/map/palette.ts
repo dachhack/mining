@@ -157,8 +157,8 @@ export const MARK_COLOURS = {
   rulerBackground: '#14110f',
   /** Tells on top blocks (design doc 3.7), each with a shape of its own. */
   tellDamp: '#5db4ff',
-  tellPit: '#141a05',
-  tellPitRim: '#d6ee6a',
+  tellPit: '#000000',
+  tellPitRim: '#b9b2a8',
   tellWarm: '#ff8a2a',
   tellHairline: '#fff7c2',
   tellOutline: 'rgba(0, 0, 0, 0.75)',

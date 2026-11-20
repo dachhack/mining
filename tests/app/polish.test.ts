@@ -19,9 +19,11 @@ import {
 } from '../../src/engine/state';
 import { PREPARED_KEY, SAVE_KEY, clearPrepared, loadPrepared } from '../../src/app/previewSession';
 import type { SaveStore } from '../../src/app/previewSession';
+import { tapOutcome } from '../../src/app/map/targets';
 import { buildTile, openingSquare } from '../../src/app/map/tiles';
 import { choiceLabel, describeEvents } from '../../src/app/text/describe';
 import { tooLittleApNote } from '../../src/app/text/missing';
+import { mineChoice } from '../../src/app/text/squares';
 import { buildView, forecastTextLines, hazardsLines } from '../../src/app/text/view';
 import { act, buildState, terrainLayers } from '../engine/helpers';
 import type { BuildStateOptions } from '../engine/helpers';
@@ -326,6 +328,130 @@ describe("the phone's own wording (issue #110)", () => {
   });
 });
 
+describe('refusals on the phone name buttons, not commands (review of PR #111)', () => {
+  it('a tap on a camp square says where Decommission is', () => {
+    const rows = Array.from({ length: 7 }, () => '0'.repeat(7));
+    const state = pit(rows, { camps: [{ pos: { x: 3, y: 3, z: 0 }, foundedShift: 1 }] });
+    const phone = tapOutcome(state, 3, 3).lines.join(' ');
+    expect(phone).toContain(
+      'A camp stands on x3 y3: its squares cannot be mined while it stands. ' +
+        'To mine there, decommission the camp first ("Decommission" under "Other actions").',
+    );
+    expect(phone).not.toContain('decommission 3,3');
+    // The play tool still names the command to type.
+    expect(mineChoice(state, 3, 3).refusal).toContain('("decommission 3,3")');
+  });
+
+  it('a mine of a tree square says to tap the tree', () => {
+    const state = buildState({ layers: [['##'], ['##']], surface: ['T.'] });
+    expect(mineChoice(state, 0, 0, 'phone').refusal).toBe(
+      'A tree stands on x0 y0: cut it first (tap the tree).',
+    );
+    expect(mineChoice(state, 0, 0).refusal).toBe(
+      'A tree stands on x0 y0: cut it first ("cut 0,0").',
+    );
+  });
+
+  it('no refusal a tap can give on the phone holds a typed command', () => {
+    // A field with a camp, a tree, a dug square and nothing in the stockpile:
+    // every tool is tried on every square.
+    const rows = ['0000000', '0000000', '0000000', '0000000', '0000000', '0000010', '0000000'];
+    const state = pit(rows, {
+      camps: [{ pos: { x: 2, y: 2, z: 0 }, foundedShift: 1 }],
+      surface: ['......T', '.......', '.......', '.......', '.......', '.......', '.......'],
+    });
+    const tools = ['dig', 'support', 'camp', 'explosive', 'pump', 'vent', 'seal', 'scan'] as const;
+    // What the play tool types: a word and "x,y", or a craft name.
+    const typed =
+      /"(mine|cut|support|explosive|camp|rest|decommission|pump|vent|seal|scan|look)!? [0-9X]+,[0-9Y]+"|craft-[a-z]/;
+    for (const tool of tools) {
+      for (let y = 0; y < 7; y += 1) {
+        for (let x = 0; x < 7; x += 1) {
+          const text = tapOutcome(state, x, y, tool).lines.join(' ');
+          expect(text, `${tool} on ${x},${y}`).not.toMatch(typed);
+        }
+      }
+    }
+  });
+});
+
+describe('the forecast warns where a hazard will reach the crew (review of PR #111)', () => {
+  it('names the worked squares water, lava, gas and a slump will reach', () => {
+    // Water flows from x0 onto x1; gas stands on x3; lava stands beside x5.
+    const state = pit(['3333333'], {
+      shift: 2,
+      worked: [
+        { x: 1, y: 0 },
+        { x: 3, y: 0 },
+        { x: 5, y: 0 },
+      ],
+    });
+    setWaterOn(state, 0, 0, 3);
+    setGasOn(state, 3, 0, 2);
+    setLavaOn(state, 6, 0, 1, false);
+    const lines = buildView(state, { deepestDepth: 3 }).forecastLines;
+    const danger = lines.find((line) => line.startsWith('THE CREW IS IN DANGER')) ?? '';
+    expect(danger).toContain('x1 y0 (water)');
+    expect(danger).toContain('x3 y0 (gas)');
+    expect(danger).toContain('x5 y0 (lava beside it)');
+    expect(danger).toContain('this line does not say how much');
+    // It is among the first lines, before the flows themselves.
+    expect(lines.indexOf(danger)).toBeLessThan(
+      lines.findIndex((line) => line.startsWith('WATER WILL FLOW')),
+    );
+    // And it is true: ending the shift hurts the crew.
+    expect(endShift(state).state.crew.health).toBeLessThan(state.crew.health);
+  });
+
+  it('a slump that lands on a worked square', () => {
+    // Dirt at the top of a slope that falls 2, cracked and due now; the crew
+    // worked the square at the foot, where the block will land.
+    const worked = pit(
+      ['012'],
+      { cracks: [{ pos: { x: 0, y: 0, z: 0 }, timer: 0 }], worked: [{ x: 2, y: 0 }] },
+      ['ddd'],
+    );
+    const lines = buildView(worked, { deepestDepth: 3 }).forecastLines;
+    expect(lines.join(' ')).toContain('THE PIT WALL SLUMPS');
+    expect(lines[0]).toContain('THE CREW IS IN DANGER where it worked this shift: x2 y0 (a slump)');
+  });
+
+  it('says nothing when no hazard reaches a worked square, or a vent will clear the gas', () => {
+    const calm = pit(['3333333'], { shift: 2, worked: [{ x: 3, y: 0 }] });
+    setWaterOn(calm, 0, 0, 3);
+    expect(buildView(calm, { deepestDepth: 3 }).forecast).not.toContain('IN DANGER');
+
+    const vented = pit(['333'], {
+      worked: [{ x: 0, y: 0 }],
+      structures: [{ pos: { x: 2, y: 0, z: 3 }, structure: 'vent' }],
+    });
+    setGasOn(vented, 0, 0, 2);
+    expect(buildView(vented, { deepestDepth: 3 }).forecast).not.toContain('IN DANGER');
+    expect(endShift(vented).state.crew.health).toBe(vented.crew.health);
+  });
+});
+
+describe('the Hazards list is in order of urgency (review of PR #111)', () => {
+  it('what is due when this shift ends comes first, stopped cracks last', () => {
+    const state = pit(
+      ['0120', '0000'],
+      {
+        cracks: [
+          { pos: { x: 0, y: 0, z: 0 }, timer: 1 }, // due next shift
+          { pos: { x: 3, y: 1, z: 0 }, timer: 0 }, // a stable square: stopped
+        ],
+      },
+      ['d##d', '####'],
+    );
+    setStructure(state, { x: 0, y: 1, z: 0 }, STRUCTURES.explosive.code);
+    armCharge(state, { x: 0, y: 1, z: 0 }, 'explosive');
+    const hazards = buildView(state, { deepestDepth: 2 }).hazards;
+    expect(hazards[0]).toContain('the explosive on x0 y1 goes off at the end of this shift');
+    expect(hazards[1]).toContain('x0 y0 is cracked: due at the end of the next shift');
+    expect(hazards[2]).toContain('x3 y1 is cracked, countdown stopped at 1');
+  });
+});
+
 describe('a prepared state (for tests and screenshots)', () => {
   function memoryStore(): SaveStore & { data: Map<string, string> } {
     const data = new Map<string, string>();
@@ -359,6 +485,14 @@ describe('a prepared state (for tests and screenshots)', () => {
     store.setItem(PREPARED_KEY, '{"not":"a state"}');
     expect(loadPrepared(store)).toBeNull();
     store.setItem(PREPARED_KEY, 'not json');
+    expect(loadPrepared(store)).toBeNull();
+  });
+
+  it('is dropped if it cannot be shown: an item the data does not have', () => {
+    const saved = serialise(pit(['012']));
+    saved.stockpile = { unobtainium: 3 };
+    const store = memoryStore();
+    store.setItem(PREPARED_KEY, JSON.stringify(saved));
     expect(loadPrepared(store)).toBeNull();
   });
 

@@ -11,6 +11,7 @@ import { ENGINE_VERSION, deserialise, knownSquare } from '../engine';
 import type { SerialisedState } from '../engine';
 import { LOG_FORMAT, logFromText, logToText, newSession, replayLog } from './text/log';
 import type { Session } from './text/log';
+import { buildView } from './text/view';
 
 /** The `localStorage` key the run is saved under. */
 export const SAVE_KEY = 'mining-game.preview.run';
@@ -169,6 +170,10 @@ export function loadPrepared(store: SaveStore | null): Session | null {
         deepestDepth = Math.max(deepestDepth, knownSquare(state, x, y).depth);
       }
     }
+    // `deserialise` checks the shape, not every value (an item the data does
+    // not have, say). Build the view once here: if that throws, the state
+    // cannot be shown, and it is dropped like a saved run that does not replay.
+    buildView(state, { deepestDepth, audience: 'phone' });
     return {
       log: {
         format: LOG_FORMAT,

@@ -52,6 +52,7 @@ import {
   choiceName,
   contentsNames,
   crackDueText,
+  crewDangerLine,
   depthName,
   describeChoice,
   forecastFlowLines,
@@ -631,7 +632,17 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   // The countdowns the player can read: every cracked square (design doc
   // 6.1), with when it falls and where to; then every placed explosive and
   // every armed unstable ore block, with the squares of its blast (6.6).
-  const hazards = preview.countdowns.map((countdown) => {
+  // The most urgent first: what happens when this shift ends, then the
+  // later countdowns in the order they are due, then the stopped ones. The
+  // sort is stable, so equals keep the engine's order.
+  const urgency = (countdown: (typeof preview.countdowns)[number]): number => {
+    if (countdown.kind === 'slump' && !countdown.running) {
+      return Number.MAX_SAFE_INTEGER;
+    }
+    return countdown.inShifts;
+  };
+  const countdowns = [...preview.countdowns].sort((a, b) => urgency(a) - urgency(b));
+  const hazards = countdowns.map((countdown) => {
     const where = squareText(countdown.pos.x, countdown.pos.y);
     if (countdown.kind === 'explosive') {
       return (
@@ -696,6 +707,12 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     // What step (c) will do: gas spreads, charges and armed ore go off, gas
     // burns (design doc 6.5 and 6.6).
     ranked.push(...forecastGasLines(state, preview.gas));
+    // A warning where a slump, water, lava or gas will reach a square the
+    // crew worked: the engine's forecast does not report that damage yet.
+    const danger = crewDangerLine(state, preview.slumps, preview.flows, preview.gas);
+    if (danger !== null) {
+      ranked.push(danger);
+    }
     if (state.crew.restingAt !== null && state.crew.health < CREW.startHealth) {
       ranked.push({
         rank: FORECAST_RANK.relief,

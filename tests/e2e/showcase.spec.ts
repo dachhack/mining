@@ -26,6 +26,16 @@ test('with a camp standing: the vent tool places a vent, the crew rests, the ven
   await expect(rest.locator('.choice-meta')).toHaveText('5 AP');
   await expect(page.locator('[data-choice="craft-sealant"]')).toBeVisible();
 
+  // A tap on a camp square is refused in the phone's words: the button, not
+  // the play tool's "decommission 12,12" (review of PR #111).
+  await canvas.scrollIntoViewIfNeeded();
+  await tapSquare(page, canvas, 12, 12);
+  await expect(outcome).toContainText(
+    'decommission the camp first ("Decommission" under "Other actions")',
+  );
+  await expect(outcome).not.toContainText('decommission 12,12');
+  await expect(gauges).toContainText('AP 5/5');
+
   // The vent tool: the first tap marks the range, the second places the vent.
   await expect(ventTool).toHaveText('Vent (1)');
   await ventTool.click();

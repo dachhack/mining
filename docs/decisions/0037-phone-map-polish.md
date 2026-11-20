@@ -13,7 +13,7 @@ One rule for every mark: it differs from every other in colour **and** in shape,
 | What                               | Mark                                                   | Before                                           |
 | ---------------------------------- | ------------------------------------------------------ | ------------------------------------------------ |
 | Damp stone (water under or beside) | two blue drips from the top edge                       | text only                                        |
-| Pitted rock (gas under or beside)  | three dark pits with a pale rim                        | text only                                        |
+| Pitted rock (gas under or beside)  | three black pits in a row                              | text only                                        |
 | Warm glow (lava within 2)          | three orange heat lines rising from the bottom edge    | text only                                        |
 | Hairline glow (unstable ore)       | a thin pale ring round the ore's cross                 | text only                                        |
 | Worked this shift (question 95)    | four white corners                                     | not marked                                       |
@@ -27,7 +27,7 @@ One rule for every mark: it differs from every other in colour **and** in shape,
 | Lava flows here                    | an orange flame with two tongues and a yellow heart    | a pale triangle, the shape of the camp's tent    |
 | Gas spreads here                   | three bubbles, no wash                                 | one ring                                         |
 
-- **Order.** A square is drawn from the bottom up: rock, tells, a camp, what stands on it, the cheaper-area line and the worked corners, traces and scan marks, a structure or a charge, what is coming, the blast frame, and last the crack and the number badges, which nothing covers.
+- **Order.** A square is drawn from the bottom up: rock, tells, a camp, what stands on it, the cheaper-area line and the worked corners, traces and scan marks, a structure or a charge, what is coming, the blast frame, the worked corners (over the frame: a square that is both is the one that matters most), and last the crack and the number badges, which nothing covers.
 - **The whole-map zoom.** Below 16 pixels a square the numbers are left out (they cannot be read) and the "coming" marks are drawn bigger. Colour and shape still tell each mark apart there.
 - **Gas has no number** (question 127a). The rules read only whether a square is gassy; settled gas swaps a unit between level squares every shift (question 120), so the number flickered and said nothing. Inspect, or a hold, says the units.
 - **Rulers.** A strip along the top and one down the left name the squares' x and y (every square at the default zoom, every fifth on the whole map), so "x17 y12" in the text can be found. The squares start 14 pixels in; the canvas says so in `data-origin-px` for the tests.
@@ -37,7 +37,7 @@ One rule for every mark: it differs from every other in colour **and** in shape,
 ## The text
 
 - **The forecast is a list**: one line for each thing that will happen when the shift ends, the most dangerous first. The order is a table in `describe.ts` (`FORECAST_RANK`): the run ending; the crew hurt or a camp lost; explosions; slumps; lava; water; gas; things destroyed; new cracks; good news (pumps, vents, rest, regrowth); the fuel. It is presentation, not a rule, so it lives with the views. The sentences are the ones the views already had. `PlayerView.forecastLines` holds them; `forecast` is the same lines joined.
-- **The Hazards list** has one line for each hazard. A running crack is "due at the end of this shift", not "falls": an earlier slump of the same end of shift can fill the hole first, and the forecast's "THE PIT WALL SLUMPS" names the ones that will fall. After the countdowns it says how many squares water, lava and gas stand on, so that a pit with gas in it never reads "Hazards: none known".
+- **The Hazards list** has one line for each hazard, the most urgent first: what is due when this shift ends, then later countdowns, then stopped cracks. A running crack is "due at the end of this shift", not "falls": an earlier slump of the same end of shift can fill the hole first, and the forecast's "THE PIT WALL SLUMPS" names the ones that will fall. After the countdowns it says how many squares water, lava and gas stand on, so that a pit with gas in it never reads "Hazards: none known".
 - **A full lava source** is one sentence ("is full to ground level: the 1 lava it pours will drain away") where there were two that read as a contradiction.
 - **The phone's own wording.** `buildView`, `describeEvents` and `tooLittleApNote` take an `audience` (`'playTool'`, the default, or `'phone'`). On the phone: the camp note and the line after founding a camp name the buttons under "Other actions", not `rest 17,12`; mineral traces are "three gold dots", not "D, % or h"; a choice that costs too much AP is named by its button ("Craft Support (2 AP)"); the small print of a button is its cost, without the typed name. The phone's notes leave out what its map draws (what stands on a square, tells, pumps, vents, the cheaper squares). Refusals that named a craft command now name the recipe as both views list it ("Craft Support" on the list of actions).
 - **The play tool** prints the same two lists, a heading and one indented line each, and its help says so. Its tells keep their short names in sentences ("Stone, damp"); the note under its map ties them to the design doc's names ("damp: damp stone, ...").
@@ -49,7 +49,15 @@ One rule for every mark: it differs from every other in colour **and** in shape,
 - **e2e:** fingers drag and pinch the map (sent through the browser's touch input); the vent path on the prepared state; every mark, its legend entry and the forecast's order on the prepared state. **Unit:** the new tile fields, the opening square, the forecast's order, the phone's wording, and the tells data table (issue #88 item 5).
 - **CI** keeps the Playwright browser in a cache keyed by the Playwright version, and installs Chromium's system packages only if the browser does not start.
 
+## After the review of PR #111
+
+- **Pitted rock** was three dark pits with a pale green rim, and read as the three bubbles of "gas spreads here". It is three black dots in a row now: filled, in a line and without colour, where the bubbles are hollow, clustered and green.
+- **Refusals on the phone.** A tap on a camp square said `("decommission 12,12")`. The functions of `squares.ts` that word a refusal take the `audience` too; `targets.ts`, which is the phone's, asks for `'phone'`. So the phone names a button and the play tool keeps every command it had (the first version of this PR had made the craft hints one shared sentence, which cost the play tool its typed names).
+- **"THE CREW IS IN DANGER".** The forecast said "THE CREW WORKED THERE" for explosions only, so a forecast with no such line read as safe; the reviewer lost a run that way. There is now one line, among the first, naming each worked square that a slump, water, lava or gas will reach. It is a warning with no number: it is made from the forecast's own events and what stands in the open, and the view does not work the damage rules out a second time. A vent's squares are left out for gas.
+- **A prepared state that cannot be shown** (an item the data does not have) is dropped when it is loaded, like a saved run that does not replay; it used to leave the page half built.
+
 ## Not done here
 
-- The crew's danger is forecast for explosions only (as before). Whether a slump, water, lava or gas will hurt the crew is shown by the worked corners on the map, not by a line of the forecast: that needs the engine's forecast to report the damage, which is an engine change.
+- **The forecast does not say how much health the crew will lose** to a slump, water, lava or gas, only where it is in danger. A number needs the engine's forecast to report damage: an engine change, and its own task. It should be done before the next playtest round.
+- The prepared-state hook is in every build. Before a public release it should be behind a build flag that the e2e server sets (the e2e tests run against the production build).
 - The secondary 3D view of design doc 11 is M3.

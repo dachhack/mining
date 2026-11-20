@@ -697,7 +697,7 @@ function drawBlast(ctx: CanvasRenderingContext2D, x: number, y: number, c: numbe
  * under whatever stands on the square. Each has a colour of the hazard it
  * warns of and a shape of its own:
  * - damp stone (water under or beside): two blue drips from the top edge;
- * - pitted rock (gas under or beside): three dark pits with a pale rim;
+ * - pitted rock (gas under or beside): three black pits in a row;
  * - warm glow (lava within 2): three orange heat lines rising from the bottom;
  * - hairline glow (unstable ore): a thin pale ring round the ore's cross.
  */
@@ -745,17 +745,17 @@ function drawTells(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
     ctx.restore();
   }
   if (tells.pitted) {
+    // Holes in the rock: three black dots in a row, each with a hair-thin
+    // pale grey edge so that it shows on dark rock. Filled, in a row and
+    // without colour, where gas that is arriving is hollow green bubbles in
+    // a cluster (issue #110, review).
     ctx.save();
     ctx.fillStyle = MARK_COLOURS.tellPit;
     ctx.strokeStyle = MARK_COLOURS.tellPitRim;
-    ctx.lineWidth = Math.max(1, c / 18);
-    for (const [fx, fy] of [
-      [0.28, 0.52],
-      [0.52, 0.72],
-      [0.72, 0.48],
-    ] as const) {
+    ctx.lineWidth = Math.max(0.6, c / 36);
+    for (const fx of [0.26, 0.5, 0.74]) {
       ctx.beginPath();
-      ctx.arc(x + fx * c, y + fy * c, Math.max(1.6, c * 0.085), 0, Math.PI * 2);
+      ctx.arc(x + fx * c, y + 0.62 * c, Math.max(1.6, c * 0.095), 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
     }
@@ -921,10 +921,10 @@ function drawCrack(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
 
 /**
  * Everything drawn over a tile's rock, from the bottom up: the tells on the
- * rock; a camp; water, lava and gas; the edge of the cheaper area and the
- * corners of a worked square; mineral traces and scan marks; a structure or
- * a charge; what is coming when the shift ends; and last the crack and the
- * number badges, which nothing may cover.
+ * rock; a camp; water, lava and gas; the edge of the cheaper area; mineral
+ * traces and scan marks; a structure or a charge; what is coming when the
+ * shift ends; the blast frame and, over it, the corners of a worked square;
+ * and last the crack and the number badges, which nothing may cover.
  */
 function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number, c: number) {
   const mid = c / 2;
@@ -959,9 +959,6 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
     drawGas(ctx, x, y, c);
   }
   drawCheaperEdge(ctx, tile, x, y, c);
-  if (tile.worked) {
-    drawWorked(ctx, x, y, c);
-  }
   if (tile.traced) {
     // Three small gold dots along the top edge: mineral traces seen on this rock.
     ctx.save();
@@ -995,6 +992,11 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
   }
   if (tile.blast) {
     drawBlast(ctx, x, y, c);
+  }
+  // The worked corners go over the blast frame: a square that is both is the
+  // one that matters most, and must show both.
+  if (tile.worked) {
+    drawWorked(ctx, x, y, c);
   }
   drawCrack(ctx, tile, x, y, c);
   drawFluidBadge(ctx, tile, x, y, c);
@@ -1105,7 +1107,7 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
   add(
     (t) => t.tells.pitted,
     { tells: { ...NO_TELLS, pitted: true } },
-    'pitted rock (dark pits): gas under or beside',
+    'pitted rock (a row of black pits): gas under or beside',
   );
   add(
     (t) => t.tells.warm,

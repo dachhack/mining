@@ -719,6 +719,103 @@ export function forecastGasLines(state: GameState, gas: GameEvent[]): RankedLine
 }
 
 /**
+ * A warning for the forecast: the squares the crew worked this shift that a
+ * slump, water, lava or gas will reach when the shift ends (design doc 5.2),
+ * or `null` if there is none. Explosions are left out: their own lines say
+ * what the crew loses.
+ *
+ * It is a warning, not a sum. The engine's forecast does not report damage
+ * to the crew yet, and the view must not work the rules out a second time,
+ * so the line names the squares and the hazards and gives no number. Without
+ * it, a forecast with no word of the crew read as "safe" (review of PR #111).
+ *
+ * What counts, from the forecast's own events and what stands in the open:
+ * - a slump that falls from a worked square or comes to rest on one;
+ * - water that flows onto a worked square;
+ * - lava that stands on, or flows onto, a worked square or one beside it;
+ * - gas that stands on, or spreads onto, a worked square no vent will clear.
+ * The worked squares are the player's own actions, so nothing hidden is read.
+ */
+export function crewDangerLine(
+  state: GameState,
+  slumps: GameEvent[],
+  flows: GameEvent[],
+  gas: GameEvent[],
+): RankedLine | null {
+  // Worked square "x,y" -> the hazards that will reach it, in the order found.
+  const reasons = new Map<string, { x: number; y: number; hazards: string[] }>();
+  const note = (x: number, y: number, hazard: string): void => {
+    if (!isSquare(state, x, y) || !isWorked(state, x, y)) {
+      return;
+    }
+    const key = `${x},${y}`;
+    const entry = reasons.get(key) ?? { x, y, hazards: [] };
+    if (!entry.hazards.includes(hazard)) {
+      entry.hazards.push(hazard);
+    }
+    reasons.set(key, entry);
+  };
+  /** Lava on (x, y) threatens that square and the four beside it. */
+  const noteLava = (x: number, y: number): void => {
+    note(x, y, 'lava');
+    for (const step of SQUARE_STEPS) {
+      note(x + step.dx, y + step.dy, 'lava beside it');
+    }
+  };
+
+  for (const event of slumps) {
+    if (event.type === 'blockFell') {
+      note(event.from.x, event.from.y, 'a slump');
+      note(event.to.x, event.to.y, 'a slump');
+    }
+  }
+  for (const event of flows) {
+    if (event.type === 'fluidMoved' && event.fluid === 'water') {
+      note(event.to.x, event.to.y, 'water');
+    } else if (event.type === 'fluidMoved' && event.fluid === 'lava') {
+      noteLava(event.to.x, event.to.y);
+    }
+  }
+  // The squares a vent will clear: gas there does not reach the crew.
+  const vented = new Set<string>();
+  for (const event of gas) {
+    if (event.type === 'gasRemoved' && event.reason === 'vented') {
+      vented.add(`${event.pos.x},${event.pos.y}`);
+    }
+  }
+  for (const event of gas) {
+    if (event.type === 'gasMoved' && !vented.has(`${event.to.x},${event.to.y}`)) {
+      note(event.to.x, event.to.y, 'gas');
+    }
+  }
+  // What stands in the open now, where the crew worked.
+  for (let y = 0; y < state.size.y; y += 1) {
+    for (let x = 0; x < state.size.x; x += 1) {
+      const contents = knownSquare(state, x, y).contents;
+      if (contents.lava > 0) {
+        noteLava(x, y);
+      }
+      if (contents.gas > 0 && !vented.has(`${x},${y}`)) {
+        note(x, y, 'gas');
+      }
+    }
+  }
+  if (reasons.size === 0) {
+    return null;
+  }
+  const parts: string[] = [];
+  for (const entry of reasons.values()) {
+    parts.push(`${squareText(entry.x, entry.y)} (${entry.hazards.join(', ')})`);
+  }
+  return {
+    rank: FORECAST_RANK.crewOrCamp,
+    text:
+      `THE CREW IS IN DANGER where it worked this shift: ${parts.join('; ')}. ` +
+      'A hazard that reaches a worked square hurts the crew; this line does not say how much.',
+  };
+}
+
+/**
  * The squares gas spread onto in a step, which had none before: "x3 y4 (2)".
  * `after` is the state the step led to. A square is new when all the gas now
  * on it arrived in this step. (Gas that reached a square and burnt in the
