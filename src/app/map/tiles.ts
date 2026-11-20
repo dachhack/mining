@@ -33,6 +33,12 @@ export type TileKind = 'block' | 'hidden' | 'floor';
 /** A mark drawn on top of a tile. */
 export type StructureMark = 'support' | 'other';
 
+/**
+ * Something on a square that goes off when this shift ends (design doc 6.6):
+ * a placed explosive, or unstable ore that a mine beside it has armed.
+ */
+export type ChargeMark = 'explosive' | 'armedOre';
+
 /** Which of a square's four neighbours are higher than it (they cast a shadow on it). */
 export interface HigherSides {
   north: boolean;
@@ -74,6 +80,21 @@ export interface Tile {
   waterComing: boolean;
   /** True if lava will flow onto the square when this shift ends. */
   lavaComing: boolean;
+  /** Units of gas standing on the square (design doc 6.5); 0 for none. */
+  gas: number;
+  /**
+   * True if the square has no gas now and gas will spread onto it when this
+   * shift ends. A square that already has gas is never marked: settled gas
+   * goes on shifting units between equal neighbours, and that is not news.
+   */
+  gasComing: boolean;
+  /** A placed explosive or armed unstable ore on the square, or `null`. */
+  charge: ChargeMark | null;
+  /**
+   * True if the square will be in an explosion when this shift ends: in the
+   * blast of a charge or of armed ore, or one of the squares whose gas burns.
+   */
+  blast: boolean;
   /**
    * What is on the surface of a square at ground level: a tree (it hides the
    * block), or a stump, a path, a meadow or an outcrop (drawn faintly over
@@ -117,8 +138,17 @@ function surfaceMark(code: number): SurfaceMark {
 
 function structureMark(code: number): StructureMark | null {
   if (code === STRUCTURES.support.code) return 'support';
+  // A placed explosive has its own mark (`Tile.charge`), not the plain one.
+  if (code === STRUCTURES.explosive.code) return null;
   // Any other structure (pumps, vents, ...) gets a plain mark for now.
   return code === 0 ? null : 'other';
+}
+
+/** The mark for what is armed on a top block (`KnownCell.armed`). */
+function chargeMark(armed: 'unstableOre' | 'explosive' | null): ChargeMark | null {
+  if (armed === 'explosive') return 'explosive';
+  if (armed === 'unstableOre') return 'armedOre';
+  return null;
 }
 
 /**
@@ -138,27 +168,51 @@ function isHigher(state: GameState, x: number, y: number, depth: number): boolea
 }
 
 /**
- * The squares water and lava will flow onto when this shift ends, as sets of
- * "x,y" keys (design doc 11: the map shows where they flow next).
+ * What the coming cube phase will bring to which squares, as sets of "x,y"
+ * keys (design doc 11: the map shows where things flow and what goes off):
+ * - `water`, `lava`: the squares each will flow onto;
+ * - `gas`: the squares gas will be given to (`buildTile` marks only those
+ *   that have none now);
+ * - `blast`: the squares of every explosion: the blast of each charge and of
+ *   each armed ore block, and the squares whose gas will burn.
  */
 export interface ComingFlows {
   water: Set<string>;
   lava: Set<string>;
+  gas: Set<string>;
+  blast: Set<string>;
 }
 
 /**
- * Where water and lava will flow in the coming cube phase, from the engine's
- * own forecast (`previewCubePhase`), which reads only what the player sees.
- * Both sets are empty once the run has ended: there is no shift to forecast.
+ * Where water, lava and gas will go and what will explode in the coming cube
+ * phase, from the engine's own forecast (`previewCubePhase`), which reads only what the player sees.
+ * Every set is empty once the run has ended: there is no shift to forecast.
  */
 export function comingFlows(state: GameState): ComingFlows {
-  const coming: ComingFlows = { water: new Set(), lava: new Set() };
+  const coming: ComingFlows = {
+    water: new Set(),
+    lava: new Set(),
+    gas: new Set(),
+    blast: new Set(),
+  };
   if (!isRunActive(state)) {
     return coming;
   }
-  for (const event of previewCubePhase(state).flows) {
+  const forecast = previewCubePhase(state);
+  for (const event of forecast.flows) {
     if (event.type === 'fluidMoved') {
       coming[event.fluid].add(`${event.to.x},${event.to.y}`);
+    }
+  }
+  // Step (c): gas that spreads, and everything that explodes. The events
+  // name a square by the cell above its top block; only x and y are used.
+  for (const event of forecast.gas) {
+    if (event.type === 'gasMoved') {
+      coming.gas.add(`${event.to.x},${event.to.y}`);
+    } else if (event.type === 'exploded') {
+      for (const cell of event.cells) {
+        coming.blast.add(`${cell.x},${cell.y}`);
+      }
     }
   }
   return coming;
@@ -183,6 +237,9 @@ export function buildTile(
     lavaSource: square.contents.lavaSource,
     waterComing: flows.water.has(`${x},${y}`),
     lavaComing: flows.lava.has(`${x},${y}`),
+    gas: square.contents.gas,
+    gasComing: square.contents.gas === 0 && flows.gas.has(`${x},${y}`),
+    blast: flows.blast.has(`${x},${y}`),
   };
   const higher: HigherSides = {
     north: isHigher(state, x, y - 1, square.depth),
@@ -206,6 +263,7 @@ export function buildTile(
       surface: 'tree',
       higher,
       ...standing,
+      charge: null,
       camp: false,
       cheaper: false,
     };
@@ -227,6 +285,7 @@ export function buildTile(
       surface: null,
       higher,
       ...standing,
+      charge: null,
       camp: false,
       cheaper: false,
     };
@@ -248,6 +307,8 @@ export function buildTile(
     surface,
     higher,
     ...standing,
+    // Armed charges are on top blocks the player sees (design doc 3.4).
+    charge: chargeMark(square.top.armed),
     camp,
     cheaper: !camp && mineDiscountAt(state, x, y) > 0,
   };

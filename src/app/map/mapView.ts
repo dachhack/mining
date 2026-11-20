@@ -405,7 +405,133 @@ function drawComing(
   ctx.restore();
 }
 
-/** The marks drawn over a tile: a camp, cheaper mining, water and lava, mineral traces, a structure and a crack. */
+/**
+ * Gas on a tile (design doc 6.5): a green-yellow wash, three small rings
+ * (bubbles: neither waves nor flames, so gas never differs from water and
+ * lava by colour alone), and the units half-way down the left edge, under
+ * the place where water or lava shows its number.
+ */
+function drawGas(
+  ctx: CanvasRenderingContext2D,
+  units: number,
+  x: number,
+  y: number,
+  c: number,
+): void {
+  ctx.save();
+  ctx.fillStyle = MARK_COLOURS.gas;
+  ctx.fillRect(x, y, c, c);
+  ctx.strokeStyle = MARK_COLOURS.gasInk;
+  ctx.lineWidth = Math.max(1, c / 16);
+  for (const [fx, fy, fr] of [
+    [0.62, 0.3, 0.1],
+    [0.8, 0.52, 0.07],
+    [0.5, 0.56, 0.08],
+  ] as const) {
+    ctx.beginPath();
+    ctx.arc(x + fx * c, y + fy * c, fr * c, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.font = `bold ${Math.max(8, Math.round(c * 0.42))}px sans-serif`;
+  // Half-way down the left edge, a little way in: clear of the depth number
+  // (bottom right), of water's and lava's units (top left), and inside the
+  // dashed frame of a blast.
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = Math.max(2, c / 10);
+  ctx.strokeStyle = MARK_COLOURS.fluidOutline;
+  ctx.strokeText(String(units), x + 0.14 * c, y + 0.5 * c);
+  ctx.fillStyle = MARK_COLOURS.gasInk;
+  ctx.fillText(String(units), x + 0.14 * c, y + 0.5 * c);
+  ctx.restore();
+}
+
+/** "Gas spreads onto this square when the shift ends": one ring in the middle, in the gas colour. */
+function drawGasComing(ctx: CanvasRenderingContext2D, x: number, y: number, c: number): void {
+  ctx.save();
+  for (const [colour, width] of [
+    [MARK_COLOURS.fluidOutline, Math.max(3, c / 7)],
+    [MARK_COLOURS.gasInk, Math.max(1.5, c / 12)],
+  ] as const) {
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.arc(x + 0.5 * c, y + 0.5 * c, 0.17 * c, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * A charge that goes off when the shift ends. A placed explosive is a round
+ * red charge with a fuse; armed unstable ore is a red eight-pointed
+ * starburst. Both have a dark edge so that they show on any rock.
+ */
+function drawCharge(
+  ctx: CanvasRenderingContext2D,
+  charge: 'explosive' | 'armedOre',
+  x: number,
+  y: number,
+  c: number,
+): void {
+  const cx = x + 0.5 * c;
+  const cy = y + 0.55 * c;
+  ctx.save();
+  ctx.fillStyle = MARK_COLOURS.charge;
+  ctx.strokeStyle = MARK_COLOURS.fluidOutline;
+  ctx.lineWidth = Math.max(1, c / 14);
+  ctx.beginPath();
+  if (charge === 'explosive') {
+    ctx.arc(cx, cy, 0.22 * c, 0, Math.PI * 2);
+  } else {
+    // Sixteen points round the middle, long and short in turn.
+    for (let point = 0; point < 16; point += 1) {
+      const radius = (point % 2 === 0 ? 0.34 : 0.14) * c;
+      const angle = (point * Math.PI) / 8;
+      const px = cx + radius * Math.sin(angle);
+      const py = cy - radius * Math.cos(angle);
+      if (point === 0) {
+        ctx.moveTo(px, py);
+      } else {
+        ctx.lineTo(px, py);
+      }
+    }
+    ctx.closePath();
+  }
+  ctx.fill();
+  ctx.stroke();
+  if (charge === 'explosive') {
+    // The fuse: a short line up and to the right, with a bright tip.
+    ctx.strokeStyle = MARK_COLOURS.chargeInk;
+    ctx.lineWidth = Math.max(1.5, c / 11);
+    ctx.beginPath();
+    ctx.moveTo(cx + 0.12 * c, cy - 0.18 * c);
+    ctx.lineTo(cx + 0.28 * c, cy - 0.38 * c);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * "This square will be in an explosion when the shift ends": a dashed yellow
+ * frame just inside the square, dark underneath.
+ */
+function drawBlast(ctx: CanvasRenderingContext2D, x: number, y: number, c: number): void {
+  const inset = Math.max(2, c * 0.1);
+  ctx.save();
+  for (const [colour, width] of [
+    [MARK_COLOURS.fluidOutline, Math.max(3, c / 7)],
+    [MARK_COLOURS.blast, Math.max(1.5, c / 12)],
+  ] as const) {
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = width;
+    ctx.setLineDash([c * 0.18, c * 0.12]);
+    ctx.strokeRect(x + inset, y + inset, c - 2 * inset, c - 2 * inset);
+  }
+  ctx.restore();
+}
+
+/** The marks drawn over a tile: a camp, cheaper mining, water, lava and gas, mineral traces, a structure, a charge, a blast and a crack. */
 function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number, c: number) {
   const mid = c / 2;
   if (tile.camp) {
@@ -451,6 +577,12 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
   if (tile.lavaComing) {
     drawComing(ctx, 'lava', x, y, c);
   }
+  if (tile.gas > 0) {
+    drawGas(ctx, tile.gas, x, y, c);
+  }
+  if (tile.gasComing) {
+    drawGasComing(ctx, x, y, c);
+  }
   if (tile.traced) {
     // Three small gold dots along the top edge: mineral traces seen on this rock.
     ctx.fillStyle = MARK_COLOURS.traces;
@@ -474,6 +606,12 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
     ctx.strokeStyle = MARK_COLOURS.otherStructure;
     ctx.lineWidth = Math.max(1.5, c / 10);
     ctx.strokeRect(x + 0.25 * c, y + 0.25 * c, 0.5 * c, 0.5 * c);
+  }
+  if (tile.charge !== null) {
+    drawCharge(ctx, tile.charge, x, y, c);
+  }
+  if (tile.blast) {
+    drawBlast(ctx, x, y, c);
   }
   if (tile.crack !== null) {
     // A jagged line from corner to corner, dark underneath so that it shows
@@ -535,6 +673,10 @@ function sampleTile(overrides: Partial<Tile>): Tile {
     lavaSource: false,
     waterComing: false,
     lavaComing: false,
+    gas: 0,
+    gasComing: false,
+    charge: null,
+    blast: false,
     surface: null,
     higher: { north: false, east: false, south: false, west: false },
     camp: false,
@@ -580,9 +722,19 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
   let lavaSource = false;
   let waterComing = false;
   let lavaComing = false;
+  let gas = false;
+  let gasComing = false;
+  let explosive = false;
+  let armedOre = false;
+  let blast = false;
   let camp = false;
   let cheaper = false;
   for (const tile of tiles) {
+    if (tile.gas > 0) gas = true;
+    if (tile.gasComing) gasComing = true;
+    if (tile.charge === 'explosive') explosive = true;
+    if (tile.charge === 'armedOre') armedOre = true;
+    if (tile.blast) blast = true;
     if (tile.camp) camp = true;
     if (tile.cheaper) cheaper = true;
     if (tile.water > 0) water = true;
@@ -696,6 +848,46 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
       legendEntry(
         sampleTile({ depth: 2, lavaComing: true }),
         'flame: lava flows here when this shift ends',
+      ),
+    );
+  }
+  if (gas) {
+    entries.push(
+      legendEntry(
+        sampleTile({ depth: 2, gas: 4 }),
+        'gas (rings): the number is its units; it hurts a crew working there, and lava or a blast sets it off',
+      ),
+    );
+  }
+  if (gasComing) {
+    entries.push(
+      legendEntry(
+        sampleTile({ depth: 2, gasComing: true }),
+        'ring: gas spreads here when this shift ends',
+      ),
+    );
+  }
+  if (explosive) {
+    entries.push(
+      legendEntry(
+        sampleTile({ charge: 'explosive' }),
+        'charge with a fuse: a placed explosive; it goes off when this shift ends',
+      ),
+    );
+  }
+  if (armedOre) {
+    entries.push(
+      legendEntry(
+        sampleTile({ block: 'unstableOre', charge: 'armedOre' }),
+        'red starburst: armed unstable ore; it goes off when this shift ends',
+      ),
+    );
+  }
+  if (blast) {
+    entries.push(
+      legendEntry(
+        sampleTile({ blast: true }),
+        'dashed yellow frame: in an explosion when this shift ends (a charge, armed ore, or burning gas)',
       ),
     );
   }
@@ -854,6 +1046,12 @@ export function createTapMap(onTap: (x: number, y: number) => void): TapMap {
     canvas.dataset['lava'] = list((t) => (t.lava > 0 ? `${at(t)}:${t.lava}` : null));
     canvas.dataset['waterComing'] = list((t) => (t.waterComing ? at(t) : null));
     canvas.dataset['lavaComing'] = list((t) => (t.lavaComing ? at(t) : null));
+    // The same for gas, charges ("3,4:explosive") and the squares that will
+    // be in an explosion when the shift ends.
+    canvas.dataset['gas'] = list((t) => (t.gas > 0 ? `${at(t)}:${t.gas}` : null));
+    canvas.dataset['gasComing'] = list((t) => (t.gasComing ? at(t) : null));
+    canvas.dataset['charges'] = list((t) => (t.charge !== null ? `${at(t)}:${t.charge}` : null));
+    canvas.dataset['blast'] = list((t) => (t.blast ? at(t) : null));
 
     // After a tap that was not taken: the tapped square in yellow, the
     // neighbours that are too high for the level rule in red, and the squares
@@ -867,6 +1065,10 @@ export function createTapMap(onTap: (x: number, y: number) => void): TapMap {
     // The squares that stop a camp being founded on the tapped patch, in red.
     for (const square of marks.blocked) {
       outline(ctx, square.x, square.y, c, MARK_COLOURS.blocked);
+    }
+    // The blast of a charge about to be placed, or of ore a mine would arm.
+    for (const square of marks.blast) {
+      outline(ctx, square.x, square.y, c, MARK_COLOURS.blast);
     }
     if (marks.selected !== null) {
       outline(ctx, marks.selected.x, marks.selected.y, c, MARK_COLOURS.selected);
@@ -890,6 +1092,7 @@ export function createTapMap(onTap: (x: number, y: number) => void): TapMap {
       .map((square) => `${square.x},${square.y}`)
       .join(' ');
     canvas.dataset['blocked'] = marks.blocked.map((square) => `${square.x},${square.y}`).join(' ');
+    canvas.dataset['blastMarks'] = marks.blast.map((square) => `${square.x},${square.y}`).join(' ');
   }
 
   /** A tap (not a drag) at (px, py) pixels from the map's top-left corner. */

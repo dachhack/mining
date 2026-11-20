@@ -152,9 +152,12 @@ export function mountPreview(root: HTMLElement): void {
   const campTool = element('button', 'small tool');
   campTool.type = 'button';
   campTool.dataset['testid'] = 'tool-camp';
+  const explosiveTool = element('button', 'small tool');
+  explosiveTool.type = 'button';
+  explosiveTool.dataset['testid'] = 'tool-explosive';
   const toolHint = element('span', 'tool-hint');
   toolHint.dataset['testid'] = 'tool-hint';
-  toolBar.append(supportTool, campTool, toolHint);
+  toolBar.append(supportTool, campTool, explosiveTool, toolHint);
   // What the map cannot show.
   const mapNotes = element('section', 'map-notes');
   mapNotes.dataset['testid'] = 'map-notes';
@@ -242,8 +245,18 @@ export function mountPreview(root: HTMLElement): void {
     campTool.classList.toggle('on', tool === 'camp');
     // With no kit there is nothing to found: the button is not shown.
     campTool.hidden = kitsHeld === 0;
+    // The explosive tool is shown only while there is one to place: explosives
+    // are made at a camp, so most of a run has none.
+    const explosivesHeld = countItem(session.state, STRUCTURES.explosive.placedFromItem);
+    explosiveTool.textContent = `Place explosive (${explosivesHeld})`;
+    explosiveTool.hidden = explosivesHeld === 0 && tool !== 'explosive';
+    explosiveTool.setAttribute('aria-pressed', tool === 'explosive' ? 'true' : 'false');
+    explosiveTool.classList.toggle('on', tool === 'explosive');
     toolBar.hidden = view.ended !== null;
-    if (tool === 'support') {
+    if (tool === 'explosive') {
+      toolHint.textContent =
+        'A tap shows the blast of an explosive; a second tap on the square places it. Tap the button again to go back to mining.';
+    } else if (tool === 'support') {
       toolHint.textContent = 'A tap places a support. Tap the button again to go back to mining.';
     } else if (tool === 'camp') {
       toolHint.textContent =
@@ -340,6 +353,12 @@ export function mountPreview(root: HTMLElement): void {
     if (tool === 'camp' && countItem(session.state, CAMPS.kitItem) === 0) {
       tool = 'dig';
     }
+    if (
+      tool === 'explosive' &&
+      countItem(session.state, STRUCTURES.explosive.placedFromItem) === 0
+    ) {
+      tool = 'dig';
+    }
     note.hidden = true;
     saveRun(store, session);
     draw(false);
@@ -372,6 +391,12 @@ export function mountPreview(root: HTMLElement): void {
   });
   campTool.addEventListener('click', () => {
     tool = tool === 'camp' ? 'dig' : 'camp';
+    marks = NO_MARKS;
+    pending = null;
+    draw(false);
+  });
+  explosiveTool.addEventListener('click', () => {
+    tool = tool === 'explosive' ? 'dig' : 'explosive';
     marks = NO_MARKS;
     pending = null;
     draw(false);

@@ -98,6 +98,10 @@ describe('tiles', () => {
       lavaSource: false,
       waterComing: false,
       lavaComing: false,
+      gas: 0,
+      gasComing: false,
+      blast: false,
+      charge: null,
       surface: 'meadow',
       higher: NO_HIGHER,
       camp: false,
@@ -246,6 +250,7 @@ describe('a tap', () => {
       ],
       unstable: [],
       blocked: [],
+      blast: [],
     });
     expect(outcome.lines[0]).toBe('x1 y1, depth 1: Stone, gives 1 Stone.');
     expect(outcome.lines[1]).toContain('The level rule');
@@ -265,6 +270,7 @@ describe('a tap', () => {
       tooHigh: [],
       unstable: [],
       blocked: [],
+      blast: [],
     });
   });
 
