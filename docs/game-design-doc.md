@@ -53,6 +53,7 @@ These replace three v0.1 rows: World ("mined from the top down by selecting bloc
 - **Generation:** Fully determined by a seed, generated once at run start. The cube is still fully three-dimensional under the surface: rock, ore veins, caverns and pockets are placed in 3D as in v0.1 (section 3.6).
 - **Squares:** the 32×32 columns `(x, y)`. The player acts on squares, never on a block inside the cube.
 - **Depth:** a square's depth is how many blocks have been removed from it. Every square starts at depth 0. Its **top block** is the block in layer `z = depth`. Mining a square removes its top block and lowers the square by 1; slumps and other hazards can also raise or lower a square (section 6).
+- **Steps:** distances between squares are counted in steps, and a step is to a face neighbour (north, east, south or west; no diagonals). So "within 4 steps" means a Manhattan distance of 4 or less.
 - **Level** is the same thing seen the other way: a square at depth 3 is 3 levels down, and is 1 level lower than a neighbour at depth 2. "Higher" means shallower.
 - **The bottom:** a square at depth 32 has mined out its whole column; it shows the bedrock floor and cannot be mined further.
 - **The sides [Default]:** the bedrock walls round the cube are not squares. A square on the edge has 3 face neighbours (a corner square 2), and the level rule ignores the wall (question 84).
@@ -307,7 +308,7 @@ Torches and lamp oil are removed (no light).
 
 - **Founding [Default]:** a camp kit and a flat 3×3 patch of squares: all at the same depth, none with a tree, water, lava, gas or a structure on it. It costs the rest of the shift. The standard loadout carries one camp kit (owner, question 63).
 - **Functions:** smelter and workbench (camp recipes), and rest (crew health back to full). A camp's functions are available from anywhere on the map: the crew is abstract.
-- **Mining near a camp is cheaper [Default]** (owner, question 90: "Mining near it is cheaper"): mining a square costs 1 AP less (never below 1) when the square is within 4 steps of a camp square and no more than 4 levels deeper than the camp. So as the pit deepens, the discount runs out and the next camp goes further down: that is what "camps at depth" means without a miner.
+- **Mining near a camp is cheaper [Default]** (owner, question 90: "Mining near it is cheaper"): mining a square costs 1 AP less (never below 1) when the square is within 4 steps of a camp square and no more than 4 levels deeper than the camp. So as the pit deepens, the discount runs out and the next camp goes further down: that is what "camps at depth" means without a miner. In practice distance is the limit that binds: under the level rule a square k steps from a camp is at most k levels deeper, so the depth limit matters only where a hazard has broken the rule, and the discount runs out because the pit spreads away from the camp.
 - **While a camp stands** its 9 squares cannot be mined.
 - **Vulnerability:** a camp is destroyed when water or lava enters one of its squares, an explosion includes or is beside one, or a block slumps from or onto one. A destroyed camp is lost.
 - **Upkeep:** active camps consume fuel (section 4). The player can decommission a camp to stop the upkeep; its squares can then be mined.
