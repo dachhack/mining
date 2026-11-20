@@ -30,6 +30,9 @@
 //   --survey depth   the depth survey (tools/survey.ts): how deep each policy
 //                    gets, what it meets, what a pit costs, and what-if trials.
 //                    Prints Markdown. --policy is not used.
+//   --survey depth-now   tables 1 to 6 of the depth survey only: the game as
+//                    it is, without the what-if trials. The quick measurement
+//                    to make after a change to the numbers in src/data.
 //   --survey candidates   candidate settings under which runs meet the hazards,
 //                    measured (the list is CANDIDATE_SETTINGS in tools/survey.ts)
 //   --survey camp    what a camp is worth to the terracing policy, with the
@@ -137,12 +140,12 @@ interface Options {
 /** A run that has not ended after this many shifts is stopped (0005, Consequences). */
 const DEFAULT_MAX_SHIFTS = 300;
 const LARGEST_SEED = 0xffffffff;
-const SURVEY_NAMES = ['depth', 'candidates', 'camp'];
+const SURVEY_NAMES = ['depth', 'depth-now', 'candidates', 'camp'];
 
 function fail(message: string): never {
   console.error(`sim: ${message}`);
   console.error(
-    `Usage: npm run sim -- [--seed N] [--policy ${POLICY_NAMES.join('|')}] [--runs N] [--max-shifts N] [--kit] [--json] [--acceptance] [--survey depth|candidates|camp] [--jobs N]`,
+    `Usage: npm run sim -- [--seed N] [--policy ${POLICY_NAMES.join('|')}] [--runs N] [--max-shifts N] [--kit] [--json] [--acceptance] [--survey depth|depth-now|candidates|camp] [--jobs N]`,
   );
   process.exit(1);
 }
@@ -314,6 +317,8 @@ async function main(): Promise<void> {
     let report: string;
     if (options.survey === 'depth') {
       report = await runDepthSurvey(surveyOptions);
+    } else if (options.survey === 'depth-now') {
+      report = await runDepthSurvey(surveyOptions, false);
     } else if (options.survey === 'candidates') {
       report = await runCandidateSurvey(surveyOptions);
     } else {
