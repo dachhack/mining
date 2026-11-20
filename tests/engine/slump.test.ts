@@ -524,6 +524,13 @@ describe('cascades (design doc 6.1)', () => {
         // at 1 before the shift ended, and each fell from a different square.
         const fellFrom = new Set(fell.map((event) => `${event.from.x},${event.from.y}`));
         expect(fellFrom.size, `seed ${seed}`).toBe(fell.length);
+        // No slump starts from a cell that another slump of the same phase
+        // landed in.
+        const landed = new Set(fell.map((event) => `${event.to.x},${event.to.y},${event.to.z}`));
+        for (const event of fell) {
+          const from = `${event.from.x},${event.from.y},${event.from.z}`;
+          expect(landed.has(from), `seed ${seed}`).toBe(false);
+        }
         for (const event of fell) {
           expect(crackTimerAt(before, event.from), `seed ${seed}`).toBe(0);
           expect(blockAt(before, event.from), `seed ${seed}`).toBe(event.block);
