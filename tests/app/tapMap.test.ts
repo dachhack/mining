@@ -106,6 +106,8 @@ describe('tiles', () => {
       higher: NO_HIGHER,
       camp: false,
       cheaper: false,
+      // Nothing is known under the top (issue #104): no scan has been made.
+      below: { any: false, ore: false, pocket: false, cavern: false },
     });
   });
 
@@ -251,6 +253,7 @@ describe('a tap', () => {
       unstable: [],
       blocked: [],
       blast: [],
+      range: [],
     });
     expect(outcome.lines[0]).toBe('x1 y1, depth 1: Stone, gives 1 Stone.');
     expect(outcome.lines[1]).toContain('The level rule');
@@ -271,6 +274,7 @@ describe('a tap', () => {
       unstable: [],
       blocked: [],
       blast: [],
+      range: [],
     });
   });
 

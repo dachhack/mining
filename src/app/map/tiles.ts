@@ -19,6 +19,8 @@ import {
   slumpCheck,
 } from '../../engine';
 import type { GameState } from '../../engine';
+import { belowMarksOf } from '../below';
+import type { BelowMarks } from '../below';
 import { PREVIEW_MAP } from './palette';
 import type { SurfaceMark } from './palette';
 
@@ -31,7 +33,7 @@ import type { SurfaceMark } from './palette';
 export type TileKind = 'block' | 'hidden' | 'floor';
 
 /** A mark drawn on top of a tile. */
-export type StructureMark = 'support' | 'other';
+export type StructureMark = 'support' | 'pump' | 'other';
 
 /**
  * Something on a square that goes off when this shift ends (design doc 6.6):
@@ -110,6 +112,12 @@ export interface Tile {
    * those cannot be mined.
    */
   cheaper: boolean;
+  /**
+   * What is known to lie under the square's top (design doc 7.2; owner
+   * question 93): the marks for ore, a pocket and a cavern, and `any` if at
+   * least one cell under the top is known. A scan is what shows them.
+   */
+  below: BelowMarks;
 }
 
 /** A square window of the map: the squares x0..x0+size-1 and y0..y0+size-1. */
@@ -138,9 +146,10 @@ function surfaceMark(code: number): SurfaceMark {
 
 function structureMark(code: number): StructureMark | null {
   if (code === STRUCTURES.support.code) return 'support';
+  if (code === STRUCTURES.pump.code) return 'pump';
   // A placed explosive has its own mark (`Tile.charge`), not the plain one.
   if (code === STRUCTURES.explosive.code) return null;
-  // Any other structure (pumps, vents, ...) gets a plain mark for now.
+  // Any other structure (vents) gets a plain mark for now.
   return code === 0 ? null : 'other';
 }
 
@@ -266,6 +275,7 @@ export function buildTile(
       charge: null,
       camp: false,
       cheaper: false,
+      below: belowMarksOf(square),
     };
   }
   const atGroundLevel = square.depth === 0;
@@ -288,6 +298,7 @@ export function buildTile(
       charge: null,
       camp: false,
       cheaper: false,
+      below: belowMarksOf(square),
     };
   }
   // Camps and depths are seen by the player, so neither mark tells anything hidden.
@@ -311,6 +322,7 @@ export function buildTile(
     charge: chargeMark(square.top.armed),
     camp,
     cheaper: !camp && mineDiscountAt(state, x, y) > 0,
+    below: belowMarksOf(square),
   };
 }
 

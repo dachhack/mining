@@ -1,5 +1,5 @@
 // Gas on squares, and ignition (design doc v0.2 sections 5.2 and 6.5; owner
-// questions 64 and 94; issue #103, task T11; decision note 0034). One group
+// questions 64 and 94; issue #103, task T11; decision note 0035). One group
 // of tests for each rule, each on a small hand-built pit. Charges and
 // unstable ore are in explosions.test.ts.
 //

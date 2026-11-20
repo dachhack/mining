@@ -1,6 +1,6 @@
 // Placed explosives and unstable ore (design doc v0.2 sections 4.1, 5.2, 6.6
 // and 8; owner questions 58, 64 and 65; issue #103, task T11; decision note
-// 0034). One group of tests for each rule, each on a small hand-built pit.
+// 0035). One group of tests for each rule, each on a small hand-built pit.
 // Gas by itself is in gas.test.ts.
 //
 // A pit is drawn as a grid of depths, one digit per square, row y = 0 first,
@@ -30,7 +30,7 @@ import { stepGas } from '../../src/engine/cube/gas';
 import { newCubePhase } from '../../src/engine/cube/phase';
 import type { CubePhase } from '../../src/engine/cube/phase';
 import { createRng, nextInt } from '../../src/engine/rng';
-import { gasOn, setGasOn, setLavaOn } from '../../src/engine/standing';
+import { gasOn, setGasOn, setLavaOn, setWaterOn, waterOn } from '../../src/engine/standing';
 import {
   armCharge,
   blockAt,
@@ -421,6 +421,110 @@ describe('what a blast destroys besides blocks (design doc 6.6 and 8)', () => {
     const types = events.map((event) => event.type);
     expect(types.indexOf('campDestroyed')).toBeGreaterThan(types.indexOf('exploded'));
     expect(types.indexOf('campDestroyed')).toBeLessThan(types.indexOf('blockDestroyed'));
+  });
+});
+
+describe('explosions and the camp-made tools (issues #103 and #104)', () => {
+  it('the blast of a charge destroys a pump, a vent and a support on its squares', () => {
+    const state = pit(['11111', '11111', '11111'], {
+      structures: [
+        { pos: { x: 2, y: 0, z: 1 }, structure: 'pump' },
+        { pos: { x: 1, y: 1, z: 1 }, structure: 'vent' },
+        { pos: { x: 3, y: 1, z: 1 }, structure: 'support' },
+        // Two squares from the charge: outside the blast.
+        { pos: { x: 4, y: 1, z: 1 }, structure: 'pump' },
+      ],
+    });
+    plant(state, 2, 1);
+    const { events } = runStep(state);
+    const destroyed = ofType(events, 'structureDestroyed').map((event) =>
+      event.type === 'structureDestroyed' ? `${event.pos.x},${event.pos.y}:${event.structure}` : '',
+    );
+    expect(destroyed).toEqual([
+      `2,0:${STRUCTURES.pump.code}`,
+      `1,1:${STRUCTURES.vent.code}`,
+      `3,1:${STRUCTURES.support.code}`,
+    ]);
+    expect(structureAt(state, { x: 4, y: 1, z: 1 })).toBe(STRUCTURES.pump.code);
+    // Nothing is given back.
+    expect(countItem(state, 'pump') + countItem(state, 'vent')).toBe(0);
+  });
+
+  it('the blast of unstable ore destroys them too, though it takes no other block', () => {
+    const state = pit(
+      ['111'],
+      {
+        structures: [{ pos: { x: 0, y: 0, z: 1 }, structure: 'pump' }],
+        armed: [{ pos: { x: 1, y: 0, z: 1 }, kind: 'unstableOre' }],
+      },
+      ['#U#'],
+    );
+    runStep(state);
+    expect(structureAt(state, { x: 0, y: 0, z: 1 })).toBe(0);
+    expect(depthText(state)).toEqual(['121']);
+  });
+
+  it('a pump that an explosion destroyed pumps no more', () => {
+    // Water beside a pump; the pump is in the blast of a charge.
+    let state = pit(['2222'], {
+      structures: [{ pos: { x: 1, y: 0, z: 2 }, structure: 'pump' }],
+      fuel: 20,
+    });
+    setWaterOn(state, 0, 0, 2);
+    plant(state, 2, 0);
+    // This shift the pump still works (step (b) comes before the blast).
+    state = endShift(state).state;
+    expect(structureAt(state, { x: 1, y: 0, z: 3 })).toBe(0);
+    const left = waterOn(state, 0, 0) + waterOn(state, 1, 0);
+    // From now on the water stays.
+    state = endShift(state).state;
+    expect(waterOn(state, 0, 0) + waterOn(state, 1, 0)).toBe(left);
+  });
+
+  it('sealant on armed unstable ore smothers it: it is disarmed and does not go off', () => {
+    // The ore is the top block of (1, 0), one level down, and armed.
+    const state = pit(
+      ['11'],
+      {
+        armed: [{ pos: { x: 1, y: 0, z: 1 }, kind: 'unstableOre' }],
+        stockpile: { sealant: 1 },
+        worked: [{ x: 0, y: 0 }],
+      },
+      ['#U'],
+    );
+    const sealed = act(state, { type: 'seal', x: 1, y: 0 }).state;
+    // The sealed rock is the top now; the ore lies under it, still armed
+    // until the shift ends.
+    expect(blockAt(sealed, { x: 1, y: 0, z: 0 })).toBe(BLOCKS.sealed.code);
+    expect(sealed.armed).toHaveLength(1);
+
+    const step = endShift(sealed);
+    expect(ofType(step.events, 'exploded')).toEqual([]);
+    expect(ofType(step.events, 'damageTaken')).toEqual([]);
+    expect(step.state.armed).toEqual([]);
+    expect(blockAt(step.state, { x: 1, y: 0, z: 1 })).toBe(BLOCKS.unstableOre.code);
+    // Dug out again later, it is plain unarmed ore: mining it yields.
+    expect(previewCubePhase(step.state).countdowns).toEqual([]);
+  });
+
+  it('the forecast agrees: sealed-over armed ore is not forecast to go off', () => {
+    const state = pit(
+      ['11'],
+      { armed: [{ pos: { x: 1, y: 0, z: 1 }, kind: 'unstableOre' }], stockpile: { sealant: 1 } },
+      ['#U'],
+    );
+    expect(ofType(previewCubePhase(state).gas, 'exploded')).toHaveLength(1);
+    const sealed = act(state, { type: 'seal', x: 1, y: 0 }).state;
+    expect(ofType(previewCubePhase(sealed).gas, 'exploded')).toEqual([]);
+  });
+
+  it('sealing a gassy square destroys its gas, so a later blast finds nothing to light', () => {
+    const state = pit(['111'], { stockpile: { sealant: 1 } });
+    setGasOn(state, 2, 0, 5);
+    plant(state, 0, 0);
+    const sealed = act(state, { type: 'seal', x: 2, y: 0 }).state;
+    expect(gasOn(sealed, 2, 0)).toBe(0);
+    expect(explosions(endShift(sealed).events)).toEqual(['explosive: 0,0 1,0']);
   });
 });
 

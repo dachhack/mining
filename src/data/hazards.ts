@@ -32,11 +32,13 @@ export const HAZARDS: HazardData = {
     // on a flat floor stays where it is, and a pit ends up level to within 1.
     // Must be at least 2: with 1, a unit would swap back and forth for ever.
     flowMinDrop: 2,
+    // A pump takes up to this many units of water a shift (design doc 6.3)...
     pumpUnitsPerShift: 3,
-    // A pump reaches water within this many steps through open cells.
+    // ...from the squares within this many steps of its own square. A step is
+    // to a face neighbour, so this is a Manhattan distance (design doc 3.1).
     pumpReach: 2,
   },
-  // Gas: design doc 6.5; decision note 0034. How gas spreads has no number
+  // Gas: design doc 6.5; decision note 0035. How gas spreads has no number
   // of its own: a square gives an even share to each face neighbour that is
   // no higher, and keeps the rest (cube/gas.ts).
   gas: {

@@ -1,6 +1,6 @@
-# 0034 — T11: gas, ignition, unstable ore and explosives
+# 0035 — T11: gas, ignition, unstable ore and explosives
 
-Date: 2026-11-20. Status: accepted for the code as it stands (issue #103, task T11 of decision note 0025; it reworks issue #55). It builds design doc v0.2 sections 6.5 and 6.6, with 4 (step (c) of the cube phase), 4.1 (placing an explosive), 5.2 (the crew) and 8 (camps), all [Default], and the owner's answers to questions 64 ("the gas should be less powerful than the explosive") and 65 (relics in a blast: "probability based"). The readings below are the developer's, made where the design doc leaves a detail open; the ones an owner might want to change are questions 112 to 117 in `docs/owner-questions.md`. None changes a [Decided] item. The design doc is changed in one place, on the coordinator's instruction: section 6.5 ([Default]) no longer lists "digging a channel so the gas can reach ground level" as a counter and says that gas never leaves an open pit by itself, with a pointer to question 112.
+Date: 2026-11-20. Status: accepted for the code as it stands (issue #103, task T11 of decision note 0025; it reworks issue #55). It builds design doc v0.2 sections 6.5 and 6.6, with 4 (step (c) of the cube phase), 4.1 (placing an explosive), 5.2 (the crew) and 8 (camps), all [Default], and the owner's answers to questions 64 ("the gas should be less powerful than the explosive") and 65 (relics in a blast: "probability based"). The readings below are the developer's, made where the design doc leaves a detail open; the ones an owner might want to change are questions 119 to 124 in `docs/owner-questions.md`. None changes a [Decided] item. The design doc is changed in one place, on the coordinator's instruction: section 6.5 ([Default]) no longer lists "digging a channel so the gas can reach ground level" as a counter and says that gas never leaves an open pit by itself, with a pointer to question 119.
 
 ## Context
 
@@ -36,8 +36,8 @@ In: a breach puts a pocket's gas on a square (in the player phase, or when a slu
 ### What the spread rule does in play, and what it does not
 
 - **A gassy square never empties by spreading.** It gives away at most half of its gas, and thin gas (fewer units than neighbours plus one) gives nothing. So which squares are gassy only ever grows, and stops growing once the gas has run out to the edges of the level floor it lies on. Crew damage and ignition read only _whether_ a square has gas, so they settle too.
-- **The units do not settle.** Because the shares are whole numbers, two level squares holding 2 and 1 swap them every shift, for ever. The rule as the design doc words it does this; it is not a bug in the code. The events report the difference only (`gasMoved` is one event for a pair of squares, and none when the two gifts are equal), and both views show only gas reaching a square that had none, so the player is not told about the swapping. Whether to damp it is question 113.
-- **Gas never reaches ground level by itself.** Under the level rule every square of a pit is below ground level, and gas does not climb. So "gas that reaches a square at ground level blows away" (6.5) happens only when a gassy square is raised to ground level, and the counter "digging a channel so the gas can reach ground level", which 6.5 listed, cannot work; 6.5 now says so. Today burning it is the only way to be rid of gas; vents come with T13. This is question 112.
+- **The units do not settle.** Because the shares are whole numbers, two level squares holding 2 and 1 swap them every shift, for ever. The rule as the design doc words it does this; it is not a bug in the code. The events report the difference only (`gasMoved` is one event for a pair of squares, and none when the two gifts are equal), and both views show only gas reaching a square that had none, so the player is not told about the swapping. Whether to damp it is question 120.
+- **Gas never reaches ground level by itself.** Under the level rule every square of a pit is below ground level, and gas does not climb. So "gas that reaches a square at ground level blows away" (6.5) happens only when a gassy square is raised to ground level, and the counter "digging a channel so the gas can reach ground level", which 6.5 listed, cannot work; 6.5 now says so. Today burning it is the only way to be rid of gas; vents come with T13. This is question 119.
 
 ### Readings where the design doc is silent
 
@@ -69,21 +69,25 @@ New: `HAZARDS.explosion` with `blastReach` (1), `chanceBlocks` (relic, keystone)
 - **Phone map:** a green-yellow wash with rings and the units for gas, one ring on a square gas will reach, a round charge with a fuse, a red starburst on armed ore, and a dashed yellow frame on every square of an explosion that the coming cube phase will bring. A "Place explosive" tool appears while the stockpile holds one: the first tap marks the blast, the second places it. A tap that would arm ore asks for a second tap and marks the ore's blast. The legend names each mark; shape differs as well as colour.
 - A test for each view checks that a hidden pocket, cavern or ore block changes nothing that is shown.
 
+## With the camp tools (T13, merged first as note 0034)
+
+- **Pumps, vents and supports** in a blast, or on or beside a burning gas square, are destroyed through `destroyStructure`; nothing is given back. Tested in `tests/engine/explosions.test.ts`.
+- **Sealant** already destroys the gas on the square it seals (note 0034). Sealed rock placed on armed unstable ore buries it, so by reading 4 the ore is smothered: it is disarmed when the shift ends and does not go off. Tested.
+- **Scanner:** scanned ore below a top block counts as known in `oreArmedByMine` (it reads `isRevealed`), though under the level rule a mine beside ore on its layer can only happen when the ore is a top block.
+- **Phone map:** the explosive is one more tool on T13's tool bar.
+
 ## Hooks for later tasks
 
-- **T13 (vents):** `stepGas` marks where vents act (after gas spreads, before anything goes off). `gasOn` reads a square's gas and `setGasOn(state, x, y, 0)` takes it away; emit `gasRemoved` with the reason `vented`. A blast and a gas explosion already destroy a vent or pump on their squares, through `destroyStructure`.
-- **T13 (sealant):** set the square's gas to 0 before placing the block, as for water and lava.
-- **T13 (scanner):** scanned ore below a top block counts as known in `oreArmedByMine` (it reads `isRevealed`), though under the level rule a mine beside it on its layer can only happen when the ore is a top block.
-- **T13 (tool bar):** the phone map's explosive tool is one more `MapTool`; the general tool bar can take it over.
+- **Vents** (not built yet): `stepGas` marks where vents act (after gas spreads, before anything goes off). `gasOn` reads a square's gas and `setGasOn(state, x, y, 0)` takes it away; emit `gasRemoved` with the reason `vented`.
 - **M4 (contracts):** generating relics and keystones needs nothing more here.
 
 ## What could not be done: a golden run that reaches gas
 
 As for T10 (note 0033): no recorded run reaches a gas pocket (layer 8 and below) or unstable ore (layer 20 and below), which is question 85 and T15's depth survey. `tests/engine/explosions.test.ts` pins step (c) with a fixed scenario instead ("a pinned blast"): a hand-built basin, a gas pocket broken into, the gas led onto a second square, unstable ore armed and a charge placed, all through `applyAction`, twelve ends of shift, and the hash of the final state. Treat a change of that hash like a change of a golden hash.
 
-## Noticed, not changed
+## Also fixed: the simulator and camp recipes
 
-`npm run sim -- --policy random` throws "The engine crafted an unknown recipe: sealant" on main as well: `recipeOutputId` in `tools/simRun.ts` looks only in the field recipes, and the random policy sometimes founds a camp and crafts a camp recipe. It is outside this task.
+`npm run sim -- --policy random` threw "The engine crafted an unknown recipe: sealant" on main: `recipeOutputId` in `tools/simRun.ts` looked only in the field recipes, and the random policy sometimes founds a camp and crafts a camp recipe. It now looks in the camp recipes too (the coordinator asked for the fix in this PR).
 
 ## Consequences
 

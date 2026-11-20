@@ -262,10 +262,10 @@ An underground space is a cavern, or a water, lava or gas pocket. Mining the blo
 
 ### 6.5 Gas [Default]
 
-- **Gas is heavier than air** and lies in the pit (question 94). Each shift a square's gas spreads to its face neighbours that are no higher than it (at the same depth or deeper), thinning as it goes (each gives an even share and keeps the rest, as decision note 0014 item 13). Gas never climbs, so it never leaves an open pit by itself: it blows away only if its own square comes up to ground level (question 112; decision note 0034).
+- **Gas is heavier than air** and lies in the pit (question 94). Each shift a square's gas spreads to its face neighbours that are no higher than it (at the same depth or deeper), thinning as it goes (each gives an even share and keeps the rest, as decision note 0014 item 13). Gas never climbs, so it never leaves an open pit by itself: it blows away only if its own square comes up to ground level (question 119; decision note 0035).
 - Gas on a worked square hurts the crew (5.2).
 - **Ignition:** lava or an explosion in or beside a gassy square ignites it, and all connected gassy squares go off as one explosion: it removes the gas, destroys structures in and beside those squares, and hurts the crew (3, owner question 64). There are no torches, so lava and explosions are the only sources.
-- **Counters:** vents ([Default] clear all gas within 2 steps each shift), burning it off (lava or a blast), and sealant on the square it stands on. Digging a channel to ground level does not work: every square of a pit is below ground level and gas does not climb (question 112).
+- **Counters:** vents ([Default] clear all gas within 2 steps each shift), burning it off (lava or a blast), and sealant on the square it stands on. Digging a channel to ground level does not work: every square of a pit is below ground level and gas does not climb (question 119).
 - **Tell:** pitted rock on blocks within 1 of a gas pocket.
 
 ### 6.6 Unstable ore and explosions [Default]

@@ -285,6 +285,7 @@ export function drawTile(
   if (tile.higher.east) ctx.fillRect(x + c - w, y, w, c);
 
   drawMarks(ctx, tile, x, y, c);
+  drawBelowMarks(ctx, tile, x, y, c);
   if (tile.depth > 0 && c >= PREVIEW_MAP.depthNumberMinCellPx) {
     // The depth as a number in the bottom-right corner, white with a dark edge.
     ctx.save();
@@ -402,6 +403,71 @@ function drawComing(
   }
   ctx.fill();
   ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * The marks for what is known under a square's top (design doc 7.2; owner
+ * question 93), in a row from the left edge at mid-height (the corners hold
+ * the traces, a crack's countdown, the depth and the camp tick): a gold
+ * diamond for ore, a blue disc for a pocket, a white ring for a cavern. A scanned
+ * square with only plain rock under it gets a small grey bar, so that the
+ * player sees it has been scanned. Shapes differ as well as colours.
+ */
+function drawBelowMarks(
+  ctx: CanvasRenderingContext2D,
+  tile: Tile,
+  x: number,
+  y: number,
+  c: number,
+): void {
+  const below = tile.below;
+  if (!below.any) {
+    return;
+  }
+  ctx.save();
+  const r = Math.max(1.8, c * 0.11);
+  const cy = y + 0.46 * c;
+  ctx.lineWidth = Math.max(1, c / 16);
+  ctx.strokeStyle = MARK_COLOURS.belowOutline;
+  if (!below.ore && !below.pocket && !below.cavern) {
+    ctx.fillStyle = MARK_COLOURS.belowPlain;
+    ctx.fillRect(x + 0.1 * c, cy - r * 0.3, 2.4 * r, r * 0.7);
+    ctx.strokeRect(x + 0.1 * c, cy - r * 0.3, 2.4 * r, r * 0.7);
+    ctx.restore();
+    return;
+  }
+  let cx = x + 0.08 * c + r;
+  if (below.ore) {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - r);
+    ctx.lineTo(cx + r, cy);
+    ctx.lineTo(cx, cy + r);
+    ctx.lineTo(cx - r, cy);
+    ctx.closePath();
+    ctx.fillStyle = MARK_COLOURS.belowOre;
+    ctx.fill();
+    ctx.stroke();
+    cx += 2.4 * r;
+  }
+  if (below.pocket) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.9, 0, Math.PI * 2);
+    ctx.fillStyle = MARK_COLOURS.belowPocket;
+    ctx.fill();
+    ctx.stroke();
+    cx += 2.4 * r;
+  }
+  if (below.cavern) {
+    // A ring: dark underneath, white on top, hollow in the middle.
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.75, 0, Math.PI * 2);
+    ctx.lineWidth = Math.max(2.5, c / 7);
+    ctx.stroke();
+    ctx.lineWidth = Math.max(1.2, c / 14);
+    ctx.strokeStyle = MARK_COLOURS.belowCavern;
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -530,7 +596,7 @@ function drawBlast(ctx: CanvasRenderingContext2D, x: number, y: number, c: numbe
   ctx.restore();
 }
 
-/** The marks drawn over a tile: a camp, cheaper mining, water, lava and gas, mineral traces, a structure, a charge, a blast and a crack. */
+/** The marks drawn over a tile: a camp, cheaper mining, water, lava and gas, mineral traces, scan marks, a structure, a charge, a blast and a crack. */
 function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number, c: number) {
   const mid = c / 2;
   if (tile.camp) {
@@ -601,6 +667,20 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
     ctx.moveTo(x + mid, y + 0.25 * c);
     ctx.lineTo(x + mid, y + 0.85 * c);
     ctx.stroke();
+  } else if (tile.structure === 'pump') {
+    // A blue disc with a white "P".
+    ctx.beginPath();
+    ctx.arc(x + mid, y + mid, 0.3 * c, 0, Math.PI * 2);
+    ctx.fillStyle = MARK_COLOURS.pump;
+    ctx.fill();
+    ctx.lineWidth = Math.max(1, c / 14);
+    ctx.strokeStyle = MARK_COLOURS.belowOutline;
+    ctx.stroke();
+    ctx.font = `bold ${Math.max(7, Math.round(c * 0.4))}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = MARK_COLOURS.pumpInk;
+    ctx.fillText('P', x + mid, y + mid + 0.02 * c);
   } else if (tile.structure === 'other') {
     ctx.strokeStyle = MARK_COLOURS.otherStructure;
     ctx.lineWidth = Math.max(1.5, c / 10);
@@ -680,6 +760,7 @@ function sampleTile(overrides: Partial<Tile>): Tile {
     higher: { north: false, east: false, south: false, west: false },
     camp: false,
     cheaper: false,
+    below: { any: false, ore: false, pocket: false, cavern: false },
     ...overrides,
   };
 }
@@ -728,12 +809,22 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
   let blast = false;
   let camp = false;
   let cheaper = false;
+  let belowOre = false;
+  let belowPocket = false;
+  let belowCavern = false;
+  let belowPlain = false;
   for (const tile of tiles) {
     if (tile.gas > 0) gas = true;
     if (tile.gasComing) gasComing = true;
     if (tile.charge === 'explosive') explosive = true;
     if (tile.charge === 'armedOre') armedOre = true;
     if (tile.blast) blast = true;
+    if (tile.below.ore) belowOre = true;
+    if (tile.below.pocket) belowPocket = true;
+    if (tile.below.cavern) belowCavern = true;
+    if (tile.below.any && !tile.below.ore && !tile.below.pocket && !tile.below.cavern) {
+      belowPlain = true;
+    }
     if (tile.camp) camp = true;
     if (tile.cheaper) cheaper = true;
     if (tile.water > 0) water = true;
@@ -791,8 +882,39 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
   if (structures.has('support')) {
     entries.push(legendEntry(sampleTile({ structure: 'support' }), 'support'));
   }
+  if (structures.has('pump')) {
+    entries.push(
+      legendEntry(
+        sampleTile({ structure: 'pump' }),
+        'pump: takes water from the squares near it when a shift ends',
+      ),
+    );
+  }
   if (structures.has('other')) {
     entries.push(legendEntry(sampleTile({ structure: 'other' }), 'other structure'));
+  }
+  // What a scan has shown under the tops (hold a square for the list).
+  const none = { any: true, ore: false, pocket: false, cavern: false };
+  if (belowOre) {
+    entries.push(
+      legendEntry(sampleTile({ below: { ...none, ore: true } }), 'gold diamond: ore known below'),
+    );
+  }
+  if (belowPocket) {
+    entries.push(
+      legendEntry(
+        sampleTile({ below: { ...none, pocket: true } }),
+        'blue disc: a pocket (water, lava or gas) known below',
+      ),
+    );
+  }
+  if (belowCavern) {
+    entries.push(
+      legendEntry(sampleTile({ below: { ...none, cavern: true } }), 'ring: a cavern known below'),
+    );
+  }
+  if (belowPlain) {
+    entries.push(legendEntry(sampleTile({ below: none }), 'grey bar: plain rock known below'));
   }
   if (camp) {
     entries.push(legendEntry(sampleTile({ camp: true }), 'camp square (cannot be mined)'));
@@ -938,9 +1060,15 @@ function saveZoom(cells: number): void {
 
 /**
  * Make the tap map. `onTap` is called with the square the player tapped; the
- * screen decides what the tap does (and then calls `show` again).
+ * screen decides what the tap does (and then calls `show` again). `onHold`
+ * is called with the square the player pressed and held still on for
+ * `PREVIEW_MAP.holdMs`: the screen lists what is known of it (design doc
+ * 7.2). A hold is never also a tap.
  */
-export function createTapMap(onTap: (x: number, y: number) => void): TapMap {
+export function createTapMap(
+  onTap: (x: number, y: number) => void,
+  onHold: (x: number, y: number) => void = () => undefined,
+): TapMap {
   const element = document.createElement('section');
   element.className = 'tap-map';
   element.dataset['testid'] = 'tap-map';
@@ -1069,6 +1197,10 @@ export function createTapMap(onTap: (x: number, y: number) => void): TapMap {
     for (const square of marks.blast) {
       outline(ctx, square.x, square.y, c, MARK_COLOURS.blast);
     }
+    // The range of a pump or of a scan, in light blue.
+    for (const square of marks.range) {
+      outline(ctx, square.x, square.y, c, MARK_COLOURS.range);
+    }
     if (marks.selected !== null) {
       outline(ctx, marks.selected.x, marks.selected.y, c, MARK_COLOURS.selected);
     }
@@ -1092,6 +1224,21 @@ export function createTapMap(onTap: (x: number, y: number) => void): TapMap {
       .join(' ');
     canvas.dataset['blocked'] = marks.blocked.map((square) => `${square.x},${square.y}`).join(' ');
     canvas.dataset['blastMarks'] = marks.blast.map((square) => `${square.x},${square.y}`).join(' ');
+    canvas.dataset['range'] = marks.range.map((square) => `${square.x},${square.y}`).join(' ');
+    // The structures and scan marks in view: "3,4:pump", and "3,4:op" for a
+    // square with ore and a pocket known below (o ore, p pocket, c cavern,
+    // "-" for plain rock).
+    canvas.dataset['structures'] = list((t) =>
+      t.structure === null ? null : `${at(t)}:${t.structure}`,
+    );
+    canvas.dataset['below'] = list((t) => {
+      if (!t.below.any) {
+        return null;
+      }
+      const letters =
+        (t.below.ore ? 'o' : '') + (t.below.pocket ? 'p' : '') + (t.below.cavern ? 'c' : '');
+      return `${at(t)}:${letters === '' ? '-' : letters}`;
+    });
   }
 
   /** A tap (not a drag) at (px, py) pixels from the map's top-left corner. */
@@ -1118,7 +1265,8 @@ export function createTapMap(onTap: (x: number, y: number) => void): TapMap {
   //   finger lifting on its own (issue #69).
   const pointers = new Map<number, { x: number; y: number }>();
   interface Gesture {
-    kind: 'press' | 'drag' | 'pinch';
+    /** 'held': a press that lasted long enough to be a hold; it is not a tap. */
+    kind: 'press' | 'drag' | 'pinch' | 'held';
     /** The camera when the drag or pinch started. */
     camera: Camera;
     /** Where the first finger went down (page pixels). */
@@ -1130,6 +1278,15 @@ export function createTapMap(onTap: (x: number, y: number) => void): TapMap {
     pinchMidY: number;
   }
   let gesture: Gesture | null = null;
+  // The timer of a press that may become a hold; `null` when none is running.
+  // `ReturnType<typeof setTimeout>` is "whatever `setTimeout` returns here".
+  let holdTimer: ReturnType<typeof setTimeout> | null = null;
+  function cancelHold(): void {
+    if (holdTimer !== null) {
+      clearTimeout(holdTimer);
+      holdTimer = null;
+    }
+  }
 
   /** The midpoint of the first two fingers, in pixels from the map's corner, and their distance apart. */
   function twoFingers(): { midX: number; midY: number; distance: number } | null {
@@ -1158,9 +1315,27 @@ export function createTapMap(onTap: (x: number, y: number) => void): TapMap {
         pinchMidX: 0,
         pinchMidY: 0,
       };
+      // If the finger stays down and still for `holdMs`, this is a hold.
+      const rect = canvas.getBoundingClientRect();
+      const px = event.clientX - rect.left;
+      const py = event.clientY - rect.top;
+      cancelHold();
+      holdTimer = setTimeout(() => {
+        holdTimer = null;
+        if (gesture === null || gesture.kind !== 'press' || state === null) {
+          return;
+        }
+        // Not a tap any more: lifting the finger then does nothing.
+        gesture.kind = 'held';
+        const cell = cellAt(camera, px, py, cellPixels());
+        if (cell.x >= 0 && cell.y >= 0 && cell.x < state.size.x && cell.y < state.size.y) {
+          onHold(cell.x, cell.y);
+        }
+      }, PREVIEW_MAP.holdMs);
       return;
     }
     // A second finger: from now on this gesture is a pinch.
+    cancelHold();
     const fingers = twoFingers();
     if (gesture !== null && fingers !== null) {
       gesture.kind = 'pinch';
@@ -1200,6 +1375,7 @@ export function createTapMap(onTap: (x: number, y: number) => void): TapMap {
     const dy = event.clientY - gesture.startY;
     if (gesture.kind === 'press' && Math.hypot(dx, dy) > PREVIEW_MAP.dragThresholdPx) {
       gesture.kind = 'drag';
+      cancelHold();
     }
     if (gesture.kind === 'drag') {
       camera = panned(gesture.camera, dx, dy, cellPixels(), state.size);
@@ -1233,6 +1409,7 @@ export function createTapMap(onTap: (x: number, y: number) => void): TapMap {
     }
     const ended = gesture;
     gesture = null;
+    cancelHold();
     if (ended.kind === 'pinch') {
       saveZoom(camera.cells);
     } else if (ended.kind === 'press' && !cancelled) {

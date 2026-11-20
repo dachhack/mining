@@ -10,6 +10,7 @@ import {
   BLOCKS,
   CAMPS,
   CAMP_RECIPES,
+  CAMP_TOOLS,
   CREW,
   FIELD_RECIPES,
   HAZARDS,
@@ -34,6 +35,8 @@ export function helpText(): string {
   const lowestMineCost = BLOCKS.dirt.mineCost ?? 0;
   const highestMineCost = BLOCKS.hardRock.mineCost ?? 0;
   const rubbleCost = BLOCKS.rubble.mineCost ?? 0;
+  const drilledCost = BLOCKS.hardRock.mineCostWithDrill ?? 0;
+  const sealedCost = BLOCKS.sealed.mineCost ?? 0;
   // Pit walls slump (design doc 6.1): the numbers of the rule.
   const weakLimit = BLOCKS.dirt.slumpLimit ?? 0;
   const rockLimit = BLOCKS.stone.slumpLimit ?? 0;
@@ -80,8 +83,12 @@ CHOICES
     camp X,Y                 found a camp on the ${campSide} x ${campSide} patch whose centre square is x X, y Y
     rest X,Y                 rest the crew at the camp whose centre square that is
     decommission X,Y         take that camp down
+    pump X,Y                 place a pump on that square (made at a camp: see "Camp tools")
+    seal X,Y                 put a block of sealed rock on that square (uses 1 sealant)
+    scan X,Y                 scan under that square and the 8 round it (uses 1 scanner charge)
+    look X,Y                 list what you know of that square; costs nothing and does nothing
   Any square of the map may be named; nothing has to be near anything. A square that cannot be
-  mined, cut, supported or camped on is refused with the reason, and nothing is done. A refused
+  mined, cut, supported, camped on, pumped, sealed or scanned is refused with the reason, and nothing is done. A refused
   "camp X,Y" names the squares of the patch that are in the way.
   A mine that would make other squares unstable, or arm unstable ore, is not done the first
   time: you get a warning that names those squares, and nothing happens. Type it as "mine! X,Y" to do it all the same.
@@ -113,8 +120,9 @@ READING A VIEW
     a stump. Straight after a tree's "Y" it is blank (the ground under it is hidden), or the
     block you saw there before the tree grew back.
   Under the map: the legend, then notes: what lies on a square that two characters cannot
-  show (water, lava or gas and the block under it, a crack and its countdown, a support, an
-  explosive, armed unstable ore), the
+  show (water, lava or gas and the block under it, a crack and its countdown, a support, a
+  pump, an explosive, armed unstable ore), the pumps and their range, what you know under the
+  tops from scans (ore, a pocket, a cavern: "look X,Y" lists a square's known blocks), the
   stumps, each camp, and the squares where mining is cheaper because a camp is near. Then
   "Hazards": every cracked
   square, when it falls and where its block will land, and every placed explosive and armed
@@ -225,6 +233,35 @@ THE GAME
     the rubble: none is lost, unless it is then above ground level.
   - The "If you end the shift now" line says where water and lava will flow.
 
+  Camp tools (made at a camp; see "Camp recipes")
+  - DRILL. While you have a drill, hard rock costs ${drilledCost} AP to mine instead of ${highestMineCost}. It is not used
+    up. Being near a camp and standing water change that cost as they change any other.
+  - PUMP. "pump X,Y" (${ACTION_COSTS.placePump} AP) places a pump on a square. When a shift ends, before the water
+    flows, each pump takes up to ${HAZARDS.water.pumpUnitsPerShift} units of water from the squares within ${HAZARDS.water.pumpReach} steps of it (a
+    step is to a square beside: north, east, south, west). It empties its own square first,
+    then the nearest, and among squares equally far the one further north, then further west.
+    A pump does nothing to lava. A square holds one thing (a support or a pump); no pump goes
+    on a tree, on lava, on a camp square or on a square with no block left. A pump is lost if
+    you mine its square, if a block slumps from its square or onto it, or if lava reaches it.
+    Water does it no harm.
+  - SEALANT. "seal X,Y" (${ACTION_COSTS.seal} AP, 1 sealant) puts a block of sealed rock on top of a square: the
+    square comes up 1 level, and all the water, lava and gas standing on it are destroyed.
+    Use it as a dam (water and lava flow only across a drop of ${HAZARDS.water.flowMinDrop} or more), or to plug a lava
+    source: a sealed source stops for good. Lava does not stop a seal. A square cannot be
+    sealed at ground level, on a camp square, while something is placed on it, or when a
+    square beside it is deeper (the sealed rock would stand 2 levels above it: seal the deeper
+    square first). Sealed rock ("=") costs ${sealedCost} AP to mine and gives nothing.
+  - SCANNER. "scan X,Y" (${ACTION_COSTS.scan} AP, ${CAMP_TOOLS.scanChargesPerScan} scanner charge) shows the ${CAMP_TOOLS.scanDepth} blocks under the top block of the
+    square you name and of the 8 squares round it. This is the only way to see what lies
+    under a top block. What a scan shows stays known. The line after the scan lists it; the
+    notes under the map say where ore, a pocket (open space holding water, lava or gas) or a
+    cavern (empty open space) is known to lie below; "look X,Y" lists a square's known blocks
+    at any time. Scanned blocks show mineral traces and hazard tells like top blocks. Under a
+    tree the scan shows the 3 blocks below the hidden ground block, which stays hidden. The
+    "If you end the shift now" line uses what you have scanned.
+  - Placing a pump or sealing a square makes it a square the crew worked this shift (see
+    "Crew health"). A scan does not.
+
   Camps
   - You start with 1 camp kit. "camp X,Y" founds a camp on the ${campSide} x ${campSide} patch of squares whose
     centre is the square you name. It uses up the kit and takes the rest of the shift: all the
@@ -270,7 +307,8 @@ THE GAME
 
   What you can see
   - Every square's top block and depth, always, except the ground under a tree that has not
-    been cut. Nothing below a top block: you learn what is under a block by mining it.
+    been cut. Nothing below a top block: you learn what is under a block by mining it, or
+    with a scan (see "Camp tools").
   - Mineral traces: rock that lies within ${traceSteps} steps of iron ore, copper ore or crystal (counted
     through the rock, down as well as sideways) shows mineral traces. On the map traced rock
     has a character for each kind of rock, so you still see what it is and what it costs: "D"
@@ -302,9 +340,9 @@ ${recipes}
   Camp recipes (${ACTION_COSTS.campCraft} AP each; on the list only while a camp stands)
 ${campRecipes}
     Raw ore is smelted into ingots, and the other recipes take ingots. A camp kit founds another
-    camp. An explosive is placed with "explosive X,Y" (see "Gas, unstable ore and
-    explosives"). The drill, pump, vent, scanner charge and sealant can be made but do
-    nothing yet (see "Not in this version").
+    camp. The drill, pump, scanner charge and sealant are explained under "Camp tools". An
+    explosive is placed with "explosive X,Y" (see "Gas, unstable ore and explosives"). The
+    vent can be made but does nothing yet (see "Not in this version").
 
   Crew health
   - Your crew starts with ${CREW.startHealth} health ("Crew health" among the gauges). The crew is not on the map.
@@ -372,8 +410,8 @@ ${campRecipes}
     finish alive, and a closed mine cannot be opened again.
 
   Not in this version of the game
-  - The other tools made at a camp (drill, pump, vent, scanner charge, sealant) cannot be used
-    yet. So nothing takes gas away but burning it.
+  - The vent, which is made at a camp, cannot be used yet. So nothing takes gas away but
+    burning it, or sealing the square it stands on.
   - Contracts are not built yet, and relics and keystones are not in the cube yet.
 `;
 }

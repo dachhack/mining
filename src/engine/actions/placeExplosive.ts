@@ -1,5 +1,5 @@
 // Placing an explosive on a square (design doc v0.2 sections 4.1, 5.2 and
-// 6.6; issue #103, task T11; decision note 0034).
+// 6.6; issue #103, task T11; decision note 0035).
 //
 // A placed explosive goes off in step (c) of the cube phase that ends the
 // shift it was placed in (cube/gas.ts; the blast itself is explosions.ts). It

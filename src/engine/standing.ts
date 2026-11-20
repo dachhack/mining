@@ -13,17 +13,17 @@
 // so nothing can stand on it: water and lava never stand above ground level
 // (design doc 3.1).
 //
-// HOOKS FOR LATER TASKS
-// - Gas (T11, cube/gas.ts) is stored the same way: `gasOn`, `setGasOn`.
-// - T13 (vents): take gas off a square with `setGasOn(state, x, y, 0)` and
-//   emit `gasRemoved` with the reason 'vented'. `stepGas` (cube/gas.ts) marks
+// WHO ELSE WRITES HERE
+// - Pumps take water off squares inside `stepFluids` (cube/fluids.ts).
+// - Sealant (actions/campTools.ts) sets a square's water and lava to 0
+//   before it places its block; that also stops a lava source, as design doc
+//   6.2 says.
+// - Gas (cube/gas.ts) is stored the same way: `gasOn`, `setGasOn`.
+//
+// HOOK FOR A LATER TASK
+// - Vents: take gas off a square with `setGasOn(state, x, y, 0)` and emit
+//   `gasRemoved` with the reason 'vented'. `stepGas` (cube/gas.ts) marks
 //   where vents should act.
-// - T13 (pumps): take water off a square with `setWaterOn(state, x, y,
-//   waterOn(state, x, y) - units)` and emit `fluidRemoved` with the reason
-//   'pumped'. `stepFluids` (cube/fluids.ts) marks where pumps should act.
-// - T13 (sealant): sealing a square puts a block on it. Before placing the
-//   block, set the square's water and lava to 0 (`fluidRemoved`, reason
-//   'sealed'); that also stops a lava source, as design doc 6.2 says.
 
 import { contentsOn } from './breach';
 import { depthAt } from './heightmap';

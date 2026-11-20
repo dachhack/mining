@@ -9,6 +9,7 @@ import {
   BLOCKS,
   CAMPS,
   CREW,
+  CAMP_TOOLS,
   HAZARDS,
   STRUCTURES,
   SURFACE,
@@ -26,8 +27,10 @@ import {
   knownSquare,
   mineCheck,
   oreArmedByMine,
+  scanSquares,
 } from '../../engine';
 import type { Action, GameEvent, GameState, KnownSquare } from '../../engine';
+import { belowCellText } from '../below';
 import type { LogEntry } from './log';
 import { blastText, patchText, squareText } from './squares';
 import { tracedSymbolsText } from './symbols';
@@ -126,13 +129,17 @@ function describeAction(state: GameState, action: Action): string {
       const depth = depthName(knownSquare(state, action.x, action.y).depth);
       // Near a camp a mine costs less (design doc 8); say so, so the lower
       // cost is not a puzzle.
-      const discount = mineCheck(state, action.x, action.y).campDiscount ?? 0;
+      const check = mineCheck(state, action.x, action.y);
+      const discount = check.campDiscount ?? 0;
       const cheaper = discount > 0 ? ` (${discount} AP less: near a camp)` : '';
+      // The same for the drill (design doc 3.5).
+      const drill = check.drillSaving ?? 0;
+      const drilled = drill > 0 ? ` (${drill} AP less: you have a drill)` : '';
       const arms = oreArmedByMine(state, action.x, action.y)
         .map((ore) => squareText(ore.x, ore.y))
         .join(', ');
       const arming = arms === '' ? '' : `; ARMS the unstable ore on ${arms}`;
-      return `Mine ${where} (${depth}): ${topBlockText(state, action.x, action.y)}${cheaper}${arming}`;
+      return `Mine ${where} (${depth}): ${topBlockText(state, action.x, action.y)}${cheaper}${drilled}${arming}`;
     }
     case 'cutTree':
       return (
@@ -159,14 +166,28 @@ function describeAction(state: GameState, action: Action): string {
       );
     case 'placeExplosive':
       return describePlaceExplosive(state, action.x, action.y);
-    // The other M2 actions. The engine offers none of them yet (their module
-    // is a stub; decision note 0015), so these plain lines are never shown.
     case 'placePump':
+      return (
+        `Place a pump on ${squareText(action.x, action.y)}: each shift it takes up to ` +
+        `${HAZARDS.water.pumpUnitsPerShift} water from the squares within ` +
+        `${HAZARDS.water.pumpReach} steps, the nearest first`
+      );
     case 'placeVent':
+      return (
+        `Place a vent on ${squareText(action.x, action.y)}: each shift it clears the gas ` +
+        `within ${HAZARDS.gas.ventReach} steps`
+      );
     case 'seal':
-      return `${action.type} at ${squareText(action.target.x, action.target.y)}`;
+      return (
+        `Seal ${squareText(action.x, action.y)}: uses up 1 sealant; a block of sealed rock goes on ` +
+        'top of the square (it comes up 1 level), and the water, lava and gas on it are destroyed'
+      );
     case 'scan':
-      return `scan around ${squareText(action.centre.x, action.centre.y)}`;
+      return (
+        `Scan round ${squareText(action.x, action.y)}: uses up ${CAMP_TOOLS.scanChargesPerScan} ` +
+        `scanner charge; shows the ${CAMP_TOOLS.scanDepth} blocks under the top block of that ` +
+        'square and of the 8 squares round it'
+      );
     case 'foundCamp':
       return (
         `Found a camp round ${squareText(action.x, action.y)} (${patchText(action.x, action.y)}): ` +
@@ -212,6 +233,8 @@ function idInLowerCase(id: string): string {
  * - "support 3,4": place a support on that square;
  * - "camp 3,4": found a camp whose centre square that is;
  * - "rest 3,4", "decommission 3,4": the camp centred on that square;
+ * - "pump 3,4", "vent 3,4", "seal 3,4", "scan 3,4": a camp-made tool, used
+ *   on that square;
  * - craft-fuel, craft-support, ...: "craft-" and the recipe;
  * - close-mine, and end for "end the shift".
  */
@@ -231,13 +254,14 @@ export function choiceName(entry: LogEntry): string {
       return `support ${entry.x},${entry.y}`;
     case 'placeExplosive':
       return `explosive ${entry.x},${entry.y}`;
-    // The other M2 actions: never offered yet (see `describeAction`).
     case 'placePump':
+      return `pump ${entry.x},${entry.y}`;
     case 'placeVent':
+      return `vent ${entry.x},${entry.y}`;
     case 'seal':
-      return `${idInLowerCase(entry.type)} ${entry.target.x},${entry.target.y}`;
+      return `seal ${entry.x},${entry.y}`;
     case 'scan':
-      return `scan ${entry.centre.x},${entry.centre.y}`;
+      return `scan ${entry.x},${entry.y}`;
     case 'foundCamp':
       return `camp ${entry.x},${entry.y}`;
     case 'rest':
@@ -314,8 +338,9 @@ function isFlowEvent(event: GameEvent): boolean {
  * forecast, which is worded as what will happen. Empty when nothing flows.
  *
  * One sentence for each fluid's moves ("Water flowed: x2 y3 to x2 y4 (2
- * units); ..."), then what drained at ground level, what a source poured,
- * and where water met lava.
+ * units); ..."), then what the pumps took, what drained at ground level, what
+ * a source poured, and where water met lava. (The pumps act before the water
+ * flows; the moves are said first because they are what threatens.)
  */
 export function describeFlows(events: GameEvent[], coming: boolean): string[] {
   const sentences: string[] = [];
@@ -340,6 +365,21 @@ export function describeFlows(events: GameEvent[], coming: boolean): string[] {
     const name = fluid === 'water' ? 'Water' : 'Lava';
     const verb = coming ? `${name.toUpperCase()} WILL FLOW` : `${name} flowed`;
     sentences.push(`${verb}: ${parts.join('; ')}.`);
+  }
+
+  // Pumps (design doc 6.3): what they took, square by square.
+  const pumped: string[] = [];
+  for (const event of events) {
+    if (event.type === 'fluidRemoved' && event.reason === 'pumped') {
+      pumped.push(`${event.units} from ${squareText(event.pos.x, event.pos.y)}`);
+    }
+  }
+  if (pumped.length > 0) {
+    sentences.push(
+      coming
+        ? `The pumps will take water: ${pumped.join('; ')}.`
+        : `The pumps took water: ${pumped.join('; ')}.`,
+    );
   }
 
   // Stone: how many blocks formed on each square.
@@ -705,6 +745,12 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
         lines.push(`Placed ${article} ${name}.`);
         break;
       }
+      case 'cellSealed':
+        lines.push(sealedText(after, event.pos.x, event.pos.y, events));
+        break;
+      case 'scanned':
+        lines.push(...scannedLines(after, event.x, event.y, event.cells));
+        break;
       case 'structureDestroyed':
         lines.push(
           `The ${structureNameByCode(event.structure)} on ${squareText(event.pos.x, event.pos.y)} ` +
@@ -844,6 +890,44 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
         lines.push(`A tree grew back on the stump at ${squareText(event.pos.x, event.pos.y)}.`);
         break;
     }
+  }
+  return lines;
+}
+
+/**
+ * The sentence for a square that was sealed (design doc 7.2): the new top,
+ * and what the sealant destroyed, read from the step's own events.
+ */
+function sealedText(after: GameState, x: number, y: number, events: GameEvent[]): string {
+  const destroyed: string[] = [];
+  for (const event of events) {
+    if (event.type === 'fluidRemoved' && event.reason === 'sealed') {
+      destroyed.push(`${event.units} ${event.fluid}`);
+    } else if (event.type === 'gasRemoved' && event.reason === 'sealed') {
+      destroyed.push(`${event.units} gas`);
+    }
+  }
+  const gone = destroyed.length === 0 ? '' : ` The ${destroyed.join(', ')} on it is destroyed.`;
+  const depth = depthName(knownSquare(after, x, y).depth);
+  return `Sealed ${squareText(x, y)}: its top block is now sealed rock (${depth}).${gone}`;
+}
+
+/**
+ * The lines for a scan (design doc 7.2): how much is newly known, then what
+ * is now known under the top of each square of the patch, from the top down.
+ * Read through `knownSquare`, so only revealed cells are named.
+ */
+function scannedLines(after: GameState, x: number, y: number, cells: number): string[] {
+  const lines = [
+    `Scanned round ${squareText(x, y)}: ${cells} ${cells === 1 ? 'block is' : 'blocks are'} newly known.`,
+  ];
+  for (const square of scanSquares(after, x, y)) {
+    const known = knownSquare(after, square.x, square.y);
+    if (known.below.length === 0) {
+      continue;
+    }
+    const cellsText = known.below.map((cell) => `depth ${cell.z} ${belowCellText(cell)}`);
+    lines.push(`  under ${squareText(square.x, square.y)}: ${cellsText.join('; ')}`);
   }
   return lines;
 }

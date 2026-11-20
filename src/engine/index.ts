@@ -5,24 +5,27 @@
 //
 // This file is also the dispatcher: it owns what is common to every action
 // (copying the state, checking legality, spending AP, then reveal) and hands
-// the rest to one module per rule. The module of the camp tools is a stub
-// until its task fills it in; the stub's doc comment is its contract
-// (decision note 0015).
+// the rest to one module per rule.
 
-import { CONTRACT_IDS, CREW, SHIFT, WORLD, findLoadout } from '../data';
+import { CONTRACT_IDS, CREW, SHIFT, SURFACE, WORLD, findLoadout } from '../data';
 import { actionKey } from './actionTypes';
 import type { Action } from './actionTypes';
 import { legalCampActions, applyCampAction } from './actions/camp';
-import { legalCampToolActions, applyCampToolAction } from './actions/campTools';
+import {
+  applyCampToolAction,
+  isLegalCampToolAction,
+  legalCampToolActions,
+} from './actions/campTools';
 import { legalCloseMineActions, applyCloseMine } from './actions/closeMine';
 import { legalCraftActions, applyCraft } from './actions/craft';
 import { legalCutTreeActions, applyCutTree } from './actions/cutTree';
-import { legalMineActions, applyMine } from './actions/mine';
+import { legalMineActions, applyMine, mineCheck } from './actions/mine';
 import { legalPlaceExplosiveActions, applyPlaceExplosive } from './actions/placeExplosive';
-import { legalPlaceSupportActions, applyPlaceSupport } from './actions/placeSupport';
+import { legalPlaceSupportActions, applyPlaceSupport, supportCheck } from './actions/placeSupport';
 import type { GameEvent } from './events';
 import { generateCube } from './generation/cube';
 import { generateSpaces } from './generation/spaces';
+import { isSquare } from './heightmap';
 import { updateReveal } from './reveal';
 import { isValidSeed } from './rng';
 import { forecastShift, runCubePhase, runUpkeep } from './shift';
@@ -30,6 +33,7 @@ import type { ShiftForecast } from './shift';
 import { addItem, blankState, cloneState, isRunActive } from './state';
 import { ensureCoalInSight, generateSurface } from './surface/generation';
 import { regrowTrees } from './surface/regrowth';
+import { hasTree } from './surface/state';
 import { updateMineralTraces } from './tells';
 import type { GameState } from './state';
 
@@ -125,6 +129,65 @@ export function legalActions(state: GameState): Action[] {
 }
 
 /**
+ * True if `action` is one of `legalActions(state)`, worked out without
+ * building that list (issue #88 item 6: the list has a few thousand entries,
+ * and building it for every action made the simulator slow).
+ *
+ * The actions that name a square are checked by asking their own rule about
+ * that one square: `mineCheck`, `supportCheck`, and so on. The few kinds
+ * with a short list of their own (craft, close the mine, the camp actions,
+ * the explosive) are looked up in that list. A test checks that this agrees
+ * with `legalActions` (dispatcher.test.ts).
+ */
+export function isLegalAction(state: GameState, action: Action): boolean {
+  if (!isRunActive(state)) {
+    return false;
+  }
+  // An action the player cannot afford is not legal (0005 item 12).
+  if (action.ap > state.ap) {
+    return false;
+  }
+  const wanted = actionKey(action);
+  // `some`: true if any entry of the list passes the test.
+  function listed(list: Action[]): boolean {
+    return list.some((legal) => actionKey(legal) === wanted);
+  }
+  switch (action.type) {
+    case 'mine':
+      // A refused mine has `ap: null`, which equals no number.
+      return (
+        isSquare(state, action.x, action.y) && mineCheck(state, action.x, action.y).ap === action.ap
+      );
+    case 'cutTree':
+      return (
+        isSquare(state, action.x, action.y) &&
+        hasTree(state, { x: action.x, y: action.y, z: WORLD.surfaceZ }) &&
+        action.ap === SURFACE.cutTree.ap
+      );
+    case 'placeSupport':
+      return (
+        isSquare(state, action.x, action.y) &&
+        supportCheck(state, action.x, action.y).ap === action.ap
+      );
+    case 'placePump':
+    case 'placeVent':
+    case 'seal':
+    case 'scan':
+      return isLegalCampToolAction(state, action);
+    case 'placeExplosive':
+      return listed(legalPlaceExplosiveActions(state));
+    case 'craft':
+      return listed(legalCraftActions(state));
+    case 'foundCamp':
+    case 'rest':
+    case 'decommissionCamp':
+      return listed(legalCampActions(state));
+    case 'closeMine':
+      return listed(legalCloseMineActions(state));
+  }
+}
+
+/**
  * Take one action. Returns the new state and the events; `state` itself is
  * not changed. Throws if the action is not one of `legalActions(state)`.
  */
@@ -132,10 +195,8 @@ export function applyAction(state: GameState, action: Action): StepResult {
   if (!isRunActive(state)) {
     throw new Error('The run has ended; no action can be taken');
   }
-  const wanted = actionKey(action);
-  const isLegal = legalActions(state).some((legal) => actionKey(legal) === wanted);
-  if (!isLegal) {
-    throw new Error(`Not a legal action: ${wanted}`);
+  if (!isLegalAction(state, action)) {
+    throw new Error(`Not a legal action: ${actionKey(action)}`);
   }
 
   const next = cloneState(state);
@@ -283,7 +344,7 @@ export type { SerialisedState } from './serialise';
 // cell's water, lava, gas, cracks and structures through
 // `knownCell`, which answers `null` for a cell the player has not seen.
 export { knownCell, knownSquare } from './known';
-export type { KnownCell, KnownSquare } from './known';
+export type { KnownBelow, KnownCell, KnownSquare } from './known';
 // What stands on a square in the open (water, lava, gas), and the hazard
 // tells a known block shows. Views read both through `knownSquare`.
 export type { SquareContents } from './breach';
@@ -303,6 +364,21 @@ export type { SupportCheck, SupportRefusalReason } from './actions/placeSupport'
 export { explosiveCheck } from './actions/placeExplosive';
 export type { ExplosiveCheck, ExplosiveRefusalReason } from './actions/placeExplosive';
 export { blastSquares, oreArmedByMine } from './explosions';
+// The same for the camp-made tools (design doc 7.2; issue #104): placing a
+// pump, sealing a square, scanning; and the squares and cells a scan covers.
+// All of it reads only what the player sees.
+export { pumpCheck, scanCells, scanCheck, scanSquares, sealCheck } from './actions/campTools';
+export type {
+  PlacedTool,
+  ScanCheck,
+  ScanRefusalReason,
+  SealCheck,
+  SealRefusalReason,
+  ToolCheck,
+  ToolRefusalReason,
+} from './actions/campTools';
+// The squares within so many steps of a square: a pump's range.
+export { squaresWithinSteps } from './cube/fluids';
 // Pit walls slump (design doc 6.1): is a square unstable, and which squares
 // would a mine make unstable? These read only what the player sees (depths,
 // trees, supports, seen top blocks), so a view may call them freely.

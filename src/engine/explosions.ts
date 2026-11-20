@@ -1,6 +1,6 @@
 // Explosions of placed charges and of unstable ore (design doc v0.2 section
 // 6.6; owner questions 58, 64 and 65; issue #103, task T11; decision note
-// 0034). Gas explosions are in cube/gas.ts, which also decides when the
+// 0035). Gas explosions are in cube/gas.ts, which also decides when the
 // charges here go off (step (c) of the cube phase).
 //
 // THE BLAST. A charge or an armed ore block blasts its own square and every

@@ -129,7 +129,12 @@ export function isNamedBySquareOnly(entry: LogEntry): boolean {
     entry.type === 'cutTree' ||
     entry.type === 'placeSupport' ||
     entry.type === 'placeExplosive' ||
-    entry.type === 'foundCamp'
+    entry.type === 'foundCamp' ||
+    // The camp-made tools: any square may be named (issue #104).
+    entry.type === 'placePump' ||
+    entry.type === 'placeVent' ||
+    entry.type === 'seal' ||
+    entry.type === 'scan'
   );
 }
 

@@ -26,17 +26,23 @@ export const CAMPS: CampData = {
   mineDiscountMaxDeeper: 4,
 };
 
-// Camp-made tools whose numbers are not a hazard's (0014 item 31; design doc
-// 4.1). Pump and vent numbers are in hazards.ts; the drill's mine cost is
-// `mineCostWithDrill` in blocks.ts.
+// Camp-made tools whose numbers are not a hazard's (design doc 4.1 and 7.2;
+// issue #104). Pump and vent numbers are in hazards.ts; the drill's mine cost
+// is `mineCostWithDrill` in blocks.ts; what each action costs in AP is in
+// shift.ts. All of it is [Default]: tune it here.
 export const CAMP_TOOLS: CampToolData = {
+  // While the stockpile holds at least one drill, a block with a
+  // `mineCostWithDrill` costs that to mine. The drill is not used up.
   drillItem: 'drill',
   sealantItem: 'sealant',
+  // The block one sealant puts on a square.
+  sealedBlock: 'sealed',
   scanChargeItem: 'scannerCharge',
   scanChargesPerScan: 1,
-  // The centre of the scanned region is up to this many steps from the
-  // avatar in a straight line.
-  scanReach: 3,
-  // The region is the centre and this many cells each way: 1 gives 3 x 3 x 3.
-  scanRegionRadius: 1,
+  // A scan covers the square it is aimed at and this many squares to each
+  // side of it: 1 gives 3 x 3 (owner question 93).
+  scanHalfWidth: 1,
+  // Under each of those squares it reveals this many blocks below the top
+  // block.
+  scanDepth: 3,
 };

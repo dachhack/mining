@@ -1,6 +1,6 @@
 // Step (c) of the cube phase: gas spreads, vents act, charges and armed
 // unstable ore go off, gas ignites (design doc v0.2 sections 4, 6.5 and 6.6;
-// owner questions 64 and 94; issue #103, task T11; decision note 0034).
+// owner questions 64 and 94; issue #103, task T11; decision note 0035).
 //
 // THE PICTURE. Gas stands on squares, like water (standing.ts): a number of
 // units in the open above a square's top block. It is heavier than air, so it
