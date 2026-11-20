@@ -32,10 +32,19 @@ export interface CubePhase {
    * crack shows its full countdown through the next shift (design doc 6.1).
    */
   newCracks: Square[];
+  /**
+   * True when the phase is run for the end-shift forecast, on the copy of the
+   * cube that holds only what the player sees (forecast.ts). A forecast must
+   * not roll dice: where the real phase would draw from the seeded RNG (a
+   * relic in a blast, design doc 6.6), step (c) says "may be destroyed"
+   * instead and leaves the block (decision note 0017 item 3).
+   */
+  forecast: boolean;
 }
 
-export function newCubePhase(): CubePhase {
-  return { damage: [], newCracks: [] };
+/** Fresh notes. `forecast` is true only for the end-shift forecast (see `CubePhase.forecast`). */
+export function newCubePhase(forecast = false): CubePhase {
+  return { damage: [], newCracks: [], forecast };
 }
 
 /** Throws unless `amount` is a whole number, 0 or more. */

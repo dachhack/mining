@@ -376,6 +376,17 @@ export function validateData(data: GameData): string[] {
     problems.push(`hazards.gas.pocketUnitsPerCell must be at most ${MAX_CODE}`);
   }
   requireWholeAtLeast(hazards.gas.ventReach, 0, 'hazards.gas.ventReach');
+  // Explosions (design doc 6.6).
+  requireWholeAtLeast(hazards.explosion.blastReach, 0, 'hazards.explosion.blastReach');
+  const chance = hazards.explosion.chanceBlockDestroyed;
+  if (typeof chance !== 'number' || !(chance >= 0 && chance <= 1)) {
+    problems.push(`hazards.explosion.chanceBlockDestroyed must be from 0 to 1, but is ${chance}`);
+  }
+  for (const blockId of hazards.explosion.chanceBlocks) {
+    if (!Object.hasOwn(data.blocks, blockId)) {
+      problems.push(`hazards.explosion.chanceBlocks names an unknown block "${blockId}"`);
+    }
+  }
   requireWholeAtLeast(hazards.lava.flowEveryShifts, 1, 'hazards.lava.flowEveryShifts');
   requireWholeAtLeast(hazards.lava.sourcePocketCellsOver, 0, 'hazards.lava.sourcePocketCellsOver');
   requireWholeAtLeast(hazards.lava.sourceUnitsPerStep, 1, 'hazards.lava.sourceUnitsPerStep');

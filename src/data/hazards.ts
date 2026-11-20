@@ -38,12 +38,29 @@ export const HAZARDS: HazardData = {
     // to a face neighbour, so this is a Manhattan distance (design doc 3.1).
     pumpReach: 2,
   },
-  // Gas: design doc 6.3; 0014 item 13.
+  // Gas: design doc 6.5; decision note 0035. How gas spreads has no number
+  // of its own: a square gives an even share to each face neighbour that is
+  // no higher, and keeps the rest (cube/gas.ts).
   gas: {
     // Units in each cell of a generated pocket.
     pocketUnitsPerCell: 4,
     // A vent removes gas within this many steps through open cells.
     ventReach: 2,
+  },
+  // Explosions of a placed charge or of unstable ore: design doc 6.6. What an
+  // explosion takes off crew health is in crew.ts (`CREW.damage`).
+  explosion: {
+    // The blast covers every square within this many steps of the charge
+    // (a step is to a face neighbour, no diagonals). 1: the square and the
+    // four beside it, 5 squares in all.
+    blastReach: 1,
+    // Block ids: the blocks a blast destroys only by chance (owner, question
+    // 65: "probability based"). Any other top block in a charge's blast is
+    // always destroyed.
+    chanceBlocks: ['relic', 'keystone'],
+    // The probability, 0 to 1, that a blast destroys one of those blocks.
+    // Otherwise the block is left in place. Drawn from the seeded RNG.
+    chanceBlockDestroyed: 0.5,
   },
   // Lava: design doc 6.4; 0014 item 16.
   lava: {

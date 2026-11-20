@@ -61,6 +61,7 @@ describe('the camp tool', () => {
         { x: 2, y: 2 },
         { x: 4, y: 2 },
       ],
+      blast: [],
       range: [],
     });
     expect(hashState(state)).toBe(before);

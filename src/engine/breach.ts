@@ -23,8 +23,7 @@
 // validator checks that the largest pocket fits.
 //
 // WHAT IS NOT HERE. What a breach puts on a square spreads in the cube phase:
-// water and lava by cube/fluids.ts (task T10). Gas and ignition are T11;
-// until then gas stays where a breach put it.
+// water and lava by cube/fluids.ts (task T10), gas by cube/gas.ts (task T11).
 
 import { BLOCKS, HAZARDS } from '../data';
 import type { Vec3 } from '../data';

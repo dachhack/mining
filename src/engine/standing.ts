@@ -18,13 +18,18 @@
 // - Sealant (actions/campTools.ts) sets a square's water and lava to 0
 //   before it places its block; that also stops a lava source, as design doc
 //   6.2 says.
+// - Gas (cube/gas.ts) is stored the same way: `gasOn`, `setGasOn`.
 //
 // HOOK FOR A LATER TASK
-// - T11 (gas): lava on a square ignites gas on or beside it. Ask `lavaOn`.
+// - Vents: take gas off a square with `setGasOn(state, x, y, 0)` and emit
+//   `gasRemoved` with the reason 'vented'. `stepGas` (cube/gas.ts) marks
+//   where vents should act.
 
 import { contentsOn } from './breach';
 import { depthAt } from './heightmap';
-import { setLava, setWater } from './state';
+import type { Vec3 } from '../data';
+import type { GameEvent } from './events';
+import { gasAt, setGas, setLava, setWater } from './state';
 import type { GameState } from './state';
 
 /** Units of water standing on the square (x, y). Throws if it is not a square. */
@@ -92,4 +97,51 @@ export function setLavaOn(
     return;
   }
   setLava(state, { x, y, z: storageLayer(depth, x, y, 'Lava') }, units, source);
+}
+
+/** Units of gas standing on the square (x, y). Throws if it is not a square. */
+export function gasOn(state: GameState, x: number, y: number): number {
+  return contentsOn(state, x, y).gas;
+}
+
+/**
+ * Make the gas standing on the square (x, y) exactly `units`. Throws as
+ * `setWaterOn` does: gas cannot stand on a square at ground level, where it
+ * blows away (design doc 6.5).
+ */
+export function setGasOn(state: GameState, x: number, y: number, units: number): void {
+  const depth = depthAt(state, x, y);
+  for (let z = 0; z < depth; z += 1) {
+    setGas(state, { x, y, z }, 0);
+  }
+  if (units === 0) {
+    return;
+  }
+  setGas(state, { x, y, z: storageLayer(depth, x, y, 'Gas') }, units);
+}
+
+/**
+ * A block is about to form in the open cell `cell`, the lowest open cell of
+ * its square (water meeting lava makes stone there). Gas in that cell would
+ * end up inside the block, out of sight and out of reach of every rule. So it
+ * is lifted to the cell above, where it stands on the new block. If there is
+ * no cell above (the square comes up to ground level), the gas blows away:
+ * `gasRemoved`, reason 'reachedSurface' (design doc 6.5).
+ *
+ * A slump does the same for rubble with `liftContents` (cube/slumps.ts),
+ * which never reaches ground level.
+ */
+export function liftGasOutOf(state: GameState, cell: Vec3, events: GameEvent[]): void {
+  const units = gasAt(state, cell);
+  if (units === 0) {
+    return;
+  }
+  setGas(state, cell, 0);
+  const above = { x: cell.x, y: cell.y, z: cell.z - 1 };
+  if (above.z < 0) {
+    events.push({ type: 'gasRemoved', pos: above, units, reason: 'reachedSurface' });
+    return;
+  }
+  // `Math.min` only guards the byte a cell stores, as in breach.ts.
+  setGas(state, above, Math.min(255, gasAt(state, above) + units));
 }

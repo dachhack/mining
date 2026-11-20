@@ -162,6 +162,20 @@ export const MARK_COLOURS = {
   /** Lava standing on a square: an orange wash with flames, and its units. */
   lava: 'rgba(255, 96, 16, 0.75)',
   lavaInk: '#fff0a0',
+  /** Gas standing on a square: a green-yellow wash with rings, and its units. */
+  gas: 'rgba(170, 200, 40, 0.5)',
+  gasInk: '#f2ffb0',
+  /** A placed explosive (a round charge with a fuse) and armed unstable ore (a starburst). */
+  charge: '#ff3b3b',
+  chargeInk: '#fff3c4',
+  /** A square that will be in an explosion when the shift ends: a dashed frame. */
+  blast: '#ffd21f',
+  /**
+   * The blast a tap would cause (a charge about to be placed, ore a mine
+   * would arm): a solid orange outline, so that it does not run together
+   * with the dashed yellow frames of explosions already coming.
+   */
+  blastPreview: '#ff8a1f',
   /** The dark edge under the numbers and marks of water and lava. */
   fluidOutline: 'rgba(0, 0, 0, 0.8)',
   /** The outline of a square a mine would make unstable. */

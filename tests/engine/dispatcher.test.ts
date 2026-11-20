@@ -39,6 +39,7 @@ const FAKE_FORECAST: ShiftForecast = {
   countdowns: [{ kind: 'explosive', pos: { x: 0, y: 0, z: 0 }, inShifts: 1 }],
   slumps: [],
   flows: [],
+  gas: [],
   upkeep: {
     fuelConsumed: 1,
     campFuelConsumed: 0,

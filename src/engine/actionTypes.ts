@@ -11,8 +11,6 @@
 // Actions must come from `legalActions(state)`: `applyAction` accepts an
 // action only if it equals one in that list, field for field.
 
-import type { Vec3 } from '../data';
-
 /**
  * Mine the top block of the square (x, y) (design doc 4.2; issue #86). There
  * is no miner and no reach: any square may be named. The block removed is the
@@ -60,10 +58,15 @@ export interface PlaceSupportAction {
   ap: number;
 }
 
-/** Place an explosive from the stockpile into the cell `target` (0014 item 15). */
+/**
+ * Place an explosive from the stockpile on the square (x, y) (design doc 4.1
+ * and 6.6; issue #103). Like a support, it names a square: there is no reach.
+ * It goes off when the shift ends.
+ */
 export interface PlaceExplosiveAction {
   type: 'placeExplosive';
-  target: Vec3;
+  x: number;
+  y: number;
   ap: number;
 }
 
@@ -167,10 +170,6 @@ export type Action =
   | CampAction
   | CutTreeAction;
 
-function vecKey(v: Vec3): string {
-  return `${v.x},${v.y},${v.z}`;
-}
-
 /**
  * A string that is the same for two actions exactly when every field is the
  * same. Used to compare actions, and usable as a dictionary key or a log line.
@@ -180,6 +179,7 @@ export function actionKey(action: Action): string {
     case 'mine':
     case 'cutTree':
     case 'placeSupport':
+    case 'placeExplosive':
     case 'foundCamp':
     case 'rest':
     case 'decommissionCamp':
@@ -193,9 +193,6 @@ export function actionKey(action: Action): string {
       return `craft ${action.recipe} ap ${action.ap}`;
     case 'closeMine':
       return `closeMine ap ${action.ap}`;
-    case 'placeExplosive':
-      // The type, the cell, the cost.
-      return `${action.type} ${vecKey(action.target)} ap ${action.ap}`;
   }
 }
 

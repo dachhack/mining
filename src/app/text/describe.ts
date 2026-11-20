@@ -8,6 +8,7 @@
 import {
   BLOCKS,
   CAMPS,
+  CREW,
   CAMP_TOOLS,
   HAZARDS,
   STRUCTURES,
@@ -19,11 +20,19 @@ import {
   itemDef,
 } from '../../data';
 import type { ItemStack } from '../../data';
-import { isSquare, knownSquare, mineCheck, scanSquares } from '../../engine';
+import {
+  SQUARE_STEPS,
+  isSquare,
+  isWorked,
+  knownSquare,
+  mineCheck,
+  oreArmedByMine,
+  scanSquares,
+} from '../../engine';
 import type { Action, GameEvent, GameState, KnownSquare } from '../../engine';
 import { belowCellText } from '../below';
 import type { LogEntry } from './log';
-import { patchText, squareText } from './squares';
+import { blastText, patchText, squareText } from './squares';
 import { tracedSymbolsText } from './symbols';
 
 /** "2 Stone, 1 Coal", or "nothing". */
@@ -126,7 +135,11 @@ function describeAction(state: GameState, action: Action): string {
       // The same for the drill (design doc 3.5).
       const drill = check.drillSaving ?? 0;
       const drilled = drill > 0 ? ` (${drill} AP less: you have a drill)` : '';
-      return `Mine ${where} (${depth}): ${topBlockText(state, action.x, action.y)}${cheaper}${drilled}`;
+      const arms = oreArmedByMine(state, action.x, action.y)
+        .map((ore) => squareText(ore.x, ore.y))
+        .join(', ');
+      const arming = arms === '' ? '' : `; ARMS the unstable ore on ${arms}`;
+      return `Mine ${where} (${depth}): ${topBlockText(state, action.x, action.y)}${cheaper}${drilled}${arming}`;
     }
     case 'cutTree':
       return (
@@ -151,10 +164,8 @@ function describeAction(state: GameState, action: Action): string {
         `Place a support on ${squareText(action.x, action.y)}: ` +
         'it holds that square against slumping, and is lost if the square is mined'
       );
-    // The explosive: the engine does not offer it yet (its module is a stub;
-    // decision note 0015), so this plain line is never shown. T11 words it.
     case 'placeExplosive':
-      return `${action.type} at ${squareText(action.target.x, action.target.y)}`;
+      return describePlaceExplosive(state, action.x, action.y);
     case 'placePump':
       return (
         `Place a pump on ${squareText(action.x, action.y)}: each shift it takes up to ` +
@@ -195,6 +206,17 @@ function describeAction(state: GameState, action: Action): string {
   }
 }
 
+/** The line for the choice "explosive x,y": what the charge will do, and to which squares. */
+function describePlaceExplosive(state: GameState, x: number, y: number): string {
+  if (!isSquare(state, x, y)) {
+    return `Place an explosive on ${squareText(x, y)}`; // an entry from a log
+  }
+  return (
+    `Place an explosive on ${squareText(x, y)}: it goes off when this shift ends and destroys ` +
+    `the top block of each square of its blast (${blastText(state, x, y)}), with no yield`
+  );
+}
+
 /** "placeSupport" -> "place-support": an id from src/data in the lower case a choice is typed in. */
 function idInLowerCase(id: string): string {
   return id.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
@@ -230,9 +252,8 @@ export function choiceName(entry: LogEntry): string {
       return 'close-mine';
     case 'placeSupport':
       return `support ${entry.x},${entry.y}`;
-    // The explosive: never offered yet (see `describeAction`).
     case 'placeExplosive':
-      return `${idInLowerCase(entry.type)} ${entry.target.x},${entry.target.y}`;
+      return `explosive ${entry.x},${entry.y}`;
     case 'placePump':
       return `pump ${entry.x},${entry.y}`;
     case 'placeVent':
@@ -299,6 +320,7 @@ const DESTRUCTION_CAUSES: Record<string, string> = {
   mined: 'went with the block and is lost',
   lava: 'was destroyed by lava',
   water: 'was destroyed by water',
+  explosion: 'was destroyed by an explosion',
 };
 
 /** The event types of step (b) of the cube phase that `describeFlows` words. */
@@ -417,6 +439,163 @@ export function describeForecastFlows(flows: GameEvent[]): string[] {
   }
   return sentences;
 }
+// ---------------------------------------------------------------------------
+// Gas and explosions (design doc 6.5 and 6.6; issue #103)
+// ---------------------------------------------------------------------------
+
+/** "x3 y4, x4 y4": the squares an `exploded` event names. */
+function explodedSquaresText(event: Extract<GameEvent, { type: 'exploded' }>): string {
+  return event.cells.map((cell) => squareText(cell.x, cell.y)).join(', ');
+}
+
+/** "1 chance in 2": the probability that a blast destroys a relic or keystone. */
+function chanceText(): string {
+  const percent = Math.round(HAZARDS.explosion.chanceBlockDestroyed * 100);
+  return `${percent} chances in 100`;
+}
+
+/**
+ * What the crew loses to the explosion `event`, from the squares it worked
+ * this shift, or 0: a charge or ore hurts when its blast includes a worked
+ * square, a gas explosion on a worked square or beside one (design doc 5.2).
+ * The worked squares are the player's own actions, so this tells nothing
+ * hidden.
+ */
+function explosionDamage(
+  state: GameState,
+  event: Extract<GameEvent, { type: 'exploded' }>,
+): number {
+  for (const cell of event.cells) {
+    if (!isSquare(state, cell.x, cell.y)) {
+      continue;
+    }
+    if (isWorked(state, cell.x, cell.y)) {
+      return event.kind === 'gas' ? CREW.damage.gasExplosion : CREW.damage.explosion;
+    }
+    if (event.kind !== 'gas') {
+      continue;
+    }
+    for (const step of SQUARE_STEPS) {
+      const x = cell.x + step.dx;
+      const y = cell.y + step.dy;
+      if (isSquare(state, x, y) && isWorked(state, x, y)) {
+        return CREW.damage.gasExplosion;
+      }
+    }
+  }
+  return 0;
+}
+
+/**
+ * What step (c) of the coming cube phase will do, for the "If you end the
+ * shift now" line: where gas will reach, what goes off, what each explosion
+ * destroys, and whether the crew is in it. `gas` is `ShiftForecast.gas`;
+ * `state` is the state the forecast was made from, read only through
+ * `knownSquare` and the worked squares.
+ */
+export function describeForecastGas(state: GameState, gas: GameEvent[]): string[] {
+  const sentences: string[] = [];
+
+  // Gas: only the squares it has not reached yet. Settled gas goes on
+  // shifting a unit or two between level squares for ever; saying so every
+  // shift would bury the news.
+  const reached = new Map<string, number>();
+  for (const event of gas) {
+    if (
+      event.type === 'gasMoved' &&
+      knownSquare(state, event.to.x, event.to.y).contents.gas === 0
+    ) {
+      const key = squareText(event.to.x, event.to.y);
+      reached.set(key, (reached.get(key) ?? 0) + event.units);
+    }
+  }
+  if (reached.size > 0) {
+    const parts: string[] = [];
+    for (const [where, units] of reached) {
+      parts.push(`${where} (${units})`);
+    }
+    sentences.push(`GAS WILL SPREAD onto: ${parts.join(', ')}.`);
+  }
+
+  const destroyed: string[] = [];
+  for (const event of gas) {
+    switch (event.type) {
+      case 'exploded': {
+        const where = squareText(event.pos.x, event.pos.y);
+        const damage = explosionDamage(state, event);
+        const crew = damage > 0 ? ` THE CREW WORKED THERE: it loses ${damage} health.` : '';
+        if (event.kind === 'explosive') {
+          sentences.push(
+            `THE EXPLOSIVE on ${where} GOES OFF: its blast covers ${explodedSquaresText(event)} ` +
+              `and destroys their top blocks, with no yield.${crew}`,
+          );
+        } else if (event.kind === 'unstableOre') {
+          sentences.push(
+            `THE UNSTABLE ORE on ${where} GOES OFF: the ore is destroyed, and its blast covers ` +
+              `${explodedSquaresText(event)}.${crew}`,
+          );
+        } else {
+          sentences.push(
+            `GAS EXPLODES on ${explodedSquaresText(event)}: the gas burns off, and what is ` +
+              `placed on those squares and beside them is destroyed.${crew}`,
+          );
+        }
+        break;
+      }
+      case 'blockMayBeDestroyed':
+        sentences.push(
+          `The ${blockDefByCode(event.block).name} on ${squareText(event.pos.x, event.pos.y)} is in ` +
+            `the blast: it may be destroyed (${chanceText()}), and is otherwise left in place.`,
+        );
+        break;
+      case 'treeDestroyed':
+        destroyed.push(`the tree on ${squareText(event.pos.x, event.pos.y)}`);
+        break;
+      case 'structureDestroyed':
+        destroyed.push(
+          `the ${structureNameByCode(event.structure)} on ${squareText(event.pos.x, event.pos.y)}`,
+        );
+        break;
+      case 'campDestroyed':
+        sentences.push(
+          `THE EXPLOSION DESTROYS THE CAMP at ${squareText(event.pos.x, event.pos.y)}.`,
+        );
+        break;
+      default:
+        break;
+    }
+  }
+  if (destroyed.length > 0) {
+    sentences.push(`The explosion will destroy ${destroyed.join(', ')}.`);
+  }
+  return sentences;
+}
+
+/**
+ * The squares gas spread onto in a step, which had none before: "x3 y4 (2)".
+ * `after` is the state the step led to. A square is new when all the gas now
+ * on it arrived in this step. (Gas that reached a square and burnt in the
+ * same step is not listed: the explosion is what the player is told.)
+ */
+function gasReachedText(after: GameState, events: GameEvent[]): string[] {
+  const arrived = new Map<string, { x: number; y: number; units: number }>();
+  for (const event of events) {
+    if (event.type === 'gasMoved') {
+      const key = `${event.to.x},${event.to.y}`;
+      const entry = arrived.get(key) ?? { x: event.to.x, y: event.to.y, units: 0 };
+      entry.units += event.units;
+      arrived.set(key, entry);
+    }
+  }
+  const parts: string[] = [];
+  for (const entry of arrived.values()) {
+    if (knownSquare(after, entry.x, entry.y).contents.gas === entry.units) {
+      parts.push(`${squareText(entry.x, entry.y)} (${entry.units})`);
+    }
+  }
+  return parts;
+}
+
 /** What destroyed a camp, in words. The keys are the engine's `DestructionCause`. */
 const CAMP_DESTRUCTION_CAUSES: Record<string, string> = {
   rockfall: 'a slump reached one of its squares',
@@ -520,6 +699,9 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
   const roofFell = events.some((event) => event.type === 'spaceCollapsed');
   // Water and lava: all of a step's flow is said together, where it began.
   let flowsSaid = false;
+  // The same for gas reaching new squares, and for the blocks a blast took.
+  let gasSaid = false;
+  let blastedSaid = false;
   for (const event of events) {
     if (isFlowEvent(event)) {
       if (!flowsSaid) {
@@ -556,9 +738,13 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
         // Every yield goes straight into the stockpile (design doc 4.1).
         lines.push(`Got ${event.count} ${itemDef(event.item).name}.`);
         break;
-      case 'structurePlaced':
-        lines.push(`Placed a ${structureNameByCode(event.structure)}.`);
+      case 'structurePlaced': {
+        // "a support", "an explosive".
+        const name = structureNameByCode(event.structure);
+        const article = /^[aeiou]/.test(name) ? 'an' : 'a';
+        lines.push(`Placed ${article} ${name}.`);
         break;
+      }
       case 'cellSealed':
         lines.push(sealedText(after, event.pos.x, event.pos.y, events));
         break;
@@ -627,6 +813,73 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
         break;
       case 'runEnded':
         // The view that follows opens with the outcome.
+        break;
+      case 'oreArmed':
+        lines.push(
+          `MINING BESIDE IT ARMED THE UNSTABLE ORE on ${squareText(event.pos.x, event.pos.y)}: ` +
+            `it goes off when this shift ends, and its blast covers ` +
+            `${blastText(after, event.pos.x, event.pos.y)}. Mining the ore itself now is safe, and yields.`,
+        );
+        break;
+      case 'gasMoved':
+        if (!gasSaid) {
+          gasSaid = true;
+          const reached = gasReachedText(after, events);
+          if (reached.length > 0) {
+            lines.push(`Gas spread onto: ${reached.join(', ')}.`);
+          }
+        }
+        break;
+      case 'gasRemoved':
+        // Burnt gas is said by its explosion.
+        if (event.reason === 'reachedSurface') {
+          lines.push(
+            `${event.units} gas on ${squareText(event.pos.x, event.pos.y)} came up to ground level and blew away.`,
+          );
+        }
+        break;
+      case 'exploded': {
+        const where = squareText(event.pos.x, event.pos.y);
+        if (event.kind === 'explosive') {
+          lines.push(
+            `THE EXPLOSIVE on ${where} WENT OFF: its blast covered ${explodedSquaresText(event)}.`,
+          );
+        } else if (event.kind === 'unstableOre') {
+          lines.push(
+            `THE UNSTABLE ORE on ${where} WENT OFF: its blast covered ${explodedSquaresText(event)}.`,
+          );
+        } else {
+          lines.push(`GAS EXPLODED on ${explodedSquaresText(event)}: the gas there burnt off.`);
+        }
+        break;
+      }
+      case 'blockDestroyed':
+        if (!blastedSaid) {
+          blastedSaid = true;
+          const blocks: string[] = [];
+          for (const other of events) {
+            if (other.type === 'blockDestroyed') {
+              blocks.push(
+                `${blockDefByCode(other.block).name} on ${squareText(other.pos.x, other.pos.y)}`,
+              );
+            }
+          }
+          lines.push(`Destroyed, with no yield: ${blocks.join(', ')}.`);
+        }
+        break;
+      case 'blockSurvivedBlast':
+        lines.push(
+          `The ${blockDefByCode(event.block).name} on ${squareText(event.pos.x, event.pos.y)} ` +
+            'was in the blast and survived: it is still there.',
+        );
+        break;
+      case 'blockMayBeDestroyed':
+        // Only in a forecast: `describeForecastGas` words it.
+        break;
+      case 'treeDestroyed':
+        lines.push(
+          `The blast destroyed the tree on ${squareText(event.pos.x, event.pos.y)}: no timber, and no stump.`,
+        );
         break;
       case 'treeCut':
         lines.push(

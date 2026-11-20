@@ -160,13 +160,23 @@ export function mountPreview(root: HTMLElement): void {
   }
   const supportTool = toolButton('tool-support');
   const campTool = toolButton('tool-camp');
+  const explosiveTool = toolButton('tool-explosive');
   const pumpTool = toolButton('tool-pump');
   const sealTool = toolButton('tool-seal');
   const scanTool = toolButton('tool-scan');
   const lookTool = toolButton('tool-look');
   const toolHint = element('span', 'tool-hint');
   toolHint.dataset['testid'] = 'tool-hint';
-  toolBar.append(supportTool, campTool, pumpTool, sealTool, scanTool, lookTool, toolHint);
+  toolBar.append(
+    supportTool,
+    campTool,
+    explosiveTool,
+    pumpTool,
+    sealTool,
+    scanTool,
+    lookTool,
+    toolHint,
+  );
   // What the map cannot show.
   const mapNotes = element('section', 'map-notes');
   mapNotes.dataset['testid'] = 'map-notes';
@@ -254,8 +264,8 @@ export function mountPreview(root: HTMLElement): void {
     campTool.classList.toggle('on', tool === 'camp');
     // With no kit there is nothing to found: the button is not shown.
     campTool.hidden = kitsHeld === 0;
-    // The camp-made tools (issue #104): each button shows how many are held,
-    // and is not shown while there is none.
+    // The camp-made tools (issues #103 and #104): each button shows how many
+    // are held, and is not shown while there is none.
     const held = heldTools();
     /** Set one tool button's words, whether it is on, and whether it shows. */
     const showTool = (
@@ -269,12 +279,22 @@ export function mountPreview(root: HTMLElement): void {
       toolButtonEl.classList.toggle('on', tool === name);
       toolButtonEl.hidden = !show;
     };
+    const explosivesHeld = countItem(session.state, STRUCTURES.explosive.placedFromItem);
+    showTool(
+      explosiveTool,
+      'explosive',
+      `Place explosive (${explosivesHeld})`,
+      explosivesHeld > 0 || tool === 'explosive',
+    );
     showTool(pumpTool, 'pump', `Place pump (${held.pumps})`, held.pumps > 0);
     showTool(sealTool, 'seal', `Seal (${held.sealant})`, held.sealant > 0);
     showTool(scanTool, 'scan', `Scan (${held.charges})`, held.charges > 0);
     showTool(lookTool, 'look', 'Inspect', true);
     toolBar.hidden = view.ended !== null;
-    if (tool === 'support') {
+    if (tool === 'explosive') {
+      toolHint.textContent =
+        'A tap shows the blast of an explosive; a second tap on the square places it. Tap the button again to go back to mining.';
+    } else if (tool === 'support') {
       toolHint.textContent = 'A tap places a support. Tap the button again to go back to mining.';
     } else if (tool === 'camp') {
       toolHint.textContent =
@@ -407,6 +427,8 @@ export function mountPreview(root: HTMLElement): void {
     }
     const held = heldTools();
     if (
+      (tool === 'explosive' &&
+        countItem(session.state, STRUCTURES.explosive.placedFromItem) === 0) ||
       (tool === 'pump' && held.pumps === 0) ||
       (tool === 'seal' && held.sealant === 0) ||
       (tool === 'scan' && held.charges === 0)
@@ -441,6 +463,7 @@ export function mountPreview(root: HTMLElement): void {
   const toolButtons: [HTMLButtonElement, MapTool][] = [
     [supportTool, 'support'],
     [campTool, 'camp'],
+    [explosiveTool, 'explosive'],
     [pumpTool, 'pump'],
     [sealTool, 'seal'],
     [scanTool, 'scan'],

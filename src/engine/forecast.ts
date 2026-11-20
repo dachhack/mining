@@ -1,17 +1,20 @@
 // The hazard parts of the end-shift forecast (design doc 11; 0014 item 4).
 //
-// The cracks and the slumps are built (issue #94), and the flows of water and
-// lava (issue #99). Gas joins with T11. `forecastShift` in shift.ts calls
-// these functions and adds the upkeep part.
+// The cracks and the slumps are built (issue #94), the flows of water and
+// lava (issue #99), and gas, charges and ignition (issue #103).
+// `forecastShift` in shift.ts calls `forecastHazards` and adds the upkeep
+// part.
 
 import type { Vec3 } from '../data';
 import { stepFluids } from './cube/fluids';
+import { stepGas } from './cube/gas';
 import { newCubePhase } from './cube/phase';
 import { stepSlumps } from './cube/slumps';
 import type { GameEvent } from './events';
 import { depthIn, depthMapOf } from './heightmap';
 import { knownCube, knownSquare } from './known';
 import { stabilityIn } from './slump';
+import { isRevealed } from './state';
 import type { GameState } from './state';
 
 /**
@@ -22,8 +25,11 @@ import type { GameState } from './state';
  *   and goes on if the square becomes unstable again. `to` is the cell where
  *   the block would come to rest if it fell as the pit stands now (on top of
  *   the foot of its slide path), or `null` while the countdown is stopped.
- * - `unstableOre`: the armed unstable ore at `pos` (T11).
- * - `explosive`: the placed explosive at `pos` (T11).
+ * - `unstableOre`: the armed unstable ore block at `pos` (design doc 6.6).
+ * - `explosive`: the placed explosive on the top block at `pos`.
+ *   Both go off in the coming cube phase: `inShifts` is always 1. Every
+ *   entry listed does go off, unless a hazard of that same cube phase reaches
+ *   it first (lava on a charge, rubble on the ore).
  *
  * `inShifts` is how many cube phases from now: 1 means "in the coming cube
  * phase". For a cracked block it is the stored timer plus 1, the number the
@@ -43,7 +49,12 @@ export type CountdownForecast =
  * A square is read through `knownSquare`, and whether its countdown is
  * running through `stabilityIn`, which reads depths, trees, supports and
  * seen top blocks only. So the result cannot depend on anything hidden.
- * Armed unstable ore and placed explosives join the list with T11.
+ * After the cracks come the armed charges (armed unstable ore and placed
+ * explosives), in the order of `state.armed`; only ones on a block the
+ * player has seen, which every one is: ore is armed only while known, and an
+ * explosive is placed on a top block. Armed ore that is no longer its
+ * square's top block (sealed rock was placed on it) is left out: it is
+ * smothered and will not go off.
  * Does not change `state`.
  */
 export function forecastCountdowns(state: GameState): CountdownForecast[] {
@@ -66,45 +77,99 @@ export function forecastCountdowns(state: GameState): CountdownForecast[] {
       });
     }
   }
+  for (const charge of state.armed) {
+    if (!isRevealed(state, charge.pos)) {
+      continue;
+    }
+    // Armed ore goes off only while it is its square's top block: the same
+    // test step (c) makes (`setOffCharges` in cube/gas.ts). Ore that sealed
+    // rock has buried in this player phase will not go off, so it is not
+    // listed (review of PR #105). Depths are always seen.
+    if (
+      charge.kind === 'unstableOre' &&
+      depthIn(map, charge.pos.x, charge.pos.y) !== charge.pos.z
+    ) {
+      continue;
+    }
+    countdowns.push({ kind: charge.kind, pos: { ...charge.pos }, inShifts: 1 });
+  }
   return countdowns;
 }
 
+/** The three hazard parts of the forecast: see `ShiftForecast` in shift.ts. */
+export interface HazardForecast {
+  slumps: GameEvent[];
+  flows: GameEvent[];
+  gas: GameEvent[];
+}
+
 /**
- * What step (a) of the coming cube phase will do: run `stepSlumps` on
- * `knownCube(state)`, the copy in which every unseen cell is plain rock with
- * nothing in it, and return the events it emits (`blockFell`, `blockCracked`,
- * `structureDestroyed`, ...). See `ShiftForecast.slumps` in shift.ts for how
- * exact this is. Does not change `state`.
+ * What steps (a), (b) and (c) of the coming cube phase will do to what the
+ * player sees (design doc 6 and 11): the steps are run in order on
+ * `knownCube(state)`, the copy in which every unrevealed cell is plain rock
+ * with nothing in it, and the events of each are returned apart.
+ *
+ * - `slumps`: step (a), `stepSlumps`: `blockFell`, `blockCracked`, what a
+ *   slump destroys.
+ * - `flows`: step (b), `stepFluids`: `fluidMoved`, `fluidRemoved`,
+ *   `lavaPoured`, `stoneFormed`, what water or lava destroys.
+ * - `gas`: step (c), `stepGas`: `gasMoved`, `exploded` for each charge, armed
+ *   ore and gas explosion, `blockDestroyed`, `treeDestroyed`, `gasRemoved`,
+ *   and what an explosion destroys.
+ *
+ * Each step runs after the ones before it, because a slump changes the pit
+ * the water then flows in, and lava that has flowed lights gas.
+ *
+ * NO DICE. The phase is marked as a forecast (`CubePhase.forecast`), so a
+ * relic or keystone in a blast is not rolled for: the forecast says
+ * `blockMayBeDestroyed` and nothing is drawn from the RNG, not even from the
+ * copy's (decision note 0017 item 3).
+ *
+ * HOW EXACT. Everything these steps read is seen (depths, tops, what stands
+ * on squares, structures, armed charges), so this is what will happen, with
+ * one kind of exception: a top block that a slump or a blast removes shows a
+ * new top block, which is not seen yet and is taken to be plain rock with
+ * solid rock under it. If it is weaker it may crack as well, and if it was
+ * the roof of a cavern or pocket, the space collapses and its contents come
+ * out, which the forecast cannot know.
+ *
+ * Does not change `state`.
+ */
+export function forecastHazards(state: GameState): HazardForecast {
+  const copy = knownCube(state);
+  const phase = newCubePhase(true);
+  const slumps: GameEvent[] = [];
+  stepSlumps(copy, slumps, phase);
+  const flows: GameEvent[] = [];
+  stepFluids(copy, flows, phase);
+  const gas: GameEvent[] = [];
+  stepGas(copy, gas, phase);
+  return { slumps, flows, gas };
+}
+
+/**
+ * What step (a) of the coming cube phase will do: `forecastHazards(state).slumps`.
+ * See `ShiftForecast.slumps` in shift.ts for how exact this is. Does not
+ * change `state`.
  */
 export function forecastSlumps(state: GameState): GameEvent[] {
-  const copy = knownCube(state);
-  const events: GameEvent[] = [];
-  stepSlumps(copy, events, newCubePhase());
-  return events;
+  return forecastHazards(state).slumps;
 }
 
 /**
  * Part 2 of the forecast, the flows: what step (b) of the coming cube phase
- * will do to the water and lava the player sees (design doc 6 and 11).
- *
- * - Runs steps (a) and (b) of the cube phase (`stepSlumps`, then
- *   `stepFluids`) on `knownCube(state)`, the copy in which every unrevealed
- *   cell is plain rock with nothing in it, and returns the events step (b)
- *   emits: `fluidMoved` for each unit that will move, `fluidRemoved`,
- *   `lavaPoured`, `stoneFormed`, and what lava or water will destroy. Step
- *   (a) runs first because a slump changes the pit the water then flows in;
- *   its own events are `forecastSlumps`.
- * - Everything the flow rule reads is seen (depths, and what stands on the
- *   squares), so this is what will happen, as exactly as the slumps are
- *   forecast (`ShiftForecast.slumps` in shift.ts).
- * - Gas (step (c), `stepGas`) joins with T11.
- * - Does not change `state`.
+ * will do to the water and lava the player sees: `forecastHazards(state).flows`.
+ * Does not change `state`.
  */
 export function forecastFlows(state: GameState): GameEvent[] {
-  const copy = knownCube(state);
-  const phase = newCubePhase();
-  stepSlumps(copy, [], phase); // its events are not part of the flows
-  const events: GameEvent[] = [];
-  stepFluids(copy, events, phase);
-  return events;
+  return forecastHazards(state).flows;
+}
+
+/**
+ * Part 3 of the forecast: what step (c) of the coming cube phase will do: gas
+ * spreading, charges and armed ore going off, gas burning:
+ * `forecastHazards(state).gas`. Does not change `state`.
+ */
+export function forecastGas(state: GameState): GameEvent[] {
+  return forecastHazards(state).gas;
 }

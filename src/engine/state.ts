@@ -435,6 +435,27 @@ export function setCrackTimer(state: GameState, pos: Vec3, timer: number): void 
   state.cracks[cellIndex(state.size, pos)] = timer + 1;
 }
 
+/**
+ * The block in the cell `pos` has just been buried: something landed or was
+ * placed on its square (rubble from a slump, stone where water met lava,
+ * sealed rock), so it is no longer a top block. Two things belong to a top
+ * block only, and both go:
+ * - its crack (design doc 6.1);
+ * - the arming of unstable ore: buried ore is smothered and will not go off
+ *   (decision note 0035). So `state.armed` never holds buried ore, and every
+ *   reader of the list agrees.
+ * Does nothing for a cell outside the grid (a square that had no block left).
+ */
+export function buryTopBlock(state: GameState, pos: Vec3): void {
+  if (!inGrid(state.size, pos)) {
+    return;
+  }
+  clearCrack(state, pos);
+  if (armedAt(state, pos) === 'unstableOre') {
+    disarmCharge(state, pos);
+  }
+}
+
 /** Remove the crack from the cell `pos`, for example when its block falls or is mined. */
 export function clearCrack(state: GameState, pos: Vec3): void {
   state.cracks[cellIndex(state.size, pos)] = 0;

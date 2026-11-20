@@ -69,9 +69,9 @@ import type { Vec3 } from '../../data';
 import { destroyCampsAt, destroyStructure } from '../destroy';
 import type { FluidKind, GameEvent } from '../events';
 import { SQUARE_STEPS, depthAt, structureOnSquare } from '../heightmap';
-import { setLavaOn, setWaterOn } from '../standing';
+import { liftGasOutOf, setLavaOn, setWaterOn } from '../standing';
 import {
-  clearCrack,
+  buryTopBlock,
   inGrid,
   isLavaSource,
   lavaAt,
@@ -272,13 +272,15 @@ function formStone(state: GameState, pit: Pit, events: GameEvent[]): void {
       const oldTop = { x, y, z: depth };
       const stone = { x, y, z: depth - 1 };
       // The block that was the top is buried: a crack belongs to a top block.
-      if (inGrid(state.size, oldTop)) {
-        clearCrack(state, oldTop);
-      }
+      // Armed unstable ore under the stone is smothered too.
+      buryTopBlock(state, oldTop);
       // The cell may still hold the square's water or lava as it was stored
       // before this step; the pit table has the count, so empty the cell.
       setWater(state, stone, 0);
       setLava(state, stone, 0);
+      // Gas on the square is not turned to stone: it rises with the top, or
+      // blows away if the square comes up to ground level (task T11).
+      liftGasOutOf(state, stone, events);
       setBlock(state, stone, BLOCKS.stone.code);
       pit.depth[square] = depth - 1;
       events.push({ type: 'stoneFormed', pos: stone });

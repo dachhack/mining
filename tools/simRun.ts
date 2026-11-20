@@ -3,7 +3,7 @@
 //
 // Everything here goes through the engine's public surface.
 
-import { BLOCKS, FIELD_RECIPES, ITEMS, SHIFT, STRUCTURES, TELLS } from '../src/data';
+import { BLOCKS, CAMP_RECIPES, FIELD_RECIPES, ITEMS, SHIFT, STRUCTURES, TELLS } from '../src/data';
 import {
   ENGINE_VERSION,
   actionKey,
@@ -156,7 +156,11 @@ function addCount(counts: Record<string, number>, key: string, amount: number): 
 
 /** The id an item or gauge made by a recipe is counted under. */
 function recipeOutputId(recipeId: string): { id: string; amount: number } {
-  const recipe = FIELD_RECIPES.find((candidate) => candidate.id === recipeId);
+  // A field recipe, or a camp recipe (the random policy sometimes founds a
+  // camp and crafts at it). `??` means "or, if that found nothing".
+  const recipe =
+    FIELD_RECIPES.find((candidate) => candidate.id === recipeId) ??
+    CAMP_RECIPES.find((candidate) => candidate.id === recipeId);
   if (recipe === undefined) {
     throw new Error(`The engine crafted an unknown recipe: ${recipeId}`);
   }

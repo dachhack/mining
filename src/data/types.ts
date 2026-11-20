@@ -274,6 +274,16 @@ export interface GasData {
   ventReach: number;
 }
 
+/** Explosions of a placed charge or of unstable ore (design doc 6.6). See hazards.ts. */
+export interface ExplosionData {
+  /** The blast covers every square within this many steps of the charge. */
+  blastReach: number;
+  /** Block ids: blocks a blast destroys only by chance (relics and keystones). */
+  chanceBlocks: string[];
+  /** The probability, 0 to 1, that a blast destroys one of `chanceBlocks`. */
+  chanceBlockDestroyed: number;
+}
+
 export interface LavaData {
   unitsPerCell: number;
   flowEveryShifts: number;
@@ -294,6 +304,7 @@ export interface HazardData {
   slump: SlumpData;
   water: WaterData;
   gas: GasData;
+  explosion: ExplosionData;
   lava: LavaData;
   forecast: ForecastData;
 }
