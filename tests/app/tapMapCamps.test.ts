@@ -108,8 +108,8 @@ describe('tiles', () => {
     expect(buildTile(state, 1, 1)).toMatchObject({ camp: true, cheaper: false });
     expect(buildTile(state, 3, 1)).toMatchObject({ camp: false, cheaper: true });
     expect(buildTile(state, 4, 1)).toMatchObject({ camp: false, cheaper: false }); // the tree
-    expect(buildTile(state, 6, 1).cheaper).toBe(true); // 4 steps
-    expect(buildTile(state, 7, 1).cheaper).toBe(false); // 5 steps
+    expect(buildTile(state, 10, 1).cheaper).toBe(true); // 8 steps
+    expect(buildTile(state, 11, 1).cheaper).toBe(false); // 9 steps
   });
 
   it('with no camp nothing is marked', () => {

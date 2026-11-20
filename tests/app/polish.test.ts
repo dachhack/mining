@@ -99,28 +99,28 @@ describe('the edge of the area where mining is cheaper', () => {
   });
 
   it('runs round the area: its outer squares have an edge, its inner squares none', () => {
-    // A 13 x 13 field with a camp in the middle (x5-7, y5-7). Mining is
-    // cheaper within 4 steps of a camp square.
-    const rows = Array.from({ length: 13 }, () => '0'.repeat(13));
-    const state = pit(rows, { camps: [{ pos: { x: 6, y: 6, z: 0 }, foundedShift: 1 }] });
+    // A 21 x 21 field with a camp in the middle (x9-11, y9-11). Mining is
+    // cheaper within 8 steps of a camp square.
+    const rows = Array.from({ length: 21 }, () => '0'.repeat(21));
+    const state = pit(rows, { camps: [{ pos: { x: 10, y: 10, z: 0 }, foundedShift: 1 }] });
     // The camp's own squares and the squares beside it are inside.
-    expect(buildTile(state, 6, 6).cheaperEdge).toEqual(NO_SIDES);
-    expect(buildTile(state, 8, 6).cheaperEdge).toEqual(NO_SIDES);
-    // x11 y6 is 4 steps east of the camp square x7 y6: the last one inside.
-    expect(buildTile(state, 11, 6).cheaper).toBe(true);
-    expect(buildTile(state, 11, 6).cheaperEdge.east).toBe(true);
-    expect(buildTile(state, 11, 6).cheaperEdge.west).toBe(false);
-    // x12 y6 is outside: no discount and no edge.
-    expect(buildTile(state, 12, 6).cheaper).toBe(false);
-    expect(buildTile(state, 12, 6).cheaperEdge).toEqual(NO_SIDES);
+    expect(buildTile(state, 10, 10).cheaperEdge).toEqual(NO_SIDES);
+    expect(buildTile(state, 12, 10).cheaperEdge).toEqual(NO_SIDES);
+    // x19 y10 is 8 steps east of the camp square x11 y10: the last one inside.
+    expect(buildTile(state, 19, 10).cheaper).toBe(true);
+    expect(buildTile(state, 19, 10).cheaperEdge.east).toBe(true);
+    expect(buildTile(state, 19, 10).cheaperEdge.west).toBe(false);
+    // x20 y10 is outside: no discount and no edge.
+    expect(buildTile(state, 20, 10).cheaper).toBe(false);
+    expect(buildTile(state, 20, 10).cheaperEdge).toEqual(NO_SIDES);
   });
 });
 
 describe('where the map opens (issue #110)', () => {
   it('on the coal in sight nearest the middle, on a new run', () => {
-    // Seed 110: coal on open ground at x17 y18, four steps from the middle.
+    // Seed 110: coal on open ground at x16 y12, four steps from the middle.
     const state = createRun(110, 'none', 'standard');
-    expect(openingSquare(state)).toEqual({ x: 17, y: 18 });
+    expect(openingSquare(state)).toEqual({ x: 16, y: 12 });
   });
 
   it('on the middle of the pit once something is dug', () => {

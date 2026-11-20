@@ -58,8 +58,8 @@ describe('what a pit costs on paper', () => {
   it('the mean cost of a layer follows the rock weights of its band', () => {
     // Layer 0 is 70% dirt (1 AP) and 30% stone (2 AP).
     expect(meanMineCostOfLayer(0)).toBeCloseTo(0.7 * 1 + 0.3 * 2, 10);
-    // Layer 7, the last of the upper band, is 10% dirt and 90% stone.
-    expect(meanMineCostOfLayer(7)).toBeCloseTo(0.1 * 1 + 0.9 * 2, 10);
+    // Layer 3, the last of the upper band, is 10% dirt and 90% stone.
+    expect(meanMineCostOfLayer(3)).toBeCloseTo(0.1 * 1 + 0.9 * 2, 10);
     // Layer 31, the last of all, is 5% stone and 95% hard rock (3 AP).
     expect(meanMineCostOfLayer(31)).toBeCloseTo(0.05 * 2 + 0.95 * 3, 10);
     // A pit 1 deep is one block of layer 0.

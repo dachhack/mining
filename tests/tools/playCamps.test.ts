@@ -70,7 +70,7 @@ describe('"camp x,y"', () => {
     expect(view.map.rows[4]).toBe('# # A A A # #');
     expect(view.legend).toContain('A camp square (cannot be mined while the camp stands)');
     expect(view.notes).toContain(
-      'Camp at x3 y3 (ground level), on x2-4, y2-4: it burns 1 fuel every 4 shifts. ' +
+      'Camp at x3 y3 (ground level), on x2-4, y2-4: it burns 1 fuel every 8 shifts. ' +
         '"rest 3,3" or "decommission 3,3".',
     );
     const text = renderView(view);
@@ -164,16 +164,16 @@ describe('a camp on the map', () => {
 
   it('lists the squares where mining is cheaper, row by row', () => {
     // A 12 x 3 strip with a camp at its west end (x 0 to 2). The squares 1 to
-    // 4 steps east of it are x 3 to 6.
+    // 8 steps east of it are x 3 to 10.
     const strip = buildState({
       layers: [layer('#', 12, 3), layer('#', 12, 3)],
       camps: [{ pos: { x: 1, y: 1, z: 0 }, foundedShift: 1 }],
     });
     const view = buildView(strip, { deepestDepth: 0 });
     expect(view.notes).toContain(
-      'Mining costs 1 AP less (never below 1) near a camp: within 4 steps of a camp square and ' +
+      'Mining costs 1 AP less (never below 1) near a camp: within 8 steps of a camp square and ' +
         'no more than 4 levels below the camp. Those squares now, by row: ' +
-        'y0 x3-6; y1 x3-6; y2 x3-6',
+        'y0 x3-10; y1 x3-10; y2 x3-10',
     );
   });
 
@@ -193,7 +193,7 @@ describe('a camp on the map', () => {
   });
 
   it('says when upkeep is due, and the forecast counts it', () => {
-    const due = campField({ shift: 4, fuel: 9 });
+    const due = campField({ shift: 8, fuel: 9 });
     const view = buildView(due, { deepestDepth: 0 });
     expect(view.notes.join('\n')).toContain('it burns 1 fuel when this shift ends');
     expect(view.forecast).toContain('fuel 9 -> 7 (-1 shift, -1 camp upkeep).');
@@ -311,13 +311,14 @@ describe('chains and the "not possible now" line', () => {
     // nothing to say.
     const state = campField({ ap: 1, stockpile: { campKit: 1 } });
     expect(tooLittleApNote(state)).toBeNull();
-    // On a wider field the far stone (2 AP) is missing, and only that.
+    // On a wider field the far stone (2 AP: the 3 squares of the last
+    // column, 9 steps from the camp) is missing, and only that.
     const wide = buildState({
       layers: [layer('#', 12, 3), layer('#', 12, 3)],
       ap: 1,
       camps: [{ pos: { x: 1, y: 1, z: 0 }, foundedShift: 1 }],
     });
-    expect(tooLittleApNote(wide)).toBe('15 mines cost more than the 1 AP you have left.');
+    expect(tooLittleApNote(wide)).toBe('3 mines cost more than the 1 AP you have left.');
   });
 });
 
@@ -357,8 +358,8 @@ describe('the help text', () => {
     expect(help).toContain(
       'MINING NEAR A CAMP IS CHEAPER: a mine costs 1 AP less (never less than 1)',
     );
-    expect(help).toContain('within 4 steps of a camp square and no more than 4 levels deeper');
-    expect(help).toContain('each camp uses up 1 fuel at the end of every 4th shift');
+    expect(help).toContain('within 8 steps of a camp square and no more than 4 levels deeper');
+    expect(help).toContain('each camp uses up 1 fuel at the end of every 8th shift');
     expect(help).toContain('The kit is not given back.');
     expect(help).toContain('A camp is DESTROYED');
     expect(help).toContain('Iron ingot (x2): from 2 Raw iron ore, 1 Coal');
