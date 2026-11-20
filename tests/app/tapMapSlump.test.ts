@@ -27,6 +27,21 @@ describe('tiles', () => {
     expect(buildTile(endShift(cracked).state, 0, 0).crack).toBe(1);
   });
 
+  it('says whether the countdown is running or stopped', () => {
+    const running = endShift(pit(['012'], ['ddd'])).state;
+    expect(buildTile(running, 0, 0)).toMatchObject({ crack: 2, crackRunning: true });
+    // The same crack on a square that is stable: stopped.
+    const stopped = pit(['011'], ['ddd'], { cracks: [{ pos: { x: 0, y: 0, z: 0 }, timer: 1 }] });
+    expect(buildTile(stopped, 0, 0)).toMatchObject({ crack: 2, crackRunning: false });
+    // And on a square a support holds.
+    const held = pit(['012'], ['ddd'], {
+      cracks: [{ pos: { x: 0, y: 0, z: 0 }, timer: 0 }],
+      supports: [{ x: 0, y: 0, z: 0 }],
+    });
+    expect(buildTile(held, 0, 0)).toMatchObject({ crack: 1, crackRunning: false });
+    expect(buildTile(running, 1, 0).crackRunning).toBe(false);
+  });
+
   it('a supported square carries the support mark', () => {
     const state = pit(['012'], ['ddd'], { supports: [{ x: 0, y: 0, z: 0 }] });
     expect(buildTile(state, 0, 0).structure).toBe('support');

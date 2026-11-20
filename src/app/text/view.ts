@@ -34,6 +34,7 @@ import {
   legalActions,
   previewCubePhase,
   shiftsUntilRegrowth,
+  slumpCheck,
   stockpileEntries,
 } from '../../engine';
 import type { GameState, KnownSquare } from '../../engine';
@@ -240,7 +241,7 @@ function structureName(code: number): string | null {
  * yet, and their words are here so that nothing on a top can go unseen when
  * they are.
  */
-function onTopNote(square: KnownSquare): string | null {
+function onTopNote(square: KnownSquare, crackRunning: boolean): string | null {
   const top = square.top;
   if (top === null || square.tree) {
     return null;
@@ -249,9 +250,15 @@ function onTopNote(square: KnownSquare): string | null {
   if (top.water > 0) things.push(`water ${top.water}`);
   if (top.lava > 0) things.push(`lava ${top.lava}`);
   if (top.gas > 0) things.push(`gas ${top.gas}`);
-  // The countdown: 1 means "falls when this shift ends". The Hazards line
-  // says whether it is running and where the block would land.
-  if (top.crackTimer !== null) things.push(`a crack, countdown ${top.crackTimer + 1}`);
+  // The countdown: 1 means "falls when this shift ends". A stopped one is
+  // said to be stopped; the Hazards line says where the block would land.
+  if (top.crackTimer !== null) {
+    things.push(
+      crackRunning
+        ? `a crack, countdown ${top.crackTimer + 1}`
+        : `a crack, stopped at ${top.crackTimer + 1}`,
+    );
+  }
   const structure = structureName(top.structure);
   if (structure !== null) things.push(`a ${structure}`);
   if (things.length === 0) {
@@ -302,7 +309,11 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       if (square.depth > 0) {
         anyDug = true;
       }
-      const note = onTopNote(square);
+      // Whether a crack's countdown is running: the square is unstable.
+      // `slumpCheck` reads only what the player sees.
+      const crackRunning =
+        square.top !== null && square.top.crackTimer !== null && slumpCheck(state, x, y).unstable;
+      const note = onTopNote(square, crackRunning);
       if (note !== null) {
         notes.push(note);
       }

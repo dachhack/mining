@@ -88,7 +88,7 @@ test('a risky mine needs a second tap; cracks show; the support tool places a su
   await tapSquare(page, canvas, 14, 16);
   await expect(outcome).toContainText('Placed a support.');
   await expect(page.getByTestId('map-notes')).toContainText(
-    'On x14 y16: a crack, countdown 2, a support',
+    'On x14 y16: a crack, stopped at 2, a support',
   );
   // The last support is placed: a tap mines again.
   await expect(supportTool).toHaveText('Place support (0)');

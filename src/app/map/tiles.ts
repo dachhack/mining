@@ -9,7 +9,7 @@
 
 import { BLOCKS, STRUCTURES, SURFACE } from '../../data';
 import type { BlockId } from '../../data';
-import { isSquare, knownSquare } from '../../engine';
+import { isSquare, knownSquare, slumpCheck } from '../../engine';
 import type { GameState } from '../../engine';
 import { PREVIEW_MAP } from './palette';
 import type { SurfaceMark } from './palette';
@@ -50,6 +50,12 @@ export interface Tile {
    * falls when this shift ends. `null` for no crack.
    */
   crack: number | null;
+  /**
+   * True if that countdown is running: the square is unstable. False for no
+   * crack, and for a crack whose countdown has stopped because the square is
+   * stable or held now (it is drawn pale; it goes on if that changes).
+   */
+  crackRunning: boolean;
   /**
    * What is on the surface of a square at ground level: a tree (it hides the
    * block), or a stump, a path, a meadow or an outcrop (drawn faintly over
@@ -126,6 +132,7 @@ export function buildTile(state: GameState, x: number, y: number): Tile {
       traced: false,
       structure: null,
       crack: null,
+      crackRunning: false,
       surface: 'tree',
       higher,
     };
@@ -143,6 +150,7 @@ export function buildTile(state: GameState, x: number, y: number): Tile {
       traced: false,
       structure: null,
       crack: null,
+      crackRunning: false,
       surface: null,
       higher,
     };
@@ -156,6 +164,9 @@ export function buildTile(state: GameState, x: number, y: number): Tile {
     traced: square.traces,
     structure: structureMark(square.top.structure),
     crack: square.top.crackTimer === null ? null : square.top.crackTimer + 1,
+    // `slumpCheck` reads only what the player sees (depths, trees, supports,
+    // seen top blocks), so this tells nothing hidden.
+    crackRunning: square.top.crackTimer !== null && slumpCheck(state, x, y).unstable,
     surface,
     higher,
   };

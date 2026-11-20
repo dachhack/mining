@@ -333,8 +333,10 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
     ctx.strokeRect(x + 0.25 * c, y + 0.25 * c, 0.5 * c, 0.5 * c);
   }
   if (tile.crack !== null) {
-    // A jagged red line from corner to corner, dark underneath so that it
-    // shows on any rock, and the countdown in the top-right corner.
+    // A jagged line from corner to corner, dark underneath so that it shows
+    // on any rock, and the countdown in the top-right corner. Red while the
+    // countdown is running; pale grey when it has stopped.
+    const crackColour = tile.crackRunning ? MARK_COLOURS.crack : MARK_COLOURS.crackStopped;
     const zigzag: [number, number][] = [
       [0.1, 0.15],
       [0.42, 0.4],
@@ -344,7 +346,7 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
     ];
     for (const [colour, width] of [
       [MARK_COLOURS.crackOutline, Math.max(3, c / 6)],
-      [MARK_COLOURS.crack, Math.max(1.5, c / 11)],
+      [crackColour, Math.max(1.5, c / 11)],
     ] as const) {
       ctx.strokeStyle = colour;
       ctx.lineWidth = width;
@@ -364,7 +366,7 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
     ctx.lineWidth = Math.max(2, c / 10);
     ctx.strokeStyle = MARK_COLOURS.crackOutline;
     ctx.strokeText(String(tile.crack), x + c - 2, y + 1);
-    ctx.fillStyle = MARK_COLOURS.crack;
+    ctx.fillStyle = crackColour;
     ctx.fillText(String(tile.crack), x + c - 2, y + 1);
   }
 }
@@ -384,6 +386,7 @@ function sampleTile(overrides: Partial<Tile>): Tile {
     traced: false,
     structure: null,
     crack: null,
+    crackRunning: false,
     surface: null,
     higher: { north: false, east: false, south: false, west: false },
     ...overrides,
@@ -421,8 +424,10 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
   let dug = false;
   let traced = false;
   let cracked = false;
+  let stoppedCrack = false;
   for (const tile of tiles) {
-    if (tile.crack !== null) cracked = true;
+    if (tile.crack !== null && tile.crackRunning) cracked = true;
+    if (tile.crack !== null && !tile.crackRunning) stoppedCrack = true;
     if (tile.kind === 'block' && tile.block !== null) blocks.add(tile.block);
     if (tile.kind === 'floor') floor = true;
     if (tile.surface !== null) surfaceKinds.add(tile.surface);
@@ -477,8 +482,16 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
   if (cracked) {
     entries.push(
       legendEntry(
-        sampleTile({ block: 'dirt', crack: 1 }),
+        sampleTile({ block: 'dirt', crack: 1, crackRunning: true }),
         'crack: the block slumps into the pit; the number is its countdown (1 = when this shift ends)',
+      ),
+    );
+  }
+  if (stoppedCrack) {
+    entries.push(
+      legendEntry(
+        sampleTile({ block: 'dirt', crack: 1, crackRunning: false }),
+        'pale crack: countdown stopped (the square is stable or held); it goes on if that changes',
       ),
     );
   }

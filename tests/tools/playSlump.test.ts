@@ -170,9 +170,11 @@ describe('cracks and slumps in the view', () => {
 
   it('a stopped countdown says so', () => {
     const state = pit(['011'], ['ddd'], { cracks: [{ pos: { x: 0, y: 0, z: 0 }, timer: 1 }] });
-    expect(viewText(state)).toContain(
+    const text = viewText(state);
+    expect(text).toContain(
       'x0 y0 is cracked, countdown stopped at 2: the square is stable or held now',
     );
+    expect(text).toContain('On x0 y0: a crack, stopped at 2');
   });
 
   it('says when a slump hurt the crew and when a support was lost', () => {

@@ -146,6 +146,8 @@ export const MARK_COLOURS = {
   unstable: '#ff9a2e',
   /** A crack on a top block, and the countdown beside it. */
   crack: '#ff5a3c',
+  /** A crack whose countdown has stopped (the square is stable or held). */
+  crackStopped: '#c9c2b8',
   crackOutline: 'rgba(0, 0, 0, 0.8)',
   /** The shadow a higher neighbour casts on a lower square. */
   wallShadow: 'rgba(0, 0, 0, 0.5)',

@@ -150,7 +150,9 @@ THE GAME
     too, is lost. A slump can make other squares unstable; they crack in their turn.
   - If the square stops being unstable (you make the slope gentler, or rubble fills the hole
     below it), its countdown stops where it is. It goes on from there if the square becomes
-    unstable again.
+    unstable again. A stopped crack reads "a crack, stopped at N" in the notes, and the
+    Hazards line says its countdown is stopped. Mind one stopped at 1: it falls at the end of
+    the shift in which the square becomes unstable again.
   - Mining a cracked block removes it, crack and all, like any other block.
   - A tree holds its square: a square with a tree never cracks. Cutting the tree ends that.
   - A SUPPORT holds the square it is placed on, and only that square: it does not crack, and a

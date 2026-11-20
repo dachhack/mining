@@ -92,6 +92,7 @@ describe('tiles', () => {
       traced: false,
       structure: null,
       crack: null,
+      crackRunning: false,
       surface: 'meadow',
       higher: NO_HIGHER,
     });
