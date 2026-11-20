@@ -12,9 +12,9 @@
 // nothing below a top block.
 
 import { isRunActive, isSquare, knownSquare, mineCheck } from '../../engine';
-import type { CutTreeAction, GameState, MineAction } from '../../engine';
+import type { CutTreeAction, GameState, MineAction, PlaceSupportAction } from '../../engine';
 import { depthName, topBlockText } from '../text/describe';
-import { squareText, tapChoice } from '../text/squares';
+import { squareText, supportChoice, tapChoice } from '../text/squares';
 
 /** A square of the map. */
 export interface MapSquare {
@@ -22,25 +22,44 @@ export interface MapSquare {
   y: number;
 }
 
-/** What the map marks after a tap that was refused. Nothing is marked after one that was taken. */
+/**
+ * What a tap on the map does (design doc 11: "other actions are chosen from a
+ * tool bar and then aimed with a tap"):
+ * - 'dig': mine the square, or cut its tree;
+ * - 'support': place a support on the square (issue #94).
+ */
+export type MapTool = 'dig' | 'support';
+
+/**
+ * What the map marks after a tap that was not taken: one the rules refused,
+ * or a risky mine waiting for a second tap. Nothing is marked after a tap
+ * that was taken.
+ */
 export interface MapMarks {
   /** The square that was tapped, or `null`. */
   selected: MapSquare | null;
   /** The neighbours that are too high for the level rule. */
   tooHigh: MapSquare[];
+  /** The squares the mine would make unstable (design doc 11). */
+  unstable: MapSquare[];
 }
 
 /** No marks at all. */
-export const NO_MARKS: MapMarks = { selected: null, tooHigh: [] };
+export const NO_MARKS: MapMarks = { selected: null, tooHigh: [], unstable: [] };
 
 /** What a tap on a square came to. */
 export interface TapOutcome {
-  /** The action to take, or `null` if the tap is refused. */
-  entry: MineAction | CutTreeAction | null;
-  /** The lines to show the player for a refused tap; empty when `entry` is set. */
+  /** The action to take, or `null` if the tap is refused or needs a second tap. */
+  entry: MineAction | CutTreeAction | PlaceSupportAction | null;
+  /** The lines to show the player when nothing is taken; empty when `entry` is set. */
   lines: string[];
-  /** What to mark on the map for a refused tap; `NO_MARKS` when `entry` is set. */
+  /** What to mark on the map when nothing is taken; `NO_MARKS` when `entry` is set. */
   marks: MapMarks;
+  /**
+   * True if the tap was a risky mine (it would make squares unstable): a
+   * second tap on the same square takes it (design doc 11).
+   */
+  needsConfirm: boolean;
 }
 
 /**
@@ -57,22 +76,51 @@ export function squareSummary(state: GameState, x: number, y: number): string {
 }
 
 /**
- * A tap on the square (x, y): the action it stands for, or why it is refused
- * and what to mark. Does not change `state`.
+ * A tap on the square (x, y) with the tool `tool`: the action it stands for,
+ * or why it is not taken and what to mark. Does not change `state`.
+ *
+ * `confirmed` is true for the second tap in a row on the same square. A mine
+ * that would make squares unstable is taken only then; the first tap shows
+ * the warning and marks those squares.
  */
-export function tapOutcome(state: GameState, x: number, y: number): TapOutcome {
-  const choice = tapChoice(state, x, y);
-  if (choice.entry !== null) {
-    return { entry: choice.entry, lines: [], marks: NO_MARKS };
+export function tapOutcome(
+  state: GameState,
+  x: number,
+  y: number,
+  tool: MapTool = 'dig',
+  confirmed = false,
+): TapOutcome {
+  const choice = tool === 'support' ? supportChoice(state, x, y) : tapChoice(state, x, y);
+  const risky = choice.entry !== null && choice.warning !== null;
+  if (choice.entry !== null && (!risky || confirmed)) {
+    return { entry: choice.entry, lines: [], marks: NO_MARKS, needsConfirm: false };
+  }
+  if (choice.entry !== null && choice.warning !== null) {
+    // A risky mine, tapped once: warn, mark, and wait for the second tap.
+    return {
+      entry: null,
+      lines: [
+        `${squareSummary(state, x, y)}.`,
+        choice.warning,
+        'Tap the square again to mine it all the same.',
+      ],
+      marks: {
+        selected: { x, y },
+        tooHigh: [],
+        unstable: choice.makesUnstable.map((square) => ({ x: square.x, y: square.y })),
+      },
+      needsConfirm: true,
+    };
   }
   const refusal = choice.refusal ?? 'That cannot be done.';
   if (!isRunActive(state) || !isSquare(state, x, y)) {
-    return { entry: null, lines: [refusal], marks: NO_MARKS };
+    return { entry: null, lines: [refusal], marks: NO_MARKS, needsConfirm: false };
   }
-  // The neighbours the level rule names. A tap on a tree is a cut, which the
-  // level rule never refuses, so nothing is marked for it.
+  // The neighbours the level rule names. A tap on a tree is a cut, and a
+  // support is not a mine: the level rule refuses neither, so nothing is
+  // marked for them.
   const tooHigh: MapSquare[] = [];
-  if (!knownSquare(state, x, y).tree) {
+  if (tool === 'dig' && !knownSquare(state, x, y).tree) {
     for (const neighbour of mineCheck(state, x, y).higherNeighbours) {
       tooHigh.push({ x: neighbour.x, y: neighbour.y });
     }
@@ -80,6 +128,7 @@ export function tapOutcome(state: GameState, x: number, y: number): TapOutcome {
   return {
     entry: null,
     lines: [`${squareSummary(state, x, y)}.`, refusal],
-    marks: { selected: { x, y }, tooHigh },
+    marks: { selected: { x, y }, tooHigh, unstable: [] },
+    needsConfirm: false,
   };
 }

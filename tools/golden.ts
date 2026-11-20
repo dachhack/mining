@@ -50,15 +50,23 @@ const STANDARD_RUNS: RecordSpec[] = [
     policyName: 'pit',
     maxDecisions: undefined,
     description:
-      'The pit policy on seed 11: digs a terraced pit round the middle of the map under the level rule, cutting the trees in its way, crafts fuel from the coal it finds, and closes the mine (salvage) when the fuel is about to run out.',
+      'The pit policy on seed 11: digs a terraced pit round the middle of the map under the level rule, with the level benches that keep its walls from slumping, cutting the trees in its way, crafts fuel from the coal it finds, and closes the mine (salvage) when the fuel is about to run out.',
   },
   {
-    name: 'pit-seed-31-traces',
-    seed: 31,
+    name: 'pit-seed-4-support',
+    seed: 4,
     policyName: 'pit',
     maxDecisions: undefined,
     description:
-      'The pit policy on a seed where its pit gets deep enough for top blocks to lie near ore: mineral traces are seen and stay on the map.',
+      'The pit policy on a seed where a square turns out unstable that it cannot mine down: it crafts a support and places it on the cracked square, which then never slumps.',
+  },
+  {
+    name: 'greedy-seed-11-buried',
+    seed: 11,
+    policyName: 'greedy',
+    maxDecisions: undefined,
+    description:
+      'The greedy policy: the steepest pit the level rule allows, with no heed for slumps. Its walls crack, count down and slump into the pit, cascades follow, and the crew is hurt where it works until it is buried.',
   },
   {
     name: 'pit-seed-24-caverns',

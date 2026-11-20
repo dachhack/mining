@@ -49,10 +49,14 @@ export interface CloseMineAction {
 // finds its action needs another field adds it here and to `actionKey`.
 // ---------------------------------------------------------------------------
 
-/** Place a support from the stockpile into the cell `target` (0014 item 6). */
+/**
+ * Place a support from the stockpile on the square (x, y) (design doc 4.1
+ * and 6.1; issue #94). Like a mine, it names a square: there is no reach.
+ */
 export interface PlaceSupportAction {
   type: 'placeSupport';
-  target: Vec3;
+  x: number;
+  y: number;
   ap: number;
 }
 
@@ -160,6 +164,7 @@ export function actionKey(action: Action): string {
   switch (action.type) {
     case 'mine':
     case 'cutTree':
+    case 'placeSupport':
     case 'foundCamp':
     case 'rest':
     case 'decommissionCamp':
@@ -169,7 +174,6 @@ export function actionKey(action: Action): string {
       return `craft ${action.recipe} ap ${action.ap}`;
     case 'closeMine':
       return `closeMine ap ${action.ap}`;
-    case 'placeSupport':
     case 'placeExplosive':
     case 'placePump':
     case 'placeVent':

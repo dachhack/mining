@@ -1,8 +1,8 @@
 import type { HazardData } from './types';
 
 // Every hazard number of design doc 6 and decision note 0014, in one table.
-// All of it is [Default]: tune it here. The per-material cave-in numbers
-// (span and shaft limit) are in blocks.ts, one pair for each block.
+// All of it is [Default]: tune it here. The per-material slump limit is in
+// blocks.ts, one for each block.
 //
 // The M2 skeleton (issue #50) only puts the numbers in place. Each is read by
 // the task that builds its rule; the item of 0014 it comes from is noted.
@@ -10,19 +10,16 @@ import type { HazardData } from './types';
 // What a hazard does to the crew's health is not here: see `CREW.damage` in
 // crew.ts (design doc 5.2). There is no air (issue #90).
 export const HAZARDS: HazardData = {
-  // Cave-ins: design doc 6.1; 0014 items 5 to 10.
-  caveIn: {
-    // The stored timer a block gets when it cracks (item 7). The number shown
-    // to the player is the stored timer plus 1.
-    crackTimer: 2,
-    // A support lines its own cell and this many cells above and below (item 10).
-    supportLiningReach: 2,
-    // An open cell is "tight" when at least this many of its four side
-    // neighbours are solid (item 10).
-    tightCellSolidSides: 3,
-    // A support with no solid cell below it stays only with at least this
-    // many solid side neighbours (item 6).
-    supportHoldSolidSides: 2,
+  // Pit walls slump: design doc 6.1; owner question 81.
+  slump: {
+    // The number a fresh crack shows: the block falls in the cube phase that
+    // ends the shift after next. 1 would mean "at the end of the next shift".
+    crackCountdown: 2,
+    // A square is "steep", and so unstable whatever its material, when it is
+    // this many levels or more above a face neighbour. Only a hazard can make
+    // such a step: the level rule keeps the player's mining to steps of 1.
+    // Must be at least 2, or a slumping block would not move down.
+    steepStep: 2,
   },
   // Water: design doc 6.2; 0014 item 12.
   water: {

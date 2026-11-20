@@ -5,14 +5,17 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { BLOCKS, WORLD } from '../../src/data';
+import { BLOCKS, STRUCTURES, WORLD } from '../../src/data';
 import {
   depthAt,
   hasStump,
   hasTree,
   hashState,
   mayMine,
-  visibleMineralTraces,
+  slumpCheck,
+  structureOnSquare,
+  topBlockAt,
+  unstableSquares,
 } from '../../src/engine';
 import type { GameState } from '../../src/engine';
 import { replayDecisions, statusText } from '../../tools/simRun';
@@ -76,16 +79,58 @@ describe('golden runs', () => {
         }
       }
     }
-    expect(deepest).toBeGreaterThanOrEqual(4);
+    // Level benches keep the walls from slumping, so the pit is wide and
+    // not as deep as a plain cone would be (issue #94).
+    expect(deepest).toBeGreaterThanOrEqual(3);
   });
 
-  // The pit of this run gets deep enough for top blocks to lie within reach
-  // of ore (decision note 0012), so its `tracesSeen` is not all zeros.
-  it('pit-seed-31-traces.json sees mineral traces, and they stay on the map', () => {
-    const state = replayFile('pit-seed-31-traces.json');
-    const flags = state.tracesSeen.reduce((total, flag) => total + flag, 0);
-    expect(flags).toBeGreaterThan(0);
-    expect(visibleMineralTraces(state).length).toBeGreaterThan(0);
+  // Pit walls slump (design doc 6.1; issue #94). The pit policy never makes a
+  // square unstable knowingly, so its pit ends with nothing waiting to fall.
+  it('pit-seed-11.json leaves a pit with no unstable square', () => {
+    expect(unstableSquares(replayFile('pit-seed-11.json'))).toEqual([]);
+  });
+
+  // On this seed a square turns out unstable that the policy cannot mine
+  // down, so it crafts a support and places it. The hash pins the place
+  // action, the stored support, and a crack whose countdown the support stops.
+  it('pit-seed-4-support.json crafts a support and places it on a cracked square', () => {
+    const golden = loadGolden('pit-seed-4-support.json');
+    expect(golden.decisions.some((decision) => decision.startsWith('craft support'))).toBe(true);
+    const places = golden.decisions.filter((decision) => decision.startsWith('placeSupport'));
+    expect(places.length).toBeGreaterThan(0);
+    // Replay up to and including the first placement: the support stands on
+    // the square it names and holds it. (Later in the run the pit reaches
+    // that square and mines it, and the support goes with the block.)
+    const placedAt = golden.decisions.indexOf(places[0] ?? '');
+    const state = replayDecisions(
+      golden.seed,
+      golden.contractId,
+      golden.loadoutId,
+      golden.decisions.slice(0, placedAt + 1),
+    );
+    const square = squareOf(places[0] ?? '');
+    expect(structureOnSquare(state, square.x, square.y)).toBe(STRUCTURES.support.code);
+    expect(slumpCheck(state, square.x, square.y).heldBy).toBe('support');
+  });
+
+  // The greedy policy digs the steepest pit the level rule allows. Its walls
+  // crack, count down and slump, and the crew is buried. The hash pins the
+  // countdowns, the slumps and their order, the rubble, and the crew damage.
+  it('greedy-seed-11-buried.json has walls that slump, and the crew is buried', () => {
+    const golden = loadGolden('greedy-seed-11-buried.json');
+    expect(golden.expectedStatus).toBe('ended: lost, buried');
+    const state = replayFile('greedy-seed-11-buried.json');
+    expect(state.crew.health).toBe(0);
+    // Slumped blocks lie in the pit as rubble.
+    let rubbleTops = 0;
+    for (let y = 0; y < state.size.y; y += 1) {
+      for (let x = 0; x < state.size.x; x += 1) {
+        if (topBlockAt(state, x, y) === BLOCKS.rubble.code) {
+          rubbleTops += 1;
+        }
+      }
+    }
+    expect(rubbleTops).toBeGreaterThan(0);
   });
 
   // Breaking into an underground space (design doc 6.2; issue #88 item 2):

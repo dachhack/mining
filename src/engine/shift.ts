@@ -3,15 +3,15 @@
 import { SHIFT } from '../data';
 import type { Vec3 } from '../data';
 import { campFuelDue } from './camps';
-import { stepCaveIns } from './cube/caveIns';
 import { stepCrewEffects } from './cube/crewEffects';
 import { stepFluids } from './cube/fluids';
 import { stepGas } from './cube/gas';
+import { stepSlumps } from './cube/slumps';
 import { newCubePhase } from './cube/phase';
 import type { CubePhase } from './cube/phase';
 import { stepTimers } from './cube/timers';
 import type { GameEvent, RunEndCause } from './events';
-import { forecastCountdowns, forecastFlows } from './forecast';
+import { forecastCountdowns, forecastFlows, forecastSlumps } from './forecast';
 import type { CountdownForecast } from './forecast';
 import { endRun, isRunActive } from './state';
 import { forecastRegrowth } from './surface/regrowth';
@@ -43,11 +43,21 @@ export interface UpkeepForecast {
  */
 export interface ShiftForecast {
   /**
-   * Part 1, countdowns: every revealed block whose countdown is running and
-   * shows 1, every armed unstable ore, and every placed explosive. A
-   * countdown cannot turn out differently.
+   * Part 1, countdowns: every cracked top block the player sees, with the
+   * number it shows and whether its countdown is running (design doc 6.1);
+   * later also every armed unstable ore and every placed explosive.
    */
   countdowns: CountdownForecast[];
+  /**
+   * What step (a) of the coming cube phase will do: the events it emits when
+   * it is run on `knownCube(state)`. `blockFell` for each block that slumps
+   * (from, to), `blockCracked` for each square that cracks, and what a slump
+   * destroys. Every input of the slump rule is seen, so this is what will
+   * happen, with one exception: a square whose top block slumps shows a new
+   * top block, which is not seen yet and is taken to be plain rock here; if
+   * it is weaker, that square may crack as well.
+   */
+  slumps: GameEvent[];
   /**
    * Part 2, flows: the events that steps (b) and (c) of the cube phase emit
    * when they are run on `knownCube(state)`, the copy of the cube in which
@@ -77,10 +87,10 @@ export interface ShiftForecast {
 // 0014 item 1. Each step is one function in its own file under cube/, so that
 // the tasks building the hazards do not edit the same file:
 //
-//   (a) cube/caveIns.ts        support check and falling blocks
+//   (a) cube/slumps.ts         cracked blocks slump, unstable squares crack
 //   (b) cube/fluids.ts         water, then lava, then water beside lava
 //   (c) cube/gas.ts            gas spreads, vents, charges go off, ignition
-//   (d) cube/timers.ts         crack timers tick
+//   (d) cube/timers.ts         crack countdowns tick
 //   (e) cube/crewEffects.ts    recorded damage, rest, worked squares cleared
 //
 // During (a) to (d) the crew is not hurt: damage is recorded in the phase's
@@ -95,7 +105,7 @@ export interface CubePhaseStep {
 
 /** The cube phase's steps, in the order they run (0014 item 1, (a) to (e)). */
 export const CUBE_PHASE_STEPS: CubePhaseStep[] = [
-  { name: 'caveIns', run: stepCaveIns },
+  { name: 'slumps', run: stepSlumps },
   { name: 'fluids', run: stepFluids },
   { name: 'gas', run: stepGas },
   { name: 'timers', run: stepTimers },
@@ -111,8 +121,8 @@ export const CUBE_PHASE_STEPS: CubePhaseStep[] = [
  * cube phase uses the RNG (0014 item 1).
  *
  * Runs the steps of `CUBE_PHASE_STEPS` in order, handing each the same
- * `CubePhase` notes. Steps (a) to (d) are empty until their M2 tasks, and
- * with nothing recorded step (e) changes nothing, so the game plays as in M1.
+ * `CubePhase` notes. Steps (b) and (c) are empty until their tasks (T10 and
+ * T11).
  */
 export function runCubePhase(state: GameState, events: GameEvent[]): void {
   const phase = newCubePhase();
@@ -213,8 +223,8 @@ export function runUpkeep(state: GameState, events: GameEvent[]): void {
  * - Does not change `state`, and is a function of what the player sees
  *   (0014 item 3) and nothing else: changing any unrevealed cell must not
  *   change the result.
- * - `countdowns` and `flows` come from forecast.ts, and are empty until the
- *   tells and forecast task (M2-6, issue #56) fills that file in.
+ * - `countdowns`, `slumps` and `flows` come from forecast.ts; `flows` is
+ *   empty until water, lava and gas are built (T10, T11).
  * - `upkeep` agrees with what `runUpkeep` then does when the cube phase does
  *   not end the run first (both use `computeUpkeep`).
  * - Throws if the run has already ended, as `endShift` does.
@@ -225,6 +235,7 @@ export function forecastShift(state: GameState): ShiftForecast {
   }
   return {
     countdowns: forecastCountdowns(state),
+    slumps: forecastSlumps(state),
     flows: forecastFlows(state),
     upkeep: computeUpkeep(state),
     regrowth: forecastRegrowth(state),

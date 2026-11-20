@@ -105,22 +105,19 @@ export function validateData(data: GameData): string[] {
     }
     checkStacks(block.yields, `${where}: yield`);
 
-    // Cave-in numbers: every block that can be dug has both; open space and
-    // bedrock have neither.
-    const canFall = block.solid && block.mineCost !== null;
-    if (canFall) {
-      if (block.span === null) {
-        problems.push(`${where} is a solid, mineable block, so it needs a span`);
+    // The slump limit: every block that can be dug has one; open space and
+    // bedrock have none. It must be at least 1: then an unstable square's
+    // foot is at least 2 levels deeper, so a slumping block always comes to
+    // rest lower than it started and a cascade always ends (design doc 6.1).
+    const canSlump = block.solid && block.mineCost !== null;
+    if (canSlump) {
+      if (block.slumpLimit === null) {
+        problems.push(`${where} is a solid, mineable block, so it needs a slump limit`);
       } else {
-        requireWholeAtLeast(block.span, 0, `${where}: span`);
+        requireWholeAtLeast(block.slumpLimit, 1, `${where}: slump limit`);
       }
-      if (block.shaftLimit === null) {
-        problems.push(`${where} is a solid, mineable block, so it needs a shaft limit`);
-      } else {
-        requireWholeAtLeast(block.shaftLimit, 1, `${where}: shaft limit`);
-      }
-    } else if (block.span !== null || block.shaftLimit !== null) {
-      problems.push(`${where} never falls, so its span and shaft limit must be null`);
+    } else if (block.slumpLimit !== null) {
+      problems.push(`${where} never slumps, so its slump limit must be null`);
     }
   }
   // The engine relies on these three blocks.
@@ -354,22 +351,14 @@ export function validateData(data: GameData): string[] {
 
   // --- Hazards ---
   const hazards = data.hazards;
-  // The number shown for a crack is the stored timer plus 1, and the cube
-  // stores that in one byte.
-  requireWholeAtLeast(hazards.caveIn.crackTimer, 0, 'hazards.caveIn.crackTimer');
-  if (hazards.caveIn.crackTimer + 1 > MAX_CODE) {
-    problems.push(`hazards.caveIn.crackTimer must be less than ${MAX_CODE}`);
+  // The cube stores a crack's countdown in one byte, and 0 there means "no
+  // crack", so the countdown is 1 to 255.
+  requireWholeAtLeast(hazards.slump.crackCountdown, 1, 'hazards.slump.crackCountdown');
+  if (hazards.slump.crackCountdown > MAX_CODE) {
+    problems.push(`hazards.slump.crackCountdown must be at most ${MAX_CODE}`);
   }
-  requireWholeAtLeast(hazards.caveIn.supportLiningReach, 0, 'hazards.caveIn.supportLiningReach');
-  for (const [name, sides] of [
-    ['tightCellSolidSides', hazards.caveIn.tightCellSolidSides],
-    ['supportHoldSolidSides', hazards.caveIn.supportHoldSolidSides],
-  ] as const) {
-    // A cell has four side neighbours.
-    if (!isWholeNumber(sides) || sides < 1 || sides > 4) {
-      problems.push(`hazards.caveIn.${name} must be a whole number 1 to 4, but is ${sides}`);
-    }
-  }
+  // A steep step of less than 2 would let a block slump without moving down.
+  requireWholeAtLeast(hazards.slump.steepStep, 2, 'hazards.slump.steepStep');
   // The flow rules of 0014 item 12 are written for one unit in a cell.
   if (hazards.water.unitsPerCell !== 1) {
     problems.push(`hazards.water.unitsPerCell must be 1, but is ${hazards.water.unitsPerCell}`);
