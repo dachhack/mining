@@ -611,3 +611,163 @@ export async function runDepthSurvey(options: SurveyOptions): Promise<string> {
   }
   return sections.join('\n\n');
 }
+
+// ---------------------------------------------------------------------------
+// Two smaller surveys: candidate settings, and what a camp is worth
+// ---------------------------------------------------------------------------
+
+/**
+ * Candidate settings for "hazards are part of normal play" (the coordinator's
+ * request on issue #108): sets of [Default] numbers under which a careful
+ * player meets water or gas in about half of runs and mines ore in most. Each
+ * is a custom what-if (tools/whatIf.ts), so its id says all it changes.
+ * NONE IS COMMITTED TO src/data: the owner chooses.
+ */
+export const CANDIDATE_SETTINGS = [
+  {
+    name: 'A: shallow bands',
+    whatIf: 'set:middle=2,deep=10,fuel=48,pockets=4,ore=2',
+  },
+  {
+    name: 'B: in between',
+    whatIf: 'set:middle=3,deep=11,fuel=48,pockets=6,ore=3',
+  },
+  {
+    name: 'C: bands moved least, longer runs',
+    whatIf: 'set:middle=4,deep=12,fuel=72,pockets=6,ore=3',
+  },
+];
+const CANDIDATE_POLICIES = ['greedy', 'pit', 'terrace:6', 'terrace:8', 'terrace:10'];
+
+/** The camp trials: the game as it is, then one camp number changed at a time. */
+const CAMP_TRIALS = [
+  {
+    name: 'The game as it is (upkeep 1 fuel every 4 shifts; 1 AP off within 4 steps)',
+    whatIf: null,
+  },
+  { name: 'Upkeep 1 fuel every 8 shifts', whatIf: 'set:campUpkeepEvery=8' },
+  { name: 'Upkeep 1 fuel every 16 shifts', whatIf: 'set:campUpkeepEvery=16' },
+  { name: '2 AP off a mine near the camp', whatIf: 'set:campDiscount=2' },
+  { name: 'Cheaper mining reaches 8 steps', whatIf: 'set:campSteps=8' },
+  {
+    name: 'Reaches 8 steps and upkeep every 8 shifts',
+    whatIf: 'set:campSteps=8,campUpkeepEvery=8',
+  },
+];
+/** The camp trials compare the terracing policy without and with a camp, at this target. */
+const CAMP_TARGET = 7;
+
+/** True if the run released water, gas or lava from a pocket. */
+function metAPocket(run: RunMetrics): boolean {
+  const hazards = run.hazards;
+  return (
+    hazards.waterPocketsBroken > 0 || hazards.gasPocketsBroken > 0 || hazards.lavaPocketsBroken > 0
+  );
+}
+
+/** Play one policy under one what-if on the survey's seeds. */
+async function playTrial(
+  options: SurveyOptions,
+  policyName: string,
+  whatIf: string | null,
+): Promise<RunMetrics[]> {
+  options.log(`survey: ${whatIf ?? 'now'} ${policyName}: ${options.runs} runs`);
+  const result = await runInParallel(
+    {
+      policyName,
+      firstSeed: options.firstSeed,
+      runs: options.runs,
+      maxShifts: options.maxShifts,
+      kit: false,
+      check: false,
+      whatIf,
+    },
+    options.workers,
+  );
+  if (result.problems.length > 0) {
+    throw new Error(result.problems.join('\n'));
+  }
+  return result.runs;
+}
+
+/** `npm run sim -- --survey candidates`: the candidate settings, measured. */
+export async function runCandidateSurvey(options: SurveyOptions): Promise<string> {
+  const header = [
+    'Setting',
+    'Policy',
+    'Deepest square: median (min to max)',
+    'Released water, gas or lava',
+    'Saw damp stone, pitted rock or warm glow',
+    'Mined iron or copper',
+    'Crew was hurt',
+    'Crew lost',
+    'Shifts played: median',
+  ];
+  const rows: string[][] = [];
+  const settings = [
+    { name: 'The game as it is', whatIf: null as string | null },
+    ...CANDIDATE_SETTINGS,
+  ];
+  for (const setting of settings) {
+    for (const policy of CANDIDATE_POLICIES) {
+      const runs = await playTrial(options, policy, setting.whatIf);
+      rows.push([
+        setting.name,
+        policy,
+        medianAndRange(runs.map((run) => run.deepestSquare)),
+        share(runs, metAPocket),
+        share(
+          runs,
+          (run) => run.tellsSeen.dampStone || run.tellsSeen.pittedRock || run.tellsSeen.warmGlow,
+        ),
+        share(runs, (run) => run.oreBlocksMined > 0),
+        share(runs, (run) => run.damageTaken > 0),
+        share(runs, (run) => run.outcome === 'lost' && run.cause !== 'outOfFuel'),
+        String(median(runs.map((run) => run.shiftsPlayed))),
+      ]);
+    }
+  }
+  const lastSeed = options.firstSeed + options.runs - 1;
+  return [
+    `Candidate settings: engine ${ENGINE_VERSION}, seeds ${options.firstSeed} to ${lastSeed} (${options.runs} runs a row), standard loadout, shift cap ${options.maxShifts}. Each setting changes numbers in the simulator's memory only.`,
+    ...CANDIDATE_SETTINGS.map((setting) => `- **${setting.name}**: \`${setting.whatIf}\``),
+    '### Table 9. The candidate settings',
+    table(header, rows),
+  ].join('\n\n');
+}
+
+/** `npm run sim -- --survey camp`: what a camp is worth to a careful digger. */
+export async function runCampSurvey(options: SurveyOptions): Promise<string> {
+  const header = [
+    'Trial',
+    'Policy',
+    `Runs that reached depth ${CAMP_TARGET}`,
+    'Deepest square: mean',
+    'Blocks mined: mean',
+    'Shifts played: mean',
+  ];
+  const rows: string[][] = [];
+  for (const trial of CAMP_TRIALS) {
+    for (const policy of [`terrace:${CAMP_TARGET}`, `terrace:${CAMP_TARGET}:camp`]) {
+      // Without a camp the camp numbers change nothing: play that row once.
+      if (trial.whatIf !== null && !policy.endsWith(':camp')) {
+        continue;
+      }
+      const runs = await playTrial(options, policy, trial.whatIf);
+      rows.push([
+        trial.name,
+        policy.endsWith(':camp') ? 'with a camp' : 'without a camp',
+        share(runs, (run) => run.deepestSquare >= CAMP_TARGET),
+        mean(runs.map((run) => run.deepestSquare)).toFixed(2),
+        mean(runs.map((run) => run.blocksMined)).toFixed(1),
+        mean(runs.map((run) => run.shiftsPlayed)).toFixed(1),
+      ]);
+    }
+  }
+  const lastSeed = options.firstSeed + options.runs - 1;
+  return [
+    `Camp survey: engine ${ENGINE_VERSION}, seeds ${options.firstSeed} to ${lastSeed} (${options.runs} runs a row). The terracing policy plans a pit ${CAMP_TARGET} deep, without a camp and with one founded beside the pit on the first shift.`,
+    '### Table 10. What a camp is worth',
+    table(header, rows),
+  ].join('\n\n');
+}

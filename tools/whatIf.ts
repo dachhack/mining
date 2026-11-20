@@ -11,15 +11,15 @@
 // depth` plays each trial in worker processes of its own (tools/parallel.ts),
 // so a trial never leaks into another measurement.
 
-import { BLOCKS, GENERATION, LOADOUTS, SHIFT, WORLD } from '../src/data';
+import { BLOCKS, CAMPS, GENERATION, LOADOUTS, SHIFT, WORLD } from '../src/data';
 
 export interface WhatIf {
   /** The name on the command line and in the report's tables. */
   id: string;
   /**
    * Which of the owner's options it belongs to: 'a', 'b' or 'c' (issue #108),
-   * 'a+b' for two of them together, or 'other' for a change that is not on
-   * the owner's list.
+   * 'a+b' for two of them together, 'other' for a change that is not on
+   * the owner's list, or 'candidate' for a custom trial (see `customWhatIf`).
    */
   option: string;
   /** What it changes, in a few words, with the numbers. */
@@ -53,6 +53,20 @@ function multiplyPockets(factor: number): void {
     for (const space of band.spaces) {
       if (space.kind === 'water' || space.kind === 'gas') {
         space.spacesPer1000Cells *= factor;
+      }
+    }
+  }
+}
+
+/**
+ * Multiply the number of iron and copper veins the generator places by
+ * `factor` (`veinsPer1000Cells` in src/data/generation.ts).
+ */
+function multiplyOreVeins(factor: number): void {
+  for (const band of GENERATION.bands) {
+    for (const vein of band.veins) {
+      if (vein.block === 'ironOre' || vein.block === 'copperOre') {
+        vein.veinsPer1000Cells *= factor;
       }
     }
   }
@@ -177,12 +191,94 @@ export const WHAT_IFS: WhatIf[] = [
   },
 ];
 
-/** The trial with this id. Throws on an unknown id. */
+/**
+ * The settings a custom trial may change, with what each one sets. A custom
+ * trial's id is 'set:' and then a list such as 'middle=4,deep=12,fuel=48':
+ * - middle, deep: the first layer of the middle band and of the deep band
+ *   (give both or neither);
+ * - fuel: the standard loadout's starting fuel;
+ * - ap: AP per shift;
+ * - pockets: how many times as many water and gas pockets are generated;
+ * - ore: how many times as many iron and copper veins are generated;
+ * - slump: how much is added to every slump limit;
+ * - campUpkeepEvery: a camp burns 1 fuel every this many shifts;
+ * - campDiscount: AP taken off a mine near a camp;
+ * - campSteps: how many steps from a camp the cheaper mining reaches.
+ */
+const CUSTOM_KEYS = [
+  'middle',
+  'deep',
+  'fuel',
+  'ap',
+  'pockets',
+  'ore',
+  'slump',
+  'campUpkeepEvery',
+  'campDiscount',
+  'campSteps',
+];
+
+/** The id prefix of a custom trial. */
+const CUSTOM_PREFIX = 'set:';
+
+/**
+ * A trial made from a list of settings: see `CUSTOM_KEYS`. The depth survey
+ * uses these for its candidate settings, so that a candidate is fully
+ * described by its id. Throws on a setting it does not know.
+ */
+function customWhatIf(id: string): WhatIf {
+  const values = new Map<string, number>();
+  for (const part of id.slice(CUSTOM_PREFIX.length).split(',')) {
+    const [key, text] = part.split('=');
+    if (key === undefined || !CUSTOM_KEYS.includes(key) || !/^\d+$/.test(text ?? '')) {
+      throw new Error(
+        `Cannot read "${part}" in the what-if "${id}"; the settings are ${CUSTOM_KEYS.join(', ')}, each with a whole number`,
+      );
+    }
+    values.set(key, Number(text));
+  }
+  const middle = values.get('middle');
+  const deep = values.get('deep');
+  if ((middle === undefined) !== (deep === undefined)) {
+    throw new Error(`The what-if "${id}" must give both middle and deep, or neither`);
+  }
+  const whatIf: WhatIf = {
+    id,
+    option: 'candidate',
+    label: id.slice(CUSTOM_PREFIX.length).split(',').join(', '),
+    apply: () => {
+      if (middle !== undefined && deep !== undefined) {
+        setBands(middle, deep);
+      }
+      // `?? current`: a setting that was not given keeps its value.
+      LOADOUTS.standard.fuel = values.get('fuel') ?? LOADOUTS.standard.fuel;
+      SHIFT.apPerShift = values.get('ap') ?? SHIFT.apPerShift;
+      multiplyPockets(values.get('pockets') ?? 1);
+      multiplyOreVeins(values.get('ore') ?? 1);
+      raiseSlumpLimits(values.get('slump') ?? 0, () => true);
+      CAMPS.upkeepEveryShifts = values.get('campUpkeepEvery') ?? CAMPS.upkeepEveryShifts;
+      CAMPS.mineDiscountAp = values.get('campDiscount') ?? CAMPS.mineDiscountAp;
+      CAMPS.mineDiscountSteps = values.get('campSteps') ?? CAMPS.mineDiscountSteps;
+    },
+  };
+  if (middle !== undefined) {
+    whatIf.middleBandStart = middle;
+  }
+  return whatIf;
+}
+
+/**
+ * The trial with this id: one of `WHAT_IFS`, or a custom trial whose id
+ * starts with 'set:' (see `CUSTOM_KEYS`). Throws on an unknown id.
+ */
 export function findWhatIf(id: string): WhatIf {
+  if (id.startsWith(CUSTOM_PREFIX)) {
+    return customWhatIf(id);
+  }
   const found = WHAT_IFS.find((whatIf) => whatIf.id === id);
   if (found === undefined) {
     throw new Error(
-      `Unknown what-if "${id}"; they are ${WHAT_IFS.map((whatIf) => whatIf.id).join(', ')}`,
+      `Unknown what-if "${id}"; they are ${WHAT_IFS.map((whatIf) => whatIf.id).join(', ')}, or set:...`,
     );
   }
   return found;
