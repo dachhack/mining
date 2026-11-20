@@ -100,6 +100,7 @@ describe('tiles', () => {
       lavaComing: false,
       gas: 0,
       gasComing: false,
+      vented: false,
       blast: false,
       charge: null,
       surface: 'meadow',

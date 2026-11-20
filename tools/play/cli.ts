@@ -33,6 +33,7 @@ import {
   scanChoice,
   sealChoice,
   supportChoice,
+  ventChoice,
 } from '../../src/app/text/squares';
 import { takeTurn } from '../../src/app/text/turn';
 import { buildView, lookLines, renderView } from '../../src/app/text/view';
@@ -206,8 +207,21 @@ export function resolveChoice(state: GameState, choice: string): ResolvedChoice 
     if (square.kind === 'pump') {
       return pumpChoice(state, square.x, square.y);
     }
+    if (square.kind === 'vent') {
+      return ventChoice(state, square.x, square.y);
+    }
     if (square.kind === 'seal') {
-      return sealChoice(state, square.x, square.y);
+      const seal = sealChoice(state, square.x, square.y);
+      if (seal.entry !== null && seal.warning !== null && !square.confirmed) {
+        // A risky seal, like a risky mine: warn first; "seal!" takes it.
+        return {
+          entry: null,
+          refusal:
+            `${seal.warning} Nothing was done. To seal it all the same, ` +
+            `type "seal! ${square.x},${square.y}".`,
+        };
+      }
+      return seal;
     }
     if (square.kind === 'scan') {
       return scanChoice(state, square.x, square.y);
@@ -244,7 +258,7 @@ export function resolveChoice(state: GameState, choice: string): ResolvedChoice 
   return {
     entry: null,
     refusal:
-      'It is not a choice as things stand now. Type "mine X,Y", "cut X,Y", "support X,Y", "explosive X,Y", "camp X,Y", "pump X,Y", "seal X,Y" or "scan X,Y" for a square, ' +
+      'It is not a choice as things stand now. Type "mine X,Y", "cut X,Y", "support X,Y", "explosive X,Y", "camp X,Y", "pump X,Y", "vent X,Y", "seal X,Y" or "scan X,Y" for a square, ' +
       `a number from 1 to ${numbered.length} or a name from the list, or 0 / end to end the shift.`,
   };
 }

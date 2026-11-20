@@ -52,7 +52,7 @@ A scan is the one sanctioned way to learn what lies below a top. The tests say s
 
 ## The vent
 
-Not in this task. The vent needs gas (T11), which was still being built, so the coordinator split it off into a follow-up issue. What is ready for it: the `placeVent x,y` action type and its key, the `vent` structure and recipe, `HAZARDS.gas.ventReach`, the shared placing rules in `actions/campTools.ts` (`toolCheck` takes `'vent'`), and the play tool's wording for the action. Until then `legalActions` never offers `placeVent`, and `isLegalAction` refuses it.
+Not in this task. The vent needs gas (T11), which was still being built, so the coordinator split it off into a follow-up issue. What is ready for it: the `placeVent x,y` action type and its key, the `vent` structure and recipe, `HAZARDS.gas.ventReach`, the shared placing rules in `actions/campTools.ts` (`toolCheck` takes `'vent'`), and the play tool's wording for the action. Until then `legalActions` never offers `placeVent`, and `isLegalAction` refuses it. It was built in issue #107: see decision note 0036.
 
 ## Consequences
 

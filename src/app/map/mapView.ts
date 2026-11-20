@@ -528,6 +528,33 @@ function drawGasComing(ctx: CanvasRenderingContext2D, x: number, y: number, c: n
 }
 
 /**
+ * A square a vent will clear of gas when the shift ends (issue #107): an
+ * arrow pointing up out of the pit, in the top-right of the square (clear of
+ * the gas's number on the left), pale green with a dark edge. A shape of its own, beside the rings of gas.
+ */
+function drawVented(ctx: CanvasRenderingContext2D, x: number, y: number, c: number): void {
+  ctx.save();
+  for (const [colour, width] of [
+    [MARK_COLOURS.fluidOutline, Math.max(3.5, c / 6)],
+    [MARK_COLOURS.vent, Math.max(1.8, c / 11)],
+  ] as const) {
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = width;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    // The shaft, then the two sides of the head.
+    ctx.moveTo(x + 0.74 * c, y + 0.5 * c);
+    ctx.lineTo(x + 0.74 * c, y + 0.12 * c);
+    ctx.moveTo(x + 0.6 * c, y + 0.27 * c);
+    ctx.lineTo(x + 0.74 * c, y + 0.12 * c);
+    ctx.lineTo(x + 0.88 * c, y + 0.27 * c);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
  * A charge that goes off when the shift ends. A placed explosive is a round
  * red charge with a fuse; armed unstable ore is a red eight-pointed
  * starburst. Both have a dark edge so that they show on any rock.
@@ -648,6 +675,9 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
   if (tile.gasComing) {
     drawGasComing(ctx, x, y, c);
   }
+  if (tile.vented) {
+    drawVented(ctx, x, y, c);
+  }
   if (tile.traced) {
     // Three small gold dots along the top edge: mineral traces seen on this rock.
     ctx.fillStyle = MARK_COLOURS.traces;
@@ -681,6 +711,20 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
     ctx.textBaseline = 'middle';
     ctx.fillStyle = MARK_COLOURS.pumpInk;
     ctx.fillText('P', x + mid, y + mid + 0.02 * c);
+  } else if (tile.structure === 'vent') {
+    // A pale green disc with a dark "V".
+    ctx.beginPath();
+    ctx.arc(x + mid, y + mid, 0.3 * c, 0, Math.PI * 2);
+    ctx.fillStyle = MARK_COLOURS.vent;
+    ctx.fill();
+    ctx.lineWidth = Math.max(1, c / 14);
+    ctx.strokeStyle = MARK_COLOURS.belowOutline;
+    ctx.stroke();
+    ctx.font = `bold ${Math.max(7, Math.round(c * 0.4))}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = MARK_COLOURS.ventInk;
+    ctx.fillText('V', x + mid, y + mid + 0.02 * c);
   } else if (tile.structure === 'other') {
     ctx.strokeStyle = MARK_COLOURS.otherStructure;
     ctx.lineWidth = Math.max(1.5, c / 10);
@@ -754,6 +798,7 @@ function sampleTile(overrides: Partial<Tile>): Tile {
     lavaComing: false,
     gas: 0,
     gasComing: false,
+    vented: false,
     charge: null,
     blast: false,
     surface: null,
@@ -804,6 +849,7 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
   let lavaComing = false;
   let gas = false;
   let gasComing = false;
+  let vented = false;
   let explosive = false;
   let armedOre = false;
   let blast = false;
@@ -816,6 +862,7 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
   for (const tile of tiles) {
     if (tile.gas > 0) gas = true;
     if (tile.gasComing) gasComing = true;
+    if (tile.vented) vented = true;
     if (tile.charge === 'explosive') explosive = true;
     if (tile.charge === 'armedOre') armedOre = true;
     if (tile.blast) blast = true;
@@ -887,6 +934,14 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
       legendEntry(
         sampleTile({ structure: 'pump' }),
         'pump: takes water from the squares near it when a shift ends',
+      ),
+    );
+  }
+  if (structures.has('vent')) {
+    entries.push(
+      legendEntry(
+        sampleTile({ structure: 'vent' }),
+        'vent: clears all the gas on the squares near it when a shift ends',
       ),
     );
   }
@@ -985,6 +1040,14 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
       legendEntry(
         sampleTile({ depth: 2, gasComing: true }),
         'ring: gas spreads here when this shift ends',
+      ),
+    );
+  }
+  if (vented) {
+    entries.push(
+      legendEntry(
+        sampleTile({ depth: 2, gas: 4, vented: true }),
+        'arrow: a vent clears the gas here when this shift ends',
       ),
     );
   }
@@ -1177,6 +1240,7 @@ export function createTapMap(
     // be in an explosion when the shift ends.
     canvas.dataset['gas'] = list((t) => (t.gas > 0 ? `${at(t)}:${t.gas}` : null));
     canvas.dataset['gasComing'] = list((t) => (t.gasComing ? at(t) : null));
+    canvas.dataset['vented'] = list((t) => (t.vented ? at(t) : null));
     canvas.dataset['charges'] = list((t) => (t.charge !== null ? `${at(t)}:${t.charge}` : null));
     canvas.dataset['blast'] = list((t) => (t.blast ? at(t) : null));
 

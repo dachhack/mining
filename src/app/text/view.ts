@@ -66,6 +66,8 @@ import {
   EXPLOSIVE_AP,
   FLOODED_EXTRA_AP,
   PUMP_AP,
+  VENT_AP,
+  VENT_REACH,
   PUMP_REACH,
   PUMP_UNITS,
   SCAN_AP,
@@ -146,6 +148,7 @@ export interface SquareChoicesView {
   campSites: number;
   /** The camp-made tools in the stockpile (design doc 7.2). */
   pumpsHeld: number;
+  ventsHeld: number;
   sealantHeld: number;
   scanChargesHeld: number;
   /** True if the stockpile holds a drill. */
@@ -197,6 +200,16 @@ export interface PlayerView {
   /** The listed choices: crafting, leaving, ending the shift. */
   choices: ChoiceView[];
 }
+
+/**
+ * How the note about what is known under the tops begins. Each view adds its
+ * own hint to that note for how to list a square's known blocks: the play
+ * tool's is "look X,Y" (`renderMap`), the phone's is Inspect or a hold.
+ */
+export const KNOWN_BELOW_NOTE = 'Known under the tops (scanned, or buried after you saw it):';
+
+/** The play tool's hint for the note above. */
+const LOOK_HINT = '"look X,Y" lists what you know under a square.';
 
 /** The two characters of one square, and what its first character means (for the legend). */
 interface SquareCellView {
@@ -453,6 +466,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   const tells: string[] = [];
   // Pumps, and what is known under the tops (design doc 7.2).
   const pumps: string[] = [];
+  const vents: string[] = [];
   const underOre: string[] = [];
   const underPocket: string[] = [];
   const underCavern: string[] = [];
@@ -485,6 +499,9 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       if (square.top !== null && square.top.structure === STRUCTURES.pump.code) {
         pumps.push(squareText(x, y));
       }
+      if (square.top !== null && square.top.structure === STRUCTURES.vent.code) {
+        vents.push(squareText(x, y));
+      }
       const marks = belowMarksOf(square);
       if (marks.any) anyBelow = true;
       if (marks.ore) underOre.push(squareText(x, y));
@@ -511,6 +528,12 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       `Stumps, and the shifts until a tree grows back (1 is the end of this shift): ${stumps.join('; ')}`,
     );
   }
+  if (vents.length > 0) {
+    notes.push(
+      `Vents on ${vents.join(', ')}: when a shift ends each clears all the gas on the squares ` +
+        `within ${VENT_REACH} steps of it, after the gas has spread and before it can burn or poison.`,
+    );
+  }
   if (pumps.length > 0) {
     notes.push(
       `Pumps on ${pumps.join(', ')}: each takes up to ${PUMP_UNITS} water a shift from the squares ` +
@@ -524,9 +547,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     if (underPocket.length > 0) marked.push(`a pocket under ${underPocket.join(', ')}`);
     if (underCavern.length > 0) marked.push(`a cavern under ${underCavern.join(', ')}`);
     notes.push(
-      'Known under the tops (scanned, or buried after you saw it): ' +
-        `${marked.length === 0 ? 'plain rock only' : marked.join('; ')}. ` +
-        '"look X,Y" lists what you know under a square.',
+      `${KNOWN_BELOW_NOTE} ` + `${marked.length === 0 ? 'plain rock only' : marked.join('; ')}.`,
     );
   }
   notes.push(...campNotes(state));
@@ -711,6 +732,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       campKitsHeld: countItem(state, CAMPS.kitItem),
       campSites,
       pumpsHeld: countItem(state, STRUCTURES.pump.placedFromItem),
+      ventsHeld: countItem(state, STRUCTURES.vent.placedFromItem),
       sealantHeld: countItem(state, CAMP_TOOLS.sealantItem),
       scanChargesHeld: countItem(state, CAMP_TOOLS.scanChargeItem),
       hasDrill: countItem(state, CAMP_TOOLS.drillItem) > 0,
@@ -776,7 +798,11 @@ export function renderMap(view: PlayerView): MapText {
   map.rows.forEach((row, y) => {
     grid.push(`y${String(y).padStart(3, ' ')} ${row}`);
   });
-  const after = [`Legend: ${view.legend.join(' | ')}`, ...view.notes];
+  // The play tool lists a square's known blocks with "look X,Y".
+  const notes = view.notes.map((note) =>
+    note.startsWith(KNOWN_BELOW_NOTE) ? `${note} ${LOOK_HINT}` : note,
+  );
+  const after = [`Legend: ${view.legend.join(' | ')}`, ...notes];
   return { header, grid, after };
 }
 
@@ -823,6 +849,12 @@ export function squareChoiceLines(view: PlayerView): string[] {
     tools.push(
       `    pump X,Y     [${PUMP_AP}] Place a pump on square x X, y Y: each shift it takes up to ` +
         `${PUMP_UNITS} water from the squares within ${PUMP_REACH} steps. You have ${squares.pumpsHeld}.`,
+    );
+  }
+  if (squares.ventsHeld > 0) {
+    tools.push(
+      `    vent X,Y     [${VENT_AP}] Place a vent on square x X, y Y: when a shift ends it clears all ` +
+        `the gas on the squares within ${VENT_REACH} steps. You have ${squares.ventsHeld}.`,
     );
   }
   if (squares.sealantHeld > 0) {

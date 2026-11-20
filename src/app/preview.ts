@@ -25,8 +25,14 @@ import { createTapMap } from './map/mapView';
 import { NO_MARKS, lookOutcome, tapOutcome } from './map/targets';
 import type { MapMarks, MapSquare, MapTool } from './map/targets';
 import type { LogEntry, Session } from './text/log';
-import { takeTurn } from './text/turn';
-import { buildView, forecastLine, hazardsLine, renderEndedLines } from './text/view';
+import { takeTurnLines } from './text/turn';
+import {
+  KNOWN_BELOW_NOTE,
+  buildView,
+  forecastLine,
+  hazardsLine,
+  renderEndedLines,
+} from './text/view';
 import type { ChoiceView, PlayerView } from './text/view';
 
 /**
@@ -162,6 +168,7 @@ export function mountPreview(root: HTMLElement): void {
   const campTool = toolButton('tool-camp');
   const explosiveTool = toolButton('tool-explosive');
   const pumpTool = toolButton('tool-pump');
+  const ventTool = toolButton('tool-vent');
   const sealTool = toolButton('tool-seal');
   const scanTool = toolButton('tool-scan');
   const lookTool = toolButton('tool-look');
@@ -172,6 +179,7 @@ export function mountPreview(root: HTMLElement): void {
     campTool,
     explosiveTool,
     pumpTool,
+    ventTool,
     sealTool,
     scanTool,
     lookTool,
@@ -244,7 +252,15 @@ export function mountPreview(root: HTMLElement): void {
     showLines(gauges, view.hud);
     showLines(ended, renderEndedLines(view));
     tapMap.show(session.state, fresh, marks);
-    showLines(mapNotes, view.notes);
+    // The phone lists a square's known blocks by a hold or the Inspect tool.
+    showLines(
+      mapNotes,
+      view.notes.map((note) =>
+        note.startsWith(KNOWN_BELOW_NOTE)
+          ? `${note} Hold a square, or tap it with Inspect, to list what you know under it.`
+          : note,
+      ),
+    );
     if (view.ended === null) {
       const notOffered = view.notOffered.map((line) => `Not possible now: ${line}`);
       showLines(forecast, [hazardsLine(view), forecastLine(view), ...notOffered]);
@@ -287,6 +303,7 @@ export function mountPreview(root: HTMLElement): void {
       explosivesHeld > 0 || tool === 'explosive',
     );
     showTool(pumpTool, 'pump', `Place pump (${held.pumps})`, held.pumps > 0);
+    showTool(ventTool, 'vent', `Place vent (${held.vents})`, held.vents > 0);
     showTool(sealTool, 'seal', `Seal (${held.sealant})`, held.sealant > 0);
     showTool(scanTool, 'scan', `Scan (${held.charges})`, held.charges > 0);
     showTool(lookTool, 'look', 'Inspect', true);
@@ -302,6 +319,9 @@ export function mountPreview(root: HTMLElement): void {
     } else if (tool === 'pump') {
       toolHint.textContent =
         'Tap a square to see what a pump there would reach; tap it again to place the pump.';
+    } else if (tool === 'vent') {
+      toolHint.textContent =
+        'Tap a square to see which squares a vent there would clear of gas; tap it again to place the vent.';
     } else if (tool === 'seal') {
       toolHint.textContent =
         'A tap puts a block of sealed rock on a dug square: it comes up 1 level, and the water, lava and gas on it are destroyed.';
@@ -352,8 +372,9 @@ export function mountPreview(root: HTMLElement): void {
   }
 
   /** How many of each camp-made tool the stockpile holds. */
-  function heldTools(): { pumps: number; sealant: number; charges: number } {
+  function heldTools(): { pumps: number; vents: number; sealant: number; charges: number } {
     return {
+      vents: countItem(session.state, STRUCTURES.vent.placedFromItem),
       pumps: countItem(session.state, STRUCTURES.pump.placedFromItem),
       sealant: countItem(session.state, CAMP_TOOLS.sealantItem),
       charges: countItem(session.state, CAMP_TOOLS.scanChargeItem),
@@ -386,7 +407,7 @@ export function mountPreview(root: HTMLElement): void {
       return;
     }
     // A second tap in a row on the same square confirms a risky mine, and
-    // takes a pump or a scan whose range the first tap showed.
+    // takes a pump, a vent or a scan whose range the first tap showed.
     const confirmed = pending !== null && pending.x === x && pending.y === y;
     const outcome = tapOutcome(session.state, x, y, tool, confirmed);
     if (outcome.entry !== null) {
@@ -411,7 +432,7 @@ export function mountPreview(root: HTMLElement): void {
     marks = NO_MARKS;
     pending = null;
     try {
-      lastLines = [takeTurn(session, entry)];
+      lastLines = takeTurnLines(session, entry);
     } catch (error) {
       // Should not happen: the choice came from the list of legal choices,
       // or from a tap the rules had just allowed.
@@ -430,6 +451,7 @@ export function mountPreview(root: HTMLElement): void {
       (tool === 'explosive' &&
         countItem(session.state, STRUCTURES.explosive.placedFromItem) === 0) ||
       (tool === 'pump' && held.pumps === 0) ||
+      (tool === 'vent' && held.vents === 0) ||
       (tool === 'seal' && held.sealant === 0) ||
       (tool === 'scan' && held.charges === 0)
     ) {
@@ -465,6 +487,7 @@ export function mountPreview(root: HTMLElement): void {
     [campTool, 'camp'],
     [explosiveTool, 'explosive'],
     [pumpTool, 'pump'],
+    [ventTool, 'vent'],
     [sealTool, 'seal'],
     [scanTool, 'scan'],
     [lookTool, 'look'],

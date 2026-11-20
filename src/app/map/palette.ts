@@ -139,6 +139,9 @@ export const UNKNOWN_LOOK = { colour: '#1d1916', ink: '#3a332d' };
 export const MARK_COLOURS = {
   support: '#e8e0d0',
   otherStructure: '#60d0ff',
+  /** A vent: a pale green disc with a dark "V"; and the arrow on a square it will clear. */
+  vent: '#d9f7a1',
+  ventInk: '#1f2a12',
   /** A pump: a blue disc with a white "P". */
   pump: '#2f7fe0',
   pumpInk: '#ffffff',

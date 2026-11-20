@@ -216,7 +216,13 @@ function leakedBelowTops(
  * play scans, seals and pumps (a random player never gets as far as crafting
  * them: a scanner charge needs crystal from the deep band).
  */
-const TOOL_KIT: Record<string, number> = { scannerCharge: 4, sealant: 4, pump: 2, drill: 1 };
+const TOOL_KIT: Record<string, number> = {
+  scannerCharge: 4,
+  sealant: 4,
+  pump: 2,
+  vent: 2,
+  drill: 1,
+};
 
 /** What a random player does next: one legal action, or end the shift. */
 type Decision = Action | 'endShift';
@@ -335,6 +341,7 @@ describe('property tests: random legal play', () => {
       expect(taken.has('scan')).toBe(true);
       expect(taken.has('seal')).toBe(true);
       expect(taken.has('placePump')).toBe(true);
+      expect(taken.has('placeVent')).toBe(true);
     },
     60000,
   );
@@ -593,6 +600,42 @@ describe('property tests: hidden blocks change nothing the player gets (issue #8
         }
       });
       expect(nearScrambleChangedTells).toBe(true);
+    },
+    60000,
+  );
+
+  it.each([8, 31])(
+    'seed %i, with scans: a tell on a scanned block also depends only on cells within its reach',
+    (seed) => {
+      // The same in a run that scans (issue #107): a scanned block shows its
+      // tells too, so the cells near it are kept as well as those near a top.
+      const scrambler = createRng(seed + 11000);
+      let compared = 0;
+      let scans = 0;
+      let comparedAfterScan = 0;
+      playRandomly(
+        seed,
+        60,
+        (state, label, decision) => {
+          if (decision !== null && decision !== 'endShift' && decision.type === 'scan') {
+            scans += 1;
+          }
+          compared += 1;
+          if (compared % 6 !== 1 || !isRunActive(state)) {
+            return;
+          }
+          if (scans > 0) {
+            comparedAfterScan += 1;
+          }
+          const farOnly = scrambleHidden(state, scrambler, TELL_REACH);
+          expect(snapshot(farOnly) === snapshot(state), `${label}: scramble`).toBe(false);
+          expect(playerSees(farOnly, true) === playerSees(state, true), label).toBe(true);
+        },
+        TOOL_KIT,
+        ['mine', 'seal'],
+      );
+      expect(scans).toBeGreaterThan(0);
+      expect(comparedAfterScan).toBeGreaterThan(0);
     },
     60000,
   );

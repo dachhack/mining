@@ -20,10 +20,7 @@
 //   6.2 says.
 // - Gas (cube/gas.ts) is stored the same way: `gasOn`, `setGasOn`.
 //
-// HOOK FOR A LATER TASK
-// - Vents: take gas off a square with `setGasOn(state, x, y, 0)` and emit
-//   `gasRemoved` with the reason 'vented'. `stepGas` (cube/gas.ts) marks
-//   where vents should act.
+// - Vents take gas off squares inside `stepGas` (cube/gas.ts).
 
 import { contentsOn } from './breach';
 import { depthAt } from './heightmap';
