@@ -222,7 +222,12 @@ describe('previewCubePhase', () => {
       const upkeep = forecast.upkeep;
 
       // The forecast has exactly these fields: nothing about banked AP or lamp oil.
-      expect(Object.keys(upkeep).sort()).toEqual(['fuelAfter', 'fuelConsumed', 'runEnds']);
+      expect(Object.keys(upkeep).sort()).toEqual([
+        'campFuelConsumed',
+        'fuelAfter',
+        'fuelConsumed',
+        'runEnds',
+      ]);
       expect(upkeep.fuelAfter).toBe(after.fuel);
       expect(upkeep.fuelConsumed).toBe(state.fuel - after.fuel);
 

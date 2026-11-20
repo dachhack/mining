@@ -42,7 +42,7 @@ export interface SerialisedState {
   stumpAge: number[];
   /** The worked squares (issue #90), one entry per square, run-length encoded. */
   worked: number[];
-  crew: { health: number; resting: boolean };
+  crew: { health: number; restingAt: { x: number; y: number } | null };
   ap: number;
   fuel: number;
   shift: number;
@@ -124,7 +124,7 @@ export function serialise(state: GameState): SerialisedState {
     worked: runLengthEncode(state.worked),
     crew: {
       health: state.crew.health,
-      resting: state.crew.resting,
+      restingAt: state.crew.restingAt === null ? null : { ...state.crew.restingAt },
     },
     ap: state.ap,
     fuel: state.fuel,
@@ -198,7 +198,7 @@ export function deserialise(saved: SerialisedState): GameState {
     worked: runLengthDecode(saved.worked, size.x * size.y, 'worked'),
     crew: {
       health: saved.crew.health,
-      resting: saved.crew.resting,
+      restingAt: saved.crew.restingAt === null ? null : { ...saved.crew.restingAt },
     },
     ap: saved.ap,
     fuel: saved.fuel,

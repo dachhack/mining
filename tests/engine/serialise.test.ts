@@ -55,7 +55,7 @@ function busyState(): GameState {
       { pos: { x: 1, y: 1, z: 0 }, foundedShift: 3 },
     ],
   });
-  state.crew.resting = true;
+  state.crew.restingAt = { x: 1, y: 1 };
   state.revealed[0] = 1;
   state.revealed[4] = 1;
   nextUint32(state.rng); // so the RNG is no longer at its seed
@@ -100,7 +100,7 @@ describe('serialise and deserialise', () => {
   it('round-trips every field the M2 skeleton added', () => {
     const loaded = throughJson(busyState());
     expect(workedSquares(loaded)).toEqual([{ x: 2, y: 1 }]);
-    expect(loaded.crew.resting).toBe(true);
+    expect(loaded.crew.restingAt).toEqual({ x: 1, y: 1 });
     expect(waterAt(loaded, { x: 0, y: 2, z: 0 })).toBe(1);
     expect(lavaAt(loaded, { x: 1, y: 2, z: 1 })).toBe(1);
     expect(isLavaSource(loaded, { x: 1, y: 2, z: 1 })).toBe(false);
@@ -176,10 +176,10 @@ describe('serialise and deserialise', () => {
 
   it('refuses a save from before the M2 skeleton with a clear error', () => {
     // State version 3 was the last M1 shape (decision note 0012).
-    expect(STATE_VERSION).toBe(11);
+    expect(STATE_VERSION).toBe(12);
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 3 })).toThrow(
-      'Saved state has version 3; this build reads version 11',
+      'Saved state has version 3; this build reads version 12',
     );
   });
 
@@ -187,7 +187,7 @@ describe('serialise and deserialise', () => {
     // State version 4 was the M2 skeleton's shape, with no surface arrays.
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 4 })).toThrow(
-      'Saved state has version 4; this build reads version 11',
+      'Saved state has version 4; this build reads version 12',
     );
   });
 
@@ -195,7 +195,7 @@ describe('serialise and deserialise', () => {
     // State version 5 could hold a ladder (structure code 1, item 'ladder').
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 5 })).toThrow(
-      'Saved state has version 5; this build reads version 11',
+      'Saved state has version 5; this build reads version 12',
     );
   });
 
@@ -203,7 +203,7 @@ describe('serialise and deserialise', () => {
     // State version 7 held `lampOil`, and could hold a torch or a safety lamp.
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 7 })).toThrow(
-      'Saved state has version 7; this build reads version 11',
+      'Saved state has version 7; this build reads version 12',
     );
   });
 
@@ -212,7 +212,7 @@ describe('serialise and deserialise', () => {
     // followed the light rule.
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 6 })).toThrow(
-      'Saved state has version 6; this build reads version 11',
+      'Saved state has version 6; this build reads version 12',
     );
   });
 
@@ -220,7 +220,7 @@ describe('serialise and deserialise', () => {
     // State version 8 held `avatar` (health and air) and no worked squares.
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 8 })).toThrow(
-      'Saved state has version 8; this build reads version 11',
+      'Saved state has version 8; this build reads version 12',
     );
   });
 
@@ -229,7 +229,15 @@ describe('serialise and deserialise', () => {
     // each camp.
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 9 })).toThrow(
-      'Saved state has version 9; this build reads version 11',
+      'Saved state has version 9; this build reads version 12',
+    );
+  });
+
+  it('refuses a save from before camps with a clear error (issue #100)', () => {
+    // State version 11 held the flag `crew.resting`, not `crew.restingAt`.
+    const saved = serialise(busyState());
+    expect(() => deserialise({ ...saved, version: 11 })).toThrow(
+      'Saved state has version 11; this build reads version 12',
     );
   });
 
@@ -238,7 +246,7 @@ describe('serialise and deserialise', () => {
     // be stored in a cell that is not its square's top block.
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 10 })).toThrow(
-      'Saved state has version 10; this build reads version 11',
+      'Saved state has version 10; this build reads version 12',
     );
   });
 });
@@ -274,7 +282,8 @@ describe('hashState', () => {
       seed: (s) => (s.seed += 1),
       health: (s) => (s.crew.health -= 1),
       'a worked square': (s) => (s.worked[0] = 1),
-      resting: (s) => (s.crew.resting = false),
+      resting: (s) => (s.crew.restingAt = null),
+      'the camp rested at': (s) => (s.crew.restingAt = { x: 2, y: 1 }),
       'an armed charge gone': (s) => s.armed.pop(),
       'an armed charge of another kind': (s) => {
         (s.armed[0] as ArmedCharge).kind = 'unstableOre';

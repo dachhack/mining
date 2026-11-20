@@ -9,7 +9,7 @@
 // cut a tap on the map stands for (`takeTurn`, which calls the engine's
 // `applyAction` or `endShift`). It never edits the state itself.
 
-import { STRUCTURES } from '../data';
+import { CAMPS, STRUCTURES } from '../data';
 import { ENGINE_VERSION, countItem, isRunActive } from '../engine';
 import {
   MAX_SEED,
@@ -36,6 +36,13 @@ import type { ChoiceView, PlayerView } from './text/view';
  */
 const CLOSE_MINE_QUESTION =
   'Close the mine? This ends the run now, alive, with what is in the stockpile.';
+
+/**
+ * What the player is asked before a camp is taken down: the kit is not given
+ * back, so a stray tap must not cost a camp (issue #100).
+ */
+const DECOMMISSION_QUESTION =
+  'Decommission this camp? Its cheaper mining, recipes and rest end, and the kit is not given back.';
 
 /**
  * The browser's `localStorage`, or `null` if it cannot be used. Merely
@@ -134,16 +141,20 @@ export function mountPreview(root: HTMLElement): void {
   const tapMap = createTapMap((x, y) => {
     tapSquare(x, y);
   });
-  // The tool bar (design doc 11): what a tap on the map does. One toggle for
-  // now: on, a tap places a support; off, a tap mines or cuts (issue #94;
-  // task T14 builds the full tool bar).
+  // The tool bar (design doc 11): what a tap on the map does. Two toggles for
+  // now: with one on, a tap places a support (issue #94) or founds a camp
+  // (issue #100); with both off, a tap mines or cuts. Task T14 builds the full
+  // tool bar.
   const toolBar = element('section', 'tool-bar');
   const supportTool = element('button', 'small tool');
   supportTool.type = 'button';
   supportTool.dataset['testid'] = 'tool-support';
+  const campTool = element('button', 'small tool');
+  campTool.type = 'button';
+  campTool.dataset['testid'] = 'tool-camp';
   const toolHint = element('span', 'tool-hint');
   toolHint.dataset['testid'] = 'tool-hint';
-  toolBar.append(supportTool, toolHint);
+  toolBar.append(supportTool, campTool, toolHint);
   // What the map cannot show.
   const mapNotes = element('section', 'map-notes');
   mapNotes.dataset['testid'] = 'map-notes';
@@ -225,13 +236,23 @@ export function mountPreview(root: HTMLElement): void {
     supportTool.textContent = `Place support (${supportsHeld})`;
     supportTool.setAttribute('aria-pressed', tool === 'support' ? 'true' : 'false');
     supportTool.classList.toggle('on', tool === 'support');
+    const kitsHeld = countItem(session.state, CAMPS.kitItem);
+    campTool.textContent = `Found camp (${kitsHeld})`;
+    campTool.setAttribute('aria-pressed', tool === 'camp' ? 'true' : 'false');
+    campTool.classList.toggle('on', tool === 'camp');
+    // With no kit there is nothing to found: the button is not shown.
+    campTool.hidden = kitsHeld === 0;
     toolBar.hidden = view.ended !== null;
-    toolHint.textContent =
-      tool === 'support'
-        ? 'A tap places a support. Tap the button again to go back to mining.'
-        : supportsHeld === 0
-          ? 'A tap mines or cuts. Craft a support to place one.'
-          : 'A tap mines or cuts.';
+    if (tool === 'support') {
+      toolHint.textContent = 'A tap places a support. Tap the button again to go back to mining.';
+    } else if (tool === 'camp') {
+      toolHint.textContent =
+        'Tap the centre of a flat 3 x 3 patch to found a camp there. It takes the rest of the shift.';
+    } else if (supportsHeld === 0) {
+      toolHint.textContent = 'A tap mines or cuts. Craft a support to place one.';
+    } else {
+      toolHint.textContent = 'A tap mines or cuts.';
+    }
 
     // End shift has its own button; it is hidden once the run is over.
     endShiftButton.hidden = view.ended !== null;
@@ -253,6 +274,11 @@ export function mountPreview(root: HTMLElement): void {
         if (closing && !window.confirm(CLOSE_MINE_QUESTION)) {
           return;
         }
+        // Taking a camp down loses its kit: ask first, too.
+        const decommissioning = choice.entry.type === 'decommissionCamp';
+        if (decommissioning && !window.confirm(DECOMMISSION_QUESTION)) {
+          return;
+        }
         take(choice.entry, true);
       });
       return button;
@@ -264,7 +290,8 @@ export function mountPreview(root: HTMLElement): void {
 
   /**
    * A tap on the square (x, y) of the map: mine it, or cut its tree; with
-   * the support tool on, place a support there. A tap the rules refuse
+   * the support tool on, place a support there; with the camp tool on, found
+   * a camp round it. A tap the rules refuse
    * changes nothing: the reason is shown under the map, and the map marks the
    * square and, for the level rule, the neighbours that are too high. A mine
    * that would make squares unstable is not taken at the first tap either:
@@ -305,8 +332,12 @@ export function mountPreview(root: HTMLElement): void {
       // or from a tap the rules had just allowed.
       lastLines = [`That could not be done: ${error instanceof Error ? error.message : ''}`];
     }
-    // With the last support placed, a tap goes back to mining.
-    if (countItem(session.state, STRUCTURES.support.placedFromItem) === 0) {
+    // With the last support placed, or the last camp kit used, a tap goes
+    // back to mining.
+    if (tool === 'support' && countItem(session.state, STRUCTURES.support.placedFromItem) === 0) {
+      tool = 'dig';
+    }
+    if (tool === 'camp' && countItem(session.state, CAMPS.kitItem) === 0) {
       tool = 'dig';
     }
     note.hidden = true;
@@ -335,6 +366,12 @@ export function mountPreview(root: HTMLElement): void {
 
   supportTool.addEventListener('click', () => {
     tool = tool === 'support' ? 'dig' : 'support';
+    marks = NO_MARKS;
+    pending = null;
+    draw(false);
+  });
+  campTool.addEventListener('click', () => {
+    tool = tool === 'camp' ? 'dig' : 'camp';
     marks = NO_MARKS;
     pending = null;
     draw(false);

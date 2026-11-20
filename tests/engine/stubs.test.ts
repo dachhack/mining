@@ -31,9 +31,9 @@ describe('actionKey and sameAction', () => {
     { type: 'placeVent', target: { x: 1, y: 2, z: 3 }, ap: 1 },
     { type: 'seal', target: { x: 1, y: 2, z: 3 }, ap: 1 },
     { type: 'scan', centre: { x: 1, y: 2, z: 3 }, ap: 2 },
-    { type: 'foundCamp', ap: 5 },
-    { type: 'rest', ap: 5 },
-    { type: 'decommissionCamp', ap: 1 },
+    { type: 'foundCamp', x: 1, y: 2, ap: 5 },
+    { type: 'rest', x: 1, y: 2, ap: 5 },
+    { type: 'decommissionCamp', x: 1, y: 2, ap: 1 },
   ];
 
   it('give every kind of action its own key', () => {
@@ -73,11 +73,6 @@ describe('the M2 action modules are stubs (decision note 0015)', () => {
   it('placeExplosive offers nothing (until M2-5)', async () => {
     const { legalPlaceExplosiveActions } = await import('../../src/engine/actions/placeExplosive');
     expect(legalPlaceExplosiveActions(state)).toEqual([]);
-  });
-
-  it('camp offers nothing (until M2-7)', async () => {
-    const { legalCampActions } = await import('../../src/engine/actions/camp');
-    expect(legalCampActions(state)).toEqual([]);
   });
 
   it('campTools offers nothing (until M2-8)', async () => {

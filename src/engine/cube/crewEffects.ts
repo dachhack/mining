@@ -9,8 +9,9 @@
 // There is no air: water and gas hurt the crew directly, through the same
 // recorded damage as everything else (design doc 5.2).
 //
-// Step 2 calls `applyRest` in camps.ts, which does nothing until the camps
-// task (T12) fills it in.
+// Step 2 calls `applyRest` in camps.ts. The camp's squares were made worked
+// squares when the crew chose to rest (actions/camp.ts), so they are worked
+// all through steps (a) to (d), and step 3 forgets them with the rest.
 
 import { applyRest } from '../camps';
 import { clearWorked } from '../crew';
@@ -78,11 +79,11 @@ export function stepCrewEffects(state: GameState, events: GameEvent[], phase: Cu
   phase.damage = [];
 
   // 2. Rest, for a crew that chose it this shift and is still alive.
-  if (isRunActive(state) && state.crew.resting) {
+  if (isRunActive(state) && state.crew.restingAt !== null) {
     applyRest(state, events);
   }
   // Rest lasts one shift, whether or not the crew lived to take it.
-  state.crew.resting = false;
+  state.crew.restingAt = null;
 
   // 3. The shift's work is over: no square is a worked square any more.
   clearWorked(state);

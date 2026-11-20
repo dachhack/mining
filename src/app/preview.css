@@ -248,6 +248,8 @@ button.small {
 .tool-bar {
   display: flex;
   align-items: center;
+  /* Two tool buttons and the hint do not fit on one line of a phone. */
+  flex-wrap: wrap;
   gap: 10px;
   margin: 6px 0;
 }
@@ -256,7 +258,7 @@ button.small {
   flex: none;
 }
 
-/* The support tool while it is on: a tap places a support. */
+/* A tool while it is on: a tap places a support, or founds a camp. */
 .tool-bar .tool.on {
   background: #e8e0d0;
   color: #1d1915;

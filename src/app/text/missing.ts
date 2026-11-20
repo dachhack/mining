@@ -9,6 +9,7 @@ import { SHIFT } from '../../data';
 import { legalActions } from '../../engine';
 import type { GameState } from '../../engine';
 import { choiceName } from './describe';
+import { isNamedBySquareOnly } from './log';
 
 /**
  * One line saying what costs more AP than the player has left, or `null` if
@@ -32,7 +33,13 @@ export function tooLittleApNote(state: GameState): string | null {
   // Python's `dataclasses.replace`). The cube arrays are shared, not copied;
   // `legalActions` does not change the state it is given.
   const withFullAp = legalActions({ ...state, ap: fullShift });
-  const tooDear = withFullAp.filter((action) => action.ap > state.ap);
+  // Founding a camp and resting cost "the rest of the shift", whatever that
+  // is, so with more AP they would only cost more: they are never missing for
+  // want of AP while there is any AP at all (and with none, the line below
+  // covers them).
+  const tooDear = withFullAp.filter(
+    (action) => action.ap > state.ap && action.type !== 'foundCamp' && action.type !== 'rest',
+  );
   if (tooDear.length === 0) {
     return null;
   }
@@ -43,10 +50,7 @@ export function tooLittleApNote(state: GameState): string | null {
   const mines = tooDear.filter((action) => action.type === 'mine').length;
   const cuts = tooDear.filter((action) => action.type === 'cutTree').length;
   const listed = tooDear
-    .filter(
-      (action) =>
-        action.type !== 'mine' && action.type !== 'cutTree' && action.type !== 'placeSupport',
-    )
+    .filter((action) => !isNamedBySquareOnly(action))
     .map((action) => `[${action.ap}] ${choiceName(action)}`);
 
   const parts: string[] = [];

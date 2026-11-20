@@ -25,7 +25,7 @@ export interface MineAction {
   ap: number;
 }
 
-/** Craft the field recipe with id `recipe` once. */
+/** Craft the recipe with id `recipe` once: a field recipe, or a camp recipe while a camp stands. */
 export interface CraftAction {
   type: 'craft';
   recipe: string;
@@ -96,23 +96,32 @@ export interface ScanAction {
 }
 
 /**
- * Found a camp around the avatar's cell, using up the camp kit (0014 item
- * 26). `ap` is all the AP left in the shift.
+ * Found a camp on the flat 3 x 3 patch whose centre square is (x, y), using
+ * up one camp kit (design doc 8). `ap` is all the AP left in the shift.
  */
 export interface FoundCampAction {
   type: 'foundCamp';
+  x: number;
+  y: number;
   ap: number;
 }
 
-/** Rest at a camp for the rest of the shift (0014 item 27). `ap` is all the AP left. */
+/**
+ * Rest at the camp whose centre square is (x, y) for the rest of the shift
+ * (design doc 4.1 and 8). `ap` is all the AP left.
+ */
 export interface RestAction {
   type: 'rest';
+  x: number;
+  y: number;
   ap: number;
 }
 
-/** Decommission the camp the avatar is in (0014 item 28). */
+/** Decommission the camp whose centre square is (x, y) (design doc 8). */
 export interface DecommissionCampAction {
   type: 'decommissionCamp';
+  x: number;
+  y: number;
   ap: number;
 }
 
@@ -130,7 +139,7 @@ export interface CutTreeAction {
 /** The actions of actions/campTools.ts (M2-8). */
 export type CampToolAction = PlacePumpAction | PlaceVentAction | SealAction | ScanAction;
 
-/** The actions of actions/camp.ts (M2-7). */
+/** The actions of actions/camp.ts. */
 export type CampAction = FoundCampAction | RestAction | DecommissionCampAction;
 
 export type Action =
@@ -156,7 +165,10 @@ export function actionKey(action: Action): string {
     case 'mine':
     case 'cutTree':
     case 'placeSupport':
-      // The type, the square, the cost.
+    case 'foundCamp':
+    case 'rest':
+    case 'decommissionCamp':
+      // The type, the square (for a camp action, the camp's centre), the cost.
       return `${action.type} ${action.x},${action.y} ap ${action.ap}`;
     case 'craft':
       return `craft ${action.recipe} ap ${action.ap}`;
@@ -170,10 +182,6 @@ export function actionKey(action: Action): string {
       return `${action.type} ${vecKey(action.target)} ap ${action.ap}`;
     case 'scan':
       return `scan ${vecKey(action.centre)} ap ${action.ap}`;
-    case 'foundCamp':
-    case 'rest':
-    case 'decommissionCamp':
-      return `${action.type} ap ${action.ap}`;
   }
 }
 

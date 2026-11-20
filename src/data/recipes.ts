@@ -27,9 +27,9 @@ export const FIELD_RECIPES: RecipeDef[] = [
   },
 ];
 
-// Camp recipes, design doc 7.2. Craftable only in a camp cell (0014 item 27).
-// Nothing reads this table until the camps task (M2-7). The safety lamp is
-// removed with light (design doc v0.2, 7.2).
+// Camp recipes, design doc 7.2. Craftable only while at least one camp stands
+// (design doc 8: a camp's functions are available from anywhere on the map).
+// The safety lamp is removed with light (design doc v0.2, 7.2).
 //
 // "Iron" and "copper" in 7.2 are read as ingots: raw ore must be smelted
 // first. Smelting 2 raw ore + 1 coal makes 2 ingots (0014 item 31).

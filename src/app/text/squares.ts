@@ -1,5 +1,6 @@
-// Acting on a square of the map: "mine x,y", "cut x,y" and "support x,y"
-// (issues #86 and #94).
+// Acting on a square of the map: "mine x,y", "cut x,y", "support x,y", and
+// the camp actions "camp x,y", "rest x,y" and "decommission x,y", which name
+// a camp by its centre square (issues #86, #94 and #100).
 //
 // There is no miner: the player names any square. With some 1,700 squares to
 // choose from, these actions are not lines of a list; the play tool takes
@@ -12,8 +13,11 @@
 // view.ts, a square is read only through `knownSquare`, so a sentence can
 // never tell something below a top block.
 
-import { ACTION_COSTS, SURFACE, blockDefByCode } from '../../data';
+import { ACTION_COSTS, CAMPS, SURFACE, blockDefByCode, itemDef } from '../../data';
 import {
+  campAtSquare,
+  campCentredAt,
+  foundCampCheck,
   isRunActive,
   isSquare,
   knownSquare,
@@ -22,17 +26,32 @@ import {
   unstableAfterMine,
 } from '../../engine';
 import type {
-  CutTreeAction,
+  Camp,
+  DecommissionCampAction,
+  FoundCampAction,
+  FoundCampCheck,
   GameState,
+  CutTreeAction,
   MineAction,
   PlaceSupportAction,
+  RestAction,
+  Square,
   UnstableSquare,
 } from '../../engine';
+
+/** The actions that name a square: what `SquareChoice.entry` may hold. */
+export type SquareEntry =
+  | MineAction
+  | CutTreeAction
+  | PlaceSupportAction
+  | FoundCampAction
+  | RestAction
+  | DecommissionCampAction;
 
 /** What a typed choice or a tap on a square came to. */
 export interface SquareChoice {
   /** The action to take, or `null` if it is refused. */
-  entry: MineAction | CutTreeAction | PlaceSupportAction | null;
+  entry: SquareEntry | null;
   /** Why it is refused, as a sentence for the player; `null` when `entry` is set. */
   refusal: string | null;
   /**
@@ -43,14 +62,20 @@ export interface SquareChoice {
    */
   makesUnstable: UnstableSquare[];
   warning: string | null;
+  /**
+   * For a refused "camp x,y": the squares of the 3 x 3 patch that are in the
+   * way (the ones with a tree, the ones off the level, ...), so that a map
+   * can mark them. Empty for everything else.
+   */
+  blockedSquares: Square[];
 }
 
-function allowed(entry: MineAction | CutTreeAction | PlaceSupportAction): SquareChoice {
-  return { entry, refusal: null, makesUnstable: [], warning: null };
+function allowed(entry: SquareEntry): SquareChoice {
+  return { entry, refusal: null, makesUnstable: [], warning: null, blockedSquares: [] };
 }
 
-function refused(refusal: string): SquareChoice {
-  return { entry: null, refusal, makesUnstable: [], warning: null };
+function refused(refusal: string, blockedSquares: Square[] = []): SquareChoice {
+  return { entry: null, refusal, makesUnstable: [], warning: null, blockedSquares };
 }
 
 /** "x3 y4": how a square is written in every sentence. */
@@ -98,6 +123,15 @@ export function mineChoice(state: GameState, x: number, y: number): SquareChoice
   if (check.refusal === 'bottom') {
     return refused(`${where} has no block left: it is at the bedrock floor of the cube.`);
   }
+  if (check.refusal === 'camp') {
+    const camp = campAtSquare(state, x, y);
+    // The camp is named by its centre square.
+    const command = camp === null ? '' : ` ("decommission ${camp.pos.x},${camp.pos.y}")`;
+    return refused(
+      `A camp stands on ${where}: its squares cannot be mined while it stands. ` +
+        `To mine there, decommission the camp first${command}.`,
+    );
+  }
   if (check.refusal === 'neighbourHigher') {
     const depth = knownSquare(state, x, y).depth;
     const higher = check.higherNeighbours.map(
@@ -131,6 +165,7 @@ export function mineChoice(state: GameState, x: number, y: number): SquareChoice
     refusal: null,
     makesUnstable,
     warning: unstableWarning(state, x, y, makesUnstable),
+    blockedSquares: [],
   };
 }
 
@@ -193,6 +228,9 @@ export function supportChoice(state: GameState, x: number, y: number): SquareCho
   if (check.refusal === 'occupied') {
     return refused(`Something is already placed on ${where}: a square holds one thing.`);
   }
+  if (check.refusal === 'camp') {
+    return refused(`A camp stands on ${where}: nothing is placed on a camp square.`);
+  }
   if (check.ap === null) {
     // `supportCheck` gives a cost whenever it gives no refusal.
     return refused(`A support cannot be placed on ${where}.`);
@@ -233,6 +271,158 @@ export function cutChoice(state: GameState, x: number, y: number): SquareChoice 
   return allowed({ type: 'cutTree', x, y, ap: cost });
 }
 
+// ---------------------------------------------------------------------------
+// Camps (design doc 8; issue #100)
+// ---------------------------------------------------------------------------
+
+/** "x2 y3, x3 y3 and x4 y3". */
+function squareListText(squares: Square[]): string {
+  return joinWithAnd(squares.map((square) => squareText(square.x, square.y)));
+}
+
+/** "x2-4, y2-4": the 3 x 3 patch round a centre square, as the player reads it off the map. */
+export function patchText(x: number, y: number): string {
+  const half = CAMPS.halfWidth;
+  return `x${x - half}-${x + half}, y${y - half}-${y + half}`;
+}
+
+/**
+ * The sentence for a patch `foundCampCheck` refuses: the reason, and the
+ * squares in the way. `x`, `y` is the centre square that was asked about.
+ */
+function foundRefusalText(state: GameState, x: number, y: number, check: FoundCampCheck): string {
+  const patch = `the 3 x 3 patch round ${squareText(x, y)} (${patchText(x, y)})`;
+  const which = squareListText(check.squares);
+  switch (check.refusal) {
+    case 'noKit':
+      return (
+        `You have no ${itemDef(CAMPS.kitItem).name.toLowerCase()}: founding a camp uses one up. ` +
+        'One is crafted at a camp ("craft-camp-kit").'
+      );
+    case 'offMap':
+      return (
+        `A camp needs a 3 x 3 patch of squares, and the patch round ${squareText(x, y)} would reach ` +
+        'over the edge of the map. Name a centre square that is not on the edge.'
+      );
+    case 'tree':
+      return `A camp needs clear ground, and ${patch} has a tree on ${which}. Cut it first.`;
+    case 'notFlat': {
+      const depth = knownSquare(state, x, y).depth;
+      const others = check.squares.map(
+        (square) =>
+          `${squareText(square.x, square.y)} (depth ${knownSquare(state, square.x, square.y).depth})`,
+      );
+      return (
+        `A camp needs a flat patch: all 9 squares at the same depth. ${squareText(x, y)} is at ` +
+        `depth ${depth}; not level with it: ${joinWithAnd(others)}.`
+      );
+    }
+    case 'bottom':
+      return `${patch} is at the bedrock floor of the cube: there is nothing to stand a camp on.`;
+    case 'water':
+      return `A camp cannot be founded in water: ${which} of ${patch} is flooded.`;
+    case 'lava':
+      return `A camp cannot be founded on lava: there is lava on ${which} of ${patch}.`;
+    case 'gas':
+      return `A camp cannot be founded in gas: there is gas on ${which} of ${patch}.`;
+    case 'structure':
+      return `Something is placed on ${which}: a camp needs a patch with nothing built on it.`;
+    case 'camp':
+      return `Another camp already stands on ${which}: camps do not overlap.`;
+    case null:
+      return `A camp cannot be founded round ${squareText(x, y)}.`;
+  }
+}
+
+/**
+ * "camp x,y": the action that founds a camp on the flat 3 x 3 patch whose
+ * centre square is (x, y), or why it is refused, with the squares in the way
+ * (`blockedSquares`). Founding costs all the AP left in the shift.
+ */
+export function campChoice(state: GameState, x: number, y: number): SquareChoice {
+  if (!isRunActive(state)) {
+    return refused('The run has ended.');
+  }
+  const offMap = offMapRefusal(state, x, y);
+  if (offMap !== null) {
+    return refused(offMap);
+  }
+  const check = foundCampCheck(state, x, y);
+  if (!check.allowed) {
+    return refused(foundRefusalText(state, x, y, check), check.squares);
+  }
+  if (state.ap < CAMPS.foundMinAp) {
+    return refused(
+      `Founding a camp takes the rest of the shift and needs at least ${CAMPS.foundMinAp} AP; ` +
+        `you have ${state.ap} left this shift.`,
+    );
+  }
+  return allowed({ type: 'foundCamp', x, y, ap: state.ap });
+}
+
+/** The refusal for a camp action that names a square with no camp centred on it. */
+function noCampRefusal(state: GameState, x: number, y: number): string {
+  if (state.camps.length === 0) {
+    return 'There is no camp yet: found one first ("camp X,Y").';
+  }
+  const centres = state.camps.map((camp: Camp) => squareText(camp.pos.x, camp.pos.y));
+  return (
+    `No camp is centred on ${squareText(x, y)}. A camp is named by its centre square: ` +
+    `${joinWithAnd(centres)}.`
+  );
+}
+
+/**
+ * "rest x,y": the action that rests the crew at the camp whose centre square
+ * is (x, y), or why it is refused. Resting costs all the AP left.
+ */
+export function restChoice(state: GameState, x: number, y: number): SquareChoice {
+  if (!isRunActive(state)) {
+    return refused('The run has ended.');
+  }
+  const offMap = offMapRefusal(state, x, y);
+  if (offMap !== null) {
+    return refused(offMap);
+  }
+  if (campCentredAt(state, x, y) === null) {
+    return refused(noCampRefusal(state, x, y));
+  }
+  if (state.crew.restingAt !== null) {
+    return refused('The crew is already resting this shift.');
+  }
+  if (state.ap < CAMPS.restMinAp) {
+    return refused(
+      `Resting takes the rest of the shift and needs at least ${CAMPS.restMinAp} AP; ` +
+        `you have ${state.ap} left this shift.`,
+    );
+  }
+  return allowed({ type: 'rest', x, y, ap: state.ap });
+}
+
+/**
+ * "decommission x,y": the action that takes down the camp whose centre
+ * square is (x, y), or why it is refused.
+ */
+export function decommissionChoice(state: GameState, x: number, y: number): SquareChoice {
+  if (!isRunActive(state)) {
+    return refused('The run has ended.');
+  }
+  const offMap = offMapRefusal(state, x, y);
+  if (offMap !== null) {
+    return refused(offMap);
+  }
+  if (campCentredAt(state, x, y) === null) {
+    return refused(noCampRefusal(state, x, y));
+  }
+  const cost = ACTION_COSTS.decommissionCamp;
+  if (cost > state.ap) {
+    return refused(
+      `Decommissioning a camp costs ${cost} AP and you have ${state.ap} left this shift.`,
+    );
+  }
+  return allowed({ type: 'decommissionCamp', x, y, ap: cost });
+}
+
 /**
  * A tap on the square (x, y) of the phone map: cut its tree if it has one,
  * otherwise mine it (design doc 11: "a tap on a square mines it, or cuts its
@@ -245,20 +435,37 @@ export function tapChoice(state: GameState, x: number, y: number): SquareChoice 
   return mineChoice(state, x, y);
 }
 
+/** The words that name a square action, as they are typed. */
+export const SQUARE_CHOICE_KINDS = [
+  'mine',
+  'cut',
+  'support',
+  'camp',
+  'rest',
+  'decommission',
+] as const;
+
+/** One of the words above. `(typeof X)[number]` is "any one element of the list X". */
+export type SquareChoiceKind = (typeof SQUARE_CHOICE_KINDS)[number];
+
+const SQUARE_CHOICE_PATTERN = new RegExp(
+  `^(${SQUARE_CHOICE_KINDS.join('|')})(!?)[ -]*(\\d+) *, *(\\d+)$`,
+);
+
 /**
- * Read a typed choice as a square action: "mine 3,4", "cut 3,4" or
- * "support 3,4" (a space or a dash after the word, a comma between the
- * numbers). "mine! 3,4" is a mine the player has confirmed: it is taken even
+ * Read a typed choice as a square action: "mine 3,4", "cut 3,4",
+ * "support 3,4", "camp 3,4", "rest 3,4" or "decommission 3,4" (a space or a
+ * dash after the word, a comma between the numbers). "mine! 3,4" is a mine the player has confirmed: it is taken even
  * if it would make squares unstable. `null` if the text is not of that form;
  * then it is something else (a listed choice, or a mistake).
  */
 export function parseSquareChoice(
   text: string,
-): { kind: 'mine' | 'cut' | 'support'; confirmed: boolean; x: number; y: number } | null {
+): { kind: SquareChoiceKind; confirmed: boolean; x: number; y: number } | null {
   // The pattern: the word (with an optional "!" after "mine"), a space or
   // dash, digits, a comma, digits. The brackets capture the parts, which
   // come back in `match[1]` to `match[4]`.
-  const match = /^(mine|cut|support)(!?)[ -]*(\d+) *, *(\d+)$/.exec(text.trim().toLowerCase());
+  const match = SQUARE_CHOICE_PATTERN.exec(text.trim().toLowerCase());
   if (match === null) {
     return null;
   }
@@ -267,6 +474,10 @@ export function parseSquareChoice(
   if (confirmed && word !== 'mine') {
     return null; // only a mine is ever confirmed
   }
-  const kind = word === 'cut' ? 'cut' : word === 'support' ? 'support' : 'mine';
+  // `find` gives back the word as one of the kinds, or `undefined`.
+  const kind = SQUARE_CHOICE_KINDS.find((known) => known === word);
+  if (kind === undefined) {
+    return null;
+  }
   return { kind, confirmed, x: Number(match[3]), y: Number(match[4]) };
 }

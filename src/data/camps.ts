@@ -1,24 +1,29 @@
 import type { CampData, CampToolData } from './types';
 
-// Camps: design doc 8 ([Decided]) and what decision note 0014 items 25 to 30
-// assume where section 8 is silent. Nothing reads this table until the camps
-// task (M2-7), except `halfWidth` and `height`, which the engine uses to tell
-// which cells belong to a camp when a hazard destroys one.
+// Camps: design doc v0.2 section 8 (issue #100; decision note 0032). The
+// numbers are [Default]: tune them here.
 export const CAMPS: CampData = {
   kitItem: 'campKit',
-  // A camp is 3 x 3 cells and 2 high (design doc 8): the founding cell, this
-  // many cells to each side of it, and `height` layers counting its own
-  // upwards (0014 item 26).
+  // A camp stands on a flat square patch: its centre square and this many
+  // squares to each side of it. 1 gives 3 x 3.
   halfWidth: 1,
-  height: 2,
   // Founding and resting cost all the AP left in the shift, and need at
-  // least this many (0014 items 26 and 27).
+  // least this many (design doc 4.1).
   foundMinAp: 1,
   restMinAp: 1,
   // Each active camp burns `upkeepFuel` every `upkeepEveryShifts` shifts,
-  // counted from the shift it was founded (design doc 4; 0014 item 28).
+  // counted from the shift it was founded (design doc 4).
   upkeepFuel: 1,
   upkeepEveryShifts: 4,
+  // Mining near a camp is cheaper (owner, question 90). A mine costs
+  // `mineDiscountAp` less, but never less than `mineMinAp`, when the square is
+  // within `mineDiscountSteps` steps of a camp square (a step is to a face
+  // neighbour, no diagonals) and no more than `mineDiscountMaxDeeper` levels
+  // deeper than the camp.
+  mineDiscountAp: 1,
+  mineMinAp: 1,
+  mineDiscountSteps: 4,
+  mineDiscountMaxDeeper: 4,
 };
 
 // Camp-made tools whose numbers are not a hazard's (0014 item 31; design doc

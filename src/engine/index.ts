@@ -5,7 +5,7 @@
 //
 // This file is also the dispatcher: it owns what is common to every action
 // (copying the state, checking legality, spending AP, then reveal) and hands the rest to one module per rule. The modules of the M2
-// actions (explosives, camp tools, camps) are stubs until
+// actions (explosives, camp tools) are stubs until
 // their tasks fill them in; each stub's doc comment is its contract
 // (decision note 0015).
 
@@ -247,7 +247,20 @@ export type {
   ScanAction,
   SealAction,
 } from './actionTypes';
-export { campCells, campsAt } from './camps';
+// Camps (design doc 8). Camps are always seen, so a view may read all of
+// this: where a camp stands, why a patch is refused, and where mining is
+// cheaper.
+export {
+  campAtSquare,
+  campCentredAt,
+  campSquares,
+  campUpkeepIsDue,
+  campsAt,
+  foundCampCheck,
+  mineDiscountAt,
+  stepsFromCamp,
+} from './camps';
+export type { FoundCampCheck, FoundCampRefusal } from './camps';
 export type {
   DamageCause,
   DestructionCause,

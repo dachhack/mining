@@ -21,9 +21,13 @@ import {
 } from '../../src/app/text/log';
 import type { LogEntry, PlayLog, Session } from '../../src/app/text/log';
 import {
+  SQUARE_CHOICE_KINDS,
+  campChoice,
   cutChoice,
+  decommissionChoice,
   mineChoice,
   parseSquareChoice,
+  restChoice,
   supportChoice,
 } from '../../src/app/text/squares';
 import { takeTurn } from '../../src/app/text/turn';
@@ -110,14 +114,17 @@ export function parseArgs(args: string[]): CliOptions {
  * "mine 3,4, cut 5,6,end" -> ["mine 3,4", "cut 5,6", "end"].
  *
  * A square is written with a comma too ("mine 3,4"), so a comma that stands
- * between the two numbers of a mine, a cut or a support is not a break. A semicolon is
- * always a break, for anyone who would rather not rely on that.
+ * between the two numbers of a square choice (mine, cut, support, camp, rest,
+ * decommission) is not a break. A semicolon is always a break, for anyone who
+ * would rather not rely on that.
  */
 export function splitChoices(text: string): string[] {
   // The pattern matches, from left to right, either a whole square choice
   // ("mine 3 , 4") or a run of characters with no comma or semicolon in it.
   // The `g` flag makes `match` return every match, not just the first.
-  const pieces = text.toLowerCase().match(/ *(?:mine!?|cut|support)[ -]*\d+ *, *\d+|[^,;]+/g) ?? [];
+  const words = SQUARE_CHOICE_KINDS.join('|');
+  const pattern = new RegExp(` *(?:${words})!?[ -]*\\d+ *, *\\d+|[^,;]+`, 'g');
+  const pieces = text.toLowerCase().match(pattern) ?? [];
   return pieces.map((piece) => piece.trim()).filter((piece) => piece !== '');
 }
 
@@ -131,9 +138,10 @@ export interface ResolvedChoice {
 /**
  * The entry a typed choice stands for, or the reason it is refused.
  *
- * - "mine 3,4", "cut 3,4" and "support 3,4" name a square. A refused one
- *   says why (a tree, the level rule and which neighbours are too high, too
- *   little AP, ...): see squares.ts.
+ * - "mine 3,4", "cut 3,4", "support 3,4" and "camp 3,4" name a square;
+ *   "rest 3,4" and "decommission 3,4" name a camp by its centre square. A
+ *   refused one says why (a tree, the level rule and which neighbours are too
+ *   high, a patch that is not flat, too little AP, ...): see squares.ts.
  * - A mine that would make squares unstable is refused the first time, with
  *   a warning that names them; "mine! 3,4" takes it all the same.
  * - 1, 2, ... are the lines of the action list in order, and 0 ends the
@@ -153,6 +161,15 @@ export function resolveChoice(state: GameState, choice: string): ResolvedChoice 
     }
     if (square.kind === 'support') {
       return supportChoice(state, square.x, square.y);
+    }
+    if (square.kind === 'camp') {
+      return campChoice(state, square.x, square.y);
+    }
+    if (square.kind === 'rest') {
+      return restChoice(state, square.x, square.y);
+    }
+    if (square.kind === 'decommission') {
+      return decommissionChoice(state, square.x, square.y);
     }
     const mine = mineChoice(state, square.x, square.y);
     if (mine.entry !== null && mine.warning !== null && !square.confirmed) {
@@ -186,7 +203,7 @@ export function resolveChoice(state: GameState, choice: string): ResolvedChoice 
   return {
     entry: null,
     refusal:
-      'It is not a choice as things stand now. Type "mine X,Y", "cut X,Y" or "support X,Y" for a square, ' +
+      'It is not a choice as things stand now. Type "mine X,Y", "cut X,Y", "support X,Y" or "camp X,Y" for a square, ' +
       `a number from 1 to ${numbered.length} or a name from the list, or 0 / end to end the shift.`,
   };
 }

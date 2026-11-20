@@ -9,7 +9,7 @@
 //
 // Placing an explosive does NOT make its square worked: the crew withdraws
 // before a charge goes off (5.2). A camp's squares count while the crew rests
-// there; that comes with resting (task T12).
+// there: the `rest` action marks them (actions/camp.ts).
 //
 // Only this file knows how `GameState.worked` is laid out.
 
