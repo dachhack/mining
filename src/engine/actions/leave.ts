@@ -1,24 +1,21 @@
-// Leaving the cube from the surface (0005 item 23).
+// Leaving, which ends the run as salvage (0005 item 23; decision note 0026).
 
 import { ACTION_COSTS } from '../../data';
 import type { LeaveAction } from '../actionTypes';
 import type { GameEvent } from '../events';
-import { endRun, isSurface } from '../state';
+import { endRun } from '../state';
 import type { GameState } from '../state';
 
 /**
- * Every `LeaveAction` the player could take now.
+ * Every `LeaveAction` the player could take now: always exactly one.
  *
- * - A single action while the avatar is on the surface, otherwise none
- *   (0005 item 23). `ap` is `ACTION_COSTS.leave` (0; owner question 27).
+ * - Leaving used to need the miner on the surface. There is no miner (issue
+ *   #86), so until task T6 turns this into "close the mine" it is offered at
+ *   any time (decision note 0026). `ap` is `ACTION_COSTS.leave` (0; owner
+ *   question 27).
  * - Does not change `state`.
- * - Lists actions as if the avatar had unlimited AP; the dispatcher in
- *   index.ts removes the ones that cost more than the AP left.
  */
-export function legalLeaveActions(state: GameState): LeaveAction[] {
-  if (!isSurface(state.size, state.avatar.pos)) {
-    return [];
-  }
+export function legalLeaveActions(_state: GameState): LeaveAction[] {
   return [{ type: 'leave', ap: ACTION_COSTS.leave }];
 }
 

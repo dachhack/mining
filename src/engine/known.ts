@@ -18,8 +18,9 @@
 //   plain rock with nothing in it. Whatever is computed from that copy cannot
 //   depend on an unrevealed cell, by construction.
 
-import { BLOCKS, HAZARDS, NO_STRUCTURE } from '../data';
+import { BLOCKS, HAZARDS, NO_STRUCTURE, WORLD } from '../data';
 import type { BlockId, ItemStack, Vec3 } from '../data';
+import { depthAt } from './heightmap';
 import {
   armedAt,
   blockAt,
@@ -37,6 +38,8 @@ import {
   waterAt,
 } from './state';
 import type { ArmedKind, GameState } from './state';
+import { hasTree, surfaceKindAt } from './surface/state';
+import { showsMineralTraces } from './tells';
 
 /** What the player sees of one revealed cell. */
 export interface KnownCell {
@@ -88,11 +91,61 @@ export function knownCell(state: GameState, pos: Vec3): KnownCell | null {
   };
 }
 
+/** What the player sees of one square of the map (design doc v0.2 section 3.4). */
+export interface KnownSquare {
+  x: number;
+  y: number;
+  /** How many levels down the square is. Always seen. */
+  depth: number;
+  /** True if a tree stands on the square. Always seen. */
+  tree: boolean;
+  /**
+   * The kind code of the square's surface cell (`SURFACE.kinds`: meadow,
+   * tree, stump, path, outcrop). Always seen. It matters only while the
+   * square is at ground level (depth 0).
+   */
+  surfaceKind: number;
+  /**
+   * What the player knows of the top block (the block in layer `depth`):
+   * `null` if it is under a tree and has never been seen, or if the square
+   * has no block left. Under a tree that grew back this is the block the
+   * player saw before.
+   */
+  top: KnownCell | null;
+  /** True if the map shows mineral traces on the top block. */
+  traces: boolean;
+}
+
+/**
+ * Everything the player sees of the square (x, y). THE function the views
+ * read a square through (the play tool, the phone map), so that none of them
+ * can show a block below a top by mistake.
+ *
+ * Reads the square's depth, its surface cell, and its top block if that is
+ * revealed. Nothing below the top block is read. Throws if (x, y) is not a
+ * square. Does not change `state`.
+ */
+export function knownSquare(state: GameState, x: number, y: number): KnownSquare {
+  const depth = depthAt(state, x, y);
+  const surfaceCell = { x, y, z: WORLD.surfaceZ };
+  const hasBlock = depth < state.size.z;
+  const topPos = { x, y, z: depth };
+  return {
+    x,
+    y,
+    depth,
+    tree: hasTree(state, surfaceCell),
+    surfaceKind: surfaceKindAt(state, surfaceCell),
+    top: hasBlock ? knownCell(state, topPos) : null,
+    traces: hasBlock && showsMineralTraces(state, topPos),
+  };
+}
+
 /**
  * A copy of `state` holding only what the player has seen: every unrevealed
  * cell is plain rock (`HAZARDS.forecast.unseenBlock`) with nothing in it: no
  * water, lava, gas, crack, structure, loose items or armed charge (0014 item
- * 4). Revealed cells, the avatar, the gauges and the camps are as they are.
+ * 4). Revealed cells, the gauges and the camps are as they are.
  *
  * The forecast runs steps (b) and (c) of the cube phase on this copy. Two
  * states that differ only in unrevealed cells give the same copy, apart from

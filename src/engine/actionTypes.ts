@@ -14,26 +14,14 @@
 import type { Vec3 } from '../data';
 
 /**
- * Move 1 block into the open face neighbour `to`: sideways, up or down. The
- * miner has no gravity, so it ends exactly there (owner, issue #80).
+ * Mine the top block of the square (x, y) (design doc 4.2; issue #86). There
+ * is no miner and no reach: any square may be named. The block removed is the
+ * one in layer `depthAt(state, x, y)`.
  */
-export interface MoveAction {
-  type: 'move';
-  to: Vec3;
-  ap: number;
-}
-
-/** Mine the block at `target`. */
 export interface MineAction {
   type: 'mine';
-  target: Vec3;
-  ap: number;
-}
-
-/** Place a torch from the inventory into the cell `target`. */
-export interface PlaceTorchAction {
-  type: 'placeTorch';
-  target: Vec3;
+  x: number;
+  y: number;
   ap: number;
 }
 
@@ -44,24 +32,11 @@ export interface CraftAction {
   ap: number;
 }
 
-/** Pick up `count` loose `item` from the cell `from`. */
-export interface PickUpAction {
-  type: 'pickUp';
-  from: Vec3;
-  item: string;
-  count: number;
-  ap: number;
-}
-
-/** Drop `count` of `item` from the inventory into the avatar's cell. */
-export interface DropAction {
-  type: 'drop';
-  item: string;
-  count: number;
-  ap: number;
-}
-
-/** Leave from the surface, ending the run (0005 item 23). */
+/**
+ * Leave, ending the run as salvage (0005 item 23). With no miner there is no
+ * surface to stand on, so it is offered at any time (decision note 0026);
+ * task T6 turns it into "close the mine".
+ */
 export interface LeaveAction {
   type: 'leave';
   ap: number;
@@ -161,12 +136,13 @@ export interface DecommissionCampAction {
 }
 
 /**
- * Cut the tree in the surface cell `target`, beside the avatar's, for timber
- * (issue #70; decision note 0020).
+ * Cut the tree on the square (x, y) for timber (issue #70; decision note
+ * 0020). Any square with a tree may be named (issue #86).
  */
 export interface CutTreeAction {
   type: 'cutTree';
-  target: Vec3;
+  x: number;
+  y: number;
   ap: number;
 }
 
@@ -185,12 +161,8 @@ export type CampAction =
   FoundCampAction | RestAction | StashPutAction | StashTakeAction | DecommissionCampAction;
 
 export type Action =
-  | MoveAction
   | MineAction
-  | PlaceTorchAction
   | CraftAction
-  | PickUpAction
-  | DropAction
   | LeaveAction
   | PlaceSupportAction
   | PlaceExplosiveAction
@@ -209,26 +181,20 @@ function vecKey(v: Vec3): string {
  */
 export function actionKey(action: Action): string {
   switch (action.type) {
-    case 'move':
-      return `move to ${vecKey(action.to)} ap ${action.ap}`;
     case 'mine':
-      return `mine ${vecKey(action.target)} ap ${action.ap}`;
+    case 'cutTree':
+      // The type, the square, the cost.
+      return `${action.type} ${action.x},${action.y} ap ${action.ap}`;
     case 'craft':
       return `craft ${action.recipe} ap ${action.ap}`;
-    case 'pickUp':
-      return `pickUp ${action.count} ${action.item} from ${vecKey(action.from)} ap ${action.ap}`;
-    case 'drop':
-      return `drop ${action.count} ${action.item} ap ${action.ap}`;
     case 'leave':
       return `leave ap ${action.ap}`;
-    case 'placeTorch':
     case 'placeSupport':
     case 'placeExplosive':
     case 'placePump':
     case 'placeVent':
     case 'placeSafetyLamp':
     case 'seal':
-    case 'cutTree':
       // The type, the cell, the cost.
       return `${action.type} ${vecKey(action.target)} ap ${action.ap}`;
     case 'scan':

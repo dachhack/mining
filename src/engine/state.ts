@@ -16,11 +16,11 @@ import type { RngState } from './rng';
 
 /**
  * Bumped whenever the shape of GameState changes, so old saves can be told
- * apart. 6: ladders removed (issue #80); a version-5 save may hold a ladder
- * (structure code 1, item 'ladder') or a miner standing in mid-air after a
- * fall, so it is not read.
+ * apart. 7: the avatar has no position (issue #86, mine by square); a
+ * version-6 save holds one, and its `revealed` cells follow the old light
+ * rule, so it is not read.
  */
-export const STATE_VERSION = 6;
+export const STATE_VERSION = 7;
 
 /** Some loose items lying in a cell. */
 export interface LooseItems {
@@ -33,8 +33,12 @@ export interface LooseItems {
 export type RunStatus =
   { kind: 'active' } | { kind: 'ended'; outcome: RunOutcome; cause: RunEndCause };
 
+/**
+ * What is left of the miner. It has no position since issue #86: the player
+ * selects squares and nobody walks. Health, air and resting stay here until
+ * crew health replaces them (task T5).
+ */
 export interface Avatar {
-  pos: Vec3;
   health: number;
   /** Air left (design doc 5.1; 0014 item 20). Full is `HAZARDS.air.max`. */
   air: number;
@@ -261,7 +265,7 @@ export function isSolid(state: GameState, pos: Vec3): boolean {
   return blockDefAt(state, pos).solid;
 }
 
-/** True if `pos` is open space the avatar, light and loose items can be in. */
+/** True if `pos` is open space: not a solid block. */
 export function isOpen(state: GameState, pos: Vec3): boolean {
   return !isSolid(state, pos);
 }
@@ -682,8 +686,8 @@ export function endRun(
 
 /**
  * A blank state for a cube of the given size: every cell open and unrevealed,
- * the surface open meadow everywhere, nothing carried, every gauge at 0 (health and air too), no camps, the avatar
- * at (0, 0) on the surface.
+ * the surface open meadow everywhere, nothing carried, every gauge at 0
+ * (health and air too), no camps.
  * `createRun` and the test helper both start from this and fill it in.
  */
 export function blankState(size: CubeSize, seed: number): GameState {
@@ -708,7 +712,7 @@ export function blankState(size: CubeSize, seed: number): GameState {
     // was before the forest. `createRun` grows the forest.
     surface: new Uint8Array(size.x * size.y),
     stumpAge: new Uint8Array(size.x * size.y),
-    avatar: { pos: { x: 0, y: 0, z: WORLD.surfaceZ }, health: 0, air: 0, resting: false },
+    avatar: { health: 0, air: 0, resting: false },
     ap: 0,
     fuel: 0,
     lampOil: 0,
@@ -748,7 +752,6 @@ export function cloneState(state: GameState): GameState {
     surface: state.surface.slice(),
     stumpAge: state.stumpAge.slice(),
     avatar: {
-      pos: { ...state.avatar.pos },
       health: state.avatar.health,
       air: state.avatar.air,
       resting: state.avatar.resting,

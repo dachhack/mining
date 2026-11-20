@@ -8,8 +8,8 @@
 //   topBlockAt  which block does the player see there?
 //   mayMine     does the level rule let the player mine it?
 //
-// They are pure: they read the state and change nothing. Nothing in the rules
-// calls them yet (task T1 only adds them; T2 makes mining use them).
+// They are pure: they read the state and change nothing. The mine action
+// (actions/mine.ts) is built on them since task T2 (issue #86).
 //
 // The level rule needs no number here. "After mining, the square is at most 1
 // level lower than each face neighbour" is the same as "before mining, no
@@ -18,6 +18,12 @@
 
 import type { GameState } from './state';
 import { blockAt, isSolid } from './state';
+
+/** A square: one column of the cube, named by its x and y. */
+export interface Square {
+  x: number;
+  y: number;
+}
 
 /** The four sideways directions, in the fixed order north, east, south, west. */
 export type SquareDirection = 'north' | 'east' | 'south' | 'west';
@@ -145,8 +151,8 @@ export interface MayMineResult {
  * A square with no block left ('bottom') is refused too.
  *
  * This checks the shape of the ground only. It does not look at trees, lava,
- * camps, action points or whether the run is over; the mine action will add
- * those checks (task T2).
+ * camps, action points or whether the run is over; the mine action
+ * (`mineCheck` in actions/mine.ts) adds the checks that exist so far.
  *
  * Throws if (x, y) is not a square.
  */
