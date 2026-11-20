@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   BLOCKS,
+  CAMPS,
   GAME_DATA,
   GENERATION,
   LOADOUTS,
@@ -78,7 +79,17 @@ describe('the what-if trials', () => {
   const pocketsBefore = GENERATION.bands.map((band) =>
     band.spaces.map((space) => space.spacesPer1000Cells),
   );
+  const veinsBefore = GENERATION.bands.map((band) =>
+    band.veins.map((vein) => vein.veinsPer1000Cells),
+  );
+  const campBefore = { ...CAMPS }; // a copy of the camp numbers
   afterEach(() => {
+    Object.assign(CAMPS, campBefore);
+    GENERATION.bands.forEach((band, bandIndex) => {
+      band.veins.forEach((vein, veinIndex) => {
+        vein.veinsPer1000Cells = veinsBefore[bandIndex]?.[veinIndex] ?? 0;
+      });
+    });
     GENERATION.bands.forEach((band, bandIndex) => {
       band.spaces.forEach((space, spaceIndex) => {
         space.spacesPer1000Cells = pocketsBefore[bandIndex]?.[spaceIndex] ?? 0;
@@ -117,6 +128,26 @@ describe('the what-if trials', () => {
       2, 2, 2,
     ]);
     expect(() => findWhatIf('free-lunch')).toThrow(/Unknown what-if/);
+  });
+
+  it('a custom trial sets exactly the numbers its id lists', () => {
+    const custom = findWhatIf('set:middle=3,deep=11,fuel=48,pockets=6,ore=3,campSteps=8');
+    expect(custom.middleBandStart).toBe(3);
+    const waterBefore = GENERATION.bands[1]?.spaces[0]?.spacesPer1000Cells ?? 0;
+    const ironBefore = GENERATION.bands[1]?.veins[0]?.veinsPer1000Cells ?? 0;
+    custom.apply();
+    expect(WORLD.depthBands.map((band) => band.firstLayer)).toEqual([0, 3, 11]);
+    expect(LOADOUTS.standard.fuel).toBe(48);
+    expect(GENERATION.bands[1]?.spaces[0]?.spacesPer1000Cells).toBeCloseTo(waterBefore * 6, 10);
+    expect(GENERATION.bands[1]?.veins[0]?.veinsPer1000Cells).toBeCloseTo(ironBefore * 3, 10);
+    expect(CAMPS.mineDiscountSteps).toBe(8);
+    // What the id does not list keeps its value.
+    expect(SHIFT.apPerShift).toBe(apBefore);
+    expect(CAMPS.upkeepEveryShifts).toBe(campBefore.upkeepEveryShifts);
+    expect(validateData(GAME_DATA)).toEqual([]);
+    // A setting it does not know, or half a pair of bands, is refused.
+    expect(() => findWhatIf('set:gravity=2')).toThrow(/Cannot read/);
+    expect(() => findWhatIf('set:middle=4')).toThrow(/both middle and deep/);
   });
 
   it('none is applied unless asked for: the data here is the game as it is', () => {
