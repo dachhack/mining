@@ -763,7 +763,7 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
     );
   }
   if (belowPlain) {
-    entries.push(legendEntry(sampleTile({ below: none }), 'grey bar: scanned, plain rock below'));
+    entries.push(legendEntry(sampleTile({ below: none }), 'grey bar: plain rock known below'));
   }
   if (camp) {
     entries.push(legendEntry(sampleTile({ camp: true }), 'camp square (cannot be mined)'));

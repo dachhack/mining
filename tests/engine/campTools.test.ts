@@ -13,8 +13,10 @@ import {
   actionKey,
   applyAction,
   countItem,
+  createRun,
   depthAt,
   endShift,
+  hashState,
   isLegalAction,
   isRevealed,
   isWorked,
@@ -865,5 +867,34 @@ describe('isLegalAction: one action checked without building the list', () => {
     for (const action of legal) {
       expect(isLegalAction(state, action)).toBe(false);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A fixed scenario, pinned by its hash
+// ---------------------------------------------------------------------------
+
+describe('a generated run that uses a camp-made tool', () => {
+  // No recorded golden run reaches a camp tool: the policies never craft one.
+  // This plays seed 1 by hand instead: found a camp, mine stone and coal
+  // near it, craft sealant, seal the dug square. The hash pins the result.
+  it('seed 1: camp, sealant, seal; the final state has the recorded hash', () => {
+    let state = createRun(1, 'none', 'standard');
+    const steps: (object | 'endShift')[] = [
+      { type: 'foundCamp', x: 17, y: 12 },
+      'endShift',
+      { type: 'mine', x: 16, y: 10 },
+      { type: 'mine', x: 14, y: 14 },
+      { type: 'craft', recipe: 'sealant' },
+      { type: 'seal', x: 16, y: 10 },
+      'endShift',
+    ];
+    for (const step of steps) {
+      state = step === 'endShift' ? endShift(state).state : act(state, step).state;
+    }
+    expect(depthAt(state, 16, 10)).toBe(0);
+    expect(blockAt(state, { x: 16, y: 10, z: 0 })).toBe(BLOCKS.sealed.code);
+    expect(countItem(state, 'sealant')).toBe(0);
+    expect(hashState(state)).toBe('6f1d000500676c14');
   });
 });
