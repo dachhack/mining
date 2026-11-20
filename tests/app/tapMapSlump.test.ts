@@ -64,6 +64,7 @@ describe('a tap that would make squares unstable', () => {
       tooHigh: [],
       unstable: [{ x: 0, y: 0 }],
       blocked: [],
+      range: [],
     });
     expect(outcome.lines[1]).toContain('Mining x2 y0 would make x0 y0');
     expect(outcome.lines[2]).toBe('Tap the square again to mine it all the same.');
@@ -117,6 +118,7 @@ describe('the support tool', () => {
       tooHigh: [],
       unstable: [],
       blocked: [],
+      range: [],
     });
   });
 

@@ -101,9 +101,8 @@ export function carriesMineralTraces(state: GameState, pos: Vec3): boolean {
  *   and carries traces (see `carriesMineralTraces`). Its flag in
  *   `state.tracesSeen` is then set, and is never cleared. So a top block
  *   under a tree shows nothing until the tree is cut.
- * - Only top blocks are looked at: they are the only blocks that become
- *   known today. When scanning is built (task T13) its revealed blocks need
- *   the same check.
+ * - Only top blocks are looked at here. The other way a block becomes known
+ *   is a scan, which calls `seeMineralTracesAt` for the blocks it reveals.
  * - Appends a `mineralTracesSeen` event for each block whose flag was not set
  *   before, in the order the cube stores cells (top layer first), so the same
  *   state always gives the same events.
@@ -131,6 +130,27 @@ export function updateMineralTraces(state: GameState, events: GameEvent[]): void
   newlySeen.sort((first, second) => first - second);
   for (const index of newlySeen) {
     events.push({ type: 'mineralTracesSeen', pos: cellPosition(state.size, index) });
+  }
+}
+
+/**
+ * Note the mineral traces on the blocks a scan has just revealed (design doc
+ * 3.7: tells show "on blocks a scan revealed" too). `cells` are the newly
+ * revealed cells, in the order their events should come. For each that
+ * carries traces and was not flagged before, sets its flag in
+ * `state.tracesSeen` and appends a `mineralTracesSeen` event.
+ */
+export function seeMineralTracesAt(state: GameState, cells: Vec3[], events: GameEvent[]): void {
+  for (const pos of cells) {
+    if (!inGrid(state.size, pos) || !isRevealed(state, pos)) {
+      continue;
+    }
+    const index = cellIndex(state.size, pos);
+    if (state.tracesSeen[index] === 1 || !carriesMineralTraces(state, pos)) {
+      continue;
+    }
+    state.tracesSeen[index] = 1;
+    events.push({ type: 'mineralTracesSeen', pos: { ...pos } });
   }
 }
 

@@ -14,6 +14,10 @@
 //
 // - `knownCell(state, pos)`: everything the player sees of one cell, or
 //   `null` for a cell it has not seen;
+// - `knownSquare(state, x, y)`: everything the player sees of one square: its
+//   top block, what stands on it, and `below`, the cells under the top that
+//   the player knows. A scan is the one sanctioned way to learn those (design
+//   doc 3.4 and 7.2; issue #104);
 // - `knownCube(state)`: a copy of the state in which every unrevealed cell is
 //   plain rock with nothing in it. Whatever is computed from that copy cannot
 //   depend on an unrevealed cell, by construction.
@@ -89,6 +93,22 @@ export function knownCell(state: GameState, pos: Vec3): KnownCell | null {
   };
 }
 
+/**
+ * One cell below a square's top block that the player knows (design doc 3.4:
+ * "anything below the top is unknown until it becomes the top, or a scan
+ * reveals it. A revealed block stays revealed").
+ */
+export interface KnownBelow {
+  /** The cell's layer. Always more than the square's depth. */
+  z: number;
+  /** What the player sees of the cell: its block, or open space and what it holds. */
+  cell: KnownCell;
+  /** True if the map shows mineral traces on the block (design doc 3.7). */
+  traces: boolean;
+  /** The hazard tells the block shows (3.7: tells show on scanned blocks too). */
+  tells: HazardTells;
+}
+
 /** What the player sees of one square of the map (design doc v0.2 section 3.4). */
 export interface KnownSquare {
   x: number;
@@ -125,6 +145,37 @@ export interface KnownSquare {
    * block: that is what it is for.
    */
   tells: HazardTells;
+  /**
+   * The cells under the top block that the player knows, from the highest
+   * down. Empty for most squares. They are known because a scan revealed
+   * them, or because they were a top block once and were then buried (by
+   * rubble, by stone that water and lava made, or by sealant). The map shows
+   * a mark for them, and they are listed when the player holds the square
+   * (design doc 7.2; owner question 93).
+   */
+  below: KnownBelow[];
+}
+
+/**
+ * The cells below the top block of square (x, y) that the player knows. Only
+ * revealed cells are read; an unrevealed cell is skipped whatever it holds.
+ */
+function knownBelow(state: GameState, x: number, y: number, depth: number): KnownBelow[] {
+  const below: KnownBelow[] = [];
+  for (let z = depth + 1; z < state.size.z; z += 1) {
+    const pos = { x, y, z };
+    const cell = knownCell(state, pos);
+    if (cell === null) {
+      continue;
+    }
+    below.push({
+      z,
+      cell,
+      traces: showsMineralTraces(state, pos),
+      tells: hazardTellsAt(state, pos),
+    });
+  }
+  return below;
 }
 
 /**
@@ -132,10 +183,10 @@ export interface KnownSquare {
  * read a square through (the play tool, the phone map), so that none of them
  * can show a block below a top by mistake.
  *
- * Reads the square's depth, its surface cell, what stands on it, and its top
- * block if that is revealed. Nothing below the top block is read, except by
- * the tells (`traces` and `tells`), which say that something hidden is near
- * and no more. Throws if (x, y) is not a square. Does not change `state`.
+ * Reads the square's depth, its surface cell, what stands on it, its top
+ * block if that is revealed, and the cells below the top that are revealed
+ * (`below`). No unrevealed cell is read, except by the tells (`traces` and
+ * `tells`), which say that something hidden is near and no more. Throws if (x, y) is not a square. Does not change `state`.
  */
 export function knownSquare(state: GameState, x: number, y: number): KnownSquare {
   const depth = depthAt(state, x, y);
@@ -153,6 +204,7 @@ export function knownSquare(state: GameState, x: number, y: number): KnownSquare
     traces: hasBlock && showsMineralTraces(state, topPos),
     contents: contentsOn(state, x, y),
     tells: topKnown ? hazardTellsAt(state, topPos) : { ...NO_HAZARD_TELLS },
+    below: knownBelow(state, x, y, depth),
   };
 }
 

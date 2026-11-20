@@ -408,8 +408,11 @@ export function validateData(data: GameData): string[] {
   requireKnownItem(campTools.sealantItem, 'campTools.sealantItem');
   requireKnownItem(campTools.scanChargeItem, 'campTools.scanChargeItem');
   requireWholeAtLeast(campTools.scanChargesPerScan, 0, 'campTools.scanChargesPerScan');
-  requireWholeAtLeast(campTools.scanReach, 0, 'campTools.scanReach');
-  requireWholeAtLeast(campTools.scanRegionRadius, 0, 'campTools.scanRegionRadius');
+  requireWholeAtLeast(campTools.scanHalfWidth, 0, 'campTools.scanHalfWidth');
+  // A scan that revealed no block would use up a charge for nothing.
+  requireWholeAtLeast(campTools.scanDepth, 1, 'campTools.scanDepth');
+  // Sealant places a block that can then be mined out again.
+  requireDiggableBlock(campTools.sealedBlock, 'campTools.sealedBlock');
 
   // --- Shift ---
   const shift = data.shift;

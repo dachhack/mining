@@ -28,6 +28,8 @@ export const PREVIEW_MAP = {
   gridMinCellPx: 12,
   /** A press that moves less than this many pixels is a tap; more is a drag. */
   dragThresholdPx: 8,
+  /** A press held still for this many milliseconds is a hold: it lists the square's known blocks. */
+  holdMs: 500,
   /** From this cell size in pixels up, a dug square shows its depth as a number. */
   depthNumberMinCellPx: 20,
   /**
@@ -137,6 +139,18 @@ export const UNKNOWN_LOOK = { colour: '#1d1916', ink: '#3a332d' };
 export const MARK_COLOURS = {
   support: '#e8e0d0',
   otherStructure: '#60d0ff',
+  /** A pump: a blue disc with a white "P". */
+  pump: '#2f7fe0',
+  pumpInk: '#ffffff',
+  /** The outline of a square in a pump's or a scan's range. */
+  range: '#6fd3ff',
+  /** What is known under a top: ore (a gold diamond), a pocket (a blue disc), a cavern (a ring). */
+  belowOre: '#ffd84a',
+  belowPocket: '#4aa3ff',
+  belowCavern: '#f2f2f2',
+  /** A scanned square with only plain rock under it: a small grey bar. */
+  belowPlain: '#b9b2a8',
+  belowOutline: 'rgba(0, 0, 0, 0.85)',
   traces: '#ffd84a',
   /** The outline of the square a refused tap was on. */
   selected: '#ffe14d',

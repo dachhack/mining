@@ -9,7 +9,7 @@
 // cut a tap on the map stands for (`takeTurn`, which calls the engine's
 // `applyAction` or `endShift`). It never edits the state itself.
 
-import { CAMPS, STRUCTURES } from '../data';
+import { CAMPS, CAMP_TOOLS, STRUCTURES } from '../data';
 import { ENGINE_VERSION, countItem, isRunActive } from '../engine';
 import {
   MAX_SEED,
@@ -22,7 +22,7 @@ import {
 } from './previewSession';
 import type { SaveStore } from './previewSession';
 import { createTapMap } from './map/mapView';
-import { NO_MARKS, tapOutcome } from './map/targets';
+import { NO_MARKS, lookOutcome, tapOutcome } from './map/targets';
 import type { MapMarks, MapSquare, MapTool } from './map/targets';
 import type { LogEntry, Session } from './text/log';
 import { takeTurn } from './text/turn';
@@ -138,23 +138,35 @@ export function mountPreview(root: HTMLElement): void {
   ended.dataset['testid'] = 'ended';
   // The map: the whole surface from above. Drag to pan, pinch to zoom, tap a
   // square to mine it or cut its tree (issue #86).
-  const tapMap = createTapMap((x, y) => {
-    tapSquare(x, y);
-  });
-  // The tool bar (design doc 11): what a tap on the map does. Two toggles for
-  // now: with one on, a tap places a support (issue #94) or founds a camp
-  // (issue #100); with both off, a tap mines or cuts. Task T14 builds the full
-  // tool bar.
+  const tapMap = createTapMap(
+    (x, y) => {
+      tapSquare(x, y);
+    },
+    (x, y) => {
+      holdSquare(x, y);
+    },
+  );
+  // The tool bar (design doc 11): what a tap on the map does. Each button is
+  // a toggle: with one on, a tap places a support (issue #94), founds a camp
+  // (issue #100), places a pump, seals, scans, or lists what is known of the
+  // square (issue #104); with all off, a tap mines or cuts.
   const toolBar = element('section', 'tool-bar');
-  const supportTool = element('button', 'small tool');
-  supportTool.type = 'button';
-  supportTool.dataset['testid'] = 'tool-support';
-  const campTool = element('button', 'small tool');
-  campTool.type = 'button';
-  campTool.dataset['testid'] = 'tool-camp';
+  /** One button of the tool bar. */
+  function toolButton(testId: string): HTMLButtonElement {
+    const made = element('button', 'small tool');
+    made.type = 'button';
+    made.dataset['testid'] = testId;
+    return made;
+  }
+  const supportTool = toolButton('tool-support');
+  const campTool = toolButton('tool-camp');
+  const pumpTool = toolButton('tool-pump');
+  const sealTool = toolButton('tool-seal');
+  const scanTool = toolButton('tool-scan');
+  const lookTool = toolButton('tool-look');
   const toolHint = element('span', 'tool-hint');
   toolHint.dataset['testid'] = 'tool-hint';
-  toolBar.append(supportTool, campTool, toolHint);
+  toolBar.append(supportTool, campTool, pumpTool, sealTool, scanTool, lookTool, toolHint);
   // What the map cannot show.
   const mapNotes = element('section', 'map-notes');
   mapNotes.dataset['testid'] = 'map-notes';
@@ -242,12 +254,43 @@ export function mountPreview(root: HTMLElement): void {
     campTool.classList.toggle('on', tool === 'camp');
     // With no kit there is nothing to found: the button is not shown.
     campTool.hidden = kitsHeld === 0;
+    // The camp-made tools (issue #104): each button shows how many are held,
+    // and is not shown while there is none.
+    const held = heldTools();
+    /** Set one tool button's words, whether it is on, and whether it shows. */
+    const showTool = (
+      toolButtonEl: HTMLButtonElement,
+      name: MapTool,
+      text: string,
+      show: boolean,
+    ) => {
+      toolButtonEl.textContent = text;
+      toolButtonEl.setAttribute('aria-pressed', tool === name ? 'true' : 'false');
+      toolButtonEl.classList.toggle('on', tool === name);
+      toolButtonEl.hidden = !show;
+    };
+    showTool(pumpTool, 'pump', `Place pump (${held.pumps})`, held.pumps > 0);
+    showTool(sealTool, 'seal', `Seal (${held.sealant})`, held.sealant > 0);
+    showTool(scanTool, 'scan', `Scan (${held.charges})`, held.charges > 0);
+    showTool(lookTool, 'look', 'Inspect', true);
     toolBar.hidden = view.ended !== null;
     if (tool === 'support') {
       toolHint.textContent = 'A tap places a support. Tap the button again to go back to mining.';
     } else if (tool === 'camp') {
       toolHint.textContent =
         'Tap the centre of a flat 3 x 3 patch to found a camp there. It takes the rest of the shift.';
+    } else if (tool === 'pump') {
+      toolHint.textContent =
+        'Tap a square to see what a pump there would reach; tap it again to place the pump.';
+    } else if (tool === 'seal') {
+      toolHint.textContent =
+        'A tap puts a block of sealed rock on a dug square: it comes up 1 level, and the water, lava and gas on it are destroyed.';
+    } else if (tool === 'scan') {
+      toolHint.textContent =
+        'Tap a square to see which squares a scan there would look under; tap it again to scan.';
+    } else if (tool === 'look') {
+      toolHint.textContent =
+        'A tap lists what you know of a square, and changes nothing. Holding a square does the same with any tool.';
     } else if (supportsHeld === 0) {
       toolHint.textContent = 'A tap mines or cuts. Craft a support to place one.';
     } else {
@@ -288,6 +331,27 @@ export function mountPreview(root: HTMLElement): void {
     allActions.hidden = buttons.length === 0;
   }
 
+  /** How many of each camp-made tool the stockpile holds. */
+  function heldTools(): { pumps: number; sealant: number; charges: number } {
+    return {
+      pumps: countItem(session.state, STRUCTURES.pump.placedFromItem),
+      sealant: countItem(session.state, CAMP_TOOLS.sealantItem),
+      charges: countItem(session.state, CAMP_TOOLS.scanChargeItem),
+    };
+  }
+
+  /**
+   * The player held the square (x, y): list what is known of it, the blocks
+   * a scan showed under it included (design doc 7.2). Nothing is done.
+   */
+  function holdSquare(x: number, y: number): void {
+    const looked = lookOutcome(session.state, x, y);
+    lastLines = looked.lines;
+    marks = looked.marks;
+    pending = null;
+    draw(false);
+  }
+
   /**
    * A tap on the square (x, y) of the map: mine it, or cut its tree; with
    * the support tool on, place a support there; with the camp tool on, found
@@ -301,7 +365,8 @@ export function mountPreview(root: HTMLElement): void {
     if (!isRunActive(session.state)) {
       return;
     }
-    // A second tap in a row on the same square confirms a risky mine.
+    // A second tap in a row on the same square confirms a risky mine, and
+    // takes a pump or a scan whose range the first tap showed.
     const confirmed = pending !== null && pending.x === x && pending.y === y;
     const outcome = tapOutcome(session.state, x, y, tool, confirmed);
     if (outcome.entry !== null) {
@@ -340,6 +405,14 @@ export function mountPreview(root: HTMLElement): void {
     if (tool === 'camp' && countItem(session.state, CAMPS.kitItem) === 0) {
       tool = 'dig';
     }
+    const held = heldTools();
+    if (
+      (tool === 'pump' && held.pumps === 0) ||
+      (tool === 'seal' && held.sealant === 0) ||
+      (tool === 'scan' && held.charges === 0)
+    ) {
+      tool = 'dig';
+    }
     note.hidden = true;
     saveRun(store, session);
     draw(false);
@@ -364,18 +437,23 @@ export function mountPreview(root: HTMLElement): void {
     window.scrollTo(0, 0);
   }
 
-  supportTool.addEventListener('click', () => {
-    tool = tool === 'support' ? 'dig' : 'support';
-    marks = NO_MARKS;
-    pending = null;
-    draw(false);
-  });
-  campTool.addEventListener('click', () => {
-    tool = tool === 'camp' ? 'dig' : 'camp';
-    marks = NO_MARKS;
-    pending = null;
-    draw(false);
-  });
+  // Each tool button turns its tool on, or off again (back to mining).
+  const toolButtons: [HTMLButtonElement, MapTool][] = [
+    [supportTool, 'support'],
+    [campTool, 'camp'],
+    [pumpTool, 'pump'],
+    [sealTool, 'seal'],
+    [scanTool, 'scan'],
+    [lookTool, 'look'],
+  ];
+  for (const [toolButtonEl, name] of toolButtons) {
+    toolButtonEl.addEventListener('click', () => {
+      tool = tool === name ? 'dig' : name;
+      marks = NO_MARKS;
+      pending = null;
+      draw(false);
+    });
+  }
 
   endShiftButton.addEventListener('click', () => {
     take({ type: 'endShift' }, false);

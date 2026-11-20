@@ -67,31 +67,46 @@ export interface PlaceExplosiveAction {
   ap: number;
 }
 
-/** Place a pump from the stockpile into the cell `target` (0014 items 12 and 31). */
+/**
+ * Place a pump from the stockpile on the square (x, y) (design doc 4.1 and
+ * 6.3; issue #104). Like a mine, it names a square: there is no reach.
+ */
 export interface PlacePumpAction {
   type: 'placePump';
-  target: Vec3;
+  x: number;
+  y: number;
   ap: number;
 }
 
-/** Place a vent from the stockpile into the cell `target` (0014 items 13 and 31). */
+/** Place a vent from the stockpile on the square (x, y) (design doc 4.1 and 6.5). */
 export interface PlaceVentAction {
   type: 'placeVent';
-  target: Vec3;
+  x: number;
+  y: number;
   ap: number;
 }
 
-/** Use one sealant to turn the open cell `target` into sealed rock (0014 item 12). */
+/**
+ * Use one sealant on the square (x, y): a block of sealed rock is put on top
+ * of it, which raises the square by 1 and destroys the water, lava and gas
+ * standing on it (design doc 4.1 and 7.2).
+ */
 export interface SealAction {
   type: 'seal';
-  target: Vec3;
+  x: number;
+  y: number;
   ap: number;
 }
 
-/** Use one scanner charge to reveal the region centred on `centre` (0014 item 31). */
+/**
+ * Use one scanner charge, aimed at the square (x, y): reveals the 3 blocks
+ * under the top block of that square and of the 8 squares round it (design
+ * doc 7.2; owner question 93).
+ */
 export interface ScanAction {
   type: 'scan';
-  centre: Vec3;
+  x: number;
+  y: number;
   ap: number;
 }
 
@@ -136,7 +151,7 @@ export interface CutTreeAction {
   ap: number;
 }
 
-/** The actions of actions/campTools.ts (M2-8). */
+/** The actions of actions/campTools.ts (issue #104). */
 export type CampToolAction = PlacePumpAction | PlaceVentAction | SealAction | ScanAction;
 
 /** The actions of actions/camp.ts. */
@@ -168,6 +183,10 @@ export function actionKey(action: Action): string {
     case 'foundCamp':
     case 'rest':
     case 'decommissionCamp':
+    case 'placePump':
+    case 'placeVent':
+    case 'seal':
+    case 'scan':
       // The type, the square (for a camp action, the camp's centre), the cost.
       return `${action.type} ${action.x},${action.y} ap ${action.ap}`;
     case 'craft':
@@ -175,13 +194,8 @@ export function actionKey(action: Action): string {
     case 'closeMine':
       return `closeMine ap ${action.ap}`;
     case 'placeExplosive':
-    case 'placePump':
-    case 'placeVent':
-    case 'seal':
       // The type, the cell, the cost.
       return `${action.type} ${vecKey(action.target)} ap ${action.ap}`;
-    case 'scan':
-      return `scan ${vecKey(action.centre)} ap ${action.ap}`;
   }
 }
 

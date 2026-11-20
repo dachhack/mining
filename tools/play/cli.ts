@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname } from 'node:path';
 
 import { CONTRACT_IDS, DEFAULT_LOADOUT_ID, GAME_DATA, validateData } from '../../src/data';
-import { ENGINE_VERSION, hashState, isRunActive } from '../../src/engine';
+import { ENGINE_VERSION, hashState, isRunActive, isSquare } from '../../src/engine';
 import type { GameState } from '../../src/engine';
 import { choiceName } from '../../src/app/text/describe';
 import { helpText } from './help';
@@ -27,11 +27,14 @@ import {
   decommissionChoice,
   mineChoice,
   parseSquareChoice,
+  pumpChoice,
   restChoice,
+  scanChoice,
+  sealChoice,
   supportChoice,
 } from '../../src/app/text/squares';
 import { takeTurn } from '../../src/app/text/turn';
-import { buildView, renderView } from '../../src/app/text/view';
+import { buildView, lookLines, renderView } from '../../src/app/text/view';
 
 /** What the command line asked for. `null` means "not given". */
 export interface CliOptions {
@@ -115,14 +118,14 @@ export function parseArgs(args: string[]): CliOptions {
  *
  * A square is written with a comma too ("mine 3,4"), so a comma that stands
  * between the two numbers of a square choice (mine, cut, support, camp, rest,
- * decommission) is not a break. A semicolon is always a break, for anyone who
+ * decommission, pump, seal, scan) is not a break. A semicolon is always a break, for anyone who
  * would rather not rely on that.
  */
 export function splitChoices(text: string): string[] {
   // The pattern matches, from left to right, either a whole square choice
   // ("mine 3 , 4") or a run of characters with no comma or semicolon in it.
   // The `g` flag makes `match` return every match, not just the first.
-  const words = SQUARE_CHOICE_KINDS.join('|');
+  const words = [...SQUARE_CHOICE_KINDS, 'look'].join('|');
   const pattern = new RegExp(` *(?:${words})!?[ -]*\\d+ *, *\\d+|[^,;]+`, 'g');
   const pieces = text.toLowerCase().match(pattern) ?? [];
   return pieces.map((piece) => piece.trim()).filter((piece) => piece !== '');
@@ -133,6 +136,21 @@ export interface ResolvedChoice {
   entry: LogEntry | null;
   /** Why the choice is refused; `null` when `entry` is set. */
   refusal: string | null;
+  /**
+   * For "look X,Y": the lines to print. A look is not an action: nothing is
+   * done, nothing goes into the log, and the chain carries on. Left out
+   * (`undefined`) for everything else; the `?` marks the field as optional.
+   */
+  info?: string[];
+}
+
+/** "look 3,4" or "look-3,4": the square asked about, or `null` if `choice` is not a look. */
+function parseLook(choice: string): { x: number; y: number } | null {
+  const match = /^look[ -]*(\d+) *, *(\d+)$/.exec(choice.trim().toLowerCase());
+  if (match === null) {
+    return null;
+  }
+  return { x: Number(match[1]), y: Number(match[2]) };
 }
 
 /**
@@ -142,6 +160,7 @@ export interface ResolvedChoice {
  *   "rest 3,4" and "decommission 3,4" name a camp by its centre square. A
  *   refused one says why (a tree, the level rule and which neighbours are too
  *   high, a patch that is not flat, too little AP, ...): see squares.ts.
+ * - "pump 3,4", "seal 3,4" and "scan 3,4" use a camp-made tool on a square.
  * - A mine that would make squares unstable is refused the first time, with
  *   a warning that names them; "mine! 3,4" takes it all the same.
  * - 1, 2, ... are the lines of the action list in order, and 0 ends the
@@ -153,6 +172,13 @@ export interface ResolvedChoice {
 export function resolveChoice(state: GameState, choice: string): ResolvedChoice {
   if (!isRunActive(state)) {
     return { entry: null, refusal: 'The run has ended.' };
+  }
+  const look = parseLook(choice);
+  if (look !== null) {
+    if (!isSquare(state, look.x, look.y)) {
+      return { entry: null, refusal: `x${look.x} y${look.y} is not a square of the map.` };
+    }
+    return { entry: null, refusal: null, info: lookLines(state, look.x, look.y) };
   }
   const square = parseSquareChoice(choice);
   if (square !== null) {
@@ -170,6 +196,15 @@ export function resolveChoice(state: GameState, choice: string): ResolvedChoice 
     }
     if (square.kind === 'decommission') {
       return decommissionChoice(state, square.x, square.y);
+    }
+    if (square.kind === 'pump') {
+      return pumpChoice(state, square.x, square.y);
+    }
+    if (square.kind === 'seal') {
+      return sealChoice(state, square.x, square.y);
+    }
+    if (square.kind === 'scan') {
+      return scanChoice(state, square.x, square.y);
     }
     const mine = mineChoice(state, square.x, square.y);
     if (mine.entry !== null && mine.warning !== null && !square.confirmed) {
@@ -203,7 +238,7 @@ export function resolveChoice(state: GameState, choice: string): ResolvedChoice 
   return {
     entry: null,
     refusal:
-      'It is not a choice as things stand now. Type "mine X,Y", "cut X,Y", "support X,Y" or "camp X,Y" for a square, ' +
+      'It is not a choice as things stand now. Type "mine X,Y", "cut X,Y", "support X,Y", "camp X,Y", "pump X,Y", "seal X,Y" or "scan X,Y" for a square, ' +
       `a number from 1 to ${numbered.length} or a name from the list, or 0 / end to end the shift.`,
   };
 }
@@ -225,12 +260,19 @@ export interface ChoicesResult {
 export function takeChoices(session: Session, choices: string[]): ChoicesResult {
   const lines: string[] = [];
   let taken = 0;
-  for (const choice of choices) {
-    const position = `choice ${taken + 1} of ${choices.length} ("${choice}")`;
+  // `entries()` gives each choice with its place in the list, like Python's
+  // `enumerate`.
+  for (const [index, choice] of choices.entries()) {
+    const position = `choice ${index + 1} of ${choices.length} ("${choice}")`;
     if (!isRunActive(session.state)) {
       return { lines, taken, refused: `Refused ${position}: the run has ended.` };
     }
     const resolved = resolveChoice(session.state, choice);
+    if (resolved.info !== undefined) {
+      // A look: print it and go on. It is not a choice taken.
+      lines.push(...resolved.info);
+      continue;
+    }
     if (resolved.entry === null) {
       return {
         lines,

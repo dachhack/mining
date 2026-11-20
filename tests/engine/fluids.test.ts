@@ -743,6 +743,7 @@ describe('mining with water or lava on the square (design doc 4.2; question 91)'
       higherNeighbours: [],
       ap: null,
       campDiscount: null,
+      drillSaving: null,
     });
     expect(
       legalActions(state).some(
@@ -772,6 +773,7 @@ describe('mining with water or lava on the square (design doc 4.2; question 91)'
     expect(mineCheck(state, 3, 1)).toMatchObject({
       ap: dirtAp + HAZARDS.water.floodedMineExtraAp,
       campDiscount: 0,
+      drillSaving: 0,
     });
 
     // Stone: 1 off for the camp, then 1 on for the water.

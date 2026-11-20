@@ -11,6 +11,12 @@
 // on a block below a top block, or on the block under a tree that has never
 // been cut. The views built on the engine (the play tool's text, the phone
 // map) have the same test of their own, in tests/tools and tests/app.
+//
+// A scan is the one sanctioned way to learn what lies below a top (design doc
+// 3.4 and 7.2; issue #104). So "hidden" means "not revealed": the cells a
+// scan revealed count as known, every random run checks that nothing else
+// below a top ever becomes known, and one group of runs starts with the
+// camp-made tools in the stockpile so that scans, seals and pumps happen.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -33,6 +39,7 @@ import {
   endShift,
   hasTree,
   stockpileEntries,
+  isLegalAction,
   isRevealed,
   isRunActive,
   knownSquare,
@@ -40,11 +47,14 @@ import {
   mineCheck,
   nextInt,
   previewCubePhase,
+  scanCells,
   serialise,
 } from '../../src/engine';
 import type { Action, GameEvent, GameState, RngState } from '../../src/engine';
 import { knownCube } from '../../src/engine/known';
 import {
+  addItem,
+  cellIndex,
   cloneState,
   setBlock,
   setCrackTimer,
@@ -123,15 +133,11 @@ function invariantProblems(state: GameState): string[] {
         problems.push(`a tree stands on square ${at} at depth ${depth}`);
       }
 
-      // What is known: the top block unless a tree has always hidden it, the
-      // open cells above it, and nothing below it.
+      // What is known: the top block unless a tree has always hidden it, and
+      // the open cells above it. What is known BELOW a top is checked step by
+      // step in `playRandomly` (`leakedBelowTops`): only a scan may add to it.
       if (depth < state.size.z && !tree && !isRevealed(state, { x, y, z: depth })) {
         problems.push(`the top block of square ${at} is not known`);
-      }
-      for (let z = depth + 1; z < state.size.z; z += 1) {
-        if (isRevealed(state, { x, y, z })) {
-          problems.push(`a block below the top of square ${at} is known (layer ${z})`);
-        }
       }
     }
   }
@@ -168,6 +174,50 @@ function invariantProblems(state: GameState): string[] {
   return problems;
 }
 
+/**
+ * The cells below a top block that are known in `after` and should not be
+ * (design doc 3.4): a cell below a top may be known only if it was known
+ * already in `before` (it was scanned earlier, or it was a top once and has
+ * been buried), or if `decision` is a scan and the cell is one of the cells
+ * that scan looks into. `before` is `null` for a new run, in which nothing
+ * below a top is known at all. Returns a description of each such cell.
+ */
+function leakedBelowTops(
+  before: GameState | null,
+  decision: Decision | null,
+  after: GameState,
+): string[] {
+  const scanned = new Set<number>();
+  if (before !== null && decision !== null && decision !== 'endShift' && decision.type === 'scan') {
+    for (const cell of scanCells(before, decision.x, decision.y)) {
+      scanned.add(cellIndex(before.size, cell));
+    }
+  }
+  const leaks: string[] = [];
+  for (let y = 0; y < after.size.y; y += 1) {
+    for (let x = 0; x < after.size.x; x += 1) {
+      for (let z = depthAt(after, x, y) + 1; z < after.size.z; z += 1) {
+        const pos = { x, y, z };
+        if (!isRevealed(after, pos)) {
+          continue;
+        }
+        const knownBefore = before !== null && isRevealed(before, pos);
+        if (!knownBefore && !scanned.has(cellIndex(after.size, pos))) {
+          leaks.push(`(${x}, ${y}, ${z}) is known below a top, and no scan showed it`);
+        }
+      }
+    }
+  }
+  return leaks;
+}
+
+/**
+ * The camp-made tools a run of `playRandomly` may start with, so that random
+ * play scans, seals and pumps (a random player never gets as far as crafting
+ * them: a scanner charge needs crystal from the deep band).
+ */
+const TOOL_KIT: Record<string, number> = { scannerCharge: 4, sealant: 4, pump: 2, drill: 1 };
+
 /** What a random player does next: one legal action, or end the shift. */
 type Decision = Action | 'endShift';
 
@@ -176,34 +226,58 @@ type Decision = Action | 'endShift';
  * of the shift, and always the end of the shift when nothing else is left.
  * Leaving is never picked, so that a run lasts.
  */
-function randomDecision(state: GameState, rng: RngState): Decision {
+function randomDecision(state: GameState, rng: RngState, favour: string[] = []): Decision {
   const choices = legalActions(state).filter((action) => action.type !== 'closeMine');
   // 1 time in 8, end the shift early.
   if (choices.length === 0 || nextInt(rng, 8) === 0) {
     return 'endShift';
   }
+  // `favour` names kinds of action to pick from half the time, when one is
+  // legal. Without it, a kind that few squares allow (sealing needs a dug
+  // square) would almost never be picked among a thousand scans.
+  if (favour.length > 0 && nextInt(rng, 2) === 0) {
+    const favoured = choices.filter((action) => favour.includes(action.type));
+    if (favoured.length > 0) {
+      return favoured[nextInt(rng, favoured.length)] as Action;
+    }
+  }
   return choices[nextInt(rng, choices.length)] as Action;
 }
 
-/** Play up to `maxDecisions` random decisions of one run, calling `check` after each. */
+/**
+ * Play up to `maxDecisions` random decisions of one run, calling `check` after
+ * each. `kit` is put into the stockpile at the start (item id -> count), and
+ * `favour` is handed to `randomDecision`. After every decision this also
+ * checks that nothing below a top became known except by a scan.
+ */
 function playRandomly(
   seed: number,
   maxDecisions: number,
-  check: (state: GameState, label: string) => void,
+  check: (state: GameState, label: string, decision: Decision | null) => void,
+  kit: Record<string, number> = {},
+  favour: string[] = [],
 ): GameState {
   // The picks use a generator of their own; `state.rng` belongs to the rules.
   const rng = createRng(seed + 1000);
   let state = createRun(seed, CONTRACT, DEFAULT_LOADOUT_ID);
-  check(state, `seed ${seed}, new run`);
+  for (const [item, count] of Object.entries(kit)) {
+    addItem(state, item, count);
+  }
+  expect(leakedBelowTops(null, null, state), `seed ${seed}, new run`).toEqual([]);
+  check(state, `seed ${seed}, new run`, null);
   for (let step = 1; step <= maxDecisions && isRunActive(state); step += 1) {
-    const decision = randomDecision(state, rng);
+    const decision = randomDecision(state, rng, favour);
     const name = decision === 'endShift' ? 'endShift' : actionKey(decision);
     const before = snapshot(state);
     const result = decision === 'endShift' ? endShift(state) : applyAction(state, decision);
     // The state that was passed in is untouched.
     expect(snapshot(state) === before, `seed ${seed}, decision ${step}: input changed`).toBe(true);
+    expect(
+      leakedBelowTops(state, decision, result.state),
+      `seed ${seed}, decision ${step}`,
+    ).toEqual([]);
     state = result.state;
-    check(state, `seed ${seed}, decision ${step} (${name})`);
+    check(state, `seed ${seed}, decision ${step} (${name})`, decision);
   }
   return state;
 }
@@ -232,7 +306,80 @@ describe('property tests: random legal play', () => {
     },
     60000,
   );
+
+  it.each([8, 31])(
+    'seed %i, with the camp-made tools in the stockpile: scans, seals and pumps keep every rule',
+    (seed) => {
+      const taken = new Set<string>();
+      let step = 0;
+      playRandomly(
+        seed,
+        80,
+        (state, label, decision) => {
+          if (decision !== null && decision !== 'endShift') {
+            taken.add(decision.type);
+          }
+          expect(invariantProblems(state), label).toEqual([]);
+          // `applyAction` checks one action's legality directly (issue #88
+          // item 6). Every 20th state, check that this agrees with the list.
+          step += 1;
+          if (step % 20 === 1) {
+            expect(legalityDisagreements(state), label).toEqual([]);
+          }
+        },
+        TOOL_KIT,
+        // Mines make dug squares, which sealing needs.
+        ['mine', 'seal'],
+      );
+      // The run did use the tools.
+      expect(taken.has('scan')).toBe(true);
+      expect(taken.has('seal')).toBe(true);
+      expect(taken.has('placePump')).toBe(true);
+    },
+    60000,
+  );
 });
+
+/**
+ * Where `isLegalAction` and `legalActions` disagree about `state`: every
+ * action of the list must be legal, and for every square, every kind of
+ * action that is checked by asking about that one square, and every AP cost
+ * 0 to 3, the direct check must give the same answer as looking the action
+ * up in the list. (The camp actions are looked up in their own short list,
+ * so the first loop covers them.)
+ */
+function legalityDisagreements(state: GameState): string[] {
+  const problems: string[] = [];
+  const legal = legalActions(state);
+  const keys = new Set(legal.map(actionKey));
+  for (const action of legal) {
+    if (!isLegalAction(state, action)) {
+      problems.push(`listed but not legal: ${actionKey(action)}`);
+    }
+  }
+  const kinds = [
+    'mine',
+    'cutTree',
+    'placeSupport',
+    'placePump',
+    'placeVent',
+    'seal',
+    'scan',
+  ] as const;
+  for (let y = 0; y < state.size.y; y += 1) {
+    for (let x = 0; x < state.size.x; x += 1) {
+      for (const type of kinds) {
+        for (let ap = 0; ap <= 3; ap += 1) {
+          const action: Action = { type, x, y, ap };
+          if (isLegalAction(state, action) !== keys.has(actionKey(action))) {
+            problems.push(`the direct check and the list disagree: ${actionKey(action)}`);
+          }
+        }
+      }
+    }
+  }
+  return problems;
+}
 
 // ---------------------------------------------------------------------------
 // Hidden information
@@ -246,8 +393,10 @@ const SOLID_CODES: number[] = Object.values(BLOCKS)
 /**
  * A copy of `state` in which everything the player has NOT been shown is
  * replaced by something else, chosen with `rng`:
- * - every cell below a square's top block: another block or open space, and
- *   sometimes water, lava, gas, a crack or a structure;
+ * - every cell below a square's top block that is not revealed: another
+ *   block or open space, and sometimes water, lava, gas, a crack or a
+ *   structure. A cell below a top that IS revealed (a scan showed it, or it
+ *   was a top once) is known, and is left as it is;
  * - the layer-0 block under a tree, if it has never been seen: another solid
  *   block (solid, because the square's depth is seen and must stay 0).
  * What the player has been shown is left exactly as it is, and so are the
@@ -255,7 +404,8 @@ const SOLID_CODES: number[] = Object.values(BLOCKS)
  * that may depend on a hidden block (design doc 3.4).
  *
  * `keepNear` is for the test of the hazard tells: hidden cells within that
- * many steps (through the grid, in 3D) of a top block are left as they are.
+ * many steps (through the grid, in 3D) of a known block (a top block, or a
+ * block a scan showed) are left as they are.
  * 0, the default, scrambles every hidden cell.
  */
 function scrambleHidden(state: GameState, rng: RngState, keepNear = 0): GameState {
@@ -269,7 +419,10 @@ function scrambleHidden(state: GameState, rng: RngState, keepNear = 0): GameStat
       }
       for (let z = depth + 1; z < copy.size.z; z += 1) {
         const pos = { x, y, z };
-        if (keepNear > 0 && stepsToNearestTop(state, pos) <= keepNear) {
+        if (isRevealed(state, pos)) {
+          continue; // known to the player: not hidden
+        }
+        if (keepNear > 0 && stepsToNearestKnown(state, pos) <= keepNear) {
           continue;
         }
         // 1 time in 4 open space, otherwise a random solid block.
@@ -293,10 +446,11 @@ function scrambleHidden(state: GameState, rng: RngState, keepNear = 0): GameStat
 
 /**
  * How many steps (through the grid, in 3D) the cell `pos` is from the nearest
- * top block. Only squares close by are looked at, which is enough to tell
- * whether the answer is at most `TELL_REACH`.
+ * known block: a top block, or a revealed cell below a top (which shows its
+ * tells too: design doc 3.7). Only cells close by are looked at, which is
+ * enough to tell whether the answer is at most `TELL_REACH`.
  */
-function stepsToNearestTop(state: GameState, pos: Vec3): number {
+function stepsToNearestKnown(state: GameState, pos: Vec3): number {
   let nearest = Infinity;
   for (let dy = -TELL_REACH; dy <= TELL_REACH; dy += 1) {
     for (let dx = -TELL_REACH; dx <= TELL_REACH; dx += 1) {
@@ -305,8 +459,14 @@ function stepsToNearestTop(state: GameState, pos: Vec3): number {
       if (x < 0 || x >= state.size.x || y < 0 || y >= state.size.y) {
         continue;
       }
-      const steps = Math.abs(dx) + Math.abs(dy) + Math.abs(pos.z - depthAt(state, x, y));
-      nearest = Math.min(nearest, steps);
+      const top = depthAt(state, x, y);
+      nearest = Math.min(nearest, Math.abs(dx) + Math.abs(dy) + Math.abs(pos.z - top));
+      for (let dz = -TELL_REACH; dz <= TELL_REACH; dz += 1) {
+        const z = pos.z + dz;
+        if (z > top && z < state.size.z && isRevealed(state, { x, y, z })) {
+          nearest = Math.min(nearest, Math.abs(dx) + Math.abs(dy) + Math.abs(dz));
+        }
+      }
     }
   }
   return nearest;
@@ -333,8 +493,10 @@ function playerSees(state: GameState, withTells = false): string {
   for (let y = 0; y < state.size.y; y += 1) {
     for (let x = 0; x < state.size.x; x += 1) {
       const square = knownSquare(state, x, y);
-      // `{ ...square, tells: null }` is a copy of the square without its tells.
-      squares.push(withTells ? square : { ...square, tells: null });
+      // `{ ...square, tells: null }` is a copy of the square without its
+      // tells; the known cells under the top lose theirs the same way.
+      const belowWithoutTells = square.below.map((cell) => ({ ...cell, tells: null }));
+      squares.push(withTells ? square : { ...square, tells: null, below: belowWithoutTells });
       checks.push(mineCheck(state, x, y));
     }
   }
@@ -367,6 +529,43 @@ describe('property tests: hidden blocks change nothing the player gets (issue #8
         expect(playerSees(other) === playerSees(state), label).toBe(true);
       });
       expect(compared).toBeGreaterThan(10);
+    },
+    60000,
+  );
+
+  it.each([8, 31])(
+    'seed %i, with scans: scrambling every cell that is not revealed changes nothing',
+    (seed) => {
+      // The same test in a run that scans (and seals and pumps): the scanned
+      // cells are known and stay as they are; everything else below the tops
+      // is scrambled, and nothing the player gets may change.
+      const scrambler = createRng(seed + 7000);
+      let compared = 0;
+      let scans = 0;
+      let comparedAfterScan = 0;
+      playRandomly(
+        seed,
+        60,
+        (state, label, decision) => {
+          if (decision !== null && decision !== 'endShift' && decision.type === 'scan') {
+            scans += 1;
+          }
+          compared += 1;
+          if (compared % 6 !== 1 || !isRunActive(state)) {
+            return;
+          }
+          if (scans > 0) {
+            comparedAfterScan += 1;
+          }
+          const other = scrambleHidden(state, scrambler);
+          expect(snapshot(other) === snapshot(state), `${label}: scramble`).toBe(false);
+          expect(playerSees(other) === playerSees(state), label).toBe(true);
+        },
+        TOOL_KIT,
+        ['mine', 'seal'],
+      );
+      expect(scans).toBeGreaterThan(0);
+      expect(comparedAfterScan).toBeGreaterThan(0);
     },
     60000,
   );
