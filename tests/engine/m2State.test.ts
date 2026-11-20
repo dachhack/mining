@@ -23,7 +23,6 @@ import {
   setGas,
   setLava,
   setWater,
-  stashEntries,
   waterAt,
 } from '../../src/engine/state';
 import { buildState } from './helpers';
@@ -196,15 +195,14 @@ describe('armed charges', () => {
 });
 
 describe('camps', () => {
-  it('a new camp records where and when it was founded, with an empty stash', () => {
+  it('a new camp records where and when it was founded, and holds nothing (no stash)', () => {
     const state = openState();
     state.shift = 12;
     const camp = addCamp(state, { x: 1, y: 1, z: 0 });
-    expect(camp).toEqual({ pos: { x: 1, y: 1, z: 0 }, foundedShift: 12, stash: {} });
+    expect(camp).toEqual({ pos: { x: 1, y: 1, z: 0 }, foundedShift: 12 });
     expect(state.camps).toEqual([camp]);
-    // The object returned is the one in the list: a rule can fill its stash.
-    camp.stash['coal'] = 2;
-    expect(state.camps[0]?.stash).toEqual({ coal: 2 });
+    // The object returned is the one in the list.
+    expect(state.camps[0]).toBe(camp);
   });
 
   it('keeps the list sorted by position, and removes a camp by identity', () => {
@@ -215,17 +213,6 @@ describe('camps', () => {
     removeCamp(state, shallow);
     expect(state.camps).toEqual([deep]);
     expect(() => addCamp(state, { x: 1, y: 1, z: -1 })).toThrow('outside the cube');
-  });
-
-  it('lists a stash sorted by item id, without the items it has none of', () => {
-    const state = openState();
-    const camp = addCamp(state, { x: 1, y: 1, z: 0 });
-    camp.stash = { timber: 2, coal: 0, stone: 5, ironIngot: 1 };
-    expect(stashEntries(camp)).toEqual([
-      { item: 'ironIngot', count: 1 },
-      { item: 'stone', count: 5 },
-      { item: 'timber', count: 2 },
-    ]);
   });
 
   it('a camp covers 3 x 3 cells on 2 layers, the founding cell in the middle of the lower one', () => {

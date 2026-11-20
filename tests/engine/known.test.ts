@@ -28,11 +28,6 @@ function halfSeenState(): GameState {
   const state = buildState({
     layers: [['#..'], ['...'], ['#U#']],
     revealTops: false,
-    looseItems: [
-      { pos: SEEN, item: 'coal', count: 2 },
-      { pos: UNSEEN, item: 'stone', count: 1 },
-      { pos: { x: 2, y: 0, z: -1 }, item: 'timber', count: 1 }, // on the surface
-    ],
   });
   for (let z = 0; z < 3; z += 1) {
     setRevealed(state, { x: 0, y: 0, z }, true);
@@ -63,7 +58,6 @@ describe('knownCell (0014 item 3)', () => {
       crackTimer: null,
       structure: STRUCTURES.explosive.code,
       armed: 'explosive',
-      looseItems: [{ item: 'coal', count: 2 }],
     });
     expect(knownCell(state, { x: 0, y: 0, z: 0 })?.crackTimer).toBe(1);
     // A stored timer of 0 is still a crack.
@@ -90,12 +84,10 @@ describe('knownCell (0014 item 3)', () => {
     expect(knownCell(state, { x: 2, y: 0, z: -1 })).toEqual({
       ...empty,
       block: BLOCKS.air.code,
-      looseItems: [{ item: 'timber', count: 1 }],
     });
     expect(knownCell(state, { x: -1, y: 0, z: 1 })).toEqual({
       ...empty,
       block: BLOCKS.bedrock.code,
-      looseItems: [],
     });
   });
 });
@@ -124,11 +116,7 @@ describe('knownCube (0014 item 4)', () => {
       expect(copy.cracks[index]).toBe(0);
       expect(copy.structures[index]).toBe(NO_STRUCTURE);
     }
-    // Loose items and armed charges in unseen cells are gone; the rest stay.
-    expect(copy.looseItems).toEqual([
-      { pos: { x: 2, y: 0, z: -1 }, item: 'timber', count: 1 },
-      { pos: SEEN, item: 'coal', count: 2 },
-    ]);
+    // Armed charges in unseen cells are gone; the rest stay.
     expect(copy.armed).toEqual([{ pos: SEEN, kind: 'explosive' }]);
   });
 
@@ -155,9 +143,6 @@ describe('knownCube (0014 item 4)', () => {
       'another structure': (s) => setStructure(s, UNSEEN, STRUCTURES.pump.code),
       'no armed charges': (s) => {
         s.armed = s.armed.filter((charge) => charge.pos.x === 0);
-      },
-      'no loose items': (s) => {
-        s.looseItems = s.looseItems.filter((loose) => loose.pos.x !== 2 || loose.pos.z === -1);
       },
     };
     for (const [name, change] of Object.entries(changes)) {

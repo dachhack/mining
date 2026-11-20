@@ -427,13 +427,12 @@ describe('after step (e): settle once, then upkeep (0014 item 2)', () => {
     );
   });
 
-  it('when step (e) kills the avatar, loose items still fall and nothing else follows', () => {
+  it('when step (e) kills the avatar, nothing else follows: no regrowth and no upkeep', () => {
     // The same shaft, deeper, and the rockfall takes all the health that is left.
     const state = buildState({
       layers: [['.'], ['#'], ['.'], ['.'], ['.'], ['.'], ['.'], ['.'], ['.'], ['#']],
       revealAll: true,
       health: 4,
-      looseItems: [{ pos: { x: 0, y: 0, z: 0 }, item: 'coal', count: 1 }],
     });
     withSteps(
       {
@@ -445,10 +444,10 @@ describe('after step (e): settle once, then upkeep (0014 item 2)', () => {
       () => {
         const { state: after, events } = endShift(state);
         expect(after.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'crushed' });
-        // Nothing follows `runEnded` except the loose coal dropping down the
-        // shaft.
-        expect(events.map((event) => event.type)).toEqual(['damageTaken', 'runEnded', 'itemFell']);
-        expect(after.looseItems).toEqual([{ pos: { x: 0, y: 0, z: 8 }, item: 'coal', count: 1 }]);
+        // Nothing follows `runEnded`: no fuel is taken and no shift begins.
+        expect(events.map((event) => event.type)).toEqual(['damageTaken', 'runEnded']);
+        expect(after.fuel).toBe(state.fuel);
+        expect(after.shift).toBe(state.shift);
       },
     );
   });

@@ -1,10 +1,11 @@
 // The surface: the forest over the cube (issue #70; decision note 0020).
 //
 // The surface is the layer of open air directly above layer 0, one cell for
-// each column of the cube. Each surface cell is one of the kinds below. A tree
-// blocks walking and hides the layer-0 block under it until it is cut; every
-// other kind is open ground the miner walks on, and daylight shows the block
-// under it.
+// each column of the cube (one for each square of the map). Each surface cell
+// is one of the kinds below. A tree hides the layer-0 block under it until it
+// is cut, and its square cannot be mined before that; every other kind is open
+// ground, where the layer-0 block is the square's top block and is seen from
+// the start (design doc 3.2). There is no miner: nobody walks on the surface.
 //
 // Every number here is [Default]: tune it here.
 
@@ -19,7 +20,7 @@ export interface SurfaceKindDef {
    */
   code: number;
   name: string;
-  /** True if the miner can walk on it and daylight shows the ground under it. */
+  /** True if it is open ground: the block under it is seen, and its square can be mined. */
   open: boolean;
 }
 
@@ -76,10 +77,10 @@ export interface SurfaceGenerationData {
   outcropChance: number;
   /**
    * Coal in sight at the start (owner, PR #72: "Coal visible near start").
-   * Every new run shows at least one `coalInSightBlock` in the layer-0 ground
-   * the miner sees from its start cell. If generation made none there, one
-   * such block is picked at random and replaced: plain rock
-   * (`coalInSightReplaces`), never an outcrop's stone.
+   * Every new run shows at least one `coalInSightBlock` as the top block of a
+   * square on open ground (design doc 3.2). If generation made none, one
+   * layer-0 block under open ground is picked at random and replaced: plain
+   * rock (`coalInSightReplaces`), never an outcrop's stone.
    */
   coalInSightBlock: string;
   coalInSightReplaces: string[];
@@ -87,13 +88,12 @@ export interface SurfaceGenerationData {
 
 export interface SurfaceData {
   kinds: SurfaceKinds;
-  /** Cutting a tree in a surface cell beside the miner's (issue #70 item 3). */
+  /** Cutting the tree on any square: its AP cost and what it gives (design doc 3.2 and 4.1). */
   cutTree: { ap: number; yields: ItemStack[] };
   /**
    * A stump grows a tree again at the end of the shift that makes this many
    * since it was cut, counting the shift of the cut as one, if its layer-0
-   * block is still solid; it waits while something stands on it (issue #70
-   * item 5; decision note 0020).
+   * block is still solid (issue #70 item 5; decision note 0020).
    */
   regrowShifts: number;
   generation: SurfaceGenerationData;

@@ -18,18 +18,21 @@ import {
   depthAt,
   endShift,
   hashState,
-  inventoryEntries,
   isRunActive,
   legalActions,
+  stockpileEntries,
 } from '../../engine';
 import type { Action, GameEvent, GameState } from '../../engine';
 
 /**
- * Bumped if the shape of the log file ever changes. 2: mine and cut actions
+ * Bumped if the shape of the log file ever changes. 3: the action `leave` is
+ * now `closeMine`, and the outcome holds `stockpile` where format 2 held
+ * `inventory` (issue #92).
+ * 2: mine and cut actions
  * name a square (x, y), and the outcome holds `deepestDepth` where format 1
  * held the miner's `deepestLayer` (issue #86).
  */
-export const LOG_FORMAT = 2;
+export const LOG_FORMAT = 3;
 
 /** "End shift" is not an engine action (it is `endShift`), so the log has its own entry for it. */
 export interface EndShiftEntry {
@@ -48,7 +51,8 @@ export interface LogOutcome {
   shiftsPlayed: number;
   /** The depth of the deepest square of the map; 0 means nothing was dug. */
   deepestDepth: number;
-  inventory: ItemStack[];
+  /** What the stockpile held when the run ended. */
+  stockpile: ItemStack[];
   /** `hashState` of the final state, so a replay can be checked against it. */
   stateHash: string;
 }
@@ -104,7 +108,7 @@ export function menuChoices(state: GameState): LogEntry[] {
 
 /**
  * The choices that are printed as a list, in menu order: every legal action
- * that is not a mine or a cut of a square (crafting, leaving), then "end
+ * that is not a mine or a cut of a square (crafting, closing the mine), then "end
  * shift". Mines and cuts are named by their square instead ("mine 3,4"; see
  * squares.ts). Empty once the run has ended.
  */
@@ -136,7 +140,7 @@ export function step(session: Session, entry: LogEntry): GameEvent[] {
       cause: status.cause,
       shiftsPlayed: result.state.shift - SHIFT.firstShiftNumber + 1,
       deepestDepth: session.deepestDepth,
-      inventory: inventoryEntries(result.state),
+      stockpile: stockpileEntries(result.state),
       stateHash: hashState(result.state),
     };
   }

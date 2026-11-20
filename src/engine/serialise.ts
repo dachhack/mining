@@ -2,22 +2,19 @@
 //
 // `JSON.stringify(serialise(state))` is the save format, and it is also what
 // `hashState` hashes. So `serialise` must give the same output for two states
-// that mean the same thing: inventory entries are sorted and zero counts are
-// dropped, loose items are merged (one entry per cell and item) and sorted, and
-// the armed charges and the camps are sorted (with each stash like the
-// inventory).
+// that mean the same thing: stockpile entries are sorted and zero counts are
+// dropped, and the armed charges and the camps are sorted.
 
 import type { CubeSize } from '../data';
 import {
   STATE_VERSION,
   canonicalArmed,
   canonicalCamps,
-  canonicalLooseItems,
   cellCount,
   compareStrings,
   inGrid,
 } from './state';
-import type { ArmedCharge, Camp, GameState, LooseItems, RunStatus } from './state';
+import type { ArmedCharge, Camp, GameState, RunStatus } from './state';
 
 /**
  * A GameState with nothing in it that JSON cannot hold. The nine cube arrays
@@ -47,8 +44,7 @@ export interface SerialisedState {
   ap: number;
   fuel: number;
   shift: number;
-  inventory: Record<string, number>;
-  looseItems: LooseItems[];
+  stockpile: Record<string, number>;
   armed: ArmedCharge[];
   camps: Camp[];
   status: RunStatus;
@@ -64,15 +60,6 @@ function sortedCounts(counts: Record<string, number>): Record<string, number> {
     }
   }
   return sorted;
-}
-
-/** Camps in canonical order, each stash sorted with zero counts dropped. */
-function serialiseCamps(camps: Camp[]): Camp[] {
-  return canonicalCamps(camps).map((camp) => ({
-    pos: camp.pos,
-    foundedShift: camp.foundedShift,
-    stash: sortedCounts(camp.stash),
-  }));
 }
 
 function runLengthEncode(cells: Uint8Array): number[] {
@@ -112,11 +99,7 @@ function runLengthDecode(encoded: number[], expectedLength: number, name: string
 
 /** A JSON-safe copy of `state`. Does not change `state`. */
 export function serialise(state: GameState): SerialisedState {
-  const inventory = sortedCounts(state.inventory);
-
-  // Already canonical if the state was only changed through the helpers in
-  // state.ts; done again here so that the hash never depends on it.
-  const looseItems = canonicalLooseItems(state.looseItems);
+  const stockpile = sortedCounts(state.stockpile);
 
   return {
     version: state.version,
@@ -144,10 +127,11 @@ export function serialise(state: GameState): SerialisedState {
     ap: state.ap,
     fuel: state.fuel,
     shift: state.shift,
-    inventory,
-    looseItems,
+    stockpile,
+    // Already canonical if the state was only changed through the helpers in
+    // state.ts; done again here so that the hash never depends on it.
     armed: canonicalArmed(state.armed),
-    camps: serialiseCamps(state.camps),
+    camps: canonicalCamps(state.camps),
     status:
       state.status.kind === 'active'
         ? { kind: 'active' }
@@ -217,10 +201,9 @@ export function deserialise(saved: SerialisedState): GameState {
     ap: saved.ap,
     fuel: saved.fuel,
     shift: saved.shift,
-    inventory: { ...saved.inventory },
-    looseItems: canonicalLooseItems(saved.looseItems),
+    stockpile: { ...saved.stockpile },
     armed: canonicalArmed(saved.armed),
-    camps: serialiseCamps(saved.camps),
+    camps: canonicalCamps(saved.camps),
     status:
       saved.status.kind === 'active'
         ? { kind: 'active' }

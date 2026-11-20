@@ -147,12 +147,18 @@ describe('validateData', () => {
     expect(problems.some((p) => p.includes('block "air"'))).toBe(true);
   });
 
-  it('reports a negative item weight', () => {
-    const problems = problemsAfter((data) => {
-      entry(data.items, 'stone').weight = -2;
-    });
-    expect(problems).toHaveLength(1);
-    expect(problems[0]).toContain('item "stone"');
+  it('has no carrying numbers: no item weight, no carry capacity, no pick-up, drop or stash cost (issue #92)', () => {
+    // Design doc 4.1 and 5.4: the stockpile has no limit.
+    for (const item of Object.values(GAME_DATA.items)) {
+      expect(Object.keys(item)).toEqual(['name']);
+    }
+    expect(Object.keys(GAME_DATA.avatar)).not.toContain('carryCapacity');
+    const costNames = Object.keys(GAME_DATA.actionCosts);
+    for (const gone of ['pickUp', 'drop', 'stash', 'leave']) {
+      expect(costNames).not.toContain(gone);
+    }
+    // "Close the mine" costs 0 AP (design doc 4.1; owner question 88).
+    expect(GAME_DATA.actionCosts.closeMine).toBe(0);
   });
 
   it('reports depth bands that leave a gap or do not reach the bottom', () => {
@@ -224,19 +230,17 @@ describe('validateData', () => {
     expect(problems[0]).toContain('lists block "crystal" more than once');
   });
 
-  it('reports a loadout with an unknown item, too much weight, or a missing default', () => {
+  it('reports a loadout with an unknown item or a missing default; a big kit is fine', () => {
     const problems = problemsAfter((data) => {
       const standard = entry(data.loadouts, 'standard');
       standard.items.push({ item: 'jetpack', count: 1 });
-      // Enough stone to weigh more than the avatar can carry.
-      const stoneWeight = entry(data.items, 'stone').weight;
-      const tooMany = Math.floor(data.avatar.carryCapacity / stoneWeight) + 1;
-      standard.items.push({ item: 'stone', count: tooMany });
+      // The stockpile has no limit, so no kit is too big (issue #92).
+      standard.items.push({ item: 'stone', count: 1000 });
       data.defaultLoadoutId = 'deluxe';
     });
     expect(problems.some((p) => p.includes('unknown item "jetpack"'))).toBe(true);
-    expect(problems.some((p) => p.includes('more than the carry capacity'))).toBe(true);
     expect(problems.some((p) => p.includes('unknown loadout "deluxe"'))).toBe(true);
+    expect(problems).toHaveLength(2);
   });
 });
 
@@ -451,7 +455,6 @@ describe('M2 data (decision note 0014)', () => {
   it('has the camp numbers of design doc 8 and the note (items 25 to 31)', () => {
     expect(GAME_DATA.camps).toEqual({
       kitItem: 'campKit',
-      maxKitsCarried: 1,
       halfWidth: 1,
       height: 2,
       foundMinAp: 1,
@@ -468,35 +471,6 @@ describe('M2 data (decision note 0014)', () => {
       scanReach: 3,
       scanRegionRadius: 1,
     });
-    const weights: Record<string, number> = {};
-    for (const itemId of [
-      'campKit',
-      'drill',
-      'pump',
-      'vent',
-      'explosive',
-      'sealant',
-      'scannerCharge',
-      'ironIngot',
-      'copperIngot',
-    ]) {
-      weights[itemId] = entry(GAME_DATA.items, itemId).weight;
-    }
-    expect(weights).toEqual({
-      campKit: 8,
-      drill: 3,
-      pump: 3,
-      vent: 2,
-      explosive: 1,
-      sealant: 1,
-      scannerCharge: 1,
-      ironIngot: 1,
-      copperIngot: 1,
-    });
-    // An ingot is half the weight of the raw ore it is smelted from (7.2).
-    expect(entry(GAME_DATA.items, 'ironIngot').weight * 2).toBe(
-      entry(GAME_DATA.items, 'rawIronOre').weight,
-    );
   });
 
   it('has the camp recipes of design doc 7.2, each with its own id', () => {

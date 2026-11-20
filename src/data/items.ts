@@ -21,34 +21,32 @@ export type ItemId =
   | 'explosive'
   | 'campKit';
 
-// Weights: decision note 0005 item 18. Fuel is a gauge, not an item, so it
-// is not here. The torch and the safety lamp are gone with light (design doc
-// v0.2, section 7).
+// Fuel is a gauge, not an item, so it is not here. The torch and the safety
+// lamp are gone with light (design doc v0.2, section 7). Items have no weight:
+// carrying is gone and the stockpile has no limit (design doc 4.1 and 5.4;
+// owner question 87).
 //
-// "Raw ore" (design doc 3.2) is two items, iron and copper, because the camp
-// recipes in 7.2 need to tell them apart; each has the raw-ore weight of 2.
-// The weights of rare ore, relic and keystone are not given anywhere yet
-// (owner question 26); they are placeholders until M2 and M4.
+// "Raw ore" (design doc 3.5) is two items, iron and copper, because the camp
+// recipes in 7.2 need to tell them apart.
 export const ITEMS: Record<ItemId, ItemDef> = {
-  stone: { name: 'Stone', weight: 2 },
-  coal: { name: 'Coal', weight: 1 },
-  timber: { name: 'Timber', weight: 1 },
-  rawIronOre: { name: 'Raw iron ore', weight: 2 },
-  rawCopperOre: { name: 'Raw copper ore', weight: 2 },
-  crystal: { name: 'Crystal', weight: 1 },
-  rareOre: { name: 'Rare ore', weight: 2 },
-  relic: { name: 'Relic', weight: 2 },
-  keystone: { name: 'Keystone', weight: 2 },
-  support: { name: 'Support', weight: 2 },
-  // Camp-made items (design doc 7.2). Weights: decision note 0014 items 25
-  // and 31. An ingot weighs 1, half the raw ore it is smelted from.
-  ironIngot: { name: 'Iron ingot', weight: 1 },
-  copperIngot: { name: 'Copper ingot', weight: 1 },
-  drill: { name: 'Drill', weight: 3 },
-  pump: { name: 'Pump', weight: 3 },
-  vent: { name: 'Vent', weight: 2 },
-  scannerCharge: { name: 'Scanner charge', weight: 1 },
-  sealant: { name: 'Sealant', weight: 1 },
-  explosive: { name: 'Explosive', weight: 1 },
-  campKit: { name: 'Camp kit', weight: 8 },
+  stone: { name: 'Stone' },
+  coal: { name: 'Coal' },
+  timber: { name: 'Timber' },
+  rawIronOre: { name: 'Raw iron ore' },
+  rawCopperOre: { name: 'Raw copper ore' },
+  crystal: { name: 'Crystal' },
+  rareOre: { name: 'Rare ore' },
+  relic: { name: 'Relic' },
+  keystone: { name: 'Keystone' },
+  support: { name: 'Support' },
+  // Camp-made items (design doc 7.2).
+  ironIngot: { name: 'Iron ingot' },
+  copperIngot: { name: 'Copper ingot' },
+  drill: { name: 'Drill' },
+  pump: { name: 'Pump' },
+  vent: { name: 'Vent' },
+  scannerCharge: { name: 'Scanner charge' },
+  sealant: { name: 'Sealant' },
+  explosive: { name: 'Explosive' },
+  campKit: { name: 'Camp kit' },
 };

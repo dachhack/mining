@@ -107,7 +107,7 @@ describe('what a mine does', () => {
 
     expect(depthAt(after, 1, 1)).toBe(1);
     expect(layerText(after, 0)).toEqual(['###', '#.#', 'd##']);
-    expect(after.inventory).toEqual({ coal: 1 });
+    expect(after.stockpile).toEqual({ coal: 1 });
     expect(after.ap).toBe(100 - costOf('coalSeam'));
     expect(events).toEqual([
       { type: 'blockMined', pos: { x: 1, y: 1, z: 0 }, block: BLOCKS.coalSeam.code },
@@ -130,7 +130,7 @@ describe('what a mine does', () => {
 
   it('gives nothing for a block with no yield (dirt)', () => {
     const { state: after, events } = act(flatCube(), { type: 'mine', x: 0, y: 2 });
-    expect(after.inventory).toEqual({});
+    expect(after.stockpile).toEqual({});
     // The hard rock under it is 2 steps from the iron ore: it shows traces.
     expect(events.map((event) => event.type)).toEqual([
       'blockMined',
@@ -139,14 +139,15 @@ describe('what a mine does', () => {
     ]);
   });
 
-  it('does not enforce the carry limit (decision note 0026)', () => {
-    // 10 stone weigh 20, the carry capacity. The 11th still goes in, and
-    // nothing is left loose on the map.
-    const state = flatCube({ inventory: { stone: 10 } });
+  it('the yield goes into the stockpile, which has no limit (design doc 4.1; issue #92)', () => {
+    // 500 stone is far past the old carry capacity (10 stone filled it). The
+    // next one still goes in, and the only item event is `itemGained`.
+    const state = flatCube({ stockpile: { stone: 500 } });
     const { state: after, events } = act(state, { type: 'mine', x: 0, y: 0 });
-    expect(after.inventory).toEqual({ stone: 11 });
-    expect(after.looseItems).toEqual([]);
+    expect(after.stockpile).toEqual({ stone: 501 });
     expect(events).toContainEqual({ type: 'itemGained', item: 'stone', count: 1 });
+    const itemEvents = events.filter((event) => event.type.startsWith('item'));
+    expect(itemEvents).toHaveLength(1);
   });
 });
 
@@ -269,7 +270,7 @@ describe('the bottom of the cube', () => {
     // Mining everything away leaves no mine at all; the run goes on.
     state = mine(state, 1, 0);
     expect(findActions(state, { type: 'mine' })).toEqual([]);
-    expect(legalActions(state).map((action) => action.type)).toEqual(['leave']);
+    expect(legalActions(state).map((action) => action.type)).toEqual(['closeMine']);
   });
 });
 

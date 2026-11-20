@@ -30,7 +30,7 @@ import {
   depthAt,
   endShift,
   hasTree,
-  inventoryEntries,
+  stockpileEntries,
   isRevealed,
   isRunActive,
   knownSquare,
@@ -89,18 +89,15 @@ function invariantProblems(state: GameState): string[] {
     problems.push('the run is still going with 0 health');
   }
 
-  // Inventory. The carry limit is not enforced (decision note 0026).
-  for (const entry of inventoryEntries(state)) {
+  // The stockpile. It has no limit (design doc 4.1), so only the counts and
+  // the item ids are checked.
+  for (const entry of stockpileEntries(state)) {
     if (!isWholeNumber(entry.count) || entry.count < 0) {
-      problems.push(`inventory holds ${entry.count} ${entry.item}`);
+      problems.push(`stockpile holds ${entry.count} ${entry.item}`);
     }
     if (!Object.hasOwn(ITEMS, entry.item)) {
-      problems.push(`inventory holds an unknown item: ${entry.item}`);
+      problems.push(`stockpile holds an unknown item: ${entry.item}`);
     }
-  }
-  // Nothing leaves loose items any more (decision note 0026).
-  if (state.looseItems.length > 0) {
-    problems.push(`${state.looseItems.length} piles of loose items lie on the map`);
   }
 
   // The terrain, square by square.
@@ -178,7 +175,7 @@ type Decision = Action | 'endShift';
  * Leaving is never picked, so that a run lasts.
  */
 function randomDecision(state: GameState, rng: RngState): Decision {
-  const choices = legalActions(state).filter((action) => action.type !== 'leave');
+  const choices = legalActions(state).filter((action) => action.type !== 'closeMine');
   // 1 time in 8, end the shift early.
   if (choices.length === 0 || nextInt(rng, 8) === 0) {
     return 'endShift';
@@ -300,7 +297,7 @@ function playerSees(state: GameState): string {
     forecast: previewCubePhase(state),
     squares,
     checks,
-    hud: [state.ap, state.fuel, state.shift, state.avatar, state.inventory],
+    hud: [state.ap, state.fuel, state.shift, state.avatar, state.stockpile],
     knownCube: snapshot(knownCube(state)),
   });
 }

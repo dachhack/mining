@@ -38,8 +38,7 @@ export function legalCutTreeActions(state: GameState): CutTreeAction[] {
  *
  * - The tree becomes a stump, which is open ground, and its regrowth count
  *   starts at 0. Emits `treeCut`.
- * - Gives the timber (`itemGained`). The carry limit is not enforced
- *   (decision note 0026).
+ * - Puts the timber into the stockpile (`itemGained`).
  * - The dispatcher's `updateReveal` then reveals the block under the stump:
  *   it is now the square's top block.
  */

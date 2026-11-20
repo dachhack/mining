@@ -36,7 +36,8 @@ export function depthName(depth: number): string {
 
 /** What the player is told when the run is over, in words (the engine's ids are not shown). */
 const RUN_END_TEXT: Record<string, string> = {
-  left: 'you left the mine alive with what you had gathered (a "salvage" run)',
+  mineClosed:
+    'you closed the mine: the run ended alive, with what was in the stockpile (a "salvage" run)',
   outOfFuel: 'you ran out of fuel and the run is lost',
 };
 
@@ -84,8 +85,8 @@ function describeAction(state: GameState, action: Action): string {
       }
       return `Craft ${recipe.name} from ${stackListText(recipe.inputs)}`;
     }
-    case 'leave':
-      return 'Leave the mine with what you have gathered (ends the run alive)';
+    case 'closeMine':
+      return 'Close the mine: ends the run alive, with what is in the stockpile';
     // The M2 actions. The engine offers none of them yet (their modules are
     // stubs; decision note 0015), so these plain lines are never shown. The
     // play-tool task for the hazards (T14) gives each its wording.
@@ -97,9 +98,6 @@ function describeAction(state: GameState, action: Action): string {
       return `${action.type} at ${squareText(action.target.x, action.target.y)}`;
     case 'scan':
       return `scan around ${squareText(action.centre.x, action.centre.y)}`;
-    case 'stashPut':
-    case 'stashTake':
-      return `${action.type} ${action.count} ${itemDef(action.item).name}`;
     case 'foundCamp':
     case 'rest':
     case 'decommissionCamp':
@@ -122,7 +120,7 @@ function idInLowerCase(id: string): string {
  * - "mine 3,4": mine the top block of the square x 3, y 4;
  * - "cut 3,4": cut the tree on that square;
  * - craft-fuel, craft-support, ...: "craft-" and the recipe;
- * - leave, and end for "end the shift".
+ * - close-mine, and end for "end the shift".
  */
 export function choiceName(entry: LogEntry): string {
   switch (entry.type) {
@@ -134,8 +132,8 @@ export function choiceName(entry: LogEntry): string {
       return `cut ${entry.x},${entry.y}`;
     case 'craft':
       return `craft-${idInLowerCase(entry.recipe)}`;
-    case 'leave':
-      return 'leave';
+    case 'closeMine':
+      return 'close-mine';
     // The M2 actions: never offered yet (see `describeAction`).
     case 'placeSupport':
     case 'placeExplosive':
@@ -145,9 +143,6 @@ export function choiceName(entry: LogEntry): string {
       return `${idInLowerCase(entry.type)} ${entry.target.x},${entry.target.y}`;
     case 'scan':
       return `scan ${entry.centre.x},${entry.centre.y}`;
-    case 'stashPut':
-    case 'stashTake':
-      return `${idInLowerCase(entry.type)}-${entry.count}-${idInLowerCase(entry.item)}`;
     case 'foundCamp':
     case 'rest':
     case 'decommissionCamp':
@@ -240,21 +235,8 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
         }
         break;
       case 'itemGained':
+        // Every yield goes straight into the stockpile (design doc 4.1).
         lines.push(`Got ${event.count} ${itemDef(event.item).name}.`);
-        break;
-      // Loose items: nothing leaves any today (decision note 0026). The
-      // wording stays until task T4 removes them from the engine.
-      case 'itemPickedUp':
-        lines.push(`Picked up ${event.count} ${itemDef(event.item).name}.`);
-        break;
-      case 'itemLeft':
-        lines.push(`${event.count} ${itemDef(event.item).name} was left lying there.`);
-        break;
-      case 'itemDropped':
-        lines.push(`Dropped ${event.count} ${itemDef(event.item).name}.`);
-        break;
-      case 'itemFell':
-        lines.push(`A loose pile of ${event.count} ${itemDef(event.item).name} fell.`);
         break;
       case 'structurePlaced':
         lines.push(`Placed a ${structureNameByCode(event.structure)}.`);

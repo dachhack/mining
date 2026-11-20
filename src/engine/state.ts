@@ -16,18 +16,14 @@ import type { RngState } from './rng';
 
 /**
  * Bumped whenever the shape of GameState changes, so old saves can be told
- * apart. 8: `lampOil` is gone with light (issue #89); a version-7 save holds
+ * apart. 9: carrying is gone (issue #92): `inventory` is now `stockpile`,
+ * and `looseItems` and each camp's `stash` are removed. A version-8 save has
+ * the old fields, so it is not read.
+ * 8: `lampOil` is gone with light (issue #89); a version-7 save holds
  * it, and may hold torches or safety lamps, so it is not read.
  * 7: the avatar has no position (issue #86, mine by square).
  */
-export const STATE_VERSION = 8;
-
-/** Some loose items lying in a cell. */
-export interface LooseItems {
-  pos: Vec3;
-  item: string;
-  count: number;
-}
+export const STATE_VERSION = 9;
 
 /** Whether the run is still going, and if not, how it ended. */
 export type RunStatus =
@@ -68,11 +64,6 @@ export interface Camp {
   pos: Vec3;
   /** The number of the shift the camp was founded in; upkeep counts from it. */
   foundedShift: number;
-  /**
-   * What is stored here: item id -> count, like `GameState.inventory`, and
-   * with the same warning: walk it only through `stashEntries(camp)`.
-   */
-  stash: Record<string, number>;
 }
 
 export interface GameState {
@@ -141,28 +132,23 @@ export interface GameState {
   shift: number;
 
   /**
-   * What the avatar carries: item id -> count. An item that is not carried
-   * may be missing or may be present with a count of 0; both mean the same.
-   * `Record<string, number>` is TypeScript for "a dict from str to number".
+   * The stockpile (design doc 4.1): everything the crew has mined, cut or
+   * crafted and not yet used, item id -> count. It has no limit: there is no
+   * carry capacity and no item weight (issue #92). An item the stockpile has
+   * none of may be missing or may be present with a count of 0; both mean the
+   * same. `Record<string, number>` is TypeScript for "a dict from str to
+   * number".
    *
    * The order of the keys is the order items were first added, and it is NOT
    * kept by a save and load. So rule code must never loop over this dict
-   * directly (`Object.keys`, `for ... in`): use `inventoryEntries(state)`,
+   * directly (`Object.keys`, `for ... in`): use `stockpileEntries(state)`,
    * which always gives the same order.
    */
-  inventory: Record<string, number>;
-  /**
-   * Items lying in cells. Always in canonical form: at most one entry for
-   * each cell and item, no entry with a count of 0, and sorted by z, then y,
-   * then x, then item id. Change it only through `addLooseItems` and
-   * `removeLooseItems`, which keep it that way; then looping over it gives
-   * the same order before and after a save and load.
-   */
-  looseItems: LooseItems[];
+  stockpile: Record<string, number>;
 
   /**
    * Armed unstable ore and placed explosives: everything that goes off in
-   * step (c) of the coming cube phase. Canonical like `looseItems`: at most
+   * step (c) of the coming cube phase. Always in canonical form: at most
    * one entry for a cell, sorted by z, then y, then x. Change it only through
    * `armCharge` and `disarmCharge`. A placed explosive is also a structure in
    * its cell; `destroyStructure` (destroy.ts) keeps the two in step.
@@ -419,30 +405,30 @@ export function clearCrack(state: GameState, pos: Vec3): void {
 }
 
 // ---------------------------------------------------------------------------
-// Inventory bookkeeping. These only count; the carry limit is a rule and
-// lives in inventory.ts.
+// Stockpile bookkeeping. The stockpile has no limit (design doc 4.1), so
+// these only count.
 // ---------------------------------------------------------------------------
 
-/** How many of `item` the avatar carries. */
+/** How many of `item` are in the stockpile. */
 export function countItem(state: GameState, item: string): number {
-  return state.inventory[item] ?? 0; // `??` means "or, if missing"
+  return state.stockpile[item] ?? 0; // `??` means "or, if missing"
 }
 
-/** Put `count` of `item` into the inventory. Does not check the carry limit. */
+/** Put `count` of `item` into the stockpile. */
 export function addItem(state: GameState, item: string, count: number): void {
   if (!Number.isInteger(count) || count < 0) {
     throw new Error(`Cannot add ${count} of "${item}"`);
   }
-  state.inventory[item] = countItem(state, item) + count;
+  state.stockpile[item] = countItem(state, item) + count;
 }
 
-/** Take `count` of `item` out of the inventory. Throws if there are not enough. */
+/** Take `count` of `item` out of the stockpile. Throws if there are not enough. */
 export function removeItem(state: GameState, item: string, count: number): void {
   const have = countItem(state, item);
   if (!Number.isInteger(count) || count < 0 || count > have) {
-    throw new Error(`Cannot remove ${count} of "${item}": the avatar carries ${have}`);
+    throw new Error(`Cannot remove ${count} of "${item}": the stockpile holds ${have}`);
   }
-  state.inventory[item] = have - count;
+  state.stockpile[item] = have - count;
 }
 
 /** Order strings the same way everywhere (plain code-unit order, no locale). */
@@ -453,95 +439,20 @@ export function compareStrings(a: string, b: string): number {
 }
 
 /**
- * What the avatar carries, as a list sorted by item id, without the items it
- * has none of. This is the one way rule code should walk the inventory: the
- * order is the same for any two states with the same hash, which the key
- * order of `state.inventory` is not.
+ * What the stockpile holds, as a list sorted by item id, without the items
+ * it has none of. This is the one way rule code should walk the stockpile:
+ * the order is the same for any two states with the same hash, which the key
+ * order of `state.stockpile` is not.
  */
-export function inventoryEntries(state: GameState): ItemStack[] {
+export function stockpileEntries(state: GameState): ItemStack[] {
   const entries: ItemStack[] = [];
-  for (const item of Object.keys(state.inventory).sort(compareStrings)) {
+  for (const item of Object.keys(state.stockpile).sort(compareStrings)) {
     const count = countItem(state, item);
     if (count !== 0) {
       entries.push({ item, count });
     }
   }
   return entries;
-}
-
-// ---------------------------------------------------------------------------
-// Loose items. `state.looseItems` is kept in canonical form (see GameState);
-// these are the only functions that should change it.
-// ---------------------------------------------------------------------------
-
-/** Sort order of loose items: by z, then y, then x, then item id. */
-export function compareLooseItems(a: LooseItems, b: LooseItems): number {
-  return (
-    a.pos.z - b.pos.z || a.pos.y - b.pos.y || a.pos.x - b.pos.x || compareStrings(a.item, b.item)
-  );
-}
-
-/**
- * A canonical copy of a list of loose items: entries for the same cell and
- * item are merged into one, empty entries are dropped, and the result is
- * sorted. `serialise`, `deserialise` and the test helper use it; rule code
- * should not need to.
- */
-export function canonicalLooseItems(list: LooseItems[]): LooseItems[] {
-  const sorted = list
-    .filter((loose) => loose.count !== 0)
-    .map((loose) => ({ pos: { ...loose.pos }, item: loose.item, count: loose.count }))
-    .sort(compareLooseItems);
-  const merged: LooseItems[] = [];
-  for (const loose of sorted) {
-    const last = merged[merged.length - 1];
-    if (last !== undefined && compareLooseItems(last, loose) === 0) {
-      last.count += loose.count;
-    } else {
-      merged.push(loose);
-    }
-  }
-  return merged;
-}
-
-/** The loose items lying in the cell `pos`, sorted by item id. Copies, safe to keep. */
-export function looseItemsAt(state: GameState, pos: Vec3): ItemStack[] {
-  return state.looseItems
-    .filter((loose) => samePosition(loose.pos, pos))
-    .map((loose) => ({ item: loose.item, count: loose.count }));
-}
-
-/**
- * Put `count` loose `item` in the cell `pos`, adding to a pile of the same
- * item that is already there. `pos` must be in the grid or on the surface.
- */
-export function addLooseItems(state: GameState, pos: Vec3, item: string, count: number): void {
-  if (!Number.isInteger(count) || count < 0) {
-    throw new Error(`Cannot leave ${count} of "${item}" in a cell`);
-  }
-  if (!inGrid(state.size, pos) && !isSurface(state.size, pos)) {
-    throw new Error(`(${pos.x}, ${pos.y}, ${pos.z}) is outside the cube and its surface`);
-  }
-  state.looseItems.push({ pos: { x: pos.x, y: pos.y, z: pos.z }, item, count });
-  state.looseItems = canonicalLooseItems(state.looseItems);
-}
-
-/**
- * Take `count` loose `item` out of the cell `pos`. Throws if the cell does
- * not hold that many. A pile that reaches 0 is removed from the list.
- */
-export function removeLooseItems(state: GameState, pos: Vec3, item: string, count: number): void {
-  const pile = state.looseItems.find(
-    (loose) => loose.item === item && samePosition(loose.pos, pos),
-  );
-  const have = pile === undefined ? 0 : pile.count;
-  if (pile === undefined || !Number.isInteger(count) || count < 0 || count > have) {
-    throw new Error(
-      `Cannot take ${count} of "${item}" from (${pos.x}, ${pos.y}, ${pos.z}): it holds ${have}`,
-    );
-  }
-  pile.count -= count;
-  state.looseItems = canonicalLooseItems(state.looseItems);
 }
 
 // ---------------------------------------------------------------------------
@@ -604,7 +515,7 @@ export function compareCamps(a: Camp, b: Camp): number {
 
 /** An independent copy of a camp. */
 export function cloneCamp(camp: Camp): Camp {
-  return { pos: { ...camp.pos }, foundedShift: camp.foundedShift, stash: { ...camp.stash } };
+  return { pos: { ...camp.pos }, foundedShift: camp.foundedShift };
 }
 
 /** A canonical copy of a list of camps: sorted. */
@@ -613,24 +524,8 @@ export function canonicalCamps(list: Camp[]): Camp[] {
 }
 
 /**
- * What a camp's stash holds, as a list sorted by item id, without the items
- * it has none of. The one way rule code should walk a stash (see
- * `inventoryEntries`).
- */
-export function stashEntries(camp: Camp): ItemStack[] {
-  const entries: ItemStack[] = [];
-  for (const item of Object.keys(camp.stash).sort(compareStrings)) {
-    const count = camp.stash[item] ?? 0;
-    if (count !== 0) {
-      entries.push({ item, count });
-    }
-  }
-  return entries;
-}
-
-/**
- * Add an active camp founded at `pos` in the current shift, with an empty
- * stash, and return it. `pos` must be inside the grid.
+ * Add an active camp founded at `pos` in the current shift, and return it.
+ * `pos` must be inside the grid.
  */
 export function addCamp(state: GameState, pos: Vec3): Camp {
   if (!inGrid(state.size, pos)) {
@@ -639,7 +534,6 @@ export function addCamp(state: GameState, pos: Vec3): Camp {
   const camp: Camp = {
     pos: { x: pos.x, y: pos.y, z: pos.z },
     foundedShift: state.shift,
-    stash: {},
   };
   state.camps.push(camp);
   state.camps.sort(compareCamps);
@@ -648,7 +542,7 @@ export function addCamp(state: GameState, pos: Vec3): Camp {
 
 /**
  * Take `camp` (one of the objects in `state.camps`) off the list: it is no
- * longer active. What becomes of its stash is the caller's rule.
+ * longer active.
  */
 export function removeCamp(state: GameState, camp: Camp): void {
   state.camps = state.camps.filter((entry) => entry !== camp);
@@ -685,7 +579,7 @@ export function endRun(
 
 /**
  * A blank state for a cube of the given size: every cell open and unrevealed,
- * the surface open meadow everywhere, nothing carried, every gauge at 0
+ * the surface open meadow everywhere, an empty stockpile, every gauge at 0
  * (health and air too), no camps.
  * `createRun` and the test helper both start from this and fill it in.
  */
@@ -715,8 +609,7 @@ export function blankState(size: CubeSize, seed: number): GameState {
     ap: 0,
     fuel: 0,
     shift: 0,
-    inventory: {},
-    looseItems: [],
+    stockpile: {},
     armed: [],
     camps: [],
     status: { kind: 'active' },
@@ -757,12 +650,7 @@ export function cloneState(state: GameState): GameState {
     ap: state.ap,
     fuel: state.fuel,
     shift: state.shift,
-    inventory: { ...state.inventory },
-    looseItems: state.looseItems.map((loose) => ({
-      pos: { ...loose.pos },
-      item: loose.item,
-      count: loose.count,
-    })),
+    stockpile: { ...state.stockpile },
     armed: state.armed.map((charge) => ({ pos: { ...charge.pos }, kind: charge.kind })),
     camps: state.camps.map(cloneCamp),
     status: { ...state.status },

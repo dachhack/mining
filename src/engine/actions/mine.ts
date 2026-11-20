@@ -110,9 +110,8 @@ export function legalMineActions(state: GameState): MineAction[] {
  *
  * - Opens the square's top cell and emits `blockMined`. The square is now 1
  *   level deeper.
- * - Gives the yield (`itemGained`). The carry limit is not enforced while
- *   there is no way to pick up or drop (decision note 0026); task T4 removes
- *   carrying.
+ * - Puts the yield into the stockpile (`itemGained`). The stockpile has no
+ *   limit (design doc 4.1), so the yield always arrives.
  * - A stump on the square is gone for good: its surface cell becomes meadow,
  *   so no tree ever grows there again (design doc 3.2).
  * - Breaking into an open space (decision note 0026, until task T9): if the

@@ -3,7 +3,7 @@
 // Structures and camps are destroyed at the moment of the event that
 // destroys them, so a structure destroyed early in the cube phase is not
 // there for a later step. So a hazard never queues a destruction for later: it
-// calls one of the three functions here, there and then.
+// calls one of the two functions here, there and then.
 //
 // WHAT a hazard destroys is that hazard's rule (a falling block spares a
 // support; gas alone spares a camp). These functions only do it, the same way
@@ -14,14 +14,7 @@ import { NO_STRUCTURE, STRUCTURES } from '../data';
 import type { Vec3 } from '../data';
 import { campsAt } from './camps';
 import type { DestructionCause, GameEvent } from './events';
-import {
-  disarmCharge,
-  looseItemsAt,
-  removeCamp,
-  removeLooseItems,
-  setStructure,
-  structureAt,
-} from './state';
+import { disarmCharge, removeCamp, setStructure, structureAt } from './state';
 import type { GameState } from './state';
 
 /**
@@ -51,33 +44,8 @@ export function destroyStructure(
 }
 
 /**
- * Destroy every loose item lying in the cell `pos`. Emits one
- * `looseItemsDestroyed` for each pile, in item-id order. Returns how many
- * piles were destroyed.
- */
-export function destroyLooseItems(
-  state: GameState,
-  pos: Vec3,
-  cause: DestructionCause,
-  events: GameEvent[],
-): number {
-  const piles = looseItemsAt(state, pos);
-  for (const pile of piles) {
-    removeLooseItems(state, pos, pile.item, pile.count);
-    events.push({
-      type: 'looseItemsDestroyed',
-      pos: { ...pos },
-      item: pile.item,
-      count: pile.count,
-      cause,
-    });
-  }
-  return piles.length;
-}
-
-/**
  * Destroy every active camp that the cell `pos` belongs to (0014 item 30):
- * the camp leaves `state.camps` and its stash is lost. Emits `campDestroyed`
+ * the camp leaves `state.camps`. Emits `campDestroyed`
  * for each. Returns how many camps were destroyed.
  *
  * Call it for each cell the event touches: the cell water or lava enters,

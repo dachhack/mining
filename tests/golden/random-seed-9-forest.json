@@ -1,11 +1,11 @@
 {
-  "description": "Random legal actions (never leaving) until the fuel runs out. About half its actions cut trees; some stumps are mined (and never regrow) and some grow a tree again.",
+  "description": "Random legal actions (never closing the mine) until the fuel runs out. About half its actions cut trees; some stumps are mined (and never regrow) and some grow a tree again.",
   "seed": 9,
   "contractId": "none",
   "loadoutId": "standard",
   "recordedWith": "random",
   "expectedStatus": "ended: death, outOfFuel",
-  "expectedHash": "62a06f8302fce2e8",
+  "expectedHash": "07a49885cdc37faa",
   "decisions": [
     "cutTree 7,27 ap 2",
     "cutTree 30,8 ap 2",

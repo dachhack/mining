@@ -14,16 +14,15 @@ import { actionKey } from './actionTypes';
 import type { Action } from './actionTypes';
 import { legalCampActions, applyCampAction } from './actions/camp';
 import { legalCampToolActions, applyCampToolAction } from './actions/campTools';
+import { legalCloseMineActions, applyCloseMine } from './actions/closeMine';
 import { legalCraftActions, applyCraft } from './actions/craft';
 import { legalCutTreeActions, applyCutTree } from './actions/cutTree';
 import { legalGiveUpActions, applyGiveUp } from './actions/giveUp';
-import { legalLeaveActions, applyLeave } from './actions/leave';
 import { legalMineActions, applyMine } from './actions/mine';
 import { legalPlaceExplosiveActions, applyPlaceExplosive } from './actions/placeExplosive';
 import { legalPlaceSupportActions, applyPlaceSupport } from './actions/placeSupport';
 import type { GameEvent } from './events';
 import { generateCube } from './generation/cube';
-import { settle } from './gravity';
 import { updateReveal } from './reveal';
 import { isValidSeed } from './rng';
 import { forecastShift, runCubePhase, runUpkeep } from './shift';
@@ -115,7 +114,7 @@ export function legalActions(state: GameState): Action[] {
     ...legalCampToolActions(state),
     ...legalCraftActions(state),
     ...legalCampActions(state),
-    ...legalLeaveActions(state),
+    ...legalCloseMineActions(state),
     ...legalGiveUpActions(state),
   ];
   // An action the player cannot afford is not legal (0005 item 12). The rule
@@ -150,8 +149,8 @@ export function applyAction(state: GameState, action: Action): StepResult {
     case 'craft':
       applyCraft(next, action, events);
       break;
-    case 'leave':
-      applyLeave(next, action, events);
+    case 'closeMine':
+      applyCloseMine(next, action, events);
       break;
     case 'placeSupport':
       applyPlaceSupport(next, action, events);
@@ -169,8 +168,6 @@ export function applyAction(state: GameState, action: Action): StepResult {
       break;
     case 'foundCamp':
     case 'rest':
-    case 'stashPut':
-    case 'stashTake':
     case 'decommissionCamp':
       applyCampAction(next, action, events);
       break;
@@ -182,10 +179,8 @@ export function applyAction(state: GameState, action: Action): StepResult {
       break;
   }
 
-  // After any action: loose items with nothing under them fall (there are
-  // none today; task T4 removes them), then the new top block is revealed,
-  // with any mineral traces on it.
-  settle(next, events);
+  // After any action the new top block is revealed, with any mineral traces
+  // on it.
   updateReveal(next, events);
   updateMineralTraces(next, events);
   return { state: next, events };
@@ -196,10 +191,9 @@ export function applyAction(state: GameState, action: Action): StepResult {
  * items 1 and 2). Returns the new state and the events; `state` itself is not
  * changed. Throws if the run has already ended.
  *
- * The order: the cube phase's steps (a) to (e) (shift.ts); `settle` once
- * (loose items fall if the phase took their floor); if the run is still
- * going, trees grow back on stumps (surface/regrowth.ts) and then upkeep;
- * reveal. The forecast for the next shift is not stored: `previewCubePhase`
+ * The order: the cube phase's steps (a) to (e) (shift.ts); if the run is
+ * still going, trees grow back on stumps (surface/regrowth.ts) and then
+ * upkeep; reveal. The forecast for the next shift is not stored: `previewCubePhase`
  * works it out from the new state when asked.
  */
 export function endShift(state: GameState): StepResult {
@@ -210,8 +204,6 @@ export function endShift(state: GameState): StepResult {
   const events: GameEvent[] = [];
 
   runCubePhase(next, events);
-  // Loose items whose floor the cube phase took fall.
-  settle(next, events);
   if (isRunActive(next)) {
     // Trees grow back on stumps left alone long enough (issue #70; decision
     // note 0020): after the cube phase, before upkeep.
@@ -243,12 +235,12 @@ export type {
   Action,
   CampAction,
   CampToolAction,
+  CloseMineAction,
   CraftAction,
   CutTreeAction,
   DecommissionCampAction,
   FoundCampAction,
   GiveUpAction,
-  LeaveAction,
   MineAction,
   PlaceExplosiveAction,
   PlacePumpAction,
@@ -257,8 +249,6 @@ export type {
   RestAction,
   ScanAction,
   SealAction,
-  StashPutAction,
-  StashTakeAction,
 } from './actionTypes';
 export { campAirLineIntact } from './airLine';
 export { campCells, campsAt } from './camps';
@@ -274,11 +264,10 @@ export type {
   RunOutcome,
 } from './events';
 export { hashState } from './hash';
-export { canCarry, carriedWeight, carryCapacity } from './inventory';
 export { deserialise, serialise } from './serialise';
 export type { SerialisedState } from './serialise';
 // What the player sees of a cell (0014 item 3). Tools and the renderer read a
-// cell's water, lava, gas, cracks, structures and loose items through
+// cell's water, lava, gas, cracks and structures through
 // `knownCell`, which answers `null` for a cell the player has not seen.
 export { knownCell, knownSquare } from './known';
 export type { KnownCell, KnownSquare } from './known';
@@ -295,25 +284,15 @@ export {
   cellPosition,
   countItem,
   inGrid,
-  inventoryEntries,
   isOpen,
   isRevealed,
   isRunActive,
   isSolid,
   isSurface,
-  looseItemsAt,
-  stashEntries,
+  stockpileEntries,
   structureAt,
 } from './state';
-export type {
-  ArmedCharge,
-  ArmedKind,
-  Avatar,
-  Camp,
-  GameState,
-  LooseItems,
-  RunStatus,
-} from './state';
+export type { ArmedCharge, ArmedKind, Avatar, Camp, GameState, RunStatus } from './state';
 // Tells: the mineral traces the player has seen on rock near ore.
 export { showsMineralTraces, visibleMineralTraces } from './tells';
 // The seeded generator, for tools and tests that need random numbers of their

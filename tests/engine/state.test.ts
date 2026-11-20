@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { AVATAR, BLOCKS, ITEMS, NO_STRUCTURE, STRUCTURES } from '../../src/data';
-import { canCarry, carriedWeight, carryCapacity } from '../../src/engine/inventory';
+import { BLOCKS, NO_STRUCTURE, STRUCTURES } from '../../src/data';
 import {
   addItem,
-  addLooseItems,
   blockAt,
   blockDefAt,
   cellCount,
@@ -13,17 +11,15 @@ import {
   countItem,
   endRun,
   inGrid,
-  inventoryEntries,
   isOpen,
   isRevealed,
   isSolid,
   isSurface,
-  looseItemsAt,
   removeItem,
-  removeLooseItems,
   setBlock,
   setRevealed,
   setStructure,
+  stockpileEntries,
   structureAt,
 } from '../../src/engine/state';
 import type { GameEvent } from '../../src/engine';
@@ -179,7 +175,7 @@ describe('what is at (x, y, z)', () => {
   });
 });
 
-describe('inventory bookkeeping', () => {
+describe('stockpile bookkeeping', () => {
   it('counts, adds and removes items', () => {
     const state = smallState();
     expect(countItem(state, 'coal')).toBe(0);
@@ -190,127 +186,36 @@ describe('inventory bookkeeping', () => {
     expect(countItem(state, 'coal')).toBe(0);
   });
 
-  it('refuses to remove more than is carried, or to add a negative count', () => {
-    const state = buildState({ layers: [['#']], inventory: { coal: 1 } });
-    expect(() => removeItem(state, 'coal', 2)).toThrow('carries 1');
-    expect(() => removeItem(state, 'timber', 1)).toThrow('carries 0');
+  it('refuses to remove more than the stockpile holds, or to add a negative count', () => {
+    const state = buildState({ layers: [['#']], stockpile: { coal: 1 } });
+    expect(() => removeItem(state, 'coal', 2)).toThrow('holds 1');
+    expect(() => removeItem(state, 'timber', 1)).toThrow('holds 0');
     expect(() => addItem(state, 'coal', -1)).toThrow();
     expect(countItem(state, 'coal')).toBe(1);
   });
+
+  it('has no limit: any count goes in (design doc 4.1; issue #92)', () => {
+    const state = smallState();
+    addItem(state, 'stone', 100000);
+    addItem(state, 'campKit', 50);
+    expect(countItem(state, 'stone')).toBe(100000);
+    expect(countItem(state, 'campKit')).toBe(50);
+  });
 });
 
-describe('inventoryEntries', () => {
-  it('lists what is carried sorted by item id, whatever order it was added in', () => {
+describe('stockpileEntries', () => {
+  it('lists what the stockpile holds sorted by item id, whatever order it was added in', () => {
     const state = smallState();
     addItem(state, 'timber', 2);
     addItem(state, 'coal', 1);
     addItem(state, 'stone', 0);
     addItem(state, 'ironIngot', 6);
     removeItem(state, 'coal', 1);
-    expect(Object.keys(state.inventory)).toEqual(['timber', 'coal', 'stone', 'ironIngot']);
-    expect(inventoryEntries(state)).toEqual([
+    expect(Object.keys(state.stockpile)).toEqual(['timber', 'coal', 'stone', 'ironIngot']);
+    expect(stockpileEntries(state)).toEqual([
       { item: 'ironIngot', count: 6 },
       { item: 'timber', count: 2 },
     ]);
-  });
-});
-
-describe('carry weight', () => {
-  it('adds up count times weight from the data', () => {
-    const state = smallState();
-    expect(carriedWeight(state)).toBe(0);
-    addItem(state, 'stone', 3);
-    addItem(state, 'coal', 2);
-    addItem(state, 'timber', 6);
-    const expected = 3 * ITEMS.stone.weight + 2 * ITEMS.coal.weight + 6 * ITEMS.timber.weight;
-    expect(carriedWeight(state)).toBe(expected);
-    // With 0005's weights (stone 2, coal 1, timber 1) that is 14.
-    expect(expected).toBe(14);
-  });
-
-  it('allows carrying exactly the capacity and nothing beyond it', () => {
-    const state = smallState();
-    const capacity = carryCapacity();
-    expect(capacity).toBe(AVATAR.carryCapacity);
-    // Fill up with coal to one short of the limit.
-    const coalWeight = ITEMS.coal.weight;
-    addItem(state, 'coal', Math.floor((capacity - coalWeight) / coalWeight));
-    expect(carriedWeight(state)).toBe(capacity - coalWeight);
-
-    expect(canCarry(state, 'coal', 1)).toBe(true); // exactly full
-    expect(canCarry(state, 'coal', 2)).toBe(false);
-    expect(canCarry(state, 'stone', 1)).toBe(ITEMS.stone.weight <= coalWeight);
-    expect(canCarry(state, 'coal', 0)).toBe(true);
-  });
-
-  it('throws on an item that does not exist', () => {
-    const state = smallState();
-    state.inventory['jetpack'] = 1;
-    expect(() => carriedWeight(state)).toThrow('Unknown item id');
-    expect(() => canCarry(smallState(), 'jetpack', 1)).toThrow('Unknown item id');
-  });
-});
-
-describe('loose items', () => {
-  const A = { x: 1, y: 1, z: 0 };
-  const B = { x: 0, y: 0, z: -1 }; // on the surface
-
-  it('keeps one pile per cell and item, sorted by z, y, x, then item', () => {
-    const state = smallState();
-    addLooseItems(state, A, 'stone', 1);
-    addLooseItems(state, A, 'coal', 2);
-    addLooseItems(state, B, 'timber', 1);
-    addLooseItems(state, A, 'stone', 3);
-    expect(state.looseItems).toEqual([
-      { pos: B, item: 'timber', count: 1 },
-      { pos: A, item: 'coal', count: 2 },
-      { pos: A, item: 'stone', count: 4 },
-    ]);
-    expect(looseItemsAt(state, A)).toEqual([
-      { item: 'coal', count: 2 },
-      { item: 'stone', count: 4 },
-    ]);
-    expect(looseItemsAt(state, { x: 2, y: 2, z: 0 })).toEqual([]);
-  });
-
-  it('gives the same list whatever order the piles were added in', () => {
-    const one = smallState();
-    addLooseItems(one, A, 'coal', 1);
-    addLooseItems(one, A, 'coal', 2);
-    addLooseItems(one, B, 'stone', 1);
-    const other = smallState();
-    addLooseItems(other, B, 'stone', 1);
-    addLooseItems(other, A, 'coal', 3);
-    expect(one.looseItems).toEqual(other.looseItems);
-    expect(hashState(one)).toBe(hashState(other));
-  });
-
-  it('removes from a pile, and drops the pile when it is empty', () => {
-    const state = smallState();
-    addLooseItems(state, A, 'coal', 3);
-    removeLooseItems(state, A, 'coal', 2);
-    expect(looseItemsAt(state, A)).toEqual([{ item: 'coal', count: 1 }]);
-    removeLooseItems(state, A, 'coal', 1);
-    expect(state.looseItems).toEqual([]);
-  });
-
-  it('refuses to remove more than the cell holds, or to add outside the cube', () => {
-    const state = smallState();
-    addLooseItems(state, A, 'coal', 1);
-    expect(() => removeLooseItems(state, A, 'coal', 2)).toThrow('it holds 1');
-    expect(() => removeLooseItems(state, A, 'stone', 1)).toThrow('it holds 0');
-    expect(() => removeLooseItems(state, B, 'coal', 1)).toThrow('it holds 0');
-    expect(() => addLooseItems(state, { x: -1, y: 0, z: 0 }, 'coal', 1)).toThrow('outside');
-    expect(() => addLooseItems(state, A, 'coal', -1)).toThrow();
-    expect(looseItemsAt(state, A)).toEqual([{ item: 'coal', count: 1 }]);
-  });
-
-  it('does not keep a reference to the position it is given', () => {
-    const state = smallState();
-    const pos = { ...A };
-    addLooseItems(state, pos, 'coal', 1);
-    pos.x = 3;
-    expect(looseItemsAt(state, A)).toEqual([{ item: 'coal', count: 1 }]);
   });
 });
 
@@ -319,7 +224,7 @@ describe('endRun', () => {
     const state = smallState();
     const events: GameEvent[] = [];
     endRun(state, 'death', 'outOfFuel', events);
-    endRun(state, 'salvage', 'left', events);
+    endRun(state, 'salvage', 'mineClosed', events);
     expect(state.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'outOfFuel' });
     expect(events).toEqual([{ type: 'runEnded', outcome: 'death', cause: 'outOfFuel' }]);
   });
@@ -329,11 +234,10 @@ describe('cloneState', () => {
   it('makes an equal copy that shares nothing with the original', () => {
     const state = buildState({
       layers: [['#.'], ['##']],
-      inventory: { timber: 2 },
-      looseItems: [{ pos: { x: 1, y: 0, z: 0 }, item: 'stone', count: 1 }],
+      stockpile: { timber: 2 },
       supports: [{ x: 1, y: 0, z: 0 }],
       armed: [{ pos: { x: 0, y: 0, z: 0 }, kind: 'unstableOre' }],
-      camps: [{ pos: { x: 1, y: 0, z: 0 }, foundedShift: 1, stash: { coal: 2 } }],
+      camps: [{ pos: { x: 1, y: 0, z: 0 }, foundedShift: 1 }],
     });
     const before = hashState(state);
     const copy = cloneState(state);
@@ -357,20 +261,16 @@ describe('cloneState', () => {
     const firstCamp = copy.camps[0];
     if (firstCamp !== undefined) {
       firstCamp.pos.x = 0;
-      firstCamp.stash['coal'] = 9;
+      firstCamp.foundedShift = 9;
     }
-    copy.camps.push({ pos: { x: 0, y: 0, z: 0 }, foundedShift: 1, stash: {} });
-    copy.inventory['timber'] = 0;
-    copy.looseItems.push({ pos: { x: 0, y: 0, z: -1 }, item: 'coal', count: 1 });
-    const firstLoose = copy.looseItems[0];
-    if (firstLoose !== undefined) {
-      firstLoose.count = 5;
-      firstLoose.pos.x = 0;
-    }
+    copy.camps.push({ pos: { x: 0, y: 0, z: 0 }, foundedShift: 1 });
+    copy.stockpile['timber'] = 0;
+    copy.stockpile['coal'] = 4;
     copy.status = { kind: 'ended', outcome: 'death', cause: 'outOfFuel' };
 
     expect(hashState(state)).toBe(before);
-    expect(state.looseItems).toEqual([{ pos: { x: 1, y: 0, z: 0 }, item: 'stone', count: 1 }]);
+    expect(state.stockpile).toEqual({ timber: 2 });
+    expect(state.camps).toEqual([{ pos: { x: 1, y: 0, z: 0 }, foundedShift: 1 }]);
   });
 });
 

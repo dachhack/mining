@@ -151,7 +151,7 @@ describe('fuel upkeep', () => {
 
   it('finishing a shift on exactly 0 fuel, then crafting fuel next shift, survives', () => {
     // 1 fuel: upkeep takes the last of it but the run goes on.
-    const start = surfaceState({ ap: 0, fuel: 1, inventory: { coal: 1 } });
+    const start = surfaceState({ ap: 0, fuel: 1, stockpile: { coal: 1 } });
     const first = endShift(start);
     expect(first.state.fuel).toBe(0);
     expect(first.state.status).toEqual({ kind: 'active' });
@@ -171,7 +171,9 @@ describe('fuel upkeep', () => {
 
 describe('after the run has ended', () => {
   // Documented choice: `endShift` (and `previewCubePhase`) throw.
-  const ended = surfaceState({ status: { kind: 'ended', outcome: 'salvage', cause: 'left' } });
+  const ended = surfaceState({
+    status: { kind: 'ended', outcome: 'salvage', cause: 'mineClosed' },
+  });
 
   it('legalActions is empty', () => {
     expect(legalActions(ended)).toEqual([]);
@@ -186,10 +188,10 @@ describe('after the run has ended', () => {
   });
 
   it('holds for a run that ended by running out of fuel', () => {
-    const { state: dead } = endShift(surfaceState({ ap: 0, fuel: 0, inventory: { coal: 1 } }));
+    const { state: dead } = endShift(surfaceState({ ap: 0, fuel: 0, stockpile: { coal: 1 } }));
     expect(legalActions(dead)).toEqual([]);
     expect(() => endShift(dead)).toThrow('The run has ended');
-    expect(() => applyAction(dead, { type: 'leave', ap: 0 })).toThrow('The run has ended');
+    expect(() => applyAction(dead, { type: 'closeMine', ap: 0 })).toThrow('The run has ended');
   });
 });
 

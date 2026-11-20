@@ -50,7 +50,7 @@ const STANDARD_RUNS: RecordSpec[] = [
     policyName: 'pit',
     maxDecisions: undefined,
     description:
-      'The pit policy on seed 11: digs a terraced pit round the middle of the map under the level rule, cutting the trees in its way, crafts fuel from the coal it finds, and leaves (salvage) when the fuel is about to run out.',
+      'The pit policy on seed 11: digs a terraced pit round the middle of the map under the level rule, cutting the trees in its way, crafts fuel from the coal it finds, and closes the mine (salvage) when the fuel is about to run out.',
   },
   {
     name: 'pit-seed-31-traces',
@@ -66,7 +66,7 @@ const STANDARD_RUNS: RecordSpec[] = [
     policyName: 'random',
     maxDecisions: undefined,
     description:
-      'Random legal actions (never leaving) until the fuel runs out. About half its actions cut trees; some stumps are mined (and never regrow) and some grow a tree again.',
+      'Random legal actions (never closing the mine) until the fuel runs out. About half its actions cut trees; some stumps are mined (and never regrow) and some grow a tree again.',
   },
   {
     name: 'random-seed-27-cut-short',

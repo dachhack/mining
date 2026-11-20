@@ -70,10 +70,12 @@ export interface BlockDef {
   shaftLimit: number | null;
 }
 
-/** One kind of carried item. Fuel is a gauge, not an item (0005 item 18). */
+/**
+ * One kind of item in the stockpile. Fuel is a gauge, not an item (0005 item
+ * 18). An item has no weight: the stockpile has no limit (design doc 4.1).
+ */
 export interface ItemDef {
   name: string;
-  weight: number;
 }
 
 /** Something placed in a cell that is not a block: a support, a pump, a vent, ... */
@@ -86,7 +88,7 @@ export interface StructureDef {
 }
 
 /**
- * What a recipe makes: either carried items, or an amount added to a gauge.
+ * What a recipe makes: either items for the stockpile, or an amount added to a gauge.
  *
  * For a Python reader: this is a "tagged union". The `kind` field says which
  * of the two shapes the object has, and TypeScript checks that code looks at
@@ -105,7 +107,6 @@ export interface RecipeDef {
 
 export interface AvatarData {
   startHealth: number;
-  carryCapacity: number;
 }
 
 export interface ShiftData {
@@ -120,9 +121,8 @@ export interface ShiftData {
 export interface ActionCostData {
   move: number;
   craft: number;
-  pickUp: number;
-  drop: number;
-  leave: number;
+  /** "Close the mine": ending the run alive (design doc 4.1). */
+  closeMine: number;
   placeSupport: number;
   placeExplosive: number;
   placePump: number;
@@ -132,8 +132,6 @@ export interface ActionCostData {
   scan: number;
   /** One camp recipe (0014 item 27). */
   campCraft: number;
-  /** Putting into or taking from a camp's stash. */
-  stash: number;
   decommissionCamp: number;
   /** "Give up" (0014 item 23). */
   giveUp: number;
@@ -277,7 +275,6 @@ export interface HazardData {
 export interface CampData {
   /** An item id. */
   kitItem: string;
-  maxKitsCarried: number;
   halfWidth: number;
   height: number;
   foundMinAp: number;

@@ -6,10 +6,11 @@
 //
 // Each task deletes the lines about the module it fills in.
 //
-// M1 task 5 filled in shift, craft and leave. With craft and leave real, a new
-// run has legal actions, and with shift real an end of shift changes the
-// state, so the three stub tests that pinned the opposite are gone; the real
-// rules are tested in shift.test.ts, craft.test.ts and leave.test.ts.
+// M1 task 5 filled in shift, craft and leave (now "close the mine"). With
+// those real, a new run has legal actions, and with shift real an end of
+// shift changes the state, so the three stub tests that pinned the opposite
+// are gone; the real rules are tested in shift.test.ts, craft.test.ts and
+// closeMine.test.ts.
 
 import { describe, expect, it } from 'vitest';
 import { actionKey, sameAction } from '../../src/engine';
@@ -22,7 +23,7 @@ describe('actionKey and sameAction', () => {
     { type: 'mine', x: 1, y: 2, ap: 2 },
     { type: 'cutTree', x: 1, y: 2, ap: 2 },
     { type: 'craft', recipe: 'support', ap: 1 },
-    { type: 'leave', ap: 0 },
+    { type: 'closeMine', ap: 0 },
     // The M2 actions (decision note 0015).
     { type: 'placeSupport', target: { x: 1, y: 2, z: 3 }, ap: 1 },
     { type: 'placeExplosive', target: { x: 1, y: 2, z: 3 }, ap: 1 },
@@ -32,8 +33,6 @@ describe('actionKey and sameAction', () => {
     { type: 'scan', centre: { x: 1, y: 2, z: 3 }, ap: 2 },
     { type: 'foundCamp', ap: 5 },
     { type: 'rest', ap: 5 },
-    { type: 'stashPut', item: 'coal', count: 2, ap: 0 },
-    { type: 'stashTake', item: 'coal', count: 2, ap: 0 },
     { type: 'decommissionCamp', ap: 1 },
     { type: 'giveUp', ap: 0 },
   ];
@@ -58,10 +57,6 @@ describe('actionKey and sameAction', () => {
     expect(sameAction(craft, { ...craft, recipe: 'fuel' })).toBe(false);
     const scan: Action = { type: 'scan', centre: { x: 1, y: 2, z: 3 }, ap: 2 };
     expect(sameAction(scan, { ...scan, centre: { x: 1, y: 2, z: 4 } })).toBe(false);
-    const stash: Action = { type: 'stashPut', item: 'coal', count: 2, ap: 0 };
-    expect(sameAction(stash, { ...stash, item: 'stone' })).toBe(false);
-    expect(sameAction(stash, { ...stash, count: 3 })).toBe(false);
-    expect(sameAction(stash, { ...stash, type: 'stashTake' })).toBe(false);
   });
 });
 
@@ -73,7 +68,7 @@ describe('the M2 action modules are stubs (decision note 0015)', () => {
   const state = buildState({
     layers: [['#.#'], ['###']],
     revealAll: true,
-    inventory: { support: 2, explosive: 1, pump: 1, vent: 1, sealant: 1 },
+    stockpile: { support: 2, explosive: 1, pump: 1, vent: 1, sealant: 1 },
   });
 
   it('placeSupport offers nothing (until M2-3)', async () => {

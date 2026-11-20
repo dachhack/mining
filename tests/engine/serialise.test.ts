@@ -7,15 +7,14 @@ import { nextUint32 } from '../../src/engine/rng';
 import {
   STATE_VERSION,
   addItem,
-  addLooseItems,
   cloneState,
-  inventoryEntries,
   crackTimerAt,
   gasAt,
   isLavaSource,
   lavaAt,
   setCrackTimer,
   setLava,
+  stockpileEntries,
   structureAt,
   waterAt,
 } from '../../src/engine/state';
@@ -32,11 +31,7 @@ function busyState(): GameState {
     ap: 3,
     fuel: 11,
     shift: 9,
-    inventory: { timber: 2, vent: 5, coal: 0 },
-    looseItems: [
-      { pos: { x: 1, y: 1, z: 0 }, item: 'stone', count: 2 },
-      { pos: { x: 0, y: 0, z: -1 }, item: 'coal', count: 1 },
-    ],
+    stockpile: { timber: 2, vent: 5, coal: 0 },
     supports: [{ x: 1, y: 1, z: 0 }],
     seed: 4242,
     // Every field the M2 skeleton added (issue #50), each with something in it.
@@ -56,8 +51,8 @@ function busyState(): GameState {
       { pos: { x: 2, y: 2, z: 0 }, kind: 'explosive' },
     ],
     camps: [
-      { pos: { x: 1, y: 1, z: 1 }, foundedShift: 7, stash: { stone: 3, coal: 1, timber: 0 } },
-      { pos: { x: 1, y: 1, z: 0 }, foundedShift: 3, stash: {} },
+      { pos: { x: 1, y: 1, z: 1 }, foundedShift: 7 },
+      { pos: { x: 1, y: 1, z: 0 }, foundedShift: 3 },
     ],
   });
   state.avatar.resting = true;
@@ -77,24 +72,29 @@ describe('serialise and deserialise', () => {
     const state = busyState();
     const loaded = throughJson(state);
     expect(hashState(loaded)).toBe(hashState(state));
-    // Everything except the zero-count inventory entry, which is dropped.
-    expect(loaded.inventory).toEqual({ timber: 2, vent: 5 });
-    expect({ ...loaded, inventory: {}, looseItems: [], camps: [] }).toEqual({
+    // Everything except the zero-count stockpile entry, which is dropped.
+    expect(loaded.stockpile).toEqual({ timber: 2, vent: 5 });
+    expect({ ...loaded, stockpile: {}, camps: [] }).toEqual({
       ...state,
-      inventory: {},
-      looseItems: [],
+      stockpile: {},
       camps: [],
     });
-    // Camps come back sorted by position, each stash without its zero counts.
+    // Camps come back sorted by position.
     expect(loaded.camps).toEqual([
-      { pos: { x: 1, y: 1, z: 0 }, foundedShift: 3, stash: {} },
-      { pos: { x: 1, y: 1, z: 1 }, foundedShift: 7, stash: { coal: 1, stone: 3 } },
+      { pos: { x: 1, y: 1, z: 0 }, foundedShift: 3 },
+      { pos: { x: 1, y: 1, z: 1 }, foundedShift: 7 },
     ]);
-    // Loose items come back in canonical order: by z, then y, then x.
-    expect(loaded.looseItems).toEqual([
-      { pos: { x: 0, y: 0, z: -1 }, item: 'coal', count: 1 },
-      { pos: { x: 1, y: 1, z: 0 }, item: 'stone', count: 2 },
-    ]);
+  });
+
+  it('a save holds the stockpile, and nothing of carrying (issue #92)', () => {
+    const saved = serialise(busyState());
+    expect(saved.stockpile).toEqual({ timber: 2, vent: 5 });
+    const fields = Object.keys(saved);
+    expect(fields).not.toContain('inventory');
+    expect(fields).not.toContain('looseItems');
+    for (const camp of saved.camps) {
+      expect(Object.keys(camp)).toEqual(['pos', 'foundedShift']);
+    }
   });
 
   it('round-trips every field the M2 skeleton added', () => {
@@ -120,22 +120,6 @@ describe('serialise and deserialise', () => {
       expect(array).toBeInstanceOf(Uint8Array);
       expect(array.length).toBe(18);
     }
-  });
-
-  it('deserialise merges two piles of the same item in the same cell', () => {
-    // A save written by hand, or by an older build, may list a cell's pile in
-    // parts. The loaded state must hold one pile, as the engine keeps them.
-    const saved = serialise(busyState());
-    saved.looseItems = [
-      { pos: { x: 1, y: 1, z: 0 }, item: 'stone', count: 2 },
-      { pos: { x: 0, y: 0, z: 0 }, item: 'coal', count: 1 },
-      { pos: { x: 1, y: 1, z: 0 }, item: 'stone', count: 3 },
-    ];
-    const loaded = deserialise(JSON.parse(JSON.stringify(saved)));
-    expect(loaded.looseItems).toEqual([
-      { pos: { x: 0, y: 0, z: 0 }, item: 'coal', count: 1 },
-      { pos: { x: 1, y: 1, z: 0 }, item: 'stone', count: 5 },
-    ]);
   });
 
   it('round-trips a full-size new run to the same hash', () => {
@@ -182,7 +166,7 @@ describe('serialise and deserialise', () => {
     expect(() =>
       deserialise({
         ...saved,
-        camps: [{ pos: { x: 0, y: 0, z: -1 }, foundedShift: 1, stash: {} }],
+        camps: [{ pos: { x: 0, y: 0, z: -1 }, foundedShift: 1 }],
       }),
     ).toThrow('a camp is at (0, 0, -1)');
     // A status this build does not know. The cast gets it past the type checker.
@@ -192,10 +176,10 @@ describe('serialise and deserialise', () => {
 
   it('refuses a save from before the M2 skeleton with a clear error', () => {
     // State version 3 was the last M1 shape (decision note 0012).
-    expect(STATE_VERSION).toBe(8);
+    expect(STATE_VERSION).toBe(9);
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 3 })).toThrow(
-      'Saved state has version 3; this build reads version 8',
+      'Saved state has version 3; this build reads version 9',
     );
   });
 
@@ -203,7 +187,7 @@ describe('serialise and deserialise', () => {
     // State version 4 was the M2 skeleton's shape, with no surface arrays.
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 4 })).toThrow(
-      'Saved state has version 4; this build reads version 8',
+      'Saved state has version 4; this build reads version 9',
     );
   });
 
@@ -211,7 +195,7 @@ describe('serialise and deserialise', () => {
     // State version 5 could hold a ladder (structure code 1, item 'ladder').
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 5 })).toThrow(
-      'Saved state has version 5; this build reads version 8',
+      'Saved state has version 5; this build reads version 9',
     );
   });
 
@@ -219,7 +203,16 @@ describe('serialise and deserialise', () => {
     // State version 7 held `lampOil`, and could hold a torch or a safety lamp.
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 7 })).toThrow(
-      'Saved state has version 7; this build reads version 8',
+      'Saved state has version 7; this build reads version 9',
+    );
+  });
+
+  it('refuses a save from before carrying was removed with a clear error (issue #92)', () => {
+    // State version 8 held `inventory` and `looseItems`, and a `stash` in
+    // each camp.
+    const saved = serialise(busyState());
+    expect(() => deserialise({ ...saved, version: 8 })).toThrow(
+      'Saved state has version 8; this build reads version 9',
     );
   });
 
@@ -228,7 +221,7 @@ describe('serialise and deserialise', () => {
     // followed the light rule.
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 6 })).toThrow(
-      'Saved state has version 6; this build reads version 8',
+      'Saved state has version 6; this build reads version 9',
     );
   });
 });
@@ -272,13 +265,11 @@ describe('hashState', () => {
       'a camp gone': (s) => s.camps.pop(),
       'a camp position': (s) => ((s.camps[0] as Camp).pos.x = 0),
       'a camp founding shift': (s) => ((s.camps[0] as Camp).foundedShift += 1),
-      'a camp stash': (s) => ((s.camps[1] as Camp).stash['coal'] = 2),
       ap: (s) => (s.ap -= 1),
       fuel: (s) => (s.fuel -= 1),
       shift: (s) => (s.shift += 1),
-      inventory: (s) => (s.inventory['timber'] = 3),
-      'loose items': (s) => s.looseItems.pop(),
-      status: (s) => (s.status = { kind: 'ended', outcome: 'salvage', cause: 'left' }),
+      stockpile: (s) => (s.stockpile['timber'] = 3),
+      status: (s) => (s.status = { kind: 'ended', outcome: 'salvage', cause: 'mineClosed' }),
     };
     const hashes = new Set<string>([baseHash]);
     for (const [name, change] of Object.entries(changes)) {
@@ -295,42 +286,21 @@ describe('hashState', () => {
   it('ignores differences that mean nothing', () => {
     const base = busyState();
 
-    // The order items were added to the inventory.
+    // The order items were added to the stockpile.
     const reordered = cloneState(base);
-    reordered.inventory = { vent: 5, timber: 2 };
+    reordered.stockpile = { vent: 5, timber: 2 };
     expect(hashState(reordered)).toBe(hashState(base));
 
-    // The order of the loose-items list.
-    const shuffled = cloneState(base);
-    shuffled.looseItems.reverse();
-    expect(hashState(shuffled)).toBe(hashState(base));
+    // A stockpile entry with a count of 0.
+    const withZero = cloneState(base);
+    withZero.stockpile['stone'] = 0;
+    expect(hashState(withZero)).toBe(hashState(base));
 
-    // The order of the armed charges and of the camps, the order items were
-    // put into a stash, and a stash entry with a count of 0.
+    // The order of the armed charges and of the camps.
     const m2 = cloneState(base);
     m2.armed.reverse();
     m2.camps.reverse();
-    for (const camp of m2.camps) {
-      if (camp.foundedShift === 7) {
-        camp.stash = { timber: 0, coal: 1, vent: 0, stone: 3 };
-      }
-    }
     expect(hashState(m2)).toBe(hashState(base));
-  });
-
-  it('treats piles of one item in one cell as their total, however they were added', () => {
-    const cell = { x: 1, y: 1, z: 0 };
-    const withPiles = (counts: number[]): GameState => {
-      const state = busyState();
-      // Written straight into the list, behind the helpers' back.
-      state.looseItems = counts.map((count) => ({ pos: { ...cell }, item: 'coal', count }));
-      return state;
-    };
-    const three = hashState(withPiles([3]));
-    expect(hashState(withPiles([1, 2]))).toBe(three);
-    expect(hashState(withPiles([2, 1]))).toBe(three);
-    expect(hashState(withPiles([1, 1, 1, 0]))).toBe(three);
-    expect(hashState(withPiles([4]))).not.toBe(three);
   });
 
   it('gives a state and its saved-and-loaded copy the same order to walk', () => {
@@ -339,15 +309,11 @@ describe('hashState', () => {
     addItem(state, 'timber', 1);
     addItem(state, 'coal', 2);
     addItem(state, 'vent', 3);
-    addLooseItems(state, { x: 3, y: 0, z: 0 }, 'stone', 1);
-    addLooseItems(state, { x: 1, y: 0, z: 0 }, 'stone', 1);
-    addLooseItems(state, { x: 1, y: 0, z: 0 }, 'coal', 1);
-    expect(Object.keys(state.inventory)).toEqual(['timber', 'coal', 'vent']);
+    expect(Object.keys(state.stockpile)).toEqual(['timber', 'coal', 'vent']);
 
     const loaded = throughJson(state);
     expect(hashState(loaded)).toBe(hashState(state));
-    expect(inventoryEntries(loaded)).toEqual(inventoryEntries(state));
-    expect(loaded.looseItems).toEqual(state.looseItems);
+    expect(stockpileEntries(loaded)).toEqual(stockpileEntries(state));
   });
 
   it('tells a cube from the same blocks in another shape', () => {

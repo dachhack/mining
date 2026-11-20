@@ -13,12 +13,11 @@ describe('createRun', () => {
     const state = createRun(1, 'none', 'standard');
     const loadout = LOADOUTS.standard;
     expect(state.fuel).toBe(loadout.fuel);
-    const expectedInventory: Record<string, number> = {};
+    const expectedStockpile: Record<string, number> = {};
     for (const stack of loadout.items) {
-      expectedInventory[stack.item] = stack.count;
+      expectedStockpile[stack.item] = stack.count;
     }
-    expect(state.inventory).toEqual(expectedInventory);
-    expect(state.looseItems).toEqual([]);
+    expect(state.stockpile).toEqual(expectedStockpile);
     expect(state.loadoutId).toBe('standard');
     expect(state.contractId).toBe('none');
   });
@@ -30,8 +29,11 @@ describe('createRun', () => {
     expect(state.fuel).toBe(24);
     // No lamp oil since issue #89.
     expect('lampOil' in state).toBe(false);
+    // No carrying since issue #92: the kit is in the stockpile.
+    expect('inventory' in state).toBe(false);
+    expect('looseItems' in state).toBe(false);
     // No ladders since issue #80.
-    expect(state.inventory).toEqual({ timber: 2 });
+    expect(state.stockpile).toEqual({ timber: 2 });
     expect(state.avatar.health).toBe(10);
     expect(state.ap).toBe(5);
     expect(state.size).toEqual({ x: 32, y: 32, z: 32 });

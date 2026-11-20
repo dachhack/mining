@@ -16,11 +16,11 @@ import type { Vec3 } from '../data';
 export type RunOutcome = 'fullSuccess' | 'partial' | 'salvage' | 'death';
 
 /**
- * Why a run ended: the avatar left from the surface (salvage), or one of the
- * deaths of design doc 5.3 (0014 item 22).
+ * Why a run ended: the player closed the mine (salvage; design doc 9.3), or
+ * one of the losses of design doc 5.3 (0014 item 22).
  */
 export type RunEndCause =
-  'left' | 'outOfFuel' | 'crushed' | 'drowned' | 'suffocated' | 'burned' | 'entombed';
+  'mineClosed' | 'outOfFuel' | 'crushed' | 'drowned' | 'suffocated' | 'burned' | 'entombed';
 
 /**
  * Why the avatar took damage: a falling block, lava (in its cell or beside
@@ -33,7 +33,7 @@ export type DamageCause = 'rockfall' | 'lava' | 'explosion';
 export type FluidKind = 'water' | 'lava';
 
 /**
- * What destroyed a structure, a camp, or loose items:
+ * What destroyed a structure or a camp:
  * - `rockfall`: a falling block passed through the cell or came to rest in it;
  * - `water`, `lava`: the fluid entered the cell;
  * - `explosion`: the cell exploded, or was beside one that did;
@@ -73,22 +73,15 @@ export type GameEvent =
    */
   | { type: 'mineralTracesSeen'; pos: Vec3 }
   /**
-   * Items appeared in the inventory from nowhere on the board: a mining yield
-   * (it follows the `blockMined` of the same action) or a crafted item (it
-   * follows `crafted`). A pick-up is `itemPickedUp` instead.
+   * Items went into the stockpile: a mining yield (it follows the
+   * `blockMined` of the same action), the timber of a cut tree (it follows
+   * `treeCut`) or a crafted item (it follows `crafted`). The stockpile has no
+   * limit, so a yield always arrives (design doc 4.1).
    */
   | { type: 'itemGained'; item: string; count: number }
-  /** The avatar picked up loose items from the cell `from` into the inventory. */
-  | { type: 'itemPickedUp'; from: Vec3; item: string; count: number }
-  /** A mining yield did not fit the carry limit and was left loose at `pos` (0005 item 16). */
-  | { type: 'itemLeft'; pos: Vec3; item: string; count: number }
-  /** The player dropped items from the inventory into the cell `pos`. */
-  | { type: 'itemDropped'; pos: Vec3; item: string; count: number }
-  /** Loose items fell from one cell to another (0005 item 17). */
-  | { type: 'itemFell'; from: Vec3; to: Vec3; item: string; count: number }
   /** A structure (its code is `structure`) was placed in the cell `pos`. */
   | { type: 'structurePlaced'; pos: Vec3; structure: number }
-  /** The recipe was crafted once. Its inputs left the inventory. */
+  /** The recipe was crafted once. Its inputs were taken from the stockpile. */
   | { type: 'crafted'; recipe: string }
   /** Shift number `shift` ended and `nextShift` began. */
   | { type: 'shiftEnded'; shift: number; nextShift: number }
@@ -131,8 +124,6 @@ export type GameEvent =
   | { type: 'exploded'; cells: Vec3[] }
   /** The structure (its code is `structure`) in the cell `pos` was destroyed. */
   | { type: 'structureDestroyed'; pos: Vec3; structure: number; cause: DestructionCause }
-  /** Loose items lying in the cell `pos` were destroyed. */
-  | { type: 'looseItemsDestroyed'; pos: Vec3; item: string; count: number; cause: DestructionCause }
   /** The open cell `pos` was sealed with sealant and is now solid (0014 item 12). */
   | { type: 'cellSealed'; pos: Vec3 }
   /** The scanner revealed the region centred on `centre` (0014 item 31). */
@@ -143,14 +134,10 @@ export type GameEvent =
   | { type: 'healthRestored'; amount: number; health: number }
   /** A camp was founded; `pos` is its `Camp.pos`. */
   | { type: 'campFounded'; pos: Vec3 }
-  /** The camp at `pos` was destroyed, and its stash with it (0014 item 30). */
+  /** The camp at `pos` was destroyed (0014 item 30). */
   | { type: 'campDestroyed'; pos: Vec3; cause: DestructionCause }
-  /** The camp at `pos` was decommissioned; its stash now lies loose (0014 item 28). */
+  /** The camp at `pos` was decommissioned (0014 item 28). */
   | { type: 'campDecommissioned'; pos: Vec3 }
-  /** Items went from the inventory into the stash of the camp at `camp`. */
-  | { type: 'itemStashed'; camp: Vec3; item: string; count: number }
-  /** Items went from the stash of the camp at `camp` into the inventory. */
-  | { type: 'itemUnstashed'; camp: Vec3; item: string; count: number }
   // The surface forest (issue #70; decision note 0020).
   /** The tree in the surface cell `pos` was cut; a stump is left. */
   | { type: 'treeCut'; pos: Vec3 }

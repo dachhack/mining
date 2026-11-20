@@ -8,11 +8,12 @@
 //
 // Two policies (issue #86; the walking policies `staircase`, `wander` and
 // `coal` went with the miner):
-// - `random`: every legal action except leaving, and "end the shift", are
-//   equally likely. It never leaves; see `makeRandomPolicy` for why.
+// - `random`: every legal action except closing the mine, and "end the
+//   shift", are equally likely. It never closes the mine; see
+//   `makeRandomPolicy` for why.
 // - `pit`: digs a terraced pit round the middle of the map, cutting the trees
-//   in its way, and keeps itself in fuel from the coal it finds. It leaves
-//   when the fuel is about to run out.
+//   in its way, and keeps itself in fuel from the coal it finds. It closes
+//   the mine when the fuel is about to run out.
 // Neither is how a person plays. Task T15 adds a terracing policy and a depth
 // survey.
 
@@ -48,16 +49,16 @@ export function decisionKey(decision: Decision): string {
 // ---------------------------------------------------------------------------
 
 /**
- * A policy that picks uniformly among the legal actions other than `leave`,
+ * A policy that picks uniformly among the legal actions other than `closeMine`,
  * and "end the shift".
  *
- * Why it never leaves: leaving is legal at any time since issue #86. With
+ * Why it never closes the mine: closing is legal at any time (issue #92). With
  * action points left there are over a thousand legal actions (a mine or a cut
- * for almost every square), so leaving would hardly ever be picked; with none
- * left, leaving is the ONLY legal action, and a policy that could pick it
- * would leave half the time at the end of its first shift. Such runs say
- * nothing. So `random` plays until the fuel runs out or the shift cap, as the
- * old `wander` policy did. (The `pit` policy does leave.)
+ * for almost every square), so closing would hardly ever be picked; with none
+ * left, closing is the ONLY legal action, and a policy that could pick it
+ * would close the mine half the time at the end of its first shift. Such
+ * runs say nothing. So `random` plays until the fuel runs out or the shift cap, as the
+ * old `wander` policy did. (The `pit` policy does close the mine.)
  *
  * `seed` seeds the policy's own random numbers. It is mixed with a constant
  * so that a run whose cube came from seed N does not pick its actions with
@@ -71,7 +72,7 @@ export function makeRandomPolicy(seed: number): Policy {
   return {
     name: 'random',
     decide: (state: GameState): Decision => {
-      const choices = legalActions(state).filter((action) => action.type !== 'leave');
+      const choices = legalActions(state).filter((action) => action.type !== 'closeMine');
       // One extra slot, the last, stands for "end the shift".
       const pick = nextInt(rng, choices.length + 1);
       const action = choices[pick];
@@ -96,8 +97,8 @@ export const PIT_POLICY = {
   craftFuelAtOrBelow: 6,
   /** With less fuel than this, a coal block in sight is mined before the pit is dug further. */
   fetchCoalBelow: 12,
-  /** With this much fuel or less and no way to make more, the policy leaves. */
-  leaveAtOrBelow: 1,
+  /** With this much fuel or less and no way to make more, the policy closes the mine. */
+  closeMineAtOrBelow: 1,
 };
 
 /** A square the pit policy may work on next: a legal mine or a legal cut. */
@@ -127,8 +128,8 @@ function isBetterCandidate(a: PitCandidate, b: PitCandidate): boolean {
  * Each time it is asked, the first of these that applies:
  * 1. Fuel is at or below `craftFuelAtOrBelow` and there is coal in the
  *    stockpile: craft fuel.
- * 2. Fuel is at or below `leaveAtOrBelow`, with no coal to craft: leave, and
- *    take the salvage, before the fuel runs out.
+ * 2. Fuel is at or below `closeMineAtOrBelow`, with no coal to craft: close
+ *    the mine, and take the salvage, before the fuel runs out.
  * 3. Fuel is below `fetchCoalBelow` and a legal mine would take a coal block
  *    the player can see: mine the best such square.
  * 4. Otherwise work on the best square there is a legal action for: the
@@ -165,11 +166,11 @@ export function makePitPolicy(): Policy {
       return craft === undefined ? 'endShift' : craft;
     }
 
-    // 2. About to run out, and nothing to burn: leave alive.
-    if (state.fuel <= PIT_POLICY.leaveAtOrBelow) {
-      const leave = legal.find((action) => action.type === 'leave');
-      if (leave !== undefined) {
-        return leave;
+    // 2. About to run out, and nothing to burn: close the mine, alive.
+    if (state.fuel <= PIT_POLICY.closeMineAtOrBelow) {
+      const closeMine = legal.find((action) => action.type === 'closeMine');
+      if (closeMine !== undefined) {
+        return closeMine;
       }
     }
 

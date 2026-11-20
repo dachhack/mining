@@ -33,12 +33,12 @@ export interface CraftAction {
 }
 
 /**
- * Leave, ending the run as salvage (0005 item 23). With no miner there is no
- * surface to stand on, so it is offered at any time (decision note 0026);
- * task T6 turns it into "close the mine".
+ * Close the mine: the player ends the run alive, as salvage (design doc 4.1
+ * and 9.3; owner question 88). It is offered at any time and costs 0 AP.
+ * It replaces `leave`, which needed a miner on the surface.
  */
-export interface LeaveAction {
-  type: 'leave';
+export interface CloseMineAction {
+  type: 'closeMine';
   ap: number;
 }
 
@@ -49,28 +49,28 @@ export interface LeaveAction {
 // finds its action needs another field adds it here and to `actionKey`.
 // ---------------------------------------------------------------------------
 
-/** Place a support from the inventory into the cell `target` (0014 item 6). */
+/** Place a support from the stockpile into the cell `target` (0014 item 6). */
 export interface PlaceSupportAction {
   type: 'placeSupport';
   target: Vec3;
   ap: number;
 }
 
-/** Place an explosive from the inventory into the cell `target` (0014 item 15). */
+/** Place an explosive from the stockpile into the cell `target` (0014 item 15). */
 export interface PlaceExplosiveAction {
   type: 'placeExplosive';
   target: Vec3;
   ap: number;
 }
 
-/** Place a pump from the inventory into the cell `target` (0014 items 12 and 31). */
+/** Place a pump from the stockpile into the cell `target` (0014 items 12 and 31). */
 export interface PlacePumpAction {
   type: 'placePump';
   target: Vec3;
   ap: number;
 }
 
-/** Place a vent from the inventory into the cell `target` (0014 items 13 and 31). */
+/** Place a vent from the stockpile into the cell `target` (0014 items 13 and 31). */
 export interface PlaceVentAction {
   type: 'placeVent';
   target: Vec3;
@@ -106,22 +106,6 @@ export interface RestAction {
   ap: number;
 }
 
-/** Put `count` of `item` from the inventory into the stash of the camp the avatar is in. */
-export interface StashPutAction {
-  type: 'stashPut';
-  item: string;
-  count: number;
-  ap: number;
-}
-
-/** Take `count` of `item` from the stash of the camp the avatar is in. */
-export interface StashTakeAction {
-  type: 'stashTake';
-  item: string;
-  count: number;
-  ap: number;
-}
-
 /** Decommission the camp the avatar is in (0014 item 28). */
 export interface DecommissionCampAction {
   type: 'decommissionCamp';
@@ -149,13 +133,12 @@ export interface GiveUpAction {
 export type CampToolAction = PlacePumpAction | PlaceVentAction | SealAction | ScanAction;
 
 /** The actions of actions/camp.ts (M2-7). */
-export type CampAction =
-  FoundCampAction | RestAction | StashPutAction | StashTakeAction | DecommissionCampAction;
+export type CampAction = FoundCampAction | RestAction | DecommissionCampAction;
 
 export type Action =
   | MineAction
   | CraftAction
-  | LeaveAction
+  | CloseMineAction
   | PlaceSupportAction
   | PlaceExplosiveAction
   | CampToolAction
@@ -179,8 +162,8 @@ export function actionKey(action: Action): string {
       return `${action.type} ${action.x},${action.y} ap ${action.ap}`;
     case 'craft':
       return `craft ${action.recipe} ap ${action.ap}`;
-    case 'leave':
-      return `leave ap ${action.ap}`;
+    case 'closeMine':
+      return `closeMine ap ${action.ap}`;
     case 'placeSupport':
     case 'placeExplosive':
     case 'placePump':
@@ -190,9 +173,6 @@ export function actionKey(action: Action): string {
       return `${action.type} ${vecKey(action.target)} ap ${action.ap}`;
     case 'scan':
       return `scan ${vecKey(action.centre)} ap ${action.ap}`;
-    case 'stashPut':
-    case 'stashTake':
-      return `${action.type} ${action.count} ${action.item} ap ${action.ap}`;
     case 'foundCamp':
     case 'rest':
     case 'decommissionCamp':

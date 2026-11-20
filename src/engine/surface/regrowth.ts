@@ -1,7 +1,7 @@
 // Trees growing back on stumps (issue #70 item 5; decision note 0020).
 //
-// When: `endShift` runs this after the cube phase (and the `settle` that
-// follows it) and before upkeep, if the avatar is alive. So a tree that grows
+// When: `endShift` runs this after the cube phase and before upkeep, if the
+// run is still going. So a tree that grows
 // is there at the start of the next shift, and the end-shift preview can say
 // which stumps will grow (`forecastRegrowth`).
 //
@@ -9,9 +9,9 @@
 // 1. If its layer-0 block is not solid (something took it), the count goes
 //    back to 0: a tree needs ground to grow in.
 // 2. Otherwise the count goes up by one, to at most `SURFACE.regrowShifts`.
-// 3. When the count has reached `regrowShifts` and nothing lies on the stump
-//    (loose items), a tree grows and the count is cleared. If something does
-//    lie there, the count waits at `regrowShifts`.
+// 3. When the count has reached `regrowShifts`, a tree grows and the count is
+//    cleared. Nothing can stand on a stump and hold the tree back: loose
+//    items went with carrying (issue #92).
 //
 // So a tree cut in shift N grows at the end of shift N + regrowShifts - 1:
 // the shift of the cut counts as one of the ten.
@@ -21,28 +21,19 @@
 // meadow never grows one. Rule 1 is kept for the hazards that may take a
 // stump's ground without a mine (tasks T8 and T11).
 //
-// Everything read here is something the player sees: the stump, whether its
-// square is still at ground level, and loose items on the surface.
+// Everything read here is something the player sees: the stump, and whether
+// its square is still at ground level.
 
 import { SURFACE } from '../../data';
 import type { Vec3 } from '../../data';
 import type { GameEvent } from '../events';
-import { isSolid, looseItemsAt } from '../state';
+import { isSolid } from '../state';
 import type { GameState } from '../state';
 import { hasStump, setStumpAge, setSurfaceKind, stumpAgeAt, surfaceCells } from './state';
 
 /** The layer-0 cell under the surface cell `pos`. */
 function groundUnder(pos: Vec3): Vec3 {
   return { x: pos.x, y: pos.y, z: 0 };
-}
-
-/**
- * True if loose items lie on the surface cell `pos`. Nothing leaves loose
- * items today (decision note 0026), so this is always false until task T4
- * removes them.
- */
-function somethingStandsOn(state: GameState, pos: Vec3): boolean {
-  return looseItemsAt(state, pos).length > 0;
 }
 
 /**
@@ -55,7 +46,7 @@ function stumpOutcome(state: GameState, pos: Vec3): { age: number; grows: boolea
     return { age: 0, grows: false };
   }
   const age = Math.min(stumpAgeAt(state, pos) + 1, SURFACE.regrowShifts);
-  if (age >= SURFACE.regrowShifts && !somethingStandsOn(state, pos)) {
+  if (age >= SURFACE.regrowShifts) {
     return { age: 0, grows: true };
   }
   return { age, grows: false };
@@ -94,7 +85,7 @@ export function forecastRegrowth(state: GameState): Vec3[] {
 
 /**
  * How many more shifts must end before the stump at `pos` grows a tree, if
- * nothing stands on it then and its ground stays: 1 means "at the end of
+ * its ground stays: 1 means "at the end of
  * this shift". `null` if `pos` is not a stump, or its ground is gone (it
  * counts again from the start once there is ground). For the views.
  */

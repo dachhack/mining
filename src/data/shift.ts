@@ -10,13 +10,12 @@ export const SHIFT: ShiftData = {
 };
 
 // Design doc 4.1. Mining is not here: its cost comes from the block (blocks.ts).
-// Leaving has no cost given anywhere; 0 is assumed (owner question 27).
+// Closing the mine costs 0 AP (design doc 4.1; owner question 88).
+// There is no pick-up, drop or stash cost: carrying is gone (design doc 5.4).
 export const ACTION_COSTS: ActionCostData = {
   move: 1,
   craft: 1,
-  pickUp: 0,
-  drop: 0,
-  leave: 0,
+  closeMine: 0,
   // M2 actions (design doc 4.1; decision note 0014). Founding a camp and
   // resting cost "the rest of the shift", so they are not here: see camps.ts.
   placeSupport: 1,
@@ -26,8 +25,7 @@ export const ACTION_COSTS: ActionCostData = {
   seal: 1,
   scan: 2,
   campCraft: 1,
-  stash: 0,
   decommissionCamp: 1,
-  // Not given anywhere; 0 is assumed, like leaving (raised in the PR for issue #50).
+  // Not given anywhere; 0 is assumed, like closing the mine (raised in the PR for issue #50).
   giveUp: 0,
 };

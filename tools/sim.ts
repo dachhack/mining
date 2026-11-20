@@ -27,7 +27,7 @@
 //     "aggregate": {                all runs together
 //       "runs": 1000,
 //       "outcomes": { "salvage": n, "death": n, "unfinished": n },
-//       "causes":   { "left": n, "outOfFuel": n, "shiftCap": n },
+//       "causes":   { "mineClosed": n, "outOfFuel": n, "shiftCap": n },
 //       "shiftsPlayed":     spread+,
 //       "deepestSquare":    spread+,   levels down of the deepest square; 0 is
 //                                      untouched ground
@@ -50,13 +50,13 @@
 //       "shiftsAtZeroFuel": spread+,   shifts that began with 0 fuel (fuel was 0
 //                                      after the upkeep before them), per run
 //       "runsWithAShiftAtZeroFuel": n,
-//       "finalInventoryMean": { "<item id>": mean count, ... }   every item
+//       "finalStockpileMean": { "<item id>": mean count, ... }   every item
 //     },
 //     "runs": [                     one entry per run, in seed order
 //       {
 //         "seed": 123, "policy": "random",
 //         "outcome": "salvage" | "death" | "unfinished",
-//         "cause": "left" | "outOfFuel" | "shiftCap",
+//         "cause": "mineClosed" | "outOfFuel" | "shiftCap",
 //         "shiftsPlayed": n,        shifts started, counting the one the run ended in
 //         "actionsTaken": n,        not counting ends of shift
 //         "deepestSquare": n, "blocksMined": n, "treesCut": n, "shareOfCubeMined": x,
@@ -70,7 +70,7 @@
 //         "structuresPlaced": { "<structure id>": n, ... },   every structure
 //         "damageTaken": n, "healthAtEnd": n, "fuelAtEnd": n,
 //         "shiftsAtZeroFuel": n,
-//         "finalInventory": { "<item id>": count, ... },   every item
+//         "finalStockpile": { "<item id>": count, ... },   every item
 //         "finalHash": "16 hex digits"                      hashState of the final state
 //       }, ...
 //     ]
