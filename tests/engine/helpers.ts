@@ -12,8 +12,8 @@
 //   });
 
 import {
-  AVATAR,
   BLOCKS,
+  CREW,
   DEFAULT_LOADOUT_ID,
   HAZARDS,
   SHIFT,
@@ -23,7 +23,15 @@ import {
 } from '../../src/data';
 import type { BlockId, StructureId, Vec3 } from '../../src/data';
 import { applyAction, legalActions } from '../../src/engine';
-import type { Action, ArmedCharge, Camp, GameState, RunStatus, StepResult } from '../../src/engine';
+import type {
+  Action,
+  ArmedCharge,
+  Camp,
+  GameState,
+  RunStatus,
+  Square,
+  StepResult,
+} from '../../src/engine';
 import {
   blankState,
   canonicalArmed,
@@ -35,6 +43,7 @@ import {
   setStructure,
   setWater,
 } from '../../src/engine/state';
+import { markWorked } from '../../src/engine/crew';
 import { updateReveal } from '../../src/engine/reveal';
 import { updateMineralTraces } from '../../src/engine/tells';
 
@@ -75,10 +84,10 @@ export interface BuildStateOptions {
    * row the same length.
    */
   layers: string[][];
-  /** Default: full health from the data. */
+  /** Crew health. Default: full health from the data. */
   health?: number;
-  /** Default: full air from the data. */
-  air?: number;
+  /** The squares the crew worked this shift (design doc 5.2). Default: none. */
+  worked?: Square[];
   /** Default: a full shift's AP from the data. */
   ap?: number;
   /** Default: 10, enough that tests which do not care never run out. */
@@ -200,8 +209,10 @@ export function buildState(options: BuildStateOptions): GameState {
   state.armed = canonicalArmed(options.armed ?? []);
   state.camps = canonicalCamps(options.camps ?? []);
 
-  state.avatar.health = options.health ?? AVATAR.startHealth;
-  state.avatar.air = options.air ?? HAZARDS.air.max;
+  state.crew.health = options.health ?? CREW.startHealth;
+  for (const square of options.worked ?? []) {
+    markWorked(state, square.x, square.y);
+  }
   state.ap = options.ap ?? SHIFT.apPerShift;
   state.fuel = options.fuel ?? 10;
   state.shift = options.shift ?? SHIFT.firstShiftNumber;

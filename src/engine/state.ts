@@ -16,30 +16,31 @@ import type { RngState } from './rng';
 
 /**
  * Bumped whenever the shape of GameState changes, so old saves can be told
- * apart. 9: carrying is gone (issue #92): `inventory` is now `stockpile`,
- * and `looseItems` and each camp's `stash` are removed. A version-8 save has
+ * apart. 10: carrying is gone (issue #92): `inventory` is now `stockpile`,
+ * and `looseItems` and each camp's `stash` are removed. A version-9 save has
  * the old fields, so it is not read.
- * 8: `lampOil` is gone with light (issue #89); a version-7 save holds
- * it, and may hold torches or safety lamps, so it is not read.
+ * 9: the avatar is gone (issue #90, crew health): `crew` replaces
+ * `avatar`, air is removed, and `worked` is new, so a version-8 save is not
+ * read. 8: `lampOil` is gone with light (issue #89); a version-7 save holds
+ * it, and may hold torches or safety lamps.
  * 7: the avatar has no position (issue #86, mine by square).
  */
-export const STATE_VERSION = 9;
+export const STATE_VERSION = 10;
 
 /** Whether the run is still going, and if not, how it ended. */
 export type RunStatus =
   { kind: 'active' } | { kind: 'ended'; outcome: RunOutcome; cause: RunEndCause };
 
 /**
- * What is left of the miner. It has no position since issue #86: the player
- * selects squares and nobody walks. Health, air and resting stay here until
- * crew health replaces them (task T5).
+ * The crew (design doc v0.2 section 5; issue #90). It is abstract: it has no
+ * position, does not walk and cannot be trapped. Where it worked this shift
+ * is `GameState.worked`.
  */
-export interface Avatar {
+export interface Crew {
+  /** Crew health. Starts at `CREW.startHealth`; the run is lost at 0. */
   health: number;
-  /** Air left (design doc 5.1; 0014 item 20). Full is `HAZARDS.air.max`. */
-  air: number;
   /**
-   * True from the moment the avatar chooses to rest at a camp until step (e)
+   * True from the moment the crew chooses to rest at a camp until step (e)
    * of the cube phase that ends that shift, which applies the rest and clears
    * the flag (0014 items 2 and 27).
    */
@@ -123,8 +124,16 @@ export interface GameState {
    * reached. 0 everywhere else.
    */
   stumpAge: Uint8Array;
+  /**
+   * The worked squares (design doc 5.2): 1 if the crew mined, cut or built on
+   * the square in the shift that is going on, otherwise 0. One entry per
+   * square, like `surface`. A hazard hurts the crew only on these squares.
+   * Emptied at the end of every cube phase. Read and change it only through
+   * src/engine/crew.ts.
+   */
+  worked: Uint8Array;
 
-  avatar: Avatar;
+  crew: Crew;
   /** Action points left in this shift. */
   ap: number;
   fuel: number;
@@ -580,7 +589,7 @@ export function endRun(
 /**
  * A blank state for a cube of the given size: every cell open and unrevealed,
  * the surface open meadow everywhere, an empty stockpile, every gauge at 0
- * (health and air too), no camps.
+ * (crew health too), no worked squares, no camps.
  * `createRun` and the test helper both start from this and fill it in.
  */
 export function blankState(size: CubeSize, seed: number): GameState {
@@ -605,7 +614,8 @@ export function blankState(size: CubeSize, seed: number): GameState {
     // was before the forest. `createRun` grows the forest.
     surface: new Uint8Array(size.x * size.y),
     stumpAge: new Uint8Array(size.x * size.y),
-    avatar: { health: 0, air: 0, resting: false },
+    worked: new Uint8Array(size.x * size.y),
+    crew: { health: 0, resting: false },
     ap: 0,
     fuel: 0,
     shift: 0,
@@ -642,10 +652,10 @@ export function cloneState(state: GameState): GameState {
     tracesSeen: state.tracesSeen.slice(),
     surface: state.surface.slice(),
     stumpAge: state.stumpAge.slice(),
-    avatar: {
-      health: state.avatar.health,
-      air: state.avatar.air,
-      resting: state.avatar.resting,
+    worked: state.worked.slice(),
+    crew: {
+      health: state.crew.health,
+      resting: state.crew.resting,
     },
     ap: state.ap,
     fuel: state.fuel,

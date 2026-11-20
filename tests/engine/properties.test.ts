@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  AVATAR,
+  CREW,
   BLOCKS,
   CONTRACT_IDS,
   DEFAULT_LOADOUT_ID,
@@ -81,9 +81,9 @@ function invariantProblems(state: GameState): string[] {
   if (!isWholeNumber(state.shift) || state.shift < SHIFT.firstShiftNumber) {
     problems.push(`shift is ${state.shift}`);
   }
-  const health = state.avatar.health;
-  if (!isWholeNumber(health) || health < 0 || health > AVATAR.startHealth) {
-    problems.push(`health is ${health}, outside 0..${AVATAR.startHealth}`);
+  const health = state.crew.health;
+  if (!isWholeNumber(health) || health < 0 || health > CREW.startHealth) {
+    problems.push(`health is ${health}, outside 0..${CREW.startHealth}`);
   }
   if (isRunActive(state) && health === 0) {
     problems.push('the run is still going with 0 health');
@@ -297,7 +297,7 @@ function playerSees(state: GameState): string {
     forecast: previewCubePhase(state),
     squares,
     checks,
-    hud: [state.ap, state.fuel, state.shift, state.avatar, state.stockpile],
+    hud: [state.ap, state.fuel, state.shift, state.crew, state.stockpile],
     knownCube: snapshot(knownCube(state)),
   });
 }

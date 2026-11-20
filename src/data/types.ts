@@ -105,8 +105,24 @@ export interface RecipeDef {
   output: RecipeOutput;
 }
 
-export interface AvatarData {
+/** What each kind of hazard takes off crew health (design doc 5.2). See crew.ts. */
+export interface CrewDamageData {
+  slump: number;
+  water: number;
+  /** Lava on a worked square. */
+  lavaOn: number;
+  /** Lava on a square beside a worked square. */
+  lavaBeside: number;
+  gas: number;
+  gasExplosion: number;
+  /** A charge or unstable ore going off. */
+  explosion: number;
+}
+
+/** The crew (design doc 5). See crew.ts. */
+export interface CrewData {
   startHealth: number;
+  damage: CrewDamageData;
 }
 
 export interface ShiftData {
@@ -133,8 +149,6 @@ export interface ActionCostData {
   /** One camp recipe (0014 item 27). */
   campCraft: number;
   decommissionCamp: number;
-  /** "Give up" (0014 item 23). */
-  giveUp: number;
 }
 
 /** A starting kit (0005 item 22). */
@@ -219,7 +233,6 @@ export interface TellsData {
 /** Cave-in numbers that are not per material (0014 items 6 to 10). See hazards.ts. */
 export interface CaveInData {
   crackTimer: number;
-  rockfallDamage: number;
   supportLiningReach: number;
   tightCellSolidSides: number;
   supportHoldSolidSides: number;
@@ -237,22 +250,10 @@ export interface GasData {
   ventReach: number;
 }
 
-export interface ExplosionData {
-  damage: number;
-}
-
 export interface LavaData {
   unitsPerCell: number;
   flowEveryShifts: number;
   sourcePocketCellsOver: number;
-  damageInCell: number;
-  damageBeside: number;
-}
-
-export interface AirData {
-  /** A full gauge of air (design doc 5.1). */
-  max: number;
-  lossPerShift: number;
 }
 
 export interface ForecastData {
@@ -265,9 +266,7 @@ export interface HazardData {
   caveIn: CaveInData;
   water: WaterData;
   gas: GasData;
-  explosion: ExplosionData;
   lava: LavaData;
-  air: AirData;
   forecast: ForecastData;
 }
 
@@ -281,7 +280,6 @@ export interface CampData {
   restMinAp: number;
   upkeepFuel: number;
   upkeepEveryShifts: number;
-  airLineMaxBadStretch: number;
 }
 
 /** Numbers of the camp-made tools (0014 item 31). See camps.ts. */
@@ -311,7 +309,7 @@ export interface GameData {
   hazards: HazardData;
   camps: CampData;
   campTools: CampToolData;
-  avatar: AvatarData;
+  crew: CrewData;
   tells: TellsData;
   shift: ShiftData;
   actionCosts: ActionCostData;

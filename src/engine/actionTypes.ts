@@ -123,12 +123,6 @@ export interface CutTreeAction {
   ap: number;
 }
 
-/** Give up: end the run as entombed (0014 item 23). */
-export interface GiveUpAction {
-  type: 'giveUp';
-  ap: number;
-}
-
 /** The actions of actions/campTools.ts (M2-8). */
 export type CampToolAction = PlacePumpAction | PlaceVentAction | SealAction | ScanAction;
 
@@ -143,7 +137,6 @@ export type Action =
   | PlaceExplosiveAction
   | CampToolAction
   | CampAction
-  | GiveUpAction
   | CutTreeAction;
 
 function vecKey(v: Vec3): string {
@@ -176,7 +169,6 @@ export function actionKey(action: Action): string {
     case 'foundCamp':
     case 'rest':
     case 'decommissionCamp':
-    case 'giveUp':
       return `${action.type} ap ${action.ap}`;
   }
 }

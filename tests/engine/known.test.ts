@@ -100,7 +100,7 @@ describe('knownCube (0014 item 4)', () => {
       const pos = { x: 0, y: 0, z };
       expect(knownCell(copy, pos)).toEqual(knownCell(state, pos));
     }
-    expect(copy.avatar).toEqual(state.avatar);
+    expect(copy.crew).toEqual(state.crew);
     expect(copy.revealed).toEqual(state.revealed);
   });
 

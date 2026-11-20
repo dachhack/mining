@@ -123,7 +123,7 @@ describe('fuel upkeep', () => {
       state = endShift(state).state;
       shiftsEnded += 1;
     }
-    expect(state.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'outOfFuel' });
+    expect(state.status).toEqual({ kind: 'ended', outcome: 'lost', cause: 'outOfFuel' });
     expect(shiftsEnded).toBe(25);
     expect(shiftsEnded).toBe(startFuel / SHIFT.fuelPerShift + 1);
     // The run ended during shift 25: its upkeep did not start shift 26.
@@ -134,8 +134,8 @@ describe('fuel upkeep', () => {
   it('fuel 0 at upkeep ends the run, cause "out of fuel"', () => {
     const state = surfaceState({ ap: 2, fuel: 0, shift: 2 });
     const { state: after, events } = endShift(state);
-    expect(after.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'outOfFuel' });
-    expect(events).toEqual([{ type: 'runEnded', outcome: 'death', cause: 'outOfFuel' }]);
+    expect(after.status).toEqual({ kind: 'ended', outcome: 'lost', cause: 'outOfFuel' });
+    expect(events).toEqual([{ type: 'runEnded', outcome: 'lost', cause: 'outOfFuel' }]);
     // Upkeep stopped there: no next shift.
     expect(after.shift).toBe(2);
     expect(after.fuel).toBe(0);
@@ -145,7 +145,7 @@ describe('fuel upkeep', () => {
     // Under the old rule 3 or more unspent AP bought a fuel and saved the run.
     for (const unspent of [0, 3, 5]) {
       const { state: after } = endShift(surfaceState({ ap: unspent, fuel: 0 }));
-      expect(after.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'outOfFuel' });
+      expect(after.status).toEqual({ kind: 'ended', outcome: 'lost', cause: 'outOfFuel' });
     }
   });
 
@@ -165,7 +165,7 @@ describe('fuel upkeep', () => {
 
     // Without the craft, the same upkeep ends the run, 5 unspent AP or not.
     const without = endShift(first.state);
-    expect(without.state.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'outOfFuel' });
+    expect(without.state.status).toEqual({ kind: 'ended', outcome: 'lost', cause: 'outOfFuel' });
   });
 });
 

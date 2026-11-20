@@ -223,10 +223,10 @@ describe('endRun', () => {
   it('ends the run once and keeps the first cause', () => {
     const state = smallState();
     const events: GameEvent[] = [];
-    endRun(state, 'death', 'outOfFuel', events);
+    endRun(state, 'lost', 'outOfFuel', events);
     endRun(state, 'salvage', 'mineClosed', events);
-    expect(state.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'outOfFuel' });
-    expect(events).toEqual([{ type: 'runEnded', outcome: 'death', cause: 'outOfFuel' }]);
+    expect(state.status).toEqual({ kind: 'ended', outcome: 'lost', cause: 'outOfFuel' });
+    expect(events).toEqual([{ type: 'runEnded', outcome: 'lost', cause: 'outOfFuel' }]);
   });
 });
 
@@ -254,9 +254,9 @@ describe('cloneState', () => {
     copy.structures.fill(0);
     copy.rng.s += 1;
     copy.size.x = 99;
-    copy.avatar.health -= 1;
-    copy.avatar.air -= 1;
-    copy.avatar.resting = true;
+    copy.crew.health -= 1;
+    copy.worked.fill(1);
+    copy.crew.resting = true;
     copy.armed.push({ pos: { x: 0, y: 0, z: 1 }, kind: 'unstableOre' });
     const firstCamp = copy.camps[0];
     if (firstCamp !== undefined) {
@@ -266,7 +266,7 @@ describe('cloneState', () => {
     copy.camps.push({ pos: { x: 0, y: 0, z: 0 }, foundedShift: 1 });
     copy.stockpile['timber'] = 0;
     copy.stockpile['coal'] = 4;
-    copy.status = { kind: 'ended', outcome: 'death', cause: 'outOfFuel' };
+    copy.status = { kind: 'ended', outcome: 'lost', cause: 'outOfFuel' };
 
     expect(hashState(state)).toBe(before);
     expect(state.stockpile).toEqual({ timber: 2 });

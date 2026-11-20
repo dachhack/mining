@@ -26,6 +26,4 @@ export const ACTION_COSTS: ActionCostData = {
   scan: 2,
   campCraft: 1,
   decommissionCamp: 1,
-  // Not given anywhere; 0 is assumed, like closing the mine (raised in the PR for issue #50).
-  giveUp: 0,
 };

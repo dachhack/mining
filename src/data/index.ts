@@ -1,7 +1,7 @@
 // All gameplay data in one place. The engine and the tools import from here.
 
-import { AVATAR } from './avatar';
 import { BLOCKS } from './blocks';
+import { CREW } from './crew';
 import { GENERATION } from './generation';
 import { ITEMS } from './items';
 import { CONTRACT_IDS, DEFAULT_LOADOUT_ID, LOADOUTS } from './loadouts';
@@ -14,9 +14,9 @@ import { TELLS } from './tells';
 import type { BlockDef, GameData, ItemDef, LoadoutDef, RecipeDef } from './types';
 import { WORLD } from './world';
 
-export { AVATAR } from './avatar';
 export { BLOCKS } from './blocks';
 export type { BlockId } from './blocks';
+export { CREW } from './crew';
 export { GENERATION } from './generation';
 export { ITEMS } from './items';
 export type { ItemId } from './items';
@@ -50,7 +50,7 @@ export const GAME_DATA: GameData = {
   hazards: HAZARDS,
   camps: CAMPS,
   campTools: CAMP_TOOLS,
-  avatar: AVATAR,
+  crew: CREW,
   tells: TELLS,
   shift: SHIFT,
   actionCosts: ACTION_COSTS,

@@ -5,7 +5,16 @@
 // states rules, in the order a player meets them. Every number in it is read
 // from src/data, so the text cannot drift from the game when one is tuned.
 
-import { ACTION_COSTS, BLOCKS, FIELD_RECIPES, SHIFT, SURFACE, TELLS, WORLD } from '../../src/data';
+import {
+  ACTION_COSTS,
+  BLOCKS,
+  CREW,
+  FIELD_RECIPES,
+  SHIFT,
+  SURFACE,
+  TELLS,
+  WORLD,
+} from '../../src/data';
 import { stackListText } from '../../src/app/text/describe';
 
 export function helpText(): string {
@@ -77,7 +86,7 @@ THE GAME
   You look down on a cube of rock ${WORLD.size.x} squares by ${WORLD.size.y} and ${WORLD.size.z} blocks deep (x 0 to ${lastX}, y 0 to ${lastY}),
   and mine it from the top: you choose a square and its top block is taken. There is no miner
   on the map and nothing walks. Collect what the rock gives. The run ends alive only when you
-  choose to close the mine. It is lost if you run out of fuel.
+  choose to close the mine. It is lost if you run out of fuel, or if crew health reaches 0.
 
   Shifts and action points (AP)
   - Time passes in shifts. Each shift you get ${SHIFT.apPerShift} AP. Each action costs AP; one you cannot afford
@@ -145,6 +154,14 @@ ${recipes}
     Supports can be made but have no use yet in this version of the game. Fuel is the one
     that matters.
 
+  Crew health
+  - Your crew starts with ${CREW.startHealth} health ("Crew health" among the gauges). The crew is not on the map.
+  - A hazard hurts the crew only where it worked this shift: on a square you mined, cut a tree
+    on, or built on since the shift began. When the shift ends, each kind of hazard that
+    reaches such a square takes health once. Squares you left alone this shift are safe for
+    the crew.
+  - At 0 crew health the run is lost.
+
   Closing the mine
   - "close-mine" is always on the list and costs ${ACTION_COSTS.closeMine} AP. It ends the run at once, alive, with
     what is in the stockpile (the game calls this a "salvage" run). There is no other way to
@@ -152,6 +169,7 @@ ${recipes}
 
   Not in this version of the game
   - Hazards (pit walls that slump, water, lava, gas), supports that hold a wall, camps and
-    contracts are not built yet. Nothing hurts the crew today except running out of fuel.
+    contracts are not built yet. So nothing takes crew health today; the only way to lose
+    the run is to run out of fuel.
 `;
 }

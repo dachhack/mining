@@ -23,7 +23,7 @@ import type { GameState } from './state';
  * nothing changes and no event is emitted).
  *
  * A destroyed explosive is also taken off `state.armed`, so it does not go
- * off. Nothing is given back to the avatar.
+ * off. Nothing is given back to the stockpile.
  */
 export function destroyStructure(
   state: GameState,

@@ -13,7 +13,7 @@ One folder per round, named `<milestone>-r<n>` (for example `m1-r1`). Each holds
 
 - Interface: text | web
 - Engine version / commit:
-- Outcome: full success | partial | salvage | death (<cause>) | blocker (<what stopped the run>)
+- Outcome: full success | partial | salvage | lost (<cause>) | blocker (<what stopped the run>)
 - Shifts played:
 - Deepest layer reached:
 
@@ -27,7 +27,7 @@ Shift number, what I saw, what I chose, what I expected, what happened. Five to 
 
 ## How it ended
 
-For a death: what killed me, what warning I had and when, and whether I could trace it to a decision of mine.
+For a lost run: what ended it, what warning I had and when, and whether I could trace it to a decision of mine.
 
 ## Confusing
 

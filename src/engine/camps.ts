@@ -37,13 +37,12 @@ export function campsAt(state: GameState, pos: Vec3): Camp[] {
 }
 
 /**
- * Contract for M2-7. Called in step (e) of the cube phase when
- * `state.avatar.resting` is true and the avatar is alive after damage and
- * air (0014 items 2 and 27).
+ * Contract for the camps task (T12). Called in step (e) of the cube phase
+ * when `state.crew.resting` is true and the crew is alive after damage
+ * (design doc 5.1; 0014 items 2 and 27).
  *
- * - Restores health to full (`healthRestored`), and air to full if the
- *   camp's air line is intact (`airChanged`, reason `rested`).
- * - Does not clear `state.avatar.resting`: `stepAvatarEffects` does.
+ * - Restores crew health to full (`healthRestored`).
+ * - Does not clear `state.crew.resting`: `stepCrewEffects` does.
  */
 export function applyRest(_state: GameState, _events: GameEvent[]): void {
   // Nothing yet.

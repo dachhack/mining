@@ -219,7 +219,7 @@ describe('camps', () => {
     // The numbers this test is written for (design doc 8).
     expect(CAMPS.halfWidth).toBe(1);
     expect(CAMPS.height).toBe(2);
-    const camp = { pos: { x: 5, y: 6, z: 10 }, foundedShift: 1, stash: {} };
+    const camp = { pos: { x: 5, y: 6, z: 10 }, foundedShift: 1 };
     const cells = campCells(camp);
     expect(cells).toHaveLength(18);
     expect(cells[0]).toEqual({ x: 4, y: 5, z: 9 }); // top layer first

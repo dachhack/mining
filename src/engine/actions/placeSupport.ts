@@ -24,7 +24,8 @@ export function legalPlaceSupportActions(_state: GameState): PlaceSupportAction[
 /**
  * Contract for M2-3: carry out `action`, which the dispatcher has already
  * checked is legal: use up one support, put the structure in the cell, emit
- * `structurePlaced`. Does not spend the AP; the dispatcher has.
+ * `structurePlaced`, and mark the square worked (`markWorked` in crew.ts;
+ * design doc 5.2). Does not spend the AP; the dispatcher has.
  */
 export function applyPlaceSupport(
   _state: GameState,

@@ -58,7 +58,7 @@ describe('simulate', () => {
       Object.values(counts).reduce((sum, count) => sum + count, 0);
     expect(total(report.aggregate.outcomes)).toBe(6);
     expect(total(report.aggregate.causes)).toBe(6);
-    expect(Object.keys(report.aggregate.outcomes)).toEqual(['salvage', 'death', 'unfinished']);
+    expect(Object.keys(report.aggregate.outcomes)).toEqual(['salvage', 'lost', 'unfinished']);
     expect(Object.keys(report.aggregate.causes)).toEqual(['mineClosed', 'outOfFuel', 'shiftCap']);
   });
 

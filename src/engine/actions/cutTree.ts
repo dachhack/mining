@@ -8,6 +8,7 @@
 
 import { SURFACE, WORLD } from '../../data';
 import type { CutTreeAction } from '../actionTypes';
+import { markWorked } from '../crew';
 import type { GameEvent } from '../events';
 import { addItem } from '../state';
 import type { GameState } from '../state';
@@ -38,6 +39,7 @@ export function legalCutTreeActions(state: GameState): CutTreeAction[] {
  *
  * - The tree becomes a stump, which is open ground, and its regrowth count
  *   starts at 0. Emits `treeCut`.
+ * - The square is a worked square until the end of the shift (design doc 5.2).
  * - Puts the timber into the stockpile (`itemGained`).
  * - The dispatcher's `updateReveal` then reveals the block under the stump:
  *   it is now the square's top block.
@@ -47,6 +49,7 @@ export function applyCutTree(state: GameState, action: CutTreeAction, events: Ga
   setSurfaceKind(state, cell, SURFACE.kinds.stump.code);
   setStumpAge(state, cell, 0);
   events.push({ type: 'treeCut', pos: { ...cell } });
+  markWorked(state, action.x, action.y);
 
   for (const stack of SURFACE.cutTree.yields) {
     addItem(state, stack.item, stack.count);
