@@ -52,6 +52,12 @@ export const TERRACE_POLICY = {
   closeMineAtOrBelow: 1,
   /** With this much crew health or less, the crew rests at the camp (if there is one). */
   restAtOrBelow: 6,
+  /**
+   * A mine that would make more squares than this unstable at once is not
+   * taken: each needs a support placed (1 AP) before its crack falls two
+   * shifts later, and a shift has 5 AP, some of which go on crafting fuel.
+   */
+  mostNewCracksPerMine: 8,
 };
 
 /** Recipe ids from src/data/recipes.ts. */
@@ -150,8 +156,9 @@ function craftOf(legal: Action[], recipeId: string): Action | undefined {
  *     at the camp, or smelt the ingots for one.
  *  8. Dig the plan: the shallowest square that still has to go down, and
  *     among those the nearest to the corner. A tree on such a square is cut.
- *     A mine is taken only if every square it would make unstable can be held
- *     with a support the stockpile has or can make. A mine that would arm
+ *     A mine is taken only if every square it would make unstable can be
+ *     held: it is at its final depth, and the stockpile already holds a
+ *     support for it. A mine that would arm
  *     unstable ore (design doc 6.6) waits until the ore is braced.
  *  9. Short of supports: craft one; with no timber, cut the nearest tree;
  *     with no stone, mine the nearest stone in sight.
@@ -221,12 +228,6 @@ export function makeTerracePolicy(options: TerraceOptions = {}): Policy {
   /** True if the square still has to go down under the plan. */
   function hasToGoDown(depths: DepthMap, x: number, y: number): boolean {
     return depthIn(depths, x, y) < plannedDepth(x, y);
-  }
-
-  /** How many supports the stockpile holds or could make from its timber and stone. */
-  function supportsWithinReach(state: GameState): number {
-    const makeable = Math.min(countItem(state, 'timber'), countItem(state, 'stone'));
-    return countItem(state, 'support') + makeable;
   }
 
   /** The legal cut of the tree nearest the corner, or `undefined` if no cut is legal. */
@@ -447,7 +448,13 @@ export function makeTerracePolicy(options: TerraceOptions = {}): Policy {
       if (!allAtFinalDepth) {
         continue;
       }
-      if (supportsWithinReach(state) >= made.length) {
+      // The supports must be made already, and there must be time to place
+      // them: a crack falls at the end of the shift after next, and placing
+      // costs 1 AP each. Squares that are unstable already come first.
+      if (unstable.length > 0 || made.length > TERRACE_POLICY.mostNewCracksPerMine) {
+        continue;
+      }
+      if (countItem(state, 'support') >= made.length) {
         return mine;
       }
       shortOfSupports = true;
