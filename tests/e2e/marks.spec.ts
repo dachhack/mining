@@ -49,10 +49,11 @@ test('every mark is on the map together, at the default zoom and on the whole ma
     await expect(legend).toContainText(words);
   }
 
-  // The forecast: one line for each thing, the most dangerous first.
+  // The forecast: one line for each thing, the most dangerous first. ("MAY":
+  // the crack on x22 y12 falls first and uncovers a block nobody has seen.)
   const lines = page.getByTestId('forecast').locator('li');
-  await expect(lines.first()).toContainText('THE EXPLOSIVE on x16 y15 GOES OFF');
-  await expect(lines.first()).toContainText('THE CREW WORKED THERE: it loses 6 health');
+  await expect(lines.first()).toContainText('THE CREW MAY LOSE 6 health: the blast on');
+  await expect(page.getByTestId('forecast')).toContainText('THE EXPLOSIVE on x16 y15 GOES OFF');
   await expect(lines.last()).toContainText('fuel 18 -> 17');
   await expect(page.getByTestId('hazards')).toContainText('gas stands on 5 squares');
 

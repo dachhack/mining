@@ -6,11 +6,16 @@ import { showcaseText } from './showcase';
 
 /** Open the page on the prepared state (see `PREPARED_KEY` in src/app/previewSession.ts). */
 export async function openShowcase(page: Page): Promise<void> {
+  await openPrepared(page, showcaseText());
+}
+
+/** Open the page on any prepared state: `text` is `JSON.stringify(serialise(state))`. */
+export async function openPrepared(page: Page, text: string): Promise<void> {
   await page.goto('/');
-  await page.evaluate((text) => {
+  await page.evaluate((prepared) => {
     window.localStorage.clear();
-    window.localStorage.setItem('mining-game.preview.prepared', text);
-  }, showcaseText());
+    window.localStorage.setItem('mining-game.preview.prepared', prepared);
+  }, text);
   await page.reload();
   await expect(page.getByTestId('note')).toContainText('A prepared state');
 }
