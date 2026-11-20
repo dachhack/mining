@@ -64,7 +64,7 @@ test('a risky mine needs a second tap; cracks show; the support tool places a su
   await expect(outcome).toContainText('Mining x15 y12 would make x15 y10');
   await expect(outcome).toContainText('Tap the square again');
   await expect(canvas).toHaveAttribute('data-selected', '15,12');
-  await expect(canvas).toHaveAttribute('data-unstable', '15,10 16,11 13,12 17,12 14,13 15,14');
+  await expect(canvas).toHaveAttribute('data-unstable', '15,10 14,11 16,11 17,12 14,13 15,14');
   await expect(page.getByTestId('gauges')).toContainText('AP 5/5');
   // The second tap on the same square takes it. The block is stone, which is
   // what a support needs besides timber.
@@ -78,26 +78,26 @@ test('a risky mine needs a second tap; cracks show; the support tool places a su
 
   // Shift 3: the six squares have cracked.
   // The map draws the crack and its countdown (the phone has no note for it).
-  await expect(canvas).toHaveAttribute('data-cracks', /(^| )13,12:2( |$)/);
+  await expect(canvas).toHaveAttribute('data-cracks', /(^| )17,12:2( |$)/);
   await expect(page.getByTestId('hazards')).toContainText(
-    'x13 y12 is cracked: due at the end of the next shift',
+    'x17 y12 is cracked: due at the end of the next shift',
   );
   await expect(page.getByTestId('map-legend')).toContainText('crack');
 
   // The support tool: on, a tap places the support instead of mining.
   await supportTool.click();
   await expect(supportTool).toHaveAttribute('aria-pressed', 'true');
-  await tapSquare(page, canvas, 13, 12);
+  await tapSquare(page, canvas, 17, 12);
   await expect(outcome).toContainText('Placed a support.');
-  await expect(canvas).toHaveAttribute('data-cracks', /(^| )13,12:2:stopped( |$)/);
-  await expect(canvas).toHaveAttribute('data-structures', /13,12:support/);
+  await expect(canvas).toHaveAttribute('data-cracks', /(^| )17,12:2:stopped( |$)/);
+  await expect(canvas).toHaveAttribute('data-structures', /17,12:support/);
   // The last support is placed: a tap mines again.
   await expect(supportTool).toHaveText('Support (0)');
   await expect(supportTool).toHaveAttribute('aria-pressed', 'false');
 
   // With no support left the tool says so and changes nothing.
   await supportTool.click();
-  await tapSquare(page, canvas, 17, 12);
+  await tapSquare(page, canvas, 15, 10);
   await expect(outcome).toContainText('You have no support to place');
   await page.screenshot({
     path: process.env['SLUMP_SHOT'] ?? 'test-results/slump.png',

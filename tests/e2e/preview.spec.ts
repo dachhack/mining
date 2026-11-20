@@ -29,13 +29,13 @@ test.beforeEach(async ({ page }) => {
 test('a run on a fixed seed is played with the buttons under the map', async ({ page }) => {
   await startRun(page, 7);
   const gauges = page.getByTestId('gauges');
-  await expect(gauges).toContainText('Shift 1 | AP 5/5 | Fuel 24');
+  await expect(gauges).toContainText('Shift 1 | AP 5/5 | Fuel 72');
   await expect(gauges).toContainText('Stockpile: 1 Camp kit, 2 Timber');
   await expect(page.getByTestId('forecast')).toContainText('When you end the shift:');
 
   await page.getByTestId('end-shift').click();
   // The same choice in `npm run play -- --seed 7 --do end` gives the same gauges.
-  await expect(gauges).toContainText('Shift 2 | AP 5/5 | Fuel 23');
+  await expect(gauges).toContainText('Shift 2 | AP 5/5 | Fuel 71');
   await expect(page.getByTestId('outcome')).toContainText('> End the shift.');
 
   // Closing the mine asks first (issue #92). Answering "Cancel" changes
@@ -51,7 +51,7 @@ test('a run on a fixed seed is played with the buttons under the map', async ({ 
   await closeMine.click();
   expect(question).toContain('Close the mine? This ends the run');
   await expect(page.getByTestId('end-shift')).toBeVisible();
-  await expect(gauges).toContainText('Shift 2 | AP 5/5 | Fuel 23');
+  await expect(gauges).toContainText('Shift 2 | AP 5/5 | Fuel 71');
   await expect(page.getByTestId('ended')).not.toContainText('closed the mine');
 
   // Answering "OK" ends the run, alive.

@@ -2,8 +2,8 @@
 // founds a camp with a tap, a refused patch is marked, mining near the camp
 // is cheaper, and the crew can rest.
 //
-// Seed 1 (see `npm run play -- --seed 1`): the patch round x15 y12 has a tree
-// on x14 y11; the patch round x17 y12 is clear, flat ground. x16 y10 is
+// Seed 1 (see `npm run play -- --seed 1`): the patch round x14 y12 has a tree
+// on x13 y12; the patch round x16 y12 is clear, flat ground. x16 y10 is
 // stone, one step from that patch.
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
@@ -48,26 +48,26 @@ test('the camp tool founds a camp; mining near it is cheaper; the crew rests', a
   await campTool.click();
   await expect(campTool).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('tool-hint')).toContainText('flat 3 x 3 patch');
-  await tapSquare(page, canvas, 15, 12);
-  await expect(outcome).toContainText('has a tree on x14 y11');
-  await expect(canvas).toHaveAttribute('data-selected', '15,12');
-  await expect(canvas).toHaveAttribute('data-blocked', '14,11');
+  await tapSquare(page, canvas, 14, 12);
+  await expect(outcome).toContainText('has a tree on x13 y12');
+  await expect(canvas).toHaveAttribute('data-selected', '14,12');
+  await expect(canvas).toHaveAttribute('data-blocked', '13,12');
   await expect(gauges).toContainText('AP 5/5');
 
   // A clear, flat patch: the camp is founded and takes the rest of the shift.
-  await tapSquare(page, canvas, 17, 12);
-  await expect(outcome).toContainText('The camp stands on x16-18, y11-13');
+  await tapSquare(page, canvas, 16, 12);
+  await expect(outcome).toContainText('The camp stands on x15-17, y11-13');
   await expect(gauges).toContainText('AP 0/5');
   await expect(gauges).toContainText('Stockpile: 2 Timber');
   await expect(canvas).toHaveAttribute('data-blocked', '');
   // The kit is used up: the tool is gone, and a tap mines again.
   await expect(campTool).toBeHidden();
-  await expect(page.getByTestId('map-notes')).toContainText('Camp at x17 y12 (ground level)');
+  await expect(page.getByTestId('map-notes')).toContainText('Camp at x16 y12 (ground level)');
   // The squares where mining is cheaper are not listed on the phone: the map
   // draws a line round them, and the legend says what it means.
   await expect(page.getByTestId('map-notes')).not.toContainText('by row');
   await expect(page.getByTestId('map-notes')).toContainText('under "Other actions"');
-  await expect(page.getByTestId('map-notes')).not.toContainText('"rest 17,12"');
+  await expect(page.getByTestId('map-notes')).not.toContainText('"rest 16,12"');
   await expect(page.getByTestId('map-legend')).toContainText('camp square');
   await expect(page.getByTestId('map-legend')).toContainText(
     'mining costs 1 AP less, never below 1',
@@ -80,14 +80,14 @@ test('the camp tool founds a camp; mining near it is cheaper; the crew rests', a
   await expect(outcome).toContainText('(1 AP less: near a camp)');
   await expect(gauges).toContainText('AP 4/5');
   // A camp square cannot be mined.
-  await tapSquare(page, canvas, 17, 12);
-  await expect(outcome).toContainText('A camp stands on x17 y12');
+  await tapSquare(page, canvas, 16, 12);
+  await expect(outcome).toContainText('A camp stands on x16 y12');
   await expect(gauges).toContainText('AP 4/5');
 
   // Rest is on the list of other actions; it takes the rest of the shift.
   await page.locator('.actions-heading').click();
-  await page.locator('[data-choice="rest 17,12"]').click();
-  await expect(outcome).toContainText('The crew rests at the camp at x17 y12');
+  await page.locator('[data-choice="rest 16,12"]').click();
+  await expect(outcome).toContainText('The crew rests at the camp at x16 y12');
   await expect(gauges).toContainText('AP 0/5');
   await page.screenshot({
     path: process.env['CAMPS_SHOT'] ?? 'test-results/camps.png',

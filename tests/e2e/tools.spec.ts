@@ -4,7 +4,7 @@
 // map marks a square with known blocks below.
 //
 // Seed 1 (see `npm run play -- --seed 1`): the patch round x17 y12 is clear,
-// flat ground. x16 y10 is stone and x14 y14 is coal, both near that patch.
+// flat ground. x16 y10 is stone and x14 y15 is coal, both near that patch.
 // (A pump needs ingots and a scanner charge needs crystal, which no short
 // run reaches: those two tools are tested in tests/app/tapMapTools.test.ts.)
 import { expect, test } from '@playwright/test';
@@ -67,7 +67,7 @@ test('sealant is crafted and used from the tool bar; look and hold list a square
   await expect(gauges).toContainText('Shift 2');
   await tapSquare(page, canvas, 16, 10);
   await expect(outcome).toContainText('Got 1 Stone');
-  await tapSquare(page, canvas, 14, 14);
+  await tapSquare(page, canvas, 14, 15);
   await expect(outcome).toContainText('Got 1 Coal');
 
   // Craft sealant at the camp: the seal tool appears.
