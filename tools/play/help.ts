@@ -51,6 +51,9 @@ export function helpText(): string {
   const campSide = 2 * CAMPS.halfWidth + 1;
   const campSquareCount = campSide * campSide;
   const stoneCost = BLOCKS.stone.mineCost ?? 0;
+  // Explosions (design doc 6.6): with a reach of 1 a blast covers 5 squares.
+  const blastReach = HAZARDS.explosion.blastReach;
+  const blastSquareCount = 2 * blastReach * (blastReach + 1) + 1;
 
   return `Mining game: text play interface
 
@@ -74,7 +77,10 @@ CHOICES
     mine X,Y                 mine the top block of the square x X, y Y ("mine 3,4")
     cut X,Y                  cut down the tree on that square
     support X,Y              place a support on that square (you need one: craft-support)
-    mine! X,Y                mine a square although it would make others unstable (see below)
+    explosive X,Y            place an explosive on that square (a camp makes them); it goes
+                             off when the shift ends
+    mine! X,Y                mine a square although it would make others unstable, or arm
+                             unstable ore (see below)
     camp X,Y                 found a camp on the ${campSide} x ${campSide} patch whose centre square is x X, y Y
     rest X,Y                 rest the crew at the camp whose centre square that is
     decommission X,Y         take that camp down
@@ -85,8 +91,8 @@ CHOICES
   Any square of the map may be named; nothing has to be near anything. A square that cannot be
   mined, cut, supported, camped on, pumped, sealed or scanned is refused with the reason, and nothing is done. A refused
   "camp X,Y" names the squares of the patch that are in the way.
-  A mine that would make other squares unstable is not done the first time: you get a warning
-  that names those squares, and nothing happens. Type it as "mine! X,Y" to do it all the same.
+  A mine that would make other squares unstable, or arm unstable ore, is not done the first
+  time: you get a warning that names those squares, and nothing happens. Type it as "mine! X,Y" to do it all the same.
   Everything else you may do is a line of the action list, with a number and a name. --do and
   the prompt take either:
     craft-fuel, craft-support, ...     craft; the list shows each name
@@ -106,7 +112,7 @@ READING A VIEW
   The map is the whole surface seen from above: x grows to the east (right), y grows to the
   south (down the page). The two lines over it give each column's x (tens over ones); each row
   starts with its y. Every square is two characters:
-  - the first is what is on top: "Y" a tree, "A" a camp square, "~" water, "!" lava, otherwise
+  - the first is what is on top: "Y" a tree, "A" a camp square, "~" water, "!" lava, "*" gas, otherwise
     the square's top
     block ("d" dirt, "#" stone, "c" coal, ...); the legend under the map names every character
     on it, with what the block costs to mine;
@@ -115,14 +121,16 @@ READING A VIEW
     a stump. Straight after a tree's "Y" it is blank (the ground under it is hidden), or the
     block you saw there before the tree grew back.
   Under the map: the legend, then notes: what lies on a square that two characters cannot
-  show (water or lava and the block under it, a crack and its countdown, a support or a
-  pump), the pumps and their range, what you know under the tops from scans (ore, a pocket,
-  a cavern: "look X,Y" lists a square's known blocks), the
+  show (water, lava or gas and the block under it, a crack and its countdown, a support, a
+  pump, an explosive, armed unstable ore), the pumps and their range, what you know under the
+  tops from scans (ore, a pocket, a cavern: "look X,Y" lists a square's known blocks), the
   stumps, each camp, and the squares where mining is cheaper because a camp is near. Then
   "Hazards": every cracked
-  square, when it falls and where its block will land. Then what ending the shift now would
-  do, including which blocks slump, which squares crack, and where water and lava flow. A line starting "Not possible now:" says what costs more AP than you have left.
-  Last comes how to mine, cut, place a support and found a camp, with how many squares can be
+  square, when it falls and where its block will land, and every placed explosive and armed
+  unstable ore block with the squares of its blast. Then what ending the shift now would
+  do, including which blocks slump, which squares crack, where water and lava flow, where gas
+  spreads, and what explodes. A line starting "Not possible now:" says what costs more AP than you have left.
+  Last comes how to mine, cut, place a support or an explosive and found a camp, with how many squares can be
   mined and trees cut now, and the list of everything else you may do, each with its number, its name and its cost in AP.
 
 THE GAME
@@ -336,8 +344,9 @@ ${recipes}
   Camp recipes (${ACTION_COSTS.campCraft} AP each; on the list only while a camp stands)
 ${campRecipes}
     Raw ore is smelted into ingots, and the other recipes take ingots. A camp kit founds another
-    camp. The drill, pump, scanner charge and sealant are explained under "Camp tools". The
-    vent and the explosive can be made but do nothing yet (see "Not in this version").
+    camp. The drill, pump, scanner charge and sealant are explained under "Camp tools". An
+    explosive is placed with "explosive X,Y" (see "Gas, unstable ore and explosives"). The
+    vent can be made but does nothing yet (see "Not in this version").
 
   Crew health
   - Your crew starts with ${CREW.startHealth} health ("Crew health" among the gauges). The crew is not on the map.
@@ -356,7 +365,48 @@ ${campRecipes}
     ends, and ${CREW.damage.lavaBeside} if it stands on a square beside one. That is so at the end of every shift, not
     only when lava flows. Breaking into a lava pocket puts lava on the square you just
     worked.
+  - Gas takes ${CREW.damage.gas} health if it stands on a square the crew worked this shift when the shift
+    ends. Breaking into a gas pocket puts gas on the square you just worked.
+  - A gas explosion takes ${CREW.damage.gasExplosion} health if a burning square, or a square beside one, was worked
+    this shift. The explosion of a charge or of unstable ore takes ${CREW.damage.explosion} if its blast includes a
+    worked square. They are two kinds of hazard: a charge that sets off gas beside the crew
+    takes ${CREW.damage.explosion + CREW.damage.gasExplosion}.
   - At 0 crew health the run is lost.
+
+  Gas, unstable ore and explosives
+  - GAS stands on squares ("*" on the map; the notes give the units). It is heavier than air:
+    it lies in the pit and never climbs. When a shift ends, a square with gas gives an even
+    share to each square beside it that is no higher (at the same depth or deeper) and keeps
+    the rest: with 9 units and 2 such neighbours, 3 go to each and 3 stay. Thin gas stays:
+    a square with fewer units than it has such neighbours plus one gives nothing, and a
+    square never gives away its last unit. So gas does not go away by itself. Units go on
+    shifting between level squares, but once gas has reached a square it stays there.
+  - Gas BURNS if lava stands on its square or on a square beside it, or if a blast covers its
+    square or a square beside it. All the gassy squares joined to it through their sides go
+    off together, as one explosion: the gas is gone, what is placed on those squares and
+    beside them (supports, explosives, a camp) is destroyed, and no block is removed.
+  - UNSTABLE ORE shows a hairline glow. Mining it is safe and gives rare ore. But mining the
+    block beside it on its own layer ARMS it, if you can see the ore and no support stands on
+    its square: it goes off when that shift ends. The ore is destroyed and gives nothing, and
+    its blast covers its square and the ${blastSquareCount - 1} squares beside it. To avoid that, mine the ore
+    first, or place a support on its square before you mine beside it. A support placed after
+    the ore is armed does not disarm it; mining the armed ore out does. A mine that would arm
+    ore is not done the first time: you get a warning, and "mine! X,Y" takes it.
+  - An EXPLOSIVE is made at a camp and placed on any square with "explosive X,Y" (${ACTION_COSTS.placeExplosive} AP). It
+    goes off when that shift ends: it destroys the top block of its square and of the ${blastSquareCount - 1}
+    squares beside it, with no yield. The level rule does not bind a blast, so it can leave
+    a steep step, which then cracks and slumps like any other. A tree in the blast is
+    destroyed (no timber) and the block under it stays.
+  - Placing an explosive is not work on that square: the crew pulls back, so the charge alone
+    does not hurt it. It does if the blast covers a square you mined, cut or built on in the
+    same shift.
+  - The blast of a charge or of ore destroys what is placed on its squares (another charge
+    there is destroyed and does not go off), destroys a camp on one of its squares or beside
+    one, and lights gas on its squares and beside them.
+  - A relic or keystone in a blast is destroyed only by chance (${Math.round(HAZARDS.explosion.chanceBlockDestroyed * 100)} in 100); otherwise it is
+    left in place.
+  - If the block a blast removes was the roof of a cavern or pocket, the space falls in as
+    under a mine, and what it held comes out; gas that comes out burns at once.
 
   Closing the mine
   - "close-mine" is always on the list and costs ${ACTION_COSTS.closeMine} AP. It ends the run at once, alive, with
@@ -364,10 +414,8 @@ ${campRecipes}
     finish alive, and a closed mine cannot be opened again.
 
   Not in this version of the game
-  - Gas that comes out of a pocket stays on the square it came out on: it does not spread,
-    burn or hurt the crew yet. Unstable ore does not explode yet: it is mined like any ore.
-  - The vent and the explosive, which are made at a camp, cannot be used yet.
-  - Contracts are not built yet. Slumping pit walls, water and lava are what takes crew
-    health or destroys a camp today.
+  - The vent, which is made at a camp, cannot be used yet. So nothing takes gas away but
+    burning it, or sealing the square it stands on.
+  - Contracts are not built yet, and relics and keystones are not in the cube yet.
 `;
 }

@@ -1,7 +1,8 @@
-// Acting on a square of the map: "mine x,y", "cut x,y", "support x,y", the
-// camp actions "camp x,y", "rest x,y" and "decommission x,y", which name a
-// camp by its centre square, and the camp-made tools "pump x,y", "seal x,y"
-// and "scan x,y" (issues #86, #94, #100 and #104).
+// Acting on a square of the map: "mine x,y", "cut x,y", "support x,y",
+// "explosive x,y", the camp actions "camp x,y", "rest x,y" and
+// "decommission x,y", which name a camp by its centre square, and the
+// camp-made tools "pump x,y", "seal x,y" and "scan x,y" (issues #86, #94,
+// #100, #103 and #104).
 //
 // There is no miner: the player names any square. With some 1,700 squares to
 // choose from, these actions are not lines of a list; the play tool takes
@@ -18,19 +19,23 @@ import {
   ACTION_COSTS,
   CAMPS,
   CAMP_TOOLS,
+  CREW,
   HAZARDS,
   SURFACE,
   blockDefByCode,
   itemDef,
 } from '../../data';
 import {
+  blastSquares,
   campAtSquare,
   campCentredAt,
+  explosiveCheck,
   foundCampCheck,
   isRunActive,
   isSquare,
   knownSquare,
   mineCheck,
+  oreArmedByMine,
   pumpCheck,
   scanCheck,
   sealCheck,
@@ -46,6 +51,7 @@ import type {
   GameState,
   CutTreeAction,
   MineAction,
+  PlaceExplosiveAction,
   PlacePumpAction,
   PlaceSupportAction,
   PlaceVentAction,
@@ -61,6 +67,7 @@ export type SquareEntry =
   | MineAction
   | CutTreeAction
   | PlaceSupportAction
+  | PlaceExplosiveAction
   | PlacePumpAction
   | PlaceVentAction
   | SealAction
@@ -77,11 +84,14 @@ export interface SquareChoice {
   refusal: string | null;
   /**
    * For a mine or a seal that is allowed but risky: the squares it would make
-   * unstable (design doc 11), and `warning`, the sentence that names them. The play
-   * tool and the phone map ask the player to confirm such a mine. Empty and
-   * `null` for everything else.
+   * unstable (design doc 11), the unstable ore a mine would arm (design doc
+   * 6.6), and `warning`, the sentence that names them. The play tool and the
+   * phone map ask the player to confirm such a mine or seal. Empty and `null`
+   * for everything else.
    */
   makesUnstable: UnstableSquare[];
+  /** The squares whose unstable ore this mine would arm. */
+  armsOre: Square[];
   warning: string | null;
   /**
    * For a refused "camp x,y": the squares of the 3 x 3 patch that are in the
@@ -93,11 +103,25 @@ export interface SquareChoice {
 }
 
 function allowed(entry: SquareEntry): SquareChoice {
-  return { entry, refusal: null, makesUnstable: [], warning: null, blockedSquares: [] };
+  return {
+    entry,
+    refusal: null,
+    makesUnstable: [],
+    armsOre: [],
+    warning: null,
+    blockedSquares: [],
+  };
 }
 
 function refused(refusal: string, blockedSquares: Square[] = []): SquareChoice {
-  return { entry: null, refusal, makesUnstable: [], warning: null, blockedSquares };
+  return {
+    entry: null,
+    refusal,
+    makesUnstable: [],
+    armsOre: [],
+    warning: null,
+    blockedSquares,
+  };
 }
 
 /** "x3 y4": how a square is written in every sentence. */
@@ -190,16 +214,50 @@ export function mineChoice(state: GameState, x: number, y: number): SquareChoice
   // seen by the player (depths, top blocks, trees, supports), so naming them
   // tells nothing hidden.
   const makesUnstable = unstableAfterMine(state, x, y);
-  if (makesUnstable.length === 0) {
+  // The unstable ore this mine would arm: ore the player sees, beside the
+  // mined block (design doc 6.6). `oreArmedByMine` reads only what is seen.
+  const armsOre = oreArmedByMine(state, x, y).map((cell) => ({ x: cell.x, y: cell.y }));
+  if (makesUnstable.length === 0 && armsOre.length === 0) {
     return allowed(entry);
+  }
+  const warnings: string[] = [];
+  if (armsOre.length > 0) {
+    warnings.push(armsOreWarning(state, x, y, armsOre));
+  }
+  if (makesUnstable.length > 0) {
+    warnings.push(unstableWarning(state, x, y, makesUnstable));
   }
   return {
     entry,
     refusal: null,
     makesUnstable,
-    warning: unstableWarning(state, x, y, makesUnstable),
+    armsOre,
+    warning: warnings.join(' '),
     blockedSquares: [],
   };
+}
+
+/** "x3 y4, x4 y4 and x5 y4": the squares of a blast, for a sentence. */
+export function blastText(state: GameState, x: number, y: number): string {
+  return joinWithAnd(blastSquares(state, x, y).map((square) => squareText(square.x, square.y)));
+}
+
+/**
+ * The warning for a mine that would arm unstable ore: which ore, when it
+ * goes off, which squares its blast covers, and how to avoid it.
+ */
+function armsOreWarning(state: GameState, x: number, y: number, ore: Square[]): string {
+  const parts = ore.map(
+    (square) =>
+      `the unstable ore on ${squareText(square.x, square.y)} ` +
+      `(its blast covers ${blastText(state, square.x, square.y)})`,
+  );
+  return (
+    `Mining ${squareText(x, y)} would ARM ${joinWithAnd(parts)}: it goes off when this shift ` +
+    `ends, and ${squareText(x, y)} is in the blast, so the crew would lose ` +
+    `${CREW.damage.explosion} health. To avoid it, mine the ore itself first (it yields, and ` +
+    'never goes off when mined) or place a support on its square before mining beside it.'
+  );
 }
 
 /** "x3 y4 (Dirt, at the top of a slope that falls 2)". */
@@ -278,6 +336,56 @@ export function supportChoice(state: GameState, x: number, y: number): SquareCho
   }
   return allowed({ type: 'placeSupport', x, y, ap: check.ap });
 }
+
+/**
+ * "explosive x,y": the action that places an explosive on the square (x, y),
+ * or why it is refused: off the map, no explosive to place, a tree, no block
+ * left, something already placed there, lava, a camp, or too little AP.
+ */
+export function explosiveChoice(state: GameState, x: number, y: number): SquareChoice {
+  if (!isRunActive(state)) {
+    return refused('The run has ended.');
+  }
+  const offMap = offMapRefusal(state, x, y);
+  if (offMap !== null) {
+    return refused(offMap);
+  }
+  const where = squareText(x, y);
+  const check = explosiveCheck(state, x, y);
+  if (check.refusal === 'noExplosive') {
+    return refused(
+      'You have no explosive to place: a camp makes one ("craft-explosive" while a camp stands).',
+    );
+  }
+  if (check.refusal === 'tree') {
+    return refused(`A tree stands on ${where}: nothing is placed on a tree.`);
+  }
+  if (check.refusal === 'bottom') {
+    return refused(`${where} has no block left to blast: it is at the bedrock floor.`);
+  }
+  if (check.refusal === 'occupied') {
+    return refused(`Something is already placed on ${where}: a square holds one thing.`);
+  }
+  if (check.refusal === 'camp') {
+    return refused(`A camp stands on ${where}: nothing is placed on a camp square.`);
+  }
+  if (check.refusal === 'lava') {
+    return refused(`Lava stands on ${where}: nothing is placed on lava.`);
+  }
+  if (check.ap === null) {
+    // `explosiveCheck` gives a cost whenever it gives no refusal.
+    return refused(`An explosive cannot be placed on ${where}.`);
+  }
+  if (check.ap > state.ap) {
+    return refused(
+      `Placing an explosive costs ${check.ap} AP and you have ${state.ap} left this shift.`,
+    );
+  }
+  return allowed({ type: 'placeExplosive', x, y, ap: check.ap });
+}
+
+/** What placing an explosive costs in AP, for the lines that say how to. */
+export const EXPLOSIVE_AP = ACTION_COSTS.placeExplosive;
 
 // ---------------------------------------------------------------------------
 // Camp-made tools: pump, sealant, scanner (design doc 7.2; issue #104)
@@ -410,6 +518,7 @@ export function sealChoice(state: GameState, x: number, y: number): SquareChoice
       `Sealing ${squareText(x, y)} would make ${joinWithAnd(names)} unstable. ` +
       `${it} would crack when the shift ends and slump into the pit later, taking the sealed rock ` +
       'with it, unless it is supported or the slope is made gentler first.',
+    armsOre: [],
     blockedSquares: [],
   };
 }
@@ -641,6 +750,7 @@ export const SQUARE_CHOICE_KINDS = [
   'mine',
   'cut',
   'support',
+  'explosive',
   'camp',
   'rest',
   'decommission',
@@ -658,9 +768,9 @@ const SQUARE_CHOICE_PATTERN = new RegExp(
 
 /**
  * Read a typed choice as a square action: "mine 3,4", "cut 3,4",
- * "support 3,4", "camp 3,4", "rest 3,4", "decommission 3,4", "pump 3,4",
- * "seal 3,4" or "scan 3,4" (a space or a dash after the word, a comma
- * between the numbers). "mine! 3,4" (or "seal! 3,4") is one the player has confirmed: it is taken even
+ * "support 3,4", "explosive 3,4", "camp 3,4", "rest 3,4", "decommission 3,4",
+ * "pump 3,4", "seal 3,4" or "scan 3,4" (a space or a dash after the word, a
+ * comma between the numbers). "mine! 3,4" (or "seal! 3,4") is one the player has confirmed: it is taken even
  * if it would make squares unstable. `null` if the text is not of that form;
  * then it is something else (a listed choice, or a mistake).
  */

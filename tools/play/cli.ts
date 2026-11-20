@@ -29,6 +29,7 @@ import {
   parseSquareChoice,
   pumpChoice,
   restChoice,
+  explosiveChoice,
   scanChoice,
   sealChoice,
   supportChoice,
@@ -117,8 +118,8 @@ export function parseArgs(args: string[]): CliOptions {
  * "mine 3,4, cut 5,6,end" -> ["mine 3,4", "cut 5,6", "end"].
  *
  * A square is written with a comma too ("mine 3,4"), so a comma that stands
- * between the two numbers of a square choice (mine, cut, support, camp, rest,
- * decommission, pump, seal, scan) is not a break. A semicolon is always a break, for anyone who
+ * between the two numbers of a square choice (mine, cut, support, explosive,
+ * camp, rest, decommission, pump, seal, scan) is not a break. A semicolon is always a break, for anyone who
  * would rather not rely on that.
  */
 export function splitChoices(text: string): string[] {
@@ -156,13 +157,15 @@ function parseLook(choice: string): { x: number; y: number } | null {
 /**
  * The entry a typed choice stands for, or the reason it is refused.
  *
- * - "mine 3,4", "cut 3,4", "support 3,4" and "camp 3,4" name a square;
+ * - "mine 3,4", "cut 3,4", "support 3,4", "explosive 3,4" and "camp 3,4" name
+ *   a square;
  *   "rest 3,4" and "decommission 3,4" name a camp by its centre square. A
  *   refused one says why (a tree, the level rule and which neighbours are too
  *   high, a patch that is not flat, too little AP, ...): see squares.ts.
  * - "pump 3,4", "seal 3,4" and "scan 3,4" use a camp-made tool on a square.
- * - A mine that would make squares unstable is refused the first time, with
- *   a warning that names them; "mine! 3,4" takes it all the same.
+ * - A mine that would make squares unstable, or arm unstable ore, is refused
+ *   the first time, with a warning that names them; "mine! 3,4" takes it all
+ *   the same.
  * - 1, 2, ... are the lines of the action list in order, and 0 ends the
  *   shift.
  * - A name ("craft-fuel", "close-mine", "end") is the line of the list that has
@@ -187,6 +190,9 @@ export function resolveChoice(state: GameState, choice: string): ResolvedChoice 
     }
     if (square.kind === 'support') {
       return supportChoice(state, square.x, square.y);
+    }
+    if (square.kind === 'explosive') {
+      return explosiveChoice(state, square.x, square.y);
     }
     if (square.kind === 'camp') {
       return campChoice(state, square.x, square.y);
@@ -248,7 +254,7 @@ export function resolveChoice(state: GameState, choice: string): ResolvedChoice 
   return {
     entry: null,
     refusal:
-      'It is not a choice as things stand now. Type "mine X,Y", "cut X,Y", "support X,Y", "camp X,Y", "pump X,Y", "seal X,Y" or "scan X,Y" for a square, ' +
+      'It is not a choice as things stand now. Type "mine X,Y", "cut X,Y", "support X,Y", "explosive X,Y", "camp X,Y", "pump X,Y", "seal X,Y" or "scan X,Y" for a square, ' +
       `a number from 1 to ${numbered.length} or a name from the list, or 0 / end to end the shift.`,
   };
 }

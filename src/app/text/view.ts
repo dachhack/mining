@@ -54,6 +54,7 @@ import {
   depthName,
   describeChoice,
   describeForecastFlows,
+  describeForecastGas,
   describeForecastSlumps,
   runEndText,
   tellNames,
@@ -62,6 +63,7 @@ import { END_SHIFT, listedChoices } from './log';
 import type { LogEntry } from './log';
 import { tooLittleApNote } from './missing';
 import {
+  EXPLOSIVE_AP,
   FLOODED_EXTRA_AP,
   PUMP_AP,
   PUMP_REACH,
@@ -71,6 +73,7 @@ import {
   SCAN_WIDTH,
   SEAL_AP,
   SUPPORT_AP,
+  blastText,
   patchText,
   squareText,
 } from './squares';
@@ -80,6 +83,7 @@ import {
   MARK_UNSEEN,
   SYMBOL_CAMP,
   SYMBOL_FLOOR,
+  SYMBOL_GAS,
   SYMBOL_LAVA,
   SYMBOL_TRACES,
   SYMBOL_TREE,
@@ -130,6 +134,12 @@ export interface SquareChoicesView {
   supports: number;
   /** What placing a support costs, in AP. */
   supportAp: number;
+  /** How many explosives are in the stockpile. */
+  explosivesHeld: number;
+  /** How many squares an explosive can be placed on now, with the AP left. */
+  explosives: number;
+  /** What placing an explosive costs, in AP. */
+  explosiveAp: number;
   /** How many camp kits are in the stockpile. */
   campKitsHeld: number;
   /** How many centre squares a camp can be founded round now. */
@@ -215,9 +225,9 @@ function blockMeaning(code: number): string {
  * The two map characters of a square, from what `knownSquare` says of it.
  *
  * - First character: `Y` for a tree; `X` for a square with no block left;
- *   `A` for a camp square (`isCamp`); `!` for a square with lava on it and
- *   `~` for one with water on it (the notes under the map name the block
- *   under it); otherwise the top block's character (its "traced" character
+ *   `A` for a camp square (`isCamp`); `!` for a square with lava on it,
+ *   `~` for one with water on it and `*` for one with gas on it (the notes
+ *   under the map name the block under it); otherwise the top block's character (its "traced" character
  *   if the map shows mineral traces on it).
  * - Second character: for a dug square, its depth (`depthMark`). At ground
  *   level there is no depth to show, so it is a space for open ground and
@@ -271,6 +281,16 @@ function squareCell(square: KnownSquare, bottomDepth: number, isCamp: boolean): 
         '(the notes say how much water, and which block is under it)',
     };
   }
+  // Gas too: it hurts the crew where it works, and it burns.
+  if (square.contents.gas > 0) {
+    return {
+      text: SYMBOL_GAS + mark,
+      symbol: SYMBOL_GAS,
+      meaning:
+        `gas stands on the square: it takes ${CREW.damage.gas} health if the crew works there, ` +
+        'and explodes if lava or a blast reaches it (the notes say how much gas, and which block is under it)',
+    };
+  }
   const code = square.top.block;
   if (square.traces) {
     // Traced rock has a character of its own for each kind of rock, so the
@@ -319,8 +339,8 @@ function onTopNote(square: KnownSquare, crackRunning: boolean): string | null {
     return null;
   }
   const things: string[] = contentsNames(square);
-  // The map draws the water or lava in place of the block, so name the block.
-  if (square.contents.water > 0 || square.contents.lava > 0) {
+  // The map draws the water, lava or gas in place of the block, so name the block.
+  if (square.contents.water > 0 || square.contents.lava > 0 || square.contents.gas > 0) {
     things.push(`over ${blockMeaning(top.block)}`);
   }
   // The countdown: 1 means "falls when this shift ends". A stopped one is
@@ -333,7 +353,14 @@ function onTopNote(square: KnownSquare, crackRunning: boolean): string | null {
     );
   }
   const structure = structureName(top.structure);
-  if (structure !== null) things.push(`a ${structure}`);
+  if (top.armed === 'explosive') {
+    things.push('an explosive: it goes off when this shift ends');
+  } else if (structure !== null) {
+    things.push(`a ${structure}`);
+  }
+  if (top.armed === 'unstableOre') {
+    things.push('ARMED unstable ore: it goes off when this shift ends');
+  }
   if (things.length === 0) {
     return null;
   }
@@ -485,7 +512,8 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   if (tells.length > 0) {
     notes.push(
       'Tells on top blocks (damp: water under or beside; pitted: gas under or beside; ' +
-        `warm glow: lava within 2; hairline glow: unstable ore): ${tells.join('; ')}`,
+        'warm glow: lava within 2; hairline glow: unstable ore, which is armed by mining beside it): ' +
+        tells.join('; '),
     );
   }
   if (stumps.length > 0) {
@@ -555,11 +583,22 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   // with what ending the shift then does.
   const preview = previewCubePhase(state);
   // The countdowns the player can read: every cracked square (design doc
-  // 6.1), with when it falls and where to. T14 words the other kinds.
+  // 6.1), with when it falls and where to; then every placed explosive and
+  // every armed unstable ore block, with the squares of its blast (6.6).
   const hazards = preview.countdowns.map((countdown) => {
     const where = squareText(countdown.pos.x, countdown.pos.y);
-    if (countdown.kind !== 'slump') {
-      return `${countdown.kind} in ${countdown.inShifts} shift(s) at ${where}`;
+    if (countdown.kind === 'explosive') {
+      return (
+        `the explosive on ${where} goes off at the end of this shift: ` +
+        `its blast covers ${blastText(state, countdown.pos.x, countdown.pos.y)}`
+      );
+    }
+    if (countdown.kind === 'unstableOre') {
+      return (
+        `the unstable ore on ${where} is ARMED and goes off at the end of this shift ` +
+        `(mine it first and it does not): its blast covers ` +
+        blastText(state, countdown.pos.x, countdown.pos.y)
+      );
     }
     if (!countdown.running || countdown.to === null) {
       return (
@@ -594,6 +633,11 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     for (const sentence of describeForecastFlows(preview.flows)) {
       forecast += ` ${sentence}`;
     }
+    // What step (c) will do: gas spreads, charges and armed ore go off, gas
+    // burns (design doc 6.5 and 6.6).
+    for (const sentence of describeForecastGas(state, preview.gas)) {
+      forecast += ` ${sentence}`;
+    }
     if (preview.regrowth.length > 0) {
       const cells = preview.regrowth.map((cell) => squareText(cell.x, cell.y)).join(', ');
       forecast += ` A tree grows back on the stump at ${cells}.`;
@@ -611,6 +655,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   // The mines, cuts and supports on offer are counted from the engine's own list.
   let cuts = 0;
   let supports = 0;
+  let explosives = 0;
   let campSites = 0;
   for (const action of legalActions(state)) {
     if (action.type === 'mine') {
@@ -619,6 +664,8 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       cuts += 1;
     } else if (action.type === 'placeSupport') {
       supports += 1;
+    } else if (action.type === 'placeExplosive') {
+      explosives += 1;
     } else if (action.type === 'foundCamp') {
       campSites += 1;
     }
@@ -666,6 +713,9 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       supportsHeld: countItem(state, STRUCTURES.support.placedFromItem),
       supports,
       supportAp: SUPPORT_AP,
+      explosivesHeld: countItem(state, STRUCTURES.explosive.placedFromItem),
+      explosives,
+      explosiveAp: EXPLOSIVE_AP,
       campKitsHeld: countItem(state, CAMPS.kitItem),
       campSites,
       pumpsHeld: countItem(state, STRUCTURES.pump.placedFromItem),
@@ -753,7 +803,8 @@ export function forecastLine(view: PlayerView): string {
 }
 
 /**
- * The lines that say how to mine, cut, place a support and found a camp:
+ * The lines that say how to mine, cut, place a support or an explosive and
+ * found a camp:
  * the squares are named, not listed. Empty once the run is over.
  */
 export function squareChoiceLines(view: PlayerView): string[] {
@@ -767,6 +818,10 @@ export function squareChoiceLines(view: PlayerView): string[] {
     squares.supportsHeld === 0
       ? 'You have none: craft-support makes one.'
       : `You have ${squares.supportsHeld}.`;
+  const explosivesHeld =
+    squares.explosivesHeld === 0
+      ? 'You have none: a camp makes them.'
+      : `You have ${squares.explosivesHeld}.`;
   const siteCount =
     squares.campSites === 1 ? '1 centre square' : `${squares.campSites} centre squares`;
   const kits =
@@ -802,6 +857,8 @@ export function squareChoiceLines(view: PlayerView): string[] {
     `    cut X,Y      [${squares.cutAp}] Cut the tree on square x X, y Y. ${cutCount} can be cut now.`,
     `    support X,Y  [${squares.supportAp}] Place a support on square x X, y Y: ` +
       `it holds that square against slumping. ${held}`,
+    `    explosive X,Y [${squares.explosiveAp}] Place an explosive on square x X, y Y: when the shift ends ` +
+      `it destroys the top block of that square and of the squares beside it. ${explosivesHeld}`,
     `    camp X,Y     [all AP left] Found a camp on the flat 3 x 3 patch whose centre is square x X, y Y ` +
       `(no tree, water, lava, gas or structure on it). ${kits}`,
     ...tools,

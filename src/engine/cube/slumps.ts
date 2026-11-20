@@ -38,7 +38,7 @@ import type { DepthMap, Square } from '../heightmap';
 import { stabilityIn } from '../slump';
 import {
   blockAt,
-  clearCrack,
+  buryTopBlock,
   crackTimerAt,
   gasAt,
   inGrid,
@@ -147,7 +147,8 @@ function slumpBlock(
   const buriedCell = { x: foot.x, y: foot.y, z: footDepth };
   if (inGrid(state.size, buriedCell)) {
     destroyStructure(state, buriedCell, 'rockfall', events);
-    clearCrack(state, buriedCell);
+    // Its crack goes, and armed unstable ore under the rubble is smothered.
+    buryTopBlock(state, buriedCell);
   }
   destroyCampsAt(state, toCell, 'rockfall', events);
   liftContents(state, toCell);

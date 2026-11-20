@@ -1,7 +1,8 @@
 // What hazards do to a camp (design doc v0.2 section 8, "Vulnerability";
-// issues #100 and #99). Slumps (task T8), water and lava (T10) are built;
-// explosions call the same `destroyCampsAt` when their task builds them
-// (T11), and tests/engine/destroy.test.ts pins that function.
+// issues #100 and #99). Slumps (task T8), water and lava (T10) are here;
+// explosions (T11) call the same `destroyCampsAt` and are tested in
+// explosions.test.ts and gas.test.ts. tests/engine/destroy.test.ts pins that
+// function.
 
 import { describe, expect, it } from 'vitest';
 import { CREW } from '../../src/data';

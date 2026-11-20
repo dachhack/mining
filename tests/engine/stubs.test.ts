@@ -16,7 +16,6 @@
 import { describe, expect, it } from 'vitest';
 import { actionKey, sameAction } from '../../src/engine';
 import type { Action } from '../../src/engine';
-import { buildState } from './helpers';
 
 describe('actionKey and sameAction', () => {
   // One of each kind of action.
@@ -27,7 +26,7 @@ describe('actionKey and sameAction', () => {
     { type: 'craft', recipe: 'support', ap: 1 },
     { type: 'closeMine', ap: 0 },
     // The M2 actions (decision note 0015).
-    { type: 'placeExplosive', target: { x: 1, y: 2, z: 3 }, ap: 1 },
+    { type: 'placeExplosive', x: 1, y: 2, ap: 1 },
     { type: 'placePump', x: 1, y: 2, ap: 1 },
     { type: 'placeVent', x: 1, y: 2, ap: 1 },
     { type: 'seal', x: 1, y: 2, ap: 1 },
@@ -57,22 +56,5 @@ describe('actionKey and sameAction', () => {
     expect(sameAction(craft, { ...craft, recipe: 'fuel' })).toBe(false);
     const scan: Action = { type: 'scan', x: 1, y: 2, ap: 2 };
     expect(sameAction(scan, { ...scan, y: 3 })).toBe(false);
-  });
-});
-
-describe('the M2 action modules are stubs (decision note 0015)', () => {
-  // One test for each stub module, each with its own import inside it, so
-  // that the task filling a module in deletes one block here and touches no
-  // line another task touches. `await import(...)` loads a module where it
-  // is needed, like an `import` statement inside a Python function.
-  const state = buildState({
-    layers: [['#.#'], ['###']],
-    revealAll: true,
-    stockpile: { explosive: 1, pump: 1, vent: 1, sealant: 1 },
-  });
-
-  it('placeExplosive offers nothing (until M2-5)', async () => {
-    const { legalPlaceExplosiveActions } = await import('../../src/engine/actions/placeExplosive');
-    expect(legalPlaceExplosiveActions(state)).toEqual([]);
   });
 });

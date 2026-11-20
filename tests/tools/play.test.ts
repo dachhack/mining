@@ -249,6 +249,9 @@ describe('the action list', () => {
       supportsHeld: 0,
       supports: 0,
       supportAp: 1,
+      explosivesHeld: 0,
+      explosives: 0,
+      explosiveAp: 1,
       campKitsHeld: 0,
       campSites: 0,
       // The camp-made tools (issue #104): none at the start of a run.
@@ -744,7 +747,8 @@ describe('the help text', () => {
     expect(help).toContain(
       `warm glow      a lava pocket lies within ${TELLS.hazards.warmGlowDistance} steps`,
     );
-    expect(help).toContain('Gas that comes out of a pocket stays on the square');
+    // Gas spreads and burns since issue #103: see playGas.test.ts.
+    expect(help).toContain('Gas, unstable ore and explosives');
     expect(help).toContain('goes straight into the stockpile');
     expect(help).toContain('The stockpile has no limit');
     expect(help).toContain('close-mine               close the mine (ends the run alive)');
