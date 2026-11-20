@@ -20,6 +20,8 @@
 
 import { BLOCKS, HAZARDS, NO_STRUCTURE, WORLD } from '../data';
 import type { BlockId, Vec3 } from '../data';
+import { contentsOn } from './breach';
+import type { SquareContents } from './breach';
 import { depthAt } from './heightmap';
 import {
   armedAt,
@@ -37,15 +39,17 @@ import {
 } from './state';
 import type { ArmedKind, GameState } from './state';
 import { hasTree, surfaceKindAt } from './surface/state';
+import { NO_HAZARD_TELLS, hazardTellsAt } from './tells';
+import type { HazardTells } from './tells';
 import { showsMineralTraces } from './tells';
 
 /** What the player sees of one revealed cell. */
 export interface KnownCell {
   /** The block code. 0 is open space. */
   block: number;
-  /** Units of water: 0 or 1. */
+  /** Units of water. */
   water: number;
-  /** Units of lava: 0 or 1. */
+  /** Units of lava. */
   lava: number;
   /** True if the lava here is a source (0014 item 16). */
   lavaSource: boolean;
@@ -108,6 +112,19 @@ export interface KnownSquare {
   top: KnownCell | null;
   /** True if the map shows mineral traces on the top block. */
   traces: boolean;
+  /**
+   * What stands on the square, in the open above its top block: units of
+   * water, lava and gas (design doc 3.4: all of it is seen). All 0 on a
+   * square nothing has been released onto.
+   */
+  contents: SquareContents;
+  /**
+   * The hazard tells the top block shows (design doc 3.7): damp stone, pitted
+   * rock, warm glow, hairline glow. All false while the top block is not
+   * known. Like mineral traces, a tell depends on something hidden near the
+   * block: that is what it is for.
+   */
+  tells: HazardTells;
 }
 
 /**
@@ -115,15 +132,17 @@ export interface KnownSquare {
  * read a square through (the play tool, the phone map), so that none of them
  * can show a block below a top by mistake.
  *
- * Reads the square's depth, its surface cell, and its top block if that is
- * revealed. Nothing below the top block is read. Throws if (x, y) is not a
- * square. Does not change `state`.
+ * Reads the square's depth, its surface cell, what stands on it, and its top
+ * block if that is revealed. Nothing below the top block is read, except by
+ * the tells (`traces` and `tells`), which say that something hidden is near
+ * and no more. Throws if (x, y) is not a square. Does not change `state`.
  */
 export function knownSquare(state: GameState, x: number, y: number): KnownSquare {
   const depth = depthAt(state, x, y);
   const surfaceCell = { x, y, z: WORLD.surfaceZ };
   const hasBlock = depth < state.size.z;
   const topPos = { x, y, z: depth };
+  const topKnown = hasBlock && isRevealed(state, topPos);
   return {
     x,
     y,
@@ -132,6 +151,8 @@ export function knownSquare(state: GameState, x: number, y: number): KnownSquare
     surfaceKind: surfaceKindAt(state, surfaceCell),
     top: hasBlock ? knownCell(state, topPos) : null,
     traces: hasBlock && showsMineralTraces(state, topPos),
+    contents: contentsOn(state, x, y),
+    tells: topKnown ? hazardTellsAt(state, topPos) : { ...NO_HAZARD_TELLS },
   };
 }
 

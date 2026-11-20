@@ -57,12 +57,23 @@ export type GameEvent =
   /** The block at `pos` was mined out. `block` is the code of what was there. */
   | { type: 'blockMined'; pos: Vec3; block: number }
   /**
-   * The mined block was the roof of an open space, which fell in: the cell
-   * `pos`, the square's new top, is now rubble (decision note 0026). It
-   * follows the `blockMined` of the same action. How deep the space was is
-   * not said: that is below the top, which the player does not see.
+   * The mined block was the roof of an underground space (a cavern or a
+   * pocket), which collapsed to rubble at once (design doc 6.2; breach.ts).
+   * `pos` is the square's new top block, now rubble. `water`, `lava` and
+   * `gas` are the units the space held, which now stand on that square;
+   * `lavaSource` is true if the lava keeps pouring. All four are 0 or false
+   * for a cavern. It follows the `blockMined` of the same action. Where the
+   * rest of the space was is not said: that is below the tops, which the
+   * player does not see.
    */
-  | { type: 'roofCollapsed'; pos: Vec3 }
+  | {
+      type: 'spaceCollapsed';
+      pos: Vec3;
+      water: number;
+      lava: number;
+      gas: number;
+      lavaSource: boolean;
+    }
   /** The block at `pos` became known to the player. `block` is its code. */
   | { type: 'blockRevealed'; pos: Vec3; block: number }
   /**

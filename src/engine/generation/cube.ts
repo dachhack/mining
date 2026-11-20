@@ -5,6 +5,9 @@
 // 2. Veins. Band by band and ore by ore, groups of connected ore blocks
 //    replace some of that rock.
 //
+// Underground spaces (caverns and pockets) are opened afterwards, by
+// `generateSpaces` in spaces.ts.
+//
 // Every number used here is in src/data/generation.ts.
 
 import { BLOCKS, GENERATION } from '../../data';
@@ -16,7 +19,7 @@ import { bandLayersForDepth } from './bands';
 
 // The six face neighbours of a cell. The order is fixed, because the order in
 // which a vein looks at its neighbours decides which random number goes where.
-const NEIGHBOUR_OFFSETS: Vec3[] = [
+export const NEIGHBOUR_OFFSETS: readonly Vec3[] = [
   { x: 1, y: 0, z: 0 },
   { x: -1, y: 0, z: 0 },
   { x: 0, y: 1, z: 0 },
@@ -26,7 +29,7 @@ const NEIGHBOUR_OFFSETS: Vec3[] = [
 ];
 
 /** The code stored in the cube for the block with this id. Throws on an unknown id. */
-function blockCode(blockId: string): number {
+export function blockCode(blockId: string): number {
   // `Record<string, ...>` lets the table be indexed by any string; the result
   // is then "a block or undefined", which the check below narrows.
   const table: Record<string, { code: number }> = BLOCKS;
@@ -38,7 +41,7 @@ function blockCode(blockId: string): number {
 }
 
 /** The generation entry for a band. Throws if the data has none. */
-function bandDefFor(bandId: string): BandGenerationDef {
+export function bandDefFor(bandId: string): BandGenerationDef {
   const bandDef = GENERATION.bands.find((entry) => entry.bandId === bandId);
   if (bandDef === undefined) {
     throw new Error(`Generation data has no entry for depth band: ${bandId}`);
@@ -80,28 +83,27 @@ function pickRock(rocks: RockWeight[], depthInBand: number, rng: RngState): numb
 }
 
 /**
- * Try to grow one vein of `oreCode` from the cell `startIndex`.
+ * Try to grow one connected group of cells from the cell `startIndex`, and
+ * store `code` in each: an ore for a vein, open space for a cavern or pocket.
  *
- * The vein spreads one block at a time into a random cell next to it, so it
- * is always one 6-connected group. It only replaces cells for which
- * `canReplace[cell]` is 1 (plain rock of its own band), so it never leaves
- * its band and never eats another vein.
+ * The group spreads one cell at a time into a random cell next to it, so it
+ * is always one 6-connected group. It only takes cells for which
+ * `canReplace[cell]` is 1, and sets that to 0 for each cell it takes.
  *
- * Exported only so that a test can grow a single vein.
- *
- * Returns true if the vein reached `minSize`. If it could not (it was boxed
- * in), every cell it changed is put back and the result is false.
+ * Returns the cells of the group (as `cellIndex` numbers, in the order they
+ * were taken) if it reached `minSize`. If it could not (it was boxed in),
+ * every cell it changed is put back and the result is `null`.
  */
-export function growVein(
+export function growGroup(
   blocks: Uint8Array,
   canReplace: Uint8Array,
   size: CubeSize,
   startIndex: number,
-  oreCode: number,
+  code: number,
   minSize: number,
   targetSize: number,
   rng: RngState,
-): boolean {
+): number[] | null {
   // What each changed cell held before, so a failed vein can be undone.
   const changedCells: number[] = [];
   const blocksBefore: number[] = [];
@@ -123,7 +125,7 @@ export function growVein(
 
     changedCells.push(cell);
     blocksBefore.push(blocks[cell] as number);
-    blocks[cell] = oreCode;
+    blocks[cell] = code;
     canReplace[cell] = 0;
 
     const pos = cellPosition(size, cell);
@@ -139,14 +141,38 @@ export function growVein(
   }
 
   if (changedCells.length >= minSize) {
-    return true;
+    return changedCells;
   }
   for (let i = 0; i < changedCells.length; i += 1) {
     const cell = changedCells[i] as number;
     blocks[cell] = blocksBefore[i] as number;
     canReplace[cell] = 1;
   }
-  return false;
+  return null;
+}
+
+/**
+ * Try to grow one vein of `oreCode` from the cell `startIndex` (see
+ * `growGroup`). `canReplace` marks the plain rock of the vein's own band, so
+ * a vein never leaves its band and never eats another vein.
+ *
+ * Exported only so that a test can grow a single vein.
+ *
+ * Returns true if the vein reached `minSize`; otherwise nothing is changed
+ * and the result is false.
+ */
+export function growVein(
+  blocks: Uint8Array,
+  canReplace: Uint8Array,
+  size: CubeSize,
+  startIndex: number,
+  oreCode: number,
+  minSize: number,
+  targetSize: number,
+  rng: RngState,
+): boolean {
+  const cells = growGroup(blocks, canReplace, size, startIndex, oreCode, minSize, targetSize, rng);
+  return cells !== null;
 }
 
 /** Place all the veins of one ore in one band. `layers` are the band's layers, top first. */
@@ -196,9 +222,10 @@ function placeVeins(
  * - It works for any size, including the small cubes tests use. A cube that
  *   is not 32 layers deep gets the depth bands in proportion (see bands.ts).
  * - It generates dirt, stone, hard rock, coal, timber-root, iron ore, copper
- *   ore and crystal in the depth bands of design doc 3.1 (0005 items 3 and 4):
- *   each block appears only in the bands that list it in
- *   src/data/generation.ts. It generates no open space.
+ *   ore, crystal and unstable ore in the depth bands of design doc 3.3 (0005
+ *   items 3 and 4): each block appears only in the bands that list it in
+ *   src/data/generation.ts. It generates no open space: `generateSpaces`
+ *   (spaces.ts) opens the caverns and pockets afterwards.
  * - Ore is in veins (design doc 3.3): each vein is a 6-connected group of at
  *   least the ore's `minSize` blocks, all in one band. Two veins of the same
  *   ore may touch and so look like one larger vein.

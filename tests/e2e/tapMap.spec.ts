@@ -3,8 +3,10 @@
 // marks the neighbours that are too high, tap a tree to cut it; drag to pan,
 // and the two zoom buttons.
 //
-// Seed 7 (see `npm run play -- --seed 7`): the map starts on its middle.
-// x12..x16 of row y16 are dirt on open ground, and a tree stands on x19 y15.
+// Seed 110 (see `npm run play -- --seed 110`): the map starts on its middle.
+// x12..x16 of row y16 are dirt on open ground, x17 y16 is stone, and a tree
+// stands on x19 y15. There is no start clearing any more (issue #95), so on
+// most seeds the middle is forest: the seed was picked for this layout.
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 
@@ -43,7 +45,7 @@ test.beforeEach(async ({ page }) => {
     window.localStorage.clear();
   });
   await page.reload();
-  await startRun(page, 7);
+  await startRun(page, 110);
 });
 
 test('the map starts on the middle, with squares big enough to tap', async ({ page }) => {

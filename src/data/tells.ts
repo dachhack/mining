@@ -17,9 +17,9 @@ export const TELLS: TellsData = {
     // The plain rock traces show on.
     shownOnBlocks: ['dirt', 'stone', 'hardRock'],
   },
-  // Hazard tells (design doc 6.2 to 6.4; 0014 item 18): how near the hazard
-  // must be, in steps through the grid, for a block to show its tell. Nothing
-  // reads these until the tells task (M2-6).
+  // Hazard tells (design doc 3.7; 0014 item 18): how near a pocket must be,
+  // in steps through the grid (down as well as sideways), for a block to show
+  // its tell. Read by `hazardTellsAt` in src/engine/tells.ts.
   hazards: {
     dampStoneDistance: 1,
     pittedRockDistance: 1,

@@ -1,35 +1,35 @@
-// Growing the forest on a new cube (issue #70 item 2; decision note 0020).
+// Growing the forest on a new cube (issue #70 item 2; decision note 0020;
+// design doc v0.2 section 3.2; issue #95).
 //
-// `generateSurface` runs once, in `createRun`, right after the cube is
-// generated, and draws from the same seeded generator (`state.rng`). Every
-// number is in `SURFACE.generation` (src/data/surface.ts). In order:
+// `generateSurface` runs once, in `createRun`, after the cube and its
+// underground spaces are generated, and draws from the same seeded generator
+// (`state.rng`). Every number is in `SURFACE.generation`
+// (src/data/surface.ts). In order:
 //
 // 1. Every surface cell starts as a tree.
-// 2. The start clearing: the start cell and the cells round it are meadow.
-// 3. Meadows: a few round clearings, away from the start and the edges.
-// 4. Dirt paths: from the start cell, a winding path to the middle of each
-//    meadow and to a cell on each of `pathEdges` different edges of the cube.
-//    Under a path cell, plain rock in layer 0 is worn to dirt.
-// 5. Stone outcrops: each tree cell over stone becomes an outcrop with the
+// 2. Meadows: a few round clearings, away from the edges.
+// 3. Dirt paths: winding paths from the middle of the first meadow (the
+//    "hub") to the middle of each other meadow and to a cell on each of
+//    `pathEdges` different edges of the cube.
+// 4. Stone outcrops: each tree cell over stone becomes an outcrop with the
 //    chance in the data.
 // Coal in sight at the start is a separate step, `ensureCoalInSight`.
 //
-// There is no miner since issue #86, so the "start" below is only the hub the
-// clearing and the paths are laid out from (`WORLD.startPosition`). Design
-// doc v0.2 section 3.2 drops the start clearing and the path wear; that is
-// the generation task's (T7), not done here.
+// There is no miner and nobody walks (design doc v0.2), so there is no start
+// cell: no start clearing, and paths are scenery. A path is open ground over
+// whatever block is there; it does not wear stone to dirt any more.
 //
-// What the player cannot see. Steps 1 to 4 read nothing of the cube, so where
-// the trees, meadows and paths are says nothing about the ground. Step 5 is
+// What the player cannot see. Steps 1 to 3 read nothing of the cube, so where
+// the trees, meadows and paths are says nothing about the ground. Step 4 is
 // the one rule that looks at layer 0, and what it reads it shows: an outcrop
 // is open ground over stone, so the stone is revealed. (So a tree is a little
 // less likely to stand over stone than it would be without outcrops; issue
-// #70 accepts that.)
+// #70 accepts that.) Nothing below layer 0 is ever read here.
 
 import { BLOCKS, SURFACE, WORLD } from '../../data';
 import type { Vec3 } from '../../data';
 import { nextFloat, nextInt } from '../rng';
-import { blockAt, isSolid, setBlock } from '../state';
+import { blockAt, setBlock } from '../state';
 import type { GameState } from '../state';
 import { setSurfaceKind, surfaceCells, surfaceKindAt } from './state';
 
@@ -77,7 +77,7 @@ const STEPS: readonly { dx: number; dy: number }[] = [
  * leaves the footprint. Since turns run out, the path always arrives.
  *
  * A path cell that is a tree becomes path; meadow (the clearings) stays
- * meadow. Under each path cell, layer-0 plain rock is worn to dirt.
+ * meadow. The ground under a path is left as it is.
  */
 function carvePath(state: GameState, from: Vec3, to: Vec3): void {
   const gen = SURFACE.generation;
@@ -114,31 +114,19 @@ function carvePath(state: GameState, from: Vec3, to: Vec3): void {
   }
 }
 
-/** Make the surface cell (x, y) a path unless it is meadow, and wear the rock under it. */
+/** Make the surface cell (x, y) a path, unless it is meadow already. */
 function layPath(state: GameState, x: number, y: number): void {
-  const gen = SURFACE.generation;
   const cell = surfaceCell(x, y);
-  if (surfaceKindAt(state, cell) === SURFACE.kinds.meadow.code) {
-    return;
-  }
-  setSurfaceKind(state, cell, SURFACE.kinds.path.code);
-  const ground = { x, y, z: 0 };
-  const below = { x, y, z: 1 };
-  const wears = gen.pathWearsBlocks.map(blockCode).includes(blockAt(state, ground));
-  // Dirt cannot span a gap (design doc 3.2), so rock is worn to dirt only
-  // where the block under it is solid. Every cell of a cube generated today
-  // is solid; the check keeps a fresh cube at rest (0014 item 19) if layer 1
-  // ever has voids.
-  if (wears && isSolid(state, below)) {
-    setBlock(state, ground, blockCode(gen.pathGround));
+  if (surfaceKindAt(state, cell) !== SURFACE.kinds.meadow.code) {
+    setSurfaceKind(state, cell, SURFACE.kinds.path.code);
   }
 }
 
 /**
- * Place the round meadows (step 3). Returns their centres, in the order they
- * were placed, for the paths to run to.
+ * Place the round meadows (step 2). Returns their centres, in the order they
+ * were placed, for the paths to run between.
  */
-function placeMeadows(state: GameState, start: Vec3): Vec3[] {
+function placeMeadows(state: GameState): Vec3[] {
   const gen = SURFACE.generation;
   const centres: Vec3[] = [];
   const count = gen.meadowsMin + nextInt(state.rng, gen.meadowsMax - gen.meadowsMin + 1);
@@ -146,40 +134,30 @@ function placeMeadows(state: GameState, start: Vec3): Vec3[] {
   for (let meadow = 0; meadow < count; meadow += 1) {
     const radius =
       gen.meadowRadiusMin + nextInt(state.rng, gen.meadowRadiusMax - gen.meadowRadiusMin + 1);
-    for (let attempt = 0; attempt < gen.meadowPlacementTries; attempt += 1) {
-      // A centre at least `margin` cells in from every edge (and inside the
-      // footprint even if the cube is smaller than twice the margin).
-      const spanX = Math.max(1, state.size.x - 2 * margin);
-      const spanY = Math.max(1, state.size.y - 2 * margin);
-      const cx = Math.min(state.size.x - 1, margin + nextInt(state.rng, spanX));
-      const cy = Math.min(state.size.y - 1, margin + nextInt(state.rng, spanY));
-      const distance = Math.abs(cx - start.x) + Math.abs(cy - start.y);
-      if (distance < gen.meadowMinDistanceFromStart) {
-        continue;
-      }
-      // Round: the cells whose squared distance from the centre is at most
-      // r * r + r, which rounds off the corners of a square without making a
-      // diamond.
-      for (let dy = -radius; dy <= radius; dy += 1) {
-        for (let dx = -radius; dx <= radius; dx += 1) {
-          if (
-            dx * dx + dy * dy <= radius * radius + radius &&
-            inFootprint(state, cx + dx, cy + dy)
-          ) {
-            clear(state, cx + dx, cy + dy);
-          }
+    // A centre at least `margin` cells in from every edge (and inside the
+    // footprint even if the cube is smaller than twice the margin).
+    const spanX = Math.max(1, state.size.x - 2 * margin);
+    const spanY = Math.max(1, state.size.y - 2 * margin);
+    const cx = Math.min(state.size.x - 1, margin + nextInt(state.rng, spanX));
+    const cy = Math.min(state.size.y - 1, margin + nextInt(state.rng, spanY));
+    // Round: the cells whose squared distance from the centre is at most
+    // r * r + r, which rounds off the corners of a square without making a
+    // diamond.
+    for (let dy = -radius; dy <= radius; dy += 1) {
+      for (let dx = -radius; dx <= radius; dx += 1) {
+        if (dx * dx + dy * dy <= radius * radius + radius && inFootprint(state, cx + dx, cy + dy)) {
+          clear(state, cx + dx, cy + dy);
         }
       }
-      centres.push(surfaceCell(cx, cy));
-      break;
     }
+    centres.push(surfaceCell(cx, cy));
   }
   return centres;
 }
 
 /**
  * One cell on each of `pathEdges` different edges of the cube, the edges
- * picked at random and in random order (step 4).
+ * picked at random and in random order (step 3).
  */
 function pickEdgeCells(state: GameState): Vec3[] {
   const gen = SURFACE.generation;
@@ -203,37 +181,34 @@ function pickEdgeCells(state: GameState): Vec3[] {
 }
 
 /**
- * Grow the forest on `state`'s surface and wear the path cells' rock to dirt
- * (issue #70 item 2). Changes `state.surface`, `state.stumpAge`, some layer-0
- * blocks and `state.rng` in place. The same state (seed, cube and generator)
- * always grows the same forest.
+ * Grow the forest on `state`'s surface (issue #70 item 2). Changes
+ * `state.surface`, `state.stumpAge` and `state.rng` in place; no block of
+ * the cube is changed. The same state (seed, cube and generator) always
+ * grows the same forest.
  */
 export function generateSurface(state: GameState): void {
   const gen = SURFACE.generation;
-  const start = WORLD.startPosition;
 
   // 1. Forest everywhere.
   state.surface.fill(SURFACE.kinds.tree.code);
   state.stumpAge.fill(0);
 
-  // 2. The start clearing.
-  const r = gen.startClearingRadius;
-  for (let dy = -r; dy <= r; dy += 1) {
-    for (let dx = -r; dx <= r; dx += 1) {
-      if (inFootprint(state, start.x + dx, start.y + dy)) {
-        clear(state, start.x + dx, start.y + dy);
-      }
-    }
-  }
-
-  // 3. Meadows, then 4. paths to each meadow and to the edges.
-  const meadowCentres = placeMeadows(state, start);
+  // 2. Meadows, then 3. paths. The hub the paths start from is the middle of
+  // the first meadow; with no meadow at all it is the first edge cell. The
+  // data asks for at least 2 edges, so there is always at least one path, and
+  // so always some open ground.
+  const meadowCentres = placeMeadows(state);
   const edgeCells = pickEdgeCells(state);
-  for (const end of [...meadowCentres, ...edgeCells]) {
-    carvePath(state, start, end);
+  const ends = [...meadowCentres, ...edgeCells];
+  const hub = ends[0];
+  if (hub === undefined) {
+    throw new Error('Surface generation has nowhere to lay a path');
+  }
+  for (const end of ends.slice(1)) {
+    carvePath(state, hub, end);
   }
 
-  // 5. Stone outcrops, in the order the surface is stored. The number is
+  // 4. Stone outcrops, in the order the surface is stored. The number is
   // drawn for every tree cell before the ground is looked at, so how far the
   // generator advances never depends on the ground under the trees (review
   // of PR #72).
@@ -260,13 +235,12 @@ export function generateSurface(state: GameState): void {
  * and no random number is drawn. Otherwise one open-ground square is picked
  * at random and its layer-0 block becomes coal. It replaces plain rock
  * (`coalInSightReplaces`), never an outcrop's stone (stone is the outcrop's
- * rule), and only where the block under it is solid; if no plain rock
- * qualifies, any such block is replaced (this has not happened on any seed
- * tested).
+ * rule); if no plain rock qualifies, any open-ground block that is not an
+ * outcrop's is replaced (this has not happened on any seed tested).
  *
- * Only ground the player sees at the start is read (and layer 1's solidity,
- * as the path rule does), so whether coal was added says nothing about the
- * ground under the trees.
+ * Only layer-0 blocks the player sees at the start are read: nothing under a
+ * tree and nothing below layer 0 (issue #88 item 1). So whether coal was
+ * added, and where, says nothing about what is hidden.
  */
 export function ensureCoalInSight(state: GameState): void {
   const gen = SURFACE.generation;
@@ -287,14 +261,13 @@ export function ensureCoalInSight(state: GameState): void {
   const replaceable = gen.coalInSightReplaces.map(blockCode);
   const places = seen.filter(
     (ground) =>
-      surfaceKindAt(state, surfaceCell(ground.x, ground.y)) !== SURFACE.kinds.outcrop.code &&
-      isSolid(state, { x: ground.x, y: ground.y, z: 1 }),
+      surfaceKindAt(state, surfaceCell(ground.x, ground.y)) !== SURFACE.kinds.outcrop.code,
   );
   const plainRock = places.filter((ground) => replaceable.includes(blockAt(state, ground)));
   const choices = plainRock.length > 0 ? plainRock : places;
   const chosen = choices[nextInt(state.rng, choices.length)];
   if (chosen === undefined) {
-    // Cannot happen on a generated surface: the start clearing is open meadow.
+    // Cannot happen on a generated surface: there is always a path or a meadow.
     throw new Error('No open ground to put coal in');
   }
   setBlock(state, chosen, coal);

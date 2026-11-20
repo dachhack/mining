@@ -60,7 +60,7 @@ describe('createRun', () => {
     expect(state.status).toEqual({ kind: 'active' });
   });
 
-  it('builds a cube of the size in the data, with every cell solid', () => {
+  it('builds a cube of the size in the data, with a solid top layer', () => {
     const state = createRun(1, 'none', 'standard');
     expect(state.size).toEqual(WORLD.size);
     expect(state.size).not.toBe(WORLD.size);
@@ -79,8 +79,9 @@ describe('createRun', () => {
       expect(array).toBeInstanceOf(Uint8Array);
       expect(array.length).toBe(cells);
     }
-    // M1 generates no open space (0005 item 3).
-    expect(state.blocks.every((code) => code !== 0)).toBe(true);
+    // The surface is flat: caverns and pockets lie below layer 0 (issue #95).
+    const topLayer = state.blocks.subarray(0, WORLD.size.x * WORLD.size.y);
+    expect(topLayer.every((code) => code !== 0)).toBe(true);
   });
 
   it('gives the same state for the same seed', () => {

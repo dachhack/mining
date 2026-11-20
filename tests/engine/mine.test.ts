@@ -10,7 +10,6 @@ import { describe, expect, it } from 'vitest';
 import { BLOCKS, SURFACE } from '../../src/data';
 import {
   applyAction,
-  blockAt,
   depthAt,
   hashState,
   isRevealed,
@@ -295,72 +294,4 @@ describe('trees (design doc 3.2 and 4.2)', () => {
   });
 });
 
-describe('breaking into an open space (decision note 0026, until task T9)', () => {
-  // The middle column, from the top: stone, two open cells, stone, stone.
-  //        x  0 1 2
-  //   z=0     # # #
-  //   z=1     # . #
-  //   z=2     # . #
-  //   z=3     # # #
-  //   z=4     # # #
-  function cavernCube(): GameState {
-    return buildState({
-      layers: [['###'], ['#.#'], ['#.#'], ['###'], ['###']],
-      ap: 100,
-    });
-  }
-
-  it('the open cells directly below fill with rubble, so the square drops exactly 1', () => {
-    const { state: after, events } = act(cavernCube(), { type: 'mine', x: 1, y: 0 });
-    expect(depthAt(after, 1, 0)).toBe(1);
-    expect(layerText(after, 1)).toEqual(['#R#']);
-    expect(layerText(after, 2)).toEqual(['#R#']);
-    expect(layerText(after, 3)).toEqual(['###']); // the floor of the space is as it was
-    expect(steepestStep(after)).toBe(1);
-    expect(events).toEqual([
-      { type: 'blockMined', pos: { x: 1, y: 0, z: 0 }, block: BLOCKS.stone.code },
-      { type: 'itemGained', item: 'stone', count: 1 },
-      { type: 'roofCollapsed', pos: { x: 1, y: 0, z: 1 } },
-      { type: 'blockRevealed', pos: { x: 1, y: 0, z: 1 }, block: BLOCKS.rubble.code },
-    ]);
-    // Only the new top is known; the rubble under it is not.
-    expect(isRevealed(after, { x: 1, y: 0, z: 2 })).toBe(false);
-  });
-
-  it('the event does not say how deep the space was', () => {
-    // The same mine over a space 1 cell deep and over one 3 cells deep.
-    const shallow = buildState({ layers: [['#'], ['.'], ['#'], ['#'], ['#']] });
-    const deep = buildState({ layers: [['#'], ['.'], ['.'], ['.'], ['#']] });
-    const shallowEvents = act(shallow, { type: 'mine', x: 0, y: 0 }).events;
-    const deepEvents = act(deep, { type: 'mine', x: 0, y: 0 }).events;
-    expect(deepEvents).toEqual(shallowEvents);
-  });
-
-  it('rubble is cheap to dig and gives nothing', () => {
-    let state = mine(cavernCube(), 1, 0);
-    state = mine(mine(state, 0, 0), 2, 0);
-    const { state: after, events } = act(state, { type: 'mine', x: 1, y: 0 });
-    expect(state.ap - after.ap).toBe(costOf('rubble'));
-    expect(events.map((event) => event.type)).toEqual(['blockMined', 'blockRevealed']);
-  });
-
-  it('a space that is not directly under the mined block is left alone', () => {
-    // Stone, stone, open, stone: the first mine does not reach the space.
-    const state = buildState({ layers: [['#'], ['#'], ['.'], ['#']], ap: 100 });
-    const first = act(state, { type: 'mine', x: 0, y: 0 });
-    expect(first.events.map((event) => event.type)).not.toContain('roofCollapsed');
-    expect(blockAt(first.state, { x: 0, y: 0, z: 2 })).toBe(BLOCKS.air.code);
-    // The second mine takes its roof.
-    const second = act(first.state, { type: 'mine', x: 0, y: 0 });
-    expect(second.events).toContainEqual({ type: 'roofCollapsed', pos: { x: 0, y: 0, z: 2 } });
-    expect(depthAt(second.state, 0, 0)).toBe(2);
-  });
-
-  it('a space that reaches the bottom of the cube fills to the bottom', () => {
-    const state = buildState({ layers: [['#'], ['.'], ['.']] });
-    const after = mine(state, 0, 0);
-    expect(layerText(after, 1)).toEqual(['R']);
-    expect(layerText(after, 2)).toEqual(['R']);
-    expect(depthAt(after, 0, 0)).toBe(1);
-  });
-});
+// Breaking into an underground space: tests/engine/breach.test.ts.

@@ -6,6 +6,10 @@ import { BLOCKS, ITEMS, SURFACE, WORLD, validateSurfaceData } from '../../src/da
 import type { Vec3 } from '../../src/data';
 import { blockAt, createRun, isRevealed, surfaceKindAt } from '../../src/engine';
 import type { GameState } from '../../src/engine';
+import { generateCube } from '../../src/engine/generation/cube';
+import { generateSpaces } from '../../src/engine/generation/spaces';
+import { blankState, cloneState } from '../../src/engine/state';
+import { ensureCoalInSight, generateSurface } from '../../src/engine/surface/generation';
 
 const SEEDS = Array.from({ length: 150 }, (_, index) => index + 1);
 const KINDS = SURFACE.kinds;
@@ -16,36 +20,51 @@ function kindAt(state: GameState, x: number, y: number): number {
 }
 
 /**
- * The surface cells a miner can walk to from the start without cutting a
- * tree, as "x,y" strings: a flood fill over the open kinds.
+ * The groups of open ground on a surface: each group is the set of surface
+ * cells (as "x,y" strings) joined to each other without crossing a tree. A
+ * flood fill over the open kinds, started from every open cell not yet in a
+ * group.
  */
-function openGroundFromStart(state: GameState): Set<string> {
-  const start = WORLD.startPosition;
-  const reached = new Set<string>([`${start.x},${start.y}`]);
-  let frontier: Vec3[] = [start];
-  while (frontier.length > 0) {
-    const next: Vec3[] = [];
-    for (const cell of frontier) {
-      for (const [dx, dy] of [
-        [0, -1],
-        [1, 0],
-        [0, 1],
-        [-1, 0],
-      ] as const) {
-        const x = cell.x + dx;
-        const y = cell.y + dy;
-        const key = `${x},${y}`;
-        const inside = x >= 0 && x < state.size.x && y >= 0 && y < state.size.y;
-        if (!inside || reached.has(key) || kindAt(state, x, y) === KINDS.tree.code) {
-          continue;
-        }
-        reached.add(key);
-        next.push({ x, y, z: WORLD.surfaceZ });
+function openGroundGroups(state: GameState): Set<string>[] {
+  const groups: Set<string>[] = [];
+  const grouped = new Set<string>();
+  for (let startY = 0; startY < state.size.y; startY += 1) {
+    for (let startX = 0; startX < state.size.x; startX += 1) {
+      const startKey = `${startX},${startY}`;
+      if (grouped.has(startKey) || kindAt(state, startX, startY) === KINDS.tree.code) {
+        continue;
       }
+      const reached = new Set<string>([startKey]);
+      let frontier: Vec3[] = [{ x: startX, y: startY, z: WORLD.surfaceZ }];
+      while (frontier.length > 0) {
+        const next: Vec3[] = [];
+        for (const cell of frontier) {
+          for (const [dx, dy] of [
+            [0, -1],
+            [1, 0],
+            [0, 1],
+            [-1, 0],
+          ] as const) {
+            const x = cell.x + dx;
+            const y = cell.y + dy;
+            const key = `${x},${y}`;
+            const inside = x >= 0 && x < state.size.x && y >= 0 && y < state.size.y;
+            if (!inside || reached.has(key) || kindAt(state, x, y) === KINDS.tree.code) {
+              continue;
+            }
+            reached.add(key);
+            next.push({ x, y, z: WORLD.surfaceZ });
+          }
+        }
+        frontier = next;
+      }
+      for (const key of reached) {
+        grouped.add(key);
+      }
+      groups.push(reached);
     }
-    frontier = next;
   }
-  return reached;
+  return groups;
 }
 
 describe('surface generation (issue #70 item 2)', () => {
@@ -59,22 +78,30 @@ describe('surface generation (issue #70 item 2)', () => {
     expect(distinct.size).toBe(runs.length);
   });
 
-  it('the start cell and its eight neighbours are open meadow', () => {
-    const start = WORLD.startPosition;
-    for (const state of runs) {
-      for (let dy = -1; dy <= 1; dy += 1) {
-        for (let dx = -1; dx <= 1; dx += 1) {
-          expect(kindAt(state, start.x + dx, start.y + dy)).toBe(KINDS.meadow.code);
-        }
-      }
-    }
+  it('has no start clearing: the middle of the map is forest on some seeds (design doc v0.2)', () => {
+    // The old generator cleared the 3 x 3 squares round (16, 16) on every seed.
+    const middleX = Math.floor(WORLD.size.x / 2);
+    const middleY = Math.floor(WORLD.size.y / 2);
+    const withTreeInTheMiddle = runs.filter(
+      (state) => kindAt(state, middleX, middleY) === KINDS.tree.code,
+    );
+    expect(withTreeInTheMiddle.length).toBeGreaterThan(runs.length / 4);
   });
 
-  it('paths join the start to at least two edges of the cube, and to every meadow', () => {
+  it('paths join every meadow, and reach at least two edges of the cube', () => {
     for (const [index, state] of runs.entries()) {
-      const reached = openGroundFromStart(state);
+      // The meadows and the paths between them are one piece of open ground.
+      // (Outcrops are open ground too, scattered in the forest, so they may
+      // form small groups of their own.)
+      const withMeadow = openGroundGroups(state).filter((group) =>
+        [...group].some((key) => {
+          const [x, y] = key.split(',').map(Number) as [number, number];
+          return kindAt(state, x, y) === KINDS.meadow.code;
+        }),
+      );
+      expect(withMeadow.length, `seed ${SEEDS[index]}: groups holding a meadow`).toBe(1);
       const edges = new Set<string>();
-      for (const key of reached) {
+      for (const key of withMeadow[0] ?? []) {
         const [x, y] = key.split(',').map(Number);
         if (y === 0) edges.add('north');
         if (x === state.size.x - 1) edges.add('east');
@@ -84,30 +111,44 @@ describe('surface generation (issue #70 item 2)', () => {
       expect(edges.size, `seed ${SEEDS[index]}`).toBeGreaterThanOrEqual(
         SURFACE.generation.pathEdges,
       );
-      // Every meadow cell is reached without cutting a tree.
-      for (let y = 0; y < state.size.y; y += 1) {
-        for (let x = 0; x < state.size.x; x += 1) {
-          if (kindAt(state, x, y) === KINDS.meadow.code) {
-            expect(reached.has(`${x},${y}`), `seed ${SEEDS[index]}, meadow x${x} y${y}`).toBe(true);
-          }
-        }
-      }
     }
   });
 
-  it('a path is worn into dirt (ore is left as it is); an outcrop stands over stone', () => {
+  it('a path does not wear the ground: some paths lie over stone; an outcrop stands over stone', () => {
+    let pathsOverStone = 0;
     for (const state of runs) {
       for (let y = 0; y < state.size.y; y += 1) {
         for (let x = 0; x < state.size.x; x += 1) {
           const ground = blockAt(state, { x, y, z: 0 });
-          if (kindAt(state, x, y) === KINDS.path.code) {
-            expect(ground).not.toBe(BLOCKS.stone.code);
+          if (kindAt(state, x, y) === KINDS.path.code && ground === BLOCKS.stone.code) {
+            pathsOverStone += 1;
           }
           if (kindAt(state, x, y) === KINDS.outcrop.code) {
             expect(ground).toBe(BLOCKS.stone.code);
           }
         }
       }
+    }
+    expect(pathsOverStone).toBeGreaterThan(0);
+  });
+
+  it('changes no block of the cube, apart from at most one block of coal in sight', () => {
+    // The surface is laid over the cube `generateCube` and `generateSpaces`
+    // made: only `ensureCoalInSight` may change a block, and only in layer 0.
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const state = createRun(seed, 'none', 'standard');
+      const bare = blankState(WORLD.size, seed);
+      bare.blocks = generateCube(bare.size, bare.rng);
+      generateSpaces(bare);
+      let changed = 0;
+      for (let index = 0; index < bare.blocks.length; index += 1) {
+        if (bare.blocks[index] !== state.blocks[index]) {
+          changed += 1;
+          expect(index).toBeLessThan(WORLD.size.x * WORLD.size.y);
+          expect(state.blocks[index]).toBe(BLOCKS.coalSeam.code);
+        }
+      }
+      expect(changed).toBeLessThanOrEqual(1);
     }
   });
 
@@ -133,6 +174,45 @@ describe('surface generation (issue #70 item 2)', () => {
         );
       }
       expect(Array.from(state.stumpAge).every((age) => age === 0)).toBe(true);
+    }
+  });
+
+  it('coal in sight never depends on a hidden cell (issue #88 item 1)', () => {
+    // Change everything the player does not see at the start (every block
+    // below layer 0, and the layer-0 block under every tree) and run the rule
+    // again from the same generator: it must pick the same block.
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
+      const base = blankState(WORLD.size, seed);
+      base.blocks = generateCube(base.size, base.rng);
+      generateSpaces(base);
+      generateSurface(base);
+      // Take the coal off the open ground, so that the rule has to add some.
+      const layerCells = WORLD.size.x * WORLD.size.y;
+      for (let index = 0; index < layerCells; index += 1) {
+        if (base.blocks[index] === BLOCKS.coalSeam.code) {
+          base.blocks[index] = BLOCKS.stone.code;
+        }
+      }
+      const other = cloneState(base);
+      for (let index = 0; index < other.blocks.length; index += 1) {
+        const underTree = index < layerCells && other.surface[index] === KINDS.tree.code;
+        if (index >= layerCells) {
+          other.blocks[index] = index % 3 === 0 ? BLOCKS.air.code : BLOCKS.hardRock.code;
+        } else if (underTree) {
+          other.blocks[index] = BLOCKS.coalSeam.code;
+        }
+      }
+      ensureCoalInSight(base);
+      ensureCoalInSight(other);
+      const topLayer = (state: GameState) => Array.from(state.blocks.subarray(0, layerCells));
+      const coalAt = (state: GameState) =>
+        topLayer(state).findIndex(
+          (code, index) =>
+            code === BLOCKS.coalSeam.code && state.surface[index] !== KINDS.tree.code,
+        );
+      expect(coalAt(base), `seed ${seed}`).toBeGreaterThanOrEqual(0);
+      expect(coalAt(other), `seed ${seed}`).toBe(coalAt(base));
+      expect(other.rng.s, `seed ${seed}`).toBe(base.rng.s);
     }
   });
 

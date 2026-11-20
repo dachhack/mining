@@ -77,9 +77,9 @@ function requireSquare(state: GameState, x: number, y: number): void {
  *
  * Open cells further down (a cavern or a pocket from generation, under solid
  * rock) do not count: only the open cells above the first solid block do. So
- * a square over an unbroken cavern is as deep as its roof. If the roof's last
- * block is removed, the square's depth jumps past the whole cavern to the
- * next solid block.
+ * a square over an unbroken cavern is as deep as its roof. When a mine takes
+ * the roof's last block, the cavern collapses to rubble in the same action
+ * (breach.ts), so the square is then exactly 1 deeper.
  *
  * Throws if (x, y) is not a square.
  */

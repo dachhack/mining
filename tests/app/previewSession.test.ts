@@ -90,9 +90,9 @@ describe('seeds', () => {
 describe('a turn on the preview', () => {
   it('prints the same "what came of it" lines as npm run play', () => {
     const session = startRun(7);
-    // Seed 7: (12, 0) is open ground over stone, (11, 0) has a tree.
-    const lines = [tap(session, 12, 0), tap(session, 11, 0), take(session, 'end')];
-    const cli = runCli(['--seed', '7', '--do', 'mine 12,0; cut 11,0; end']).output.split('\n');
+    // Seed 7: (9, 0) is open ground over stone, (8, 0) has a tree.
+    const lines = [tap(session, 9, 0), tap(session, 8, 0), take(session, 'end')];
+    const cli = runCli(['--seed', '7', '--do', 'mine 9,0; cut 8,0; end']).output.split('\n');
     for (const line of lines) {
       expect(cli).toContain(line);
     }

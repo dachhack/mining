@@ -7,17 +7,20 @@
 // - the square has no block left (it shows the bedrock floor);
 // - the level rule: a face neighbour is higher than the square.
 //
+// Mining the roof of an underground space collapses it (breach.ts, task T9).
+//
 // Not here yet, because their hazards are not built: a flooded square costs 1
 // AP more and a square under lava cannot be mined (task T10), a camp's
 // squares cannot be mined (T12), and mining takes a support away (T8).
 
 import { BLOCKS, SURFACE } from '../../data';
 import type { MineAction } from '../actionTypes';
+import { collapseSpaceUnder } from '../breach';
 import { markWorked } from '../crew';
 import type { GameEvent } from '../events';
 import { depthAt, mayMine } from '../heightmap';
 import type { HigherNeighbour } from '../heightmap';
-import { addItem, blockAt, blockDefAt, inGrid, isOpen, setBlock } from '../state';
+import { addItem, blockAt, blockDefAt, setBlock } from '../state';
 import type { GameState } from '../state';
 import { hasStump, hasTree, setStumpAge, setSurfaceKind, surfaceCellAbove } from '../surface/state';
 
@@ -117,12 +120,11 @@ export function legalMineActions(state: GameState): MineAction[] {
  *   limit (design doc 4.1), so the yield always arrives.
  * - A stump on the square is gone for good: its surface cell becomes meadow,
  *   so no tree ever grows there again (design doc 3.2).
- * - Breaking into an open space (decision note 0026, until task T9): if the
- *   cell under the mined block is open, that cell and the open cells directly
- *   below it fill with rubble, down to the first solid block. So the square
- *   drops exactly 1 level and the level rule still holds. Emits
- *   `roofCollapsed`, which names the square's new top cell and nothing else:
- *   how deep the space was stays hidden.
+ * - Breaking into an underground space (design doc 6.2): if the cell under
+ *   the mined block is open, the whole cavern or pocket collapses to rubble
+ *   and its contents are put on this square (`collapseSpaceUnder` in
+ *   breach.ts). So the square drops exactly 1 level and the level rule still
+ *   holds. Emits `spaceCollapsed`.
  * - Changes `state` in place (it is the dispatcher's private copy). Does not
  *   spend the AP or reveal the new top block: the dispatcher does those.
  */
@@ -148,14 +150,6 @@ export function applyMine(state: GameState, action: MineAction, events: GameEven
     setStumpAge(state, surfaceCell, 0);
   }
 
-  // The roof of an open space. `inGrid` stops at the bottom of the cube:
-  // below it `isOpen` answers false anyway (bedrock), but `setBlock` needs a
-  // stored cell.
-  const below = { x, y, z: target.z + 1 };
-  if (inGrid(state.size, below) && isOpen(state, below)) {
-    for (let z = below.z; z < state.size.z && isOpen(state, { x, y, z }); z += 1) {
-      setBlock(state, { x, y, z }, BLOCKS.rubble.code);
-    }
-    events.push({ type: 'roofCollapsed', pos: below });
-  }
+  // If the block was the roof of a cavern or pocket, the space collapses.
+  collapseSpaceUnder(state, target, events);
 }
