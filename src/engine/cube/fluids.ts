@@ -59,7 +59,7 @@ import type { Vec3 } from '../../data';
 import { destroyCampsAt, destroyStructure } from '../destroy';
 import type { FluidKind, GameEvent } from '../events';
 import { SQUARE_STEPS, depthAt } from '../heightmap';
-import { setLavaOn, setWaterOn } from '../standing';
+import { liftGasOutOf, setLavaOn, setWaterOn } from '../standing';
 import {
   clearCrack,
   inGrid,
@@ -269,6 +269,9 @@ function formStone(state: GameState, pit: Pit, events: GameEvent[]): void {
       // before this step; the pit table has the count, so empty the cell.
       setWater(state, stone, 0);
       setLava(state, stone, 0);
+      // Gas on the square is not turned to stone: it rises with the top, or
+      // blows away if the square comes up to ground level (task T11).
+      liftGasOutOf(state, stone, events);
       setBlock(state, stone, BLOCKS.stone.code);
       pit.depth[square] = depth - 1;
       events.push({ type: 'stoneFormed', pos: stone });

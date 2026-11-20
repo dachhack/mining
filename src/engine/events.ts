@@ -50,6 +50,9 @@ export type DestructionCause =
 export type RemovalReason =
   'pumped' | 'vented' | 'burnt' | 'reachedSurface' | 'buried' | 'sealed' | 'turnedToStone';
 
+/** What went off in one explosion (design doc 6.5 and 6.6). */
+export type ExplosionKind = 'explosive' | 'unstableOre' | 'gas';
+
 /** Why the fuel gauge changed. */
 export type GaugeChangeReason = 'upkeep' | 'crafted';
 
@@ -120,7 +123,8 @@ export type GameEvent =
   | { type: 'blockFell'; from: Vec3; to: Vec3; block: number; rubble: boolean }
   /**
    * The block at `pos` (code `block`) was destroyed with no yield: unstable
-   * ore going off, or rock beside an explosive (0014 items 15 and 17).
+   * ore going off, or a top block in the blast of an explosive (design doc
+   * 6.6).
    */
   | { type: 'blockDestroyed'; pos: Vec3; block: number }
   /**
@@ -146,14 +150,52 @@ export type GameEvent =
    * `pos` is the cell directly above the square's top block.
    */
   | { type: 'lavaPoured'; pos: Vec3; units: number }
-  /** `units` of gas moved from one cell to another (0014 item 13). */
+  /**
+   * `units` of gas moved from one square to a square beside it that is no
+   * higher (design doc 6.5). `from` and `to` are the cells directly above the
+   * two squares' top blocks, as for `fluidMoved`.
+   */
   | { type: 'gasMoved'; from: Vec3; to: Vec3; units: number }
-  /** `units` of gas in the cell `pos` are gone. */
+  /**
+   * `units` of the gas on a square are gone. `pos` is the cell directly above
+   * the square's top block. 'burnt': it exploded; 'reachedSurface': the
+   * square came up to ground level, where gas blows away; 'vented': a vent.
+   */
   | { type: 'gasRemoved'; pos: Vec3; units: number; reason: RemovalReason }
-  /** The unstable ore at `pos` was armed by mining beside it (0014 item 17). */
+  /**
+   * The unstable ore at `pos` was armed by mining the block beside it on its
+   * own layer (design doc 6.6). It goes off when this shift ends.
+   */
   | { type: 'oreArmed'; pos: Vec3 }
-  /** One explosion: all of `cells` went off together (0014 item 15). */
-  | { type: 'exploded'; cells: Vec3[] }
+  /**
+   * One explosion (design doc 6.5 and 6.6). `kind` says what went off:
+   * - 'explosive': the placed charge whose block was at `pos`;
+   * - 'unstableOre': the armed ore block that was at `pos`;
+   * - 'gas': all the connected gassy squares, as one explosion; `pos` is the
+   *   first of them.
+   * `cells` names the squares of the explosion, one cell each: the cell
+   * directly above the square's top block as it was just before (for a square
+   * at ground level, the surface cell). For a charge or ore that is the whole
+   * blast; for gas, the squares whose gas burnt. The events that follow say
+   * what it destroyed.
+   */
+  | { type: 'exploded'; kind: ExplosionKind; pos: Vec3; cells: Vec3[] }
+  /**
+   * A relic or keystone at `pos` (code `block`) was in a blast and survived
+   * it: it is still there (design doc 6.6; owner question 65).
+   */
+  | { type: 'blockSurvivedBlast'; pos: Vec3; block: number }
+  /**
+   * Only in the forecast (`ShiftForecast.gas`): the relic or keystone at
+   * `pos` will be in a blast and may be destroyed. The forecast does not roll
+   * the dice (decision note 0017 item 3).
+   */
+  | { type: 'blockMayBeDestroyed'; pos: Vec3; block: number }
+  /**
+   * The tree in the surface cell `pos` was destroyed by a blast: no timber,
+   * no stump. The block under it stays (design doc 6.6).
+   */
+  | { type: 'treeDestroyed'; pos: Vec3 }
   /** The structure (its code is `structure`) in the cell `pos` was destroyed. */
   | { type: 'structureDestroyed'; pos: Vec3; structure: number; cause: DestructionCause }
   /** The open cell `pos` was sealed with sealant and is now solid (0014 item 12). */

@@ -17,6 +17,10 @@
 // block, so mining the block takes it away and it is lost (owner question 82;
 // issue #94).
 //
+// Unstable ore (design doc 6.6; task T11): mining the block beside known,
+// unbraced unstable ore on its own layer arms it (`oreArmedByMine` in
+// explosions.ts); it goes off when the shift ends.
+//
 // Camps (design doc 8; issue #100): a camp's 9 squares cannot be mined while
 // it stands, and a mine near a camp costs 1 AP less (camps.ts).
 
@@ -27,9 +31,10 @@ import { campAtSquare, discountedMineCost } from '../camps';
 import { markWorked } from '../crew';
 import { destroyStructure } from '../destroy';
 import type { GameEvent } from '../events';
+import { oreArmedByMine } from '../explosions';
 import { depthAt, mayMine } from '../heightmap';
 import type { HigherNeighbour } from '../heightmap';
-import { addItem, blockAt, blockDefAt, setBlock } from '../state';
+import { addItem, armCharge, blockAt, blockDefAt, setBlock } from '../state';
 import type { GameState } from '../state';
 import { hasStump, hasTree, setStumpAge, setSurfaceKind, surfaceCellAbove } from '../surface/state';
 
@@ -182,6 +187,9 @@ export function legalMineActions(state: GameState): MineAction[] {
  *   limit (design doc 4.1), so the yield always arrives.
  * - A stump on the square is gone for good: its surface cell becomes meadow,
  *   so no tree ever grows there again (design doc 3.2).
+ * - Known, unbraced unstable ore beside the mined block, on its own layer, is
+ *   armed (`oreArmed`): it goes off in step (c) of the coming cube phase
+ *   (design doc 6.6). Mining the ore itself never sets it off: it yields.
  * - Breaking into an underground space (design doc 6.2): if the cell under
  *   the mined block is open, the whole cavern or pocket collapses to rubble
  *   and its contents are put on this square (`collapseSpaceUnder` in
@@ -196,6 +204,9 @@ export function applyMine(state: GameState, action: MineAction, events: GameEven
   const target = { x, y, z: depthAt(state, x, y) };
   const minedCode = blockAt(state, target);
   const yields = blockDefAt(state, target).yields;
+  // Worked out before anything changes: only ore the player knew when the
+  // mine was chosen is armed (design doc 6.6; owner question 58).
+  const armedOre = oreArmedByMine(state, x, y);
 
   destroyStructure(state, target, 'mined', events);
   setBlock(state, target, BLOCKS.air.code);
@@ -211,6 +222,12 @@ export function applyMine(state: GameState, action: MineAction, events: GameEven
   if (hasStump(state, surfaceCell)) {
     setSurfaceKind(state, surfaceCell, SURFACE.kinds.meadow.code);
     setStumpAge(state, surfaceCell, 0);
+  }
+
+  // Unstable ore beside the mined block, on its layer, is armed.
+  for (const ore of armedOre) {
+    armCharge(state, ore, 'unstableOre');
+    events.push({ type: 'oreArmed', pos: ore });
   }
 
   // If the block was the roof of a cavern or pocket, the space collapses.

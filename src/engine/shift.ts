@@ -11,7 +11,7 @@ import { newCubePhase } from './cube/phase';
 import type { CubePhase } from './cube/phase';
 import { stepTimers } from './cube/timers';
 import type { GameEvent, RunEndCause } from './events';
-import { forecastCountdowns, forecastFlows, forecastSlumps } from './forecast';
+import { forecastCountdowns, forecastHazards } from './forecast';
 import type { CountdownForecast } from './forecast';
 import { endRun, isRunActive } from './state';
 import { forecastRegrowth } from './surface/regrowth';
@@ -45,7 +45,8 @@ export interface ShiftForecast {
   /**
    * Part 1, countdowns: every cracked top block the player sees, with the
    * number it shows and whether its countdown is running (design doc 6.1);
-   * later also every armed unstable ore and every placed explosive.
+   * then every armed unstable ore block and every placed explosive, which go
+   * off in the coming cube phase (design doc 6.6).
    */
   countdowns: CountdownForecast[];
   /**
@@ -65,9 +66,20 @@ export interface ShiftForecast {
    * events (`fluidMoved`, `fluidRemoved`, `lavaPoured`, `stoneFormed`,
    * `structureDestroyed`, ...), in the order they would happen. Water and
    * lava stand in the open, so this is what will happen, as exactly as
-   * `slumps` is. Gas (step (c)) joins with T11.
+   * `slumps` is.
    */
   flows: GameEvent[];
+  /**
+   * Part 3, gas and explosions: the events that step (c) of the cube phase
+   * emits when it is run, after steps (a) and (b), on `knownCube(state)`:
+   * `gasMoved` for each gift of gas, `exploded` for each charge, armed ore
+   * and gas explosion, `blockDestroyed`, `treeDestroyed`, `gasRemoved`, and
+   * what an explosion destroys. A relic or keystone in a blast is reported
+   * as `blockMayBeDestroyed`: the forecast rolls no dice. A blast shows new
+   * top blocks, which are taken to be plain rock: what is under them (a
+   * cavern, a pocket) cannot be forecast.
+   */
+  gas: GameEvent[];
   /** What upkeep will do to the gauges. */
   upkeep: UpkeepForecast;
   /**
@@ -90,7 +102,7 @@ export interface ShiftForecast {
 //
 //   (a) cube/slumps.ts         cracked blocks slump, unstable squares crack
 //   (b) cube/fluids.ts         water flows, then lava; water meeting lava makes stone
-//   (c) cube/gas.ts            gas spreads, vents, charges go off, ignition
+//   (c) cube/gas.ts            gas spreads, vents, charges go off, ignition, gas hurts
 //   (d) cube/timers.ts         crack countdowns tick
 //   (e) cube/crewEffects.ts    recorded damage, rest, worked squares cleared
 //
@@ -118,11 +130,12 @@ export const CUBE_PHASE_STEPS: CubePhaseStep[] = [
  * in a fixed order. `endShift` in index.ts calls this first, then regrowth,
  * then upkeep.
  *
- * Contract: changes `state` in place and appends to `events`. Nothing in the
- * cube phase uses the RNG (0014 item 1).
+ * Contract: changes `state` in place and appends to `events`. The cube phase
+ * uses the seeded RNG in the state in one place only: a relic or keystone in
+ * the blast of a charge survives by chance (design doc 6.6; explosions.ts).
  *
  * Runs the steps of `CUBE_PHASE_STEPS` in order, handing each the same
- * `CubePhase` notes. Step (c) is empty until its task (T11).
+ * `CubePhase` notes.
  */
 export function runCubePhase(state: GameState, events: GameEvent[]): void {
   const phase = newCubePhase();
@@ -223,8 +236,7 @@ export function runUpkeep(state: GameState, events: GameEvent[]): void {
  * - Does not change `state`, and is a function of what the player sees
  *   (0014 item 3) and nothing else: changing any unrevealed cell must not
  *   change the result.
- * - `countdowns`, `slumps` and `flows` come from forecast.ts; gas joins
- *   `flows` with T11.
+ * - `countdowns`, `slumps`, `flows` and `gas` come from forecast.ts.
  * - `upkeep` agrees with what `runUpkeep` then does when the cube phase does
  *   not end the run first (both use `computeUpkeep`).
  * - Throws if the run has already ended, as `endShift` does.
@@ -233,10 +245,12 @@ export function forecastShift(state: GameState): ShiftForecast {
   if (!isRunActive(state)) {
     throw new Error('The run has ended; there is no shift to forecast');
   }
+  const hazards = forecastHazards(state);
   return {
     countdowns: forecastCountdowns(state),
-    slumps: forecastSlumps(state),
-    flows: forecastFlows(state),
+    slumps: hazards.slumps,
+    flows: hazards.flows,
+    gas: hazards.gas,
     upkeep: computeUpkeep(state),
     regrowth: forecastRegrowth(state),
   };

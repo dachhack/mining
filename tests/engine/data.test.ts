@@ -434,6 +434,11 @@ describe('M2 data (decision note 0014)', () => {
         pumpReach: 2,
       },
       gas: { pocketUnitsPerCell: 4, ventReach: 2 },
+      explosion: {
+        blastReach: 1,
+        chanceBlocks: ['relic', 'keystone'],
+        chanceBlockDestroyed: 0.5,
+      },
       lava: {
         unitsPerCell: 1,
         flowEveryShifts: 2,
@@ -614,6 +619,25 @@ describe('M2 data (decision note 0014)', () => {
       'hazards.lava.flowEveryShifts',
       'hazards.forecast.unseenBlock',
       'tells.hazards.warmGlowDistance',
+    ]) {
+      expect(
+        problems.some((p) => p.includes(part)),
+        `no problem mentions ${part}`,
+      ).toBe(true);
+    }
+  });
+
+  it('reports bad explosion numbers (design doc 6.6)', () => {
+    const problems = problemsAfter((data) => {
+      data.hazards.explosion.blastReach = -1;
+      data.hazards.explosion.chanceBlockDestroyed = 1.5;
+      data.hazards.explosion.chanceBlocks = ['relic', 'unobtainium'];
+    });
+    expect(problems).toHaveLength(3);
+    for (const part of [
+      'hazards.explosion.blastReach',
+      'hazards.explosion.chanceBlockDestroyed must be from 0 to 1',
+      'hazards.explosion.chanceBlocks names an unknown block "unobtainium"',
     ]) {
       expect(
         problems.some((p) => p.includes(part)),

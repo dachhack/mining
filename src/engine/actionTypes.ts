@@ -60,10 +60,15 @@ export interface PlaceSupportAction {
   ap: number;
 }
 
-/** Place an explosive from the stockpile into the cell `target` (0014 item 15). */
+/**
+ * Place an explosive from the stockpile on the square (x, y) (design doc 4.1
+ * and 6.6; issue #103). Like a support, it names a square: there is no reach.
+ * It goes off when the shift ends.
+ */
 export interface PlaceExplosiveAction {
   type: 'placeExplosive';
-  target: Vec3;
+  x: number;
+  y: number;
   ap: number;
 }
 
@@ -165,6 +170,7 @@ export function actionKey(action: Action): string {
     case 'mine':
     case 'cutTree':
     case 'placeSupport':
+    case 'placeExplosive':
     case 'foundCamp':
     case 'rest':
     case 'decommissionCamp':
@@ -174,7 +180,6 @@ export function actionKey(action: Action): string {
       return `craft ${action.recipe} ap ${action.ap}`;
     case 'closeMine':
       return `closeMine ap ${action.ap}`;
-    case 'placeExplosive':
     case 'placePump':
     case 'placeVent':
     case 'seal':

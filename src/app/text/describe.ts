@@ -17,7 +17,7 @@ import {
   itemDef,
 } from '../../data';
 import type { ItemStack } from '../../data';
-import { isSquare, knownSquare, mineCheck } from '../../engine';
+import { blastSquares, isSquare, knownSquare, mineCheck } from '../../engine';
 import type { Action, GameEvent, GameState, KnownSquare } from '../../engine';
 import type { LogEntry } from './log';
 import { patchText, squareText } from './squares';
@@ -144,10 +144,10 @@ function describeAction(state: GameState, action: Action): string {
         `Place a support on ${squareText(action.x, action.y)}: ` +
         'it holds that square against slumping, and is lost if the square is mined'
       );
-    // The other M2 actions. The engine offers none of them yet (their modules
-    // are stubs; decision note 0015), so these plain lines are never shown.
-    // The play-tool task for the hazards (T14) gives each its wording.
     case 'placeExplosive':
+      return describePlaceExplosive(state, action.x, action.y);
+    // The other M2 actions. The engine offers none of them yet (their module
+    // is a stub; decision note 0015), so these plain lines are never shown.
     case 'placePump':
     case 'placeVent':
     case 'seal':
@@ -170,6 +170,17 @@ function describeAction(state: GameState, action: Action): string {
         'its cheaper mining end, its squares can be mined again, and the kit is not given back'
       );
   }
+}
+
+/** The line for the choice "explosive x,y": what the charge will do, and to which squares. */
+function describePlaceExplosive(state: GameState, x: number, y: number): string {
+  const blast = blastSquares(state, x, y)
+    .map((square) => squareText(square.x, square.y))
+    .join(', ');
+  return (
+    `Place an explosive on ${squareText(x, y)}: it goes off when this shift ends and destroys ` +
+    `the top block of each square of its blast (${blast}), with no yield`
+  );
 }
 
 /** "placeSupport" -> "place-support": an id from src/data in the lower case a choice is typed in. */
@@ -205,8 +216,9 @@ export function choiceName(entry: LogEntry): string {
       return 'close-mine';
     case 'placeSupport':
       return `support ${entry.x},${entry.y}`;
-    // The other M2 actions: never offered yet (see `describeAction`).
     case 'placeExplosive':
+      return `explosive ${entry.x},${entry.y}`;
+    // The other M2 actions: never offered yet (see `describeAction`).
     case 'placePump':
     case 'placeVent':
     case 'seal':

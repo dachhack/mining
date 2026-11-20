@@ -26,7 +26,7 @@ describe('actionKey and sameAction', () => {
     { type: 'craft', recipe: 'support', ap: 1 },
     { type: 'closeMine', ap: 0 },
     // The M2 actions (decision note 0015).
-    { type: 'placeExplosive', target: { x: 1, y: 2, z: 3 }, ap: 1 },
+    { type: 'placeExplosive', x: 1, y: 2, ap: 1 },
     { type: 'placePump', target: { x: 1, y: 2, z: 3 }, ap: 1 },
     { type: 'placeVent', target: { x: 1, y: 2, z: 3 }, ap: 1 },
     { type: 'seal', target: { x: 1, y: 2, z: 3 }, ap: 1 },
@@ -59,7 +59,7 @@ describe('actionKey and sameAction', () => {
   });
 });
 
-describe('the M2 action modules are stubs (decision note 0015)', () => {
+describe('the camp tools module is a stub (decision note 0015)', () => {
   // One test for each stub module, each with its own import inside it, so
   // that the task filling a module in deletes one block here and touches no
   // line another task touches. `await import(...)` loads a module where it
@@ -67,12 +67,7 @@ describe('the M2 action modules are stubs (decision note 0015)', () => {
   const state = buildState({
     layers: [['#.#'], ['###']],
     revealAll: true,
-    stockpile: { explosive: 1, pump: 1, vent: 1, sealant: 1 },
-  });
-
-  it('placeExplosive offers nothing (until M2-5)', async () => {
-    const { legalPlaceExplosiveActions } = await import('../../src/engine/actions/placeExplosive');
-    expect(legalPlaceExplosiveActions(state)).toEqual([]);
+    stockpile: { pump: 1, vent: 1, sealant: 1 },
   });
 
   it('campTools offers nothing (until M2-8)', async () => {

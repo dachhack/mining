@@ -4,9 +4,9 @@
 // types re-exported at the bottom, and nothing else from this folder.
 //
 // This file is also the dispatcher: it owns what is common to every action
-// (copying the state, checking legality, spending AP, then reveal) and hands the rest to one module per rule. The modules of the M2
-// actions (explosives, camp tools) are stubs until
-// their tasks fill them in; each stub's doc comment is its contract
+// (copying the state, checking legality, spending AP, then reveal) and hands
+// the rest to one module per rule. The module of the camp tools is a stub
+// until its task fills it in; the stub's doc comment is its contract
 // (decision note 0015).
 
 import { CONTRACT_IDS, CREW, SHIFT, WORLD, findLoadout } from '../data';
@@ -217,7 +217,8 @@ export function endShift(state: GameState): StepResult {
 /**
  * What ending the shift now would do, for the end-shift preview (0014 item
  * 4): the cracks and their countdowns, what will slump and crack, where
- * water and lava will flow (gas: T11), and upkeep's effect on fuel. Does not
+ * water and lava will flow, where gas will spread and what will explode, and
+ * upkeep's effect on fuel. Does not
  * change `state`. Throws if the run has already ended, as `endShift` does.
  */
 export function previewCubePhase(state: GameState): ShiftForecast {
@@ -264,6 +265,7 @@ export type { FoundCampCheck, FoundCampRefusal } from './camps';
 export type {
   DamageCause,
   DestructionCause,
+  ExplosionKind,
   FluidKind,
   GameEvent,
   GaugeChangeReason,
@@ -295,6 +297,12 @@ export type { MineCheck, MineRefusalReason } from './actions/mine';
 // The same for placing a support on a square (design doc 6.1; issue #94).
 export { supportCheck } from './actions/placeSupport';
 export type { SupportCheck, SupportRefusalReason } from './actions/placeSupport';
+// The same for placing an explosive (design doc 6.6; issue #103), with the
+// squares its blast would cover, and the unstable ore a mine would arm. All
+// three read only what the player sees.
+export { explosiveCheck } from './actions/placeExplosive';
+export type { ExplosiveCheck, ExplosiveRefusalReason } from './actions/placeExplosive';
+export { blastSquares, oreArmedByMine } from './explosions';
 // Pit walls slump (design doc 6.1): is a square unstable, and which squares
 // would a mine make unstable? These read only what the player sees (depths,
 // trees, supports, seen top blocks), so a view may call them freely.
