@@ -247,9 +247,6 @@ function hudLines(state: GameState, options: ViewOptions): string[] {
     `Shift ${state.shift}`,
     `AP ${state.ap}/${SHIFT.apPerShift}`,
     `Fuel ${state.fuel}`,
-    // Lamp oil is still counted and still burns, but nothing needs light any
-    // more (decision note 0026); it goes with task T3.
-    `Lamp oil ${state.lampOil} (not used)`,
     `Health ${state.avatar.health}/${AVATAR.startHealth}`,
   ].join(' | ');
 
@@ -362,9 +359,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     // Unspent AP is lost at the end of a shift (issue #32); say so only when
     // there is some, so a player does not end a shift early by oversight.
     const unspent = state.ap > 0 ? `${state.ap} unspent AP will be lost, ` : '';
-    forecast =
-      `${unspent}fuel ${state.fuel} -> ${upkeep.fuelAfter} (-${upkeep.fuelConsumed} shift)` +
-      `, lamp oil ${state.lampOil} -> ${upkeep.lampOilAfter}.`;
+    forecast = `${unspent}fuel ${state.fuel} -> ${upkeep.fuelAfter} (-${upkeep.fuelConsumed} shift).`;
     if (preview.regrowth.length > 0) {
       const cells = preview.regrowth.map((cell) => squareText(cell.x, cell.y)).join(', ');
       forecast += ` A tree grows back on the stump at ${cells}.`;

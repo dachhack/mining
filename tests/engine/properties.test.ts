@@ -78,9 +78,6 @@ function invariantProblems(state: GameState): string[] {
   if (!isWholeNumber(state.fuel) || state.fuel < 0) {
     problems.push(`fuel is ${state.fuel}`);
   }
-  if (!isWholeNumber(state.lampOil) || state.lampOil < 0) {
-    problems.push(`lamp oil is ${state.lampOil}`);
-  }
   if (!isWholeNumber(state.shift) || state.shift < SHIFT.firstShiftNumber) {
     problems.push(`shift is ${state.shift}`);
   }
@@ -303,7 +300,7 @@ function playerSees(state: GameState): string {
     forecast: previewCubePhase(state),
     squares,
     checks,
-    hud: [state.ap, state.fuel, state.lampOil, state.shift, state.avatar, state.inventory],
+    hud: [state.ap, state.fuel, state.shift, state.avatar, state.inventory],
     knownCube: snapshot(knownCube(state)),
   });
 }

@@ -1,8 +1,8 @@
 // Destroying things at the moment of an event (design doc 4; 0014 item 2).
 //
-// "Structures and camps are destroyed at the moment of the event that
-// destroys them, so a torch destroyed by a rockfall in (a) is not there to
-// light gas in (c)." So a hazard never queues a destruction for later: it
+// Structures and camps are destroyed at the moment of the event that
+// destroys them, so a structure destroyed early in the cube phase is not
+// there for a later step. So a hazard never queues a destruction for later: it
 // calls one of the three functions here, there and then.
 //
 // WHAT a hazard destroys is that hazard's rule (a falling block spares a

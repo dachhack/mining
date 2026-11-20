@@ -68,8 +68,7 @@ export interface KnownCell {
 
 /**
  * Everything the player sees of the cell `pos`, or `null` if the cell is not
- * revealed. Light plays no part: a revealed cell in the dark is still seen
- * (0014 item 3).
+ * revealed (0014 item 3). There is no light (design doc v0.2).
  *
  * Cells outside the grid count as revealed, as in `isRevealed`: the surface
  * is open air and everything else is bedrock, with nothing in them.

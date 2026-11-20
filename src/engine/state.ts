@@ -16,11 +16,11 @@ import type { RngState } from './rng';
 
 /**
  * Bumped whenever the shape of GameState changes, so old saves can be told
- * apart. 7: the avatar has no position (issue #86, mine by square); a
- * version-6 save holds one, and its `revealed` cells follow the old light
- * rule, so it is not read.
+ * apart. 8: `lampOil` is gone with light (issue #89); a version-7 save holds
+ * it, and may hold torches or safety lamps, so it is not read.
+ * 7: the avatar has no position (issue #86, mine by square).
  */
-export const STATE_VERSION = 7;
+export const STATE_VERSION = 8;
 
 /** Some loose items lying in a cell. */
 export interface LooseItems {
@@ -137,7 +137,6 @@ export interface GameState {
   /** Action points left in this shift. */
   ap: number;
   fuel: number;
-  lampOil: number;
   /** The number of the current shift. */
   shift: number;
 
@@ -715,7 +714,6 @@ export function blankState(size: CubeSize, seed: number): GameState {
     avatar: { health: 0, air: 0, resting: false },
     ap: 0,
     fuel: 0,
-    lampOil: 0,
     shift: 0,
     inventory: {},
     looseItems: [],
@@ -758,7 +756,6 @@ export function cloneState(state: GameState): GameState {
     },
     ap: state.ap,
     fuel: state.fuel,
-    lampOil: state.lampOil,
     shift: state.shift,
     inventory: { ...state.inventory },
     looseItems: state.looseItems.map((loose) => ({

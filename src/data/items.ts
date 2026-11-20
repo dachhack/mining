@@ -11,20 +11,19 @@ export type ItemId =
   | 'relic'
   | 'keystone'
   | 'support'
-  | 'torch'
   | 'ironIngot'
   | 'copperIngot'
   | 'drill'
   | 'pump'
   | 'vent'
-  | 'safetyLamp'
   | 'scannerCharge'
   | 'sealant'
   | 'explosive'
   | 'campKit';
 
-// Weights: decision note 0005 item 18. Fuel and lamp oil are gauges, not
-// items, so they are not here.
+// Weights: decision note 0005 item 18. Fuel is a gauge, not an item, so it
+// is not here. The torch and the safety lamp are gone with light (design doc
+// v0.2, section 7).
 //
 // "Raw ore" (design doc 3.2) is two items, iron and copper, because the camp
 // recipes in 7.2 need to tell them apart; each has the raw-ore weight of 2.
@@ -41,7 +40,6 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   relic: { name: 'Relic', weight: 2 },
   keystone: { name: 'Keystone', weight: 2 },
   support: { name: 'Support', weight: 2 },
-  torch: { name: 'Torch', weight: 1 },
   // Camp-made items (design doc 7.2). Weights: decision note 0014 items 25
   // and 31. An ingot weighs 1, half the raw ore it is smelted from.
   ironIngot: { name: 'Iron ingot', weight: 1 },
@@ -49,7 +47,6 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   drill: { name: 'Drill', weight: 3 },
   pump: { name: 'Pump', weight: 3 },
   vent: { name: 'Vent', weight: 2 },
-  safetyLamp: { name: 'Safety lamp', weight: 1 },
   scannerCharge: { name: 'Scanner charge', weight: 1 },
   sealant: { name: 'Sealant', weight: 1 },
   explosive: { name: 'Explosive', weight: 1 },

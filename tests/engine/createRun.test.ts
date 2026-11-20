@@ -13,7 +13,6 @@ describe('createRun', () => {
     const state = createRun(1, 'none', 'standard');
     const loadout = LOADOUTS.standard;
     expect(state.fuel).toBe(loadout.fuel);
-    expect(state.lampOil).toBe(loadout.lampOil);
     const expectedInventory: Record<string, number> = {};
     for (const stack of loadout.items) {
       expectedInventory[stack.item] = stack.count;
@@ -29,7 +28,8 @@ describe('createRun', () => {
     // edit of the data shows up. A deliberate change updates this test.
     const state = createRun(1, 'none', 'standard');
     expect(state.fuel).toBe(24);
-    expect(state.lampOil).toBe(3);
+    // No lamp oil since issue #89.
+    expect('lampOil' in state).toBe(false);
     // No ladders since issue #80.
     expect(state.inventory).toEqual({ timber: 2 });
     expect(state.avatar.health).toBe(10);

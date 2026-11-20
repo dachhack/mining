@@ -47,8 +47,8 @@ export function legalCraftActions(state: GameState): CraftAction[] {
  * legal list.
  *
  * - Removes the inputs, emits `crafted`, then adds the output: an item
- *   (`itemGained`) or an amount on a gauge (`fuelChanged` or
- *   `lampOilChanged`, reason `crafted`).
+ *   (`itemGained`) or an amount on the fuel gauge (`fuelChanged`, reason
+ *   `crafted`).
  * - Changes `state` in place (it is the dispatcher's private copy) and
  *   appends what happened to `events`.
  * - Does not spend the AP: the dispatcher has already taken `action.ap` off.
@@ -72,14 +72,6 @@ export function applyCraft(state: GameState, action: CraftAction, events: GameEv
   } else if (output.gauge === 'fuel') {
     state.fuel += output.amount;
     events.push({ type: 'fuelChanged', delta: output.amount, fuel: state.fuel, reason: 'crafted' });
-  } else if (output.gauge === 'lampOil') {
-    state.lampOil += output.amount;
-    events.push({
-      type: 'lampOilChanged',
-      delta: output.amount,
-      lampOil: state.lampOil,
-      reason: 'crafted',
-    });
   } else {
     // `validateData` rejects a recipe that names any other gauge.
     throw new Error(`Recipe "${recipe.id}" fills an unknown gauge: ${output.gauge}`);
