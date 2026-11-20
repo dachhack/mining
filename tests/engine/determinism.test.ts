@@ -44,7 +44,12 @@ function throughJson(state: GameState): GameState {
   return deserialise(JSON.parse(JSON.stringify(serialise(state))));
 }
 
-describe('determinism', () => {
+// These tests play and replay whole runs, which are three times as long since
+// the starting fuel went from 24 to 72 (decision note 0040). They take a
+// second or two on an idle machine and can pass vitest's default limit of 5
+// seconds on a busy one, so the whole group gets the limit of a whole-run
+// test. (`{ timeout }` as the second argument applies to every test inside.)
+describe('determinism', { timeout: 30000 }, () => {
   it('createRun gives the same state for the same seed, and another for another seed', () => {
     const a = hashState(createRun(5, CONTRACT, DEFAULT_LOADOUT_ID));
     const b = hashState(createRun(5, CONTRACT, DEFAULT_LOADOUT_ID));

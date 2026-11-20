@@ -69,7 +69,11 @@ function replayFrom(state: GameState, decision: string): GameState {
   return applyAction(state, action).state;
 }
 
-describe('golden runs', () => {
+// Every test here replays whole runs, some of several hundred decisions. They
+// take a second or two on an idle machine and can pass vitest's default limit
+// of 5 seconds on a busy one, so the whole group gets the limit of a whole-run
+// test. (`{ timeout }` as the second argument applies to every test inside.)
+describe('golden runs', { timeout: 30000 }, () => {
   it('there are at least five', () => {
     expect(files.length).toBeGreaterThanOrEqual(5);
   });
