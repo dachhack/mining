@@ -13,6 +13,7 @@ import {
   campAtSquare,
   isRunActive,
   isSquare,
+  isWorked,
   knownSquare,
   mineDiscountAt,
   previewCubePhase,
@@ -49,6 +50,29 @@ export interface HigherSides {
   west: boolean;
 }
 
+/** The sides of a square: used for the edge of the area where mining is cheaper. */
+export type Sides = HigherSides;
+
+/**
+ * The hazard tells a top block shows (design doc 3.7), as the map draws
+ * them. All false under a tree and on the bedrock floor.
+ */
+export interface TileTells {
+  /** Damp stone: water under or beside. */
+  damp: boolean;
+  /** Pitted rock: gas under or beside. */
+  pitted: boolean;
+  /** Warm glow: lava within 2. */
+  warm: boolean;
+  /** Hairline glow: the block is unstable ore. */
+  hairline: boolean;
+}
+
+/** No tell at all. */
+export const NO_TELLS: TileTells = { damp: false, pitted: false, warm: false, hairline: false };
+
+const NO_SIDES: Sides = { north: false, east: false, south: false, west: false };
+
 /** One square of the map, as far as the player knows it. */
 export interface Tile {
   x: number;
@@ -60,6 +84,14 @@ export interface Tile {
   block: BlockId | null;
   /** True for a top block the player has noticed mineral traces on. */
   traced: boolean;
+  /** The hazard tells the top block shows (design doc 3.7). */
+  tells: TileTells;
+  /**
+   * True if the crew worked on the square this shift (design doc 5.2): a
+   * hazard that reaches it when the shift ends hurts the crew. The worked
+   * squares are the player's own actions, so this tells nothing hidden.
+   */
+  worked: boolean;
   structure: StructureMark | null;
   /**
    * The countdown of a crack on the top block (design doc 6.1): 1 means it
@@ -118,6 +150,13 @@ export interface Tile {
    * those cannot be mined.
    */
   cheaper: boolean;
+  /**
+   * The sides of the square that are on the edge of the area where mining
+   * is cheaper (the squares near a camp, the camp's own included): the map
+   * draws one line round that area instead of a mark on each square. All
+   * false inside the area and outside it.
+   */
+  cheaperEdge: Sides;
   /**
    * What is known to lie under the square's top (design doc 7.2; owner
    * question 93): the marks for ore, a pocket and a cavern, and `any` if at
@@ -239,6 +278,28 @@ export function comingFlows(state: GameState): ComingFlows {
   return coming;
 }
 
+/** True if the square (x, y) is in the area where a camp makes mining cheaper, or is a camp square. */
+function inCheaperArea(state: GameState, x: number, y: number): boolean {
+  if (!isSquare(state, x, y)) {
+    return false;
+  }
+  return campAtSquare(state, x, y) !== null || mineDiscountAt(state, x, y) > 0;
+}
+
+/** The sides of (x, y) on the edge of the cheaper area (see `Tile.cheaperEdge`). */
+function cheaperEdgeOf(state: GameState, x: number, y: number): Sides {
+  // With no camp there is no area: skip the checks for all 1,024 squares.
+  if (state.camps.length === 0 || !inCheaperArea(state, x, y)) {
+    return NO_SIDES;
+  }
+  return {
+    north: !inCheaperArea(state, x, y - 1),
+    east: !inCheaperArea(state, x + 1, y),
+    south: !inCheaperArea(state, x, y + 1),
+    west: !inCheaperArea(state, x - 1, y),
+  };
+}
+
 /**
  * The tile of the square (x, y). Throws if it is not a square of the map.
  * `flows` is `comingFlows(state)`; a caller that builds many tiles works it
@@ -265,6 +326,8 @@ export function buildTile(
       square.contents.gas === 0 && flows.gas.has(`${x},${y}`) && !flows.vented.has(`${x},${y}`),
     vented: flows.vented.has(`${x},${y}`),
     blast: flows.blast.has(`${x},${y}`),
+    worked: isWorked(state, x, y),
+    cheaperEdge: cheaperEdgeOf(state, x, y),
   };
   const higher: HigherSides = {
     north: isHigher(state, x, y - 1, square.depth),
@@ -282,6 +345,7 @@ export function buildTile(
       kind: 'hidden',
       block: null,
       traced: false,
+      tells: NO_TELLS,
       structure: null,
       crack: null,
       crackRunning: false,
@@ -305,6 +369,7 @@ export function buildTile(
       kind: 'floor',
       block: null,
       traced: false,
+      tells: NO_TELLS,
       structure: null,
       crack: null,
       crackRunning: false,
@@ -326,6 +391,12 @@ export function buildTile(
     kind: 'block',
     block: BLOCK_ID_BY_CODE.get(square.top.block) ?? null,
     traced: square.traces,
+    tells: {
+      damp: square.tells.dampStone,
+      pitted: square.tells.pittedRock,
+      warm: square.tells.warmGlow,
+      hairline: square.tells.hairlineGlow,
+    },
     structure: structureMark(square.top.structure),
     crack: square.top.crackTimer === null ? null : square.top.crackTimer + 1,
     // `slumpCheck` reads only what the player sees (depths, trees, supports,
@@ -359,4 +430,55 @@ export function buildTiles(state: GameState, window: TileWindow): Tile[][] {
     rows.push(row);
   }
   return rows;
+}
+
+/**
+ * The square a new or resumed run's map opens on (issue #110). The middle of
+ * the surface is forest on most seeds, so:
+ * - if anything has been dug, the middle of the dug squares (the pit);
+ * - otherwise the open-ground square with coal on top that is nearest the
+ *   middle of the map (design doc 3.2: there is always at least one);
+ * - otherwise the open ground nearest the middle; otherwise the middle.
+ * Reads only depths, trees and seen top blocks.
+ */
+export function openingSquare(state: GameState): { x: number; y: number } {
+  const midX = (state.size.x - 1) / 2;
+  const midY = (state.size.y - 1) / 2;
+  // The box round the dug squares.
+  let minX = state.size.x;
+  let maxX = -1;
+  let minY = state.size.y;
+  let maxY = -1;
+  // The nearest coal on open ground, and the nearest open ground, with their distances.
+  let coal: { x: number; y: number } | null = null;
+  let coalDistance = Infinity;
+  let open: { x: number; y: number } | null = null;
+  let openDistance = Infinity;
+  for (let y = 0; y < state.size.y; y += 1) {
+    for (let x = 0; x < state.size.x; x += 1) {
+      const square = knownSquare(state, x, y);
+      if (square.depth > 0) {
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+      }
+      if (square.tree || square.top === null) {
+        continue;
+      }
+      const distance = Math.abs(x - midX) + Math.abs(y - midY);
+      if (distance < openDistance) {
+        open = { x, y };
+        openDistance = distance;
+      }
+      if (square.top.block === BLOCKS.coalSeam.code && distance < coalDistance) {
+        coal = { x, y };
+        coalDistance = distance;
+      }
+    }
+  }
+  if (maxX >= 0) {
+    return { x: Math.round((minX + maxX) / 2), y: Math.round((minY + maxY) / 2) };
+  }
+  return coal ?? open ?? { x: Math.round(midX), y: Math.round(midY) };
 }

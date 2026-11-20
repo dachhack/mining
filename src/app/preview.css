@@ -13,15 +13,28 @@
   padding: 0 12px 24px;
 }
 
+/* The title and the version share one line, to leave the screen to the map. */
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 10px;
+}
+
 .top .title {
-  font-size: 1.25rem;
-  margin: 8px 0 0;
+  font-size: 1.1rem;
+  margin: 6px 0 0;
 }
 
 .top .status {
-  margin: 0 0 6px;
-  font-size: 0.8rem;
+  margin: 0;
+  font-size: 0.75rem;
   color: #a89f92;
+}
+
+.top .run-bar,
+.top .new-run {
+  flex: 1 1 100%;
 }
 
 .run-bar,
@@ -101,8 +114,12 @@ button.small {
   z-index: 1;
   background: #14110f;
   border-bottom: 1px solid #3a322c;
-  padding: 6px 0;
-  font-size: 0.85rem;
+  padding: 4px 0;
+  font-size: 0.8rem;
+}
+
+.gauges .line {
+  margin-bottom: 2px;
 }
 
 .ended {
@@ -119,24 +136,22 @@ button.small {
 
 .map-bar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   margin-bottom: 6px;
 }
 
-/* Every button in the row shares the width; the label has a row of its own. */
+/* One row: the label takes what the two zoom buttons leave. */
 .map-bar > button {
-  flex: 1 1 auto;
-  padding: 0 6px;
+  flex: none;
+  padding: 0 10px;
   font-size: 0.85rem;
   white-space: nowrap;
 }
 
 .map-label {
-  flex: 1 1 100%;
-  text-align: center;
-  font-size: 0.85rem;
+  flex: 1 1 auto;
+  font-size: 0.8rem;
   color: #c9c0b3;
 }
 
@@ -160,24 +175,27 @@ button.small {
   -webkit-user-select: none;
 }
 
+/* The legend: one entry to a line where its text is long, so that each
+   little picture sits beside its own words. */
 .map-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
-  margin-top: 6px;
-  font-size: 0.75rem;
+  gap: 6px 14px;
+  margin-top: 10px;
+  font-size: 0.8rem;
   color: #c9c0b3;
 }
 
 .legend-entry {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 .legend-swatch {
-  width: 18px;
-  height: 18px;
+  flex: none;
+  width: 24px;
+  height: 24px;
 }
 
 .map-notes {
@@ -248,14 +266,21 @@ button.small {
 .tool-bar {
   display: flex;
   align-items: center;
-  /* Two tool buttons and the hint do not fit on one line of a phone. */
+  /* The tool buttons and the hint do not fit on one line of a phone. */
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 6px;
   margin: 6px 0;
 }
 
 .tool-bar .tool {
   flex: none;
+  padding: 0 10px;
+  font-size: 0.85rem;
+}
+
+/* The hint has a line of its own, so the buttons do not move when it changes. */
+.tool-bar .tool-hint {
+  flex: 1 1 100%;
 }
 
 /* A tool while it is on: a tap places a support, or founds a camp. */
@@ -268,4 +293,19 @@ button.small {
 .tool-hint {
   font-size: 0.85rem;
   color: #b9ad9c;
+}
+
+/* The forecast and the hazards: a heading and one line for each thing. */
+.list-heading {
+  margin: 0 0 2px;
+  font-weight: bold;
+}
+
+ul.lines {
+  margin: 0;
+  padding-left: 18px;
+}
+
+ul.lines > .line {
+  margin-bottom: 3px;
 }

@@ -20,13 +20,15 @@
 // - Squares are visited row by row: y = 0 first, and x = 0 first in a row.
 // - The square gives one unit to its lowest face neighbour (ties broken
 //   north, east, south, west) if that neighbour's level is at least
-//   `HAZARDS.water.flowMinDrop` (2) lower than its own, and repeats while
+//   `flowMinDrop` (2) lower than its own, and repeats while
 //   that holds. Levels are read at that moment, after every unit moved so
 //   far.
 // - A unit moves at most one square in a cube phase: a square gives away only
 //   units it held when the step began, never one it has just been given.
 // - Lava flows by the same rule, with its own levels, and only in the cube
 //   phase of an even-numbered shift (`HAZARDS.lava.flowEveryShifts`).
+// - `flowMinDrop` is `HAZARDS.water.flowMinDrop` for water and
+//   `HAZARDS.lava.flowMinDrop` for lava.
 //
 // WHY 2 AND NOT 1. A move from level a to a level 2 or more lower leaves the
 // two squares closer together. A move across a drop of only 1 would swap
@@ -191,7 +193,7 @@ function drainAboveGround(pit: Pit, fluid: FluidKind, events: GameEvent[]): void
  */
 function flow(pit: Pit, fluid: FluidKind): Move[] {
   const units = unitsOf(pit, fluid);
-  const minDrop = HAZARDS.water.flowMinDrop;
+  const minDrop = fluid === 'lava' ? HAZARDS.lava.flowMinDrop : HAZARDS.water.flowMinDrop;
   // What each square may still give away: the units it held when the step
   // began. A unit it is given during the step is not in here, so no unit
   // moves twice.

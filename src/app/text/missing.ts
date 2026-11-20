@@ -8,7 +8,8 @@
 import { SHIFT } from '../../data';
 import { legalActions } from '../../engine';
 import type { GameState } from '../../engine';
-import { choiceName } from './describe';
+import { choiceLabel, choiceName } from './describe';
+import type { Audience } from './describe';
 import { isNamedBySquareOnly } from './log';
 
 /**
@@ -25,9 +26,10 @@ import { isNamedBySquareOnly } from './log';
  *
  * Mines and cuts are counted, not named (there can be hundreds); the listed
  * choices are named, with their cost: "3 mines and 120 cuts cost more than
- * the 1 AP you have left; so does: [2] some-choice."
+ * the 1 AP you have left; so does: [2] some-choice." On the phone a listed
+ * choice is named by its button: "Craft Support (2 AP)".
  */
-export function tooLittleApNote(state: GameState): string | null {
+export function tooLittleApNote(state: GameState, audience: Audience = 'playTool'): string | null {
   const fullShift = Math.max(SHIFT.apPerShift, state.ap);
   // `{ ...state, ap }` is a copy of the state with one field changed (like
   // Python's `dataclasses.replace`). The cube arrays are shared, not copied;
@@ -51,7 +53,12 @@ export function tooLittleApNote(state: GameState): string | null {
   const cuts = tooDear.filter((action) => action.type === 'cutTree').length;
   const listed = tooDear
     .filter((action) => !isNamedBySquareOnly(action))
-    .map((action) => `[${action.ap}] ${choiceName(action)}`);
+    // The play tool names the command to type; the phone the button's words.
+    .map((action) =>
+      audience === 'phone'
+        ? `${choiceLabel(action)} (${action.ap} AP)`
+        : `[${action.ap}] ${choiceName(action)}`,
+    );
 
   const parts: string[] = [];
   if (mines > 0) {

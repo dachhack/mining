@@ -17,9 +17,11 @@ async function tapSquare(page: Page, canvas: Locator, x: number, y: number): Pro
     throw new Error('the map is not on screen');
   }
   const cellPx = Number(data['cellPx']);
+  // The squares start after the rulers along the top and the left of the map.
+  const originPx = Number(data['originPx']);
   await page.touchscreen.tap(
-    box.x + (x - Number(data['camX']) + 0.5) * cellPx,
-    box.y + (y - Number(data['camY']) + 0.5) * cellPx,
+    box.x + originPx + (x - Number(data['camX']) + 0.5) * cellPx,
+    box.y + originPx + (y - Number(data['camY']) + 0.5) * cellPx,
   );
 }
 
@@ -39,7 +41,7 @@ test('a risky mine needs a second tap; cracks show; the support tool places a su
   const canvas = page.getByTestId('map-canvas');
   const outcome = page.getByTestId('outcome');
   const supportTool = page.getByTestId('tool-support');
-  await expect(supportTool).toHaveText('Place support (0)');
+  await expect(supportTool).toHaveText('Support (0)');
   await expect(supportTool).toHaveAttribute('aria-pressed', 'false');
 
   // Shift 1: a plus of five dirt squares, one level down. Nothing is risky yet.
@@ -69,14 +71,17 @@ test('a risky mine needs a second tap; cracks show; the support tool places a su
   await tapSquare(page, canvas, 15, 12);
   await expect(outcome).toContainText('Got 1 Stone');
   await expect(canvas).toHaveAttribute('data-unstable', '');
-  await page.getByText('Other actions').click();
+  await page.locator('.actions-heading').click();
   await page.locator('[data-choice="craft-support"]').click();
-  await expect(supportTool).toHaveText('Place support (1)');
+  await expect(supportTool).toHaveText('Support (1)');
   await page.getByTestId('end-shift').click();
 
   // Shift 3: the six squares have cracked.
-  await expect(page.getByTestId('map-notes')).toContainText('On x13 y12: a crack, countdown 2');
-  await expect(page.getByTestId('forecast')).toContainText('x13 y12 is cracked');
+  // The map draws the crack and its countdown (the phone has no note for it).
+  await expect(canvas).toHaveAttribute('data-cracks', /(^| )13,12:2( |$)/);
+  await expect(page.getByTestId('hazards')).toContainText(
+    'x13 y12 is cracked: due at the end of the next shift',
+  );
   await expect(page.getByTestId('map-legend')).toContainText('crack');
 
   // The support tool: on, a tap places the support instead of mining.
@@ -84,11 +89,10 @@ test('a risky mine needs a second tap; cracks show; the support tool places a su
   await expect(supportTool).toHaveAttribute('aria-pressed', 'true');
   await tapSquare(page, canvas, 13, 12);
   await expect(outcome).toContainText('Placed a support.');
-  await expect(page.getByTestId('map-notes')).toContainText(
-    'On x13 y12: a crack, stopped at 2, a support',
-  );
+  await expect(canvas).toHaveAttribute('data-cracks', /(^| )13,12:2:stopped( |$)/);
+  await expect(canvas).toHaveAttribute('data-structures', /13,12:support/);
   // The last support is placed: a tap mines again.
-  await expect(supportTool).toHaveText('Place support (0)');
+  await expect(supportTool).toHaveText('Support (0)');
   await expect(supportTool).toHaveAttribute('aria-pressed', 'false');
 
   // With no support left the tool says so and changes nothing.

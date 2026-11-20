@@ -13,7 +13,9 @@ import { CAMPS, CAMP_TOOLS, STRUCTURES } from '../data';
 import { ENGINE_VERSION, countItem, isRunActive } from '../engine';
 import {
   MAX_SEED,
+  clearPrepared,
   clearSavedRun,
+  loadPrepared,
   loadRun,
   parseSeed,
   randomSeed,
@@ -27,10 +29,10 @@ import type { MapMarks, MapSquare, MapTool } from './map/targets';
 import type { LogEntry, Session } from './text/log';
 import { takeTurnLines } from './text/turn';
 import {
+  FORECAST_HEADING_PHONE,
+  HAZARDS_HEADING,
   KNOWN_BELOW_NOTE,
   buildView,
-  forecastLine,
-  hazardsLine,
   renderEndedLines,
 } from './text/view';
 import type { ChoiceView, PlayerView } from './text/view';
@@ -84,10 +86,20 @@ function showLines(box: HTMLElement, lines: string[]): void {
   box.hidden = lines.length === 0;
 }
 
-/** The small print under a choice: its name and its AP cost. */
+/** The small print under a choice: its AP cost. (Its typed name is the play tool's.) */
 function choiceMeta(choice: ChoiceView): string {
-  const cost = choice.ap === null ? 'no AP' : `${choice.ap} AP`;
-  return `${choice.name} · ${cost}`;
+  return choice.ap === null ? 'no AP' : `${choice.ap} AP`;
+}
+
+/**
+ * A heading and its items in `box`, replacing what was there: the heading
+ * as a paragraph, and one list item for each line.
+ */
+function showList(box: HTMLElement, heading: string, items: string[]): void {
+  const list = element('ul', 'lines');
+  list.append(...items.map((item) => element('li', 'line', item)));
+  box.replaceChildren(element('p', 'list-heading', heading), list);
+  box.hidden = false;
 }
 
 /** Build the screen inside `root` and start (or resume) a run. */
@@ -157,6 +169,7 @@ export function mountPreview(root: HTMLElement): void {
   // (issue #100), places a pump, seals, scans, or lists what is known of the
   // square (issue #104); with all off, a tap mines or cuts.
   const toolBar = element('section', 'tool-bar');
+  toolBar.setAttribute('aria-label', 'Tools: what a tap on the map does');
   /** One button of the tool bar. */
   function toolButton(testId: string): HTMLButtonElement {
     const made = element('button', 'small tool');
@@ -190,6 +203,10 @@ export function mountPreview(root: HTMLElement): void {
   mapNotes.dataset['testid'] = 'map-notes';
   const forecast = element('section', 'forecast');
   forecast.dataset['testid'] = 'forecast';
+  const hazards = element('section', 'forecast');
+  hazards.dataset['testid'] = 'hazards';
+  const notOffered = element('section', 'forecast');
+  notOffered.dataset['testid'] = 'not-offered';
   const outcome = element('section', 'outcome');
   outcome.dataset['testid'] = 'outcome';
   // End shift: an explicit button of its own, right under the map (design
@@ -205,20 +222,23 @@ export function mountPreview(root: HTMLElement): void {
   actions.dataset['testid'] = 'actions';
   allActions.append(actionsHeading, actions);
 
-  // What came of the last tap or choice sits under the map, so that the map
-  // does not move under the finger when the text changes length.
+  // The map comes first, so that it is on the first screen of a phone. The
+  // tool bar and what came of the last tap or choice sit under it, so that
+  // the map does not move under the finger when their text changes length.
   page.append(
     header,
     note,
     playTop,
     gauges,
     ended,
-    toolBar,
     tapMap.element,
+    toolBar,
     outcome,
     endShiftButton,
-    mapNotes,
     forecast,
+    hazards,
+    notOffered,
+    mapNotes,
     allActions,
     tapMap.legend,
   );
@@ -228,7 +248,17 @@ export function mountPreview(root: HTMLElement): void {
   // `session` is replaced on a new run or restart; `lastLines` holds what
   // came of the last tap or choice, and `marks` what a refused tap marks on
   // the map (cleared by the next tap or choice).
-  const loaded = loadRun(store);
+  // A prepared state (a test's, or for screenshots: see `PREPARED_KEY`) comes
+  // before the saved run, and is never saved over it.
+  const prepared = loadPrepared(store);
+  let saving = prepared === null;
+  const loaded =
+    prepared === null
+      ? loadRun(store)
+      : {
+          session: prepared,
+          note: 'A prepared state, for tests and screenshots. It is not saved.',
+        };
   let session: Session = loaded.session ?? startRun(randomSeed(Math.random));
   let lastLines: string[] = [];
   let marks: MapMarks = NO_MARKS;
@@ -247,7 +277,10 @@ export function mountPreview(root: HTMLElement): void {
    * is true for a new or resumed run: the map then centres on its middle.
    */
   function draw(fresh: boolean): void {
-    const view: PlayerView = buildView(session.state, { deepestDepth: session.deepestDepth });
+    const view: PlayerView = buildView(session.state, {
+      deepestDepth: session.deepestDepth,
+      audience: 'phone',
+    });
     seedText.textContent = `Seed ${session.log.seed}`;
     showLines(gauges, view.hud);
     showLines(ended, renderEndedLines(view));
@@ -262,20 +295,32 @@ export function mountPreview(root: HTMLElement): void {
       ),
     );
     if (view.ended === null) {
-      const notOffered = view.notOffered.map((line) => `Not possible now: ${line}`);
-      showLines(forecast, [hazardsLine(view), forecastLine(view), ...notOffered]);
+      // What ending the shift will do, one line each, most dangerous first;
+      // then the hazards and their countdowns; then what AP is missing for.
+      showList(forecast, FORECAST_HEADING_PHONE, view.forecastLines);
+      if (view.hazards.length === 0) {
+        showLines(hazards, [`${HAZARDS_HEADING} none known`]);
+      } else {
+        showList(hazards, HAZARDS_HEADING, view.hazards);
+      }
+      showLines(
+        notOffered,
+        view.notOffered.map((line) => `Not possible now: ${line}`),
+      );
     } else {
       showLines(forecast, []);
+      showLines(hazards, []);
+      showLines(notOffered, []);
     }
     showLines(outcome, lastLines);
 
     // The tool bar: how many supports there are, and what a tap does now.
     const supportsHeld = countItem(session.state, STRUCTURES.support.placedFromItem);
-    supportTool.textContent = `Place support (${supportsHeld})`;
+    supportTool.textContent = `Support (${supportsHeld})`;
     supportTool.setAttribute('aria-pressed', tool === 'support' ? 'true' : 'false');
     supportTool.classList.toggle('on', tool === 'support');
     const kitsHeld = countItem(session.state, CAMPS.kitItem);
-    campTool.textContent = `Found camp (${kitsHeld})`;
+    campTool.textContent = `Camp (${kitsHeld})`;
     campTool.setAttribute('aria-pressed', tool === 'camp' ? 'true' : 'false');
     campTool.classList.toggle('on', tool === 'camp');
     // With no kit there is nothing to found: the button is not shown.
@@ -299,11 +344,11 @@ export function mountPreview(root: HTMLElement): void {
     showTool(
       explosiveTool,
       'explosive',
-      `Place explosive (${explosivesHeld})`,
+      `Explosive (${explosivesHeld})`,
       explosivesHeld > 0 || tool === 'explosive',
     );
-    showTool(pumpTool, 'pump', `Place pump (${held.pumps})`, held.pumps > 0);
-    showTool(ventTool, 'vent', `Place vent (${held.vents})`, held.vents > 0);
+    showTool(pumpTool, 'pump', `Pump (${held.pumps})`, held.pumps > 0);
+    showTool(ventTool, 'vent', `Vent (${held.vents})`, held.vents > 0);
     showTool(sealTool, 'seal', `Seal (${held.sealant})`, held.sealant > 0);
     showTool(scanTool, 'scan', `Scan (${held.charges})`, held.charges > 0);
     showTool(lookTool, 'look', 'Inspect', true);
@@ -432,7 +477,7 @@ export function mountPreview(root: HTMLElement): void {
     marks = NO_MARKS;
     pending = null;
     try {
-      lastLines = takeTurnLines(session, entry);
+      lastLines = takeTurnLines(session, entry, 'phone');
     } catch (error) {
       // Should not happen: the choice came from the list of legal choices,
       // or from a tap the rules had just allowed.
@@ -458,7 +503,9 @@ export function mountPreview(root: HTMLElement): void {
       tool = 'dig';
     }
     note.hidden = true;
-    saveRun(store, session);
+    if (saving) {
+      saveRun(store, session);
+    }
     draw(false);
     if (fromList) {
       playTop.scrollIntoView({ block: 'start' });
@@ -468,6 +515,8 @@ export function mountPreview(root: HTMLElement): void {
   /** Start a new run on `seed`, replacing the saved one. */
   function begin(seed: number, message: string): void {
     clearSavedRun(store);
+    clearPrepared(store);
+    saving = true;
     session = startRun(seed);
     lastLines = [];
     marks = NO_MARKS;
