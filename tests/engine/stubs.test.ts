@@ -36,7 +36,6 @@ describe('actionKey and sameAction', () => {
     { type: 'stashPut', item: 'coal', count: 2, ap: 0 },
     { type: 'stashTake', item: 'coal', count: 2, ap: 0 },
     { type: 'decommissionCamp', ap: 1 },
-    { type: 'giveUp', ap: 0 },
   ];
 
   it('give every kind of action its own key', () => {
@@ -95,16 +94,5 @@ describe('the M2 action modules are stubs (decision note 0015)', () => {
   it('campTools offers nothing (until M2-8)', async () => {
     const { legalCampToolActions } = await import('../../src/engine/actions/campTools');
     expect(legalCampToolActions(state)).toEqual([]);
-  });
-
-  it('giveUp offers nothing (until M2-9)', async () => {
-    const { legalGiveUpActions } = await import('../../src/engine/actions/giveUp');
-    expect(legalGiveUpActions(state)).toEqual([]);
-  });
-
-  it('no camp has an air line (until M2-7)', async () => {
-    const { campAirLineIntact } = await import('../../src/engine/airLine');
-    const camp = { pos: { x: 1, y: 0, z: 0 }, foundedShift: 1, stash: {} };
-    expect(campAirLineIntact(state, camp)).toBe(false);
   });
 });

@@ -334,7 +334,7 @@ export function playRun(options: PlayOptions): RunResult {
     itemsCrafted,
     structuresPlaced,
     damageTaken,
-    healthAtEnd: state.avatar.health,
+    healthAtEnd: state.crew.health,
     fuelAtEnd: state.fuel,
     lampOilAtEnd: state.lampOil,
     shiftsAtZeroFuel,

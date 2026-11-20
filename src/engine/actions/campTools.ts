@@ -23,7 +23,9 @@ export function legalCampToolActions(_state: GameState): CampToolAction[] {
 
 /**
  * Contract for M2-8: carry out `action`, which the dispatcher has already
- * checked is legal. Does not spend the AP; the dispatcher has.
+ * checked is legal. Placing a pump or a vent and sealing mark the square
+ * worked (`markWorked` in crew.ts; design doc 5.2); scanning does not. Does
+ * not spend the AP; the dispatcher has.
  */
 export function applyCampToolAction(
   _state: GameState,

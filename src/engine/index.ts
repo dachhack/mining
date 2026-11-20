@@ -5,18 +5,17 @@
 //
 // This file is also the dispatcher: it owns what is common to every action
 // (copying the state, checking legality, spending AP, then reveal) and hands the rest to one module per rule. The modules of the M2
-// actions (supports, explosives, camp tools, camps, giving up) are stubs until
+// actions (supports, explosives, camp tools, camps) are stubs until
 // their tasks fill them in; each stub's doc comment is its contract
 // (decision note 0015).
 
-import { AVATAR, CONTRACT_IDS, HAZARDS, SHIFT, WORLD, findLoadout } from '../data';
+import { CONTRACT_IDS, CREW, SHIFT, WORLD, findLoadout } from '../data';
 import { actionKey } from './actionTypes';
 import type { Action } from './actionTypes';
 import { legalCampActions, applyCampAction } from './actions/camp';
 import { legalCampToolActions, applyCampToolAction } from './actions/campTools';
 import { legalCraftActions, applyCraft } from './actions/craft';
 import { legalCutTreeActions, applyCutTree } from './actions/cutTree';
-import { legalGiveUpActions, applyGiveUp } from './actions/giveUp';
 import { legalLeaveActions, applyLeave } from './actions/leave';
 import { legalMineActions, applyMine } from './actions/mine';
 import { legalPlaceExplosiveActions, applyPlaceExplosive } from './actions/placeExplosive';
@@ -77,8 +76,7 @@ export function createRun(seed: number, contractId: string, loadoutId: string): 
   // The forest on the surface (issue #70), drawn from the same generator.
   generateSurface(state);
 
-  state.avatar.health = AVATAR.startHealth;
-  state.avatar.air = HAZARDS.air.max;
+  state.crew.health = CREW.startHealth;
   state.shift = SHIFT.firstShiftNumber;
   state.ap = SHIFT.apPerShift;
   state.fuel = loadout.fuel;
@@ -117,7 +115,6 @@ export function legalActions(state: GameState): Action[] {
     ...legalCraftActions(state),
     ...legalCampActions(state),
     ...legalLeaveActions(state),
-    ...legalGiveUpActions(state),
   ];
   // An action the player cannot afford is not legal (0005 item 12). The rule
   // modules list actions without looking at AP; this is the one place it is
@@ -175,9 +172,6 @@ export function applyAction(state: GameState, action: Action): StepResult {
     case 'stashTake':
     case 'decommissionCamp':
       applyCampAction(next, action, events);
-      break;
-    case 'giveUp':
-      applyGiveUp(next, action, events);
       break;
     case 'cutTree':
       applyCutTree(next, action, events);
@@ -249,7 +243,6 @@ export type {
   CutTreeAction,
   DecommissionCampAction,
   FoundCampAction,
-  GiveUpAction,
   LeaveAction,
   MineAction,
   PlaceExplosiveAction,
@@ -263,10 +256,8 @@ export type {
   StashPutAction,
   StashTakeAction,
 } from './actionTypes';
-export { campAirLineIntact } from './airLine';
 export { campCells, campsAt } from './camps';
 export type {
-  AirChangeReason,
   DamageCause,
   DestructionCause,
   FluidKind,
@@ -276,6 +267,9 @@ export type {
   RunEndCause,
   RunOutcome,
 } from './events';
+// The squares the crew worked this shift (design doc 5.2): the player's own
+// actions, so a view may show them.
+export { isWorked, workedSquares } from './crew';
 export { hashState } from './hash';
 export { canCarry, carriedWeight, carryCapacity } from './inventory';
 export { deserialise, serialise } from './serialise';
@@ -308,15 +302,7 @@ export {
   stashEntries,
   structureAt,
 } from './state';
-export type {
-  ArmedCharge,
-  ArmedKind,
-  Avatar,
-  Camp,
-  GameState,
-  LooseItems,
-  RunStatus,
-} from './state';
+export type { ArmedCharge, ArmedKind, Camp, Crew, GameState, LooseItems, RunStatus } from './state';
 // Tells: the mineral traces the player has seen on rock near ore.
 export { showsMineralTraces, visibleMineralTraces } from './tells';
 // The seeded generator, for tools and tests that need random numbers of their

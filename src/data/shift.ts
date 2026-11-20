@@ -32,6 +32,4 @@ export const ACTION_COSTS: ActionCostData = {
   campCraft: 1,
   stash: 0,
   decommissionCamp: 1,
-  // Not given anywhere; 0 is assumed, like leaving (raised in the PR for issue #50).
-  giveUp: 0,
 };

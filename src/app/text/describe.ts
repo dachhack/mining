@@ -38,6 +38,11 @@ export function depthName(depth: number): string {
 const RUN_END_TEXT: Record<string, string> = {
   left: 'you left the mine alive with what you had gathered (a "salvage" run)',
   outOfFuel: 'you ran out of fuel and the run is lost',
+  // The crew lost its last health (design doc 5.3).
+  buried: 'the crew was buried by a slumping pit wall and the run is lost',
+  drowned: 'the crew drowned and the run is lost',
+  burned: 'the crew was burned and the run is lost',
+  poisoned: 'the crew was poisoned by gas and the run is lost',
 };
 
 /** How a run ended, in words. `cause` is the engine's `RunEndCause`. */
@@ -104,7 +109,6 @@ function describeAction(state: GameState, action: Action): string {
     case 'foundCamp':
     case 'rest':
     case 'decommissionCamp':
-    case 'giveUp':
       return action.type;
   }
 }
@@ -153,7 +157,6 @@ export function choiceName(entry: LogEntry): string {
     case 'foundCamp':
     case 'rest':
     case 'decommissionCamp':
-    case 'giveUp':
       return idInLowerCase(entry.type);
   }
 }
@@ -185,8 +188,18 @@ const GAUGE_REASONS: Record<string, string> = {
   crafted: 'crafted',
 };
 
-/** Damage causes in words; a cause not listed is shown by its id. */
-const DAMAGE_CAUSES: Record<string, string> = { rockfall: 'a falling block' };
+/**
+ * The kinds of hazard that hurt the crew, in words (design doc 5.2). The
+ * keys are the engine's `DamageCause`; a cause not listed is shown by its id.
+ */
+const DAMAGE_CAUSES: Record<string, string> = {
+  slump: 'a slumping pit wall',
+  water: 'water',
+  lava: 'lava',
+  gas: 'gas',
+  gasExplosion: 'a gas explosion',
+  explosion: 'an explosion',
+};
 
 /**
  * What the player now sees on top of the square (x, y) of `after`, as a
@@ -218,7 +231,7 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
     switch (event.type) {
       case 'damageTaken':
         lines.push(
-          `You lost ${event.amount} health from ${DAMAGE_CAUSES[event.cause] ?? event.cause} (now ${event.health}).`,
+          `The crew lost ${event.amount} health to ${DAMAGE_CAUSES[event.cause] ?? event.cause} where it worked this shift (crew health is now ${event.health}).`,
         );
         break;
       case 'blockMined':

@@ -18,7 +18,7 @@
 // rule intends, and the engine decides it.
 
 import {
-  AVATAR,
+  CREW,
   NO_STRUCTURE,
   SHIFT,
   STRUCTURES,
@@ -95,6 +95,7 @@ export interface EndedView {
   headline: string;
   shiftsPlayed: number;
   deepest: string;
+  /** Crew health at the end. */
   health: number;
   fuel: number;
 }
@@ -250,7 +251,7 @@ function hudLines(state: GameState, options: ViewOptions): string[] {
     // Lamp oil is still counted and still burns, but nothing needs light any
     // more (decision note 0026); it goes with task T3.
     `Lamp oil ${state.lampOil} (not used)`,
-    `Health ${state.avatar.health}/${AVATAR.startHealth}`,
+    `Crew health ${state.crew.health}/${CREW.startHealth}`,
   ].join(' | ');
 
   const deepest = `Deepest square so far: ${depthName(options.deepestDepth)}`;
@@ -328,7 +329,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       headline: status.kind === 'ended' ? runEndText(status.cause) : '',
       shiftsPlayed: state.shift - SHIFT.firstShiftNumber + 1,
       deepest: depthName(options.deepestDepth),
-      health: state.avatar.health,
+      health: state.crew.health,
       fuel: state.fuel,
     };
     return {
@@ -446,7 +447,7 @@ export function renderEndedLines(view: PlayerView): string[] {
   const e = view.ended;
   return [
     `=== RUN ENDED: ${e.headline} ===`,
-    `Shifts played: ${e.shiftsPlayed} | Deepest square: ${e.deepest} | Health ${e.health} | Fuel ${e.fuel}`,
+    `Shifts played: ${e.shiftsPlayed} | Deepest square: ${e.deepest} | Crew health ${e.health} | Fuel ${e.fuel}`,
   ];
 }
 

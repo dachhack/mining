@@ -16,9 +16,12 @@ import type { CubePhase } from './phase';
  * 4. ignition (item 14), repeated until nothing new explodes.
  *
  * Changes `state` in place and appends to `events`. Uses no randomness.
- * An explosion's damage to the avatar goes through `recordDamage(phase, ...)`,
- * once for each explosion; what it destroys goes through the helpers in
- * destroy.ts. Never moves the avatar (0014 item 2).
+ * Damage to the crew goes through cube/phase.ts (design doc 5.2):
+ * `recordDamage(state, phase, 'gas', ...)` for each square gas is on;
+ * `recordDamage` and `recordDamageBeside` with cause 'gasExplosion' for each
+ * exploding gas square; `recordDamage` with cause 'explosion' for each square
+ * in the blast of a charge or of unstable ore. What an explosion destroys
+ * goes through the helpers in destroy.ts.
  *
  * The forecast runs this step on a copy of the cube (0014 item 4), so it must
  * read nothing but `state`.

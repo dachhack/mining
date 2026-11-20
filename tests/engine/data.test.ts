@@ -192,15 +192,15 @@ describe('validateData', () => {
     expect(problems.some((p) => p.includes('structure "torch" has code 0'))).toBe(true);
   });
 
-  it('reports bad avatar and shift numbers', () => {
+  it('reports bad crew, avatar and shift numbers', () => {
     const problems = problemsAfter((data) => {
-      data.avatar.startHealth = 0;
+      data.crew.startHealth = 0;
       data.avatar.torchLightRadius = -1;
       data.shift.apPerShift = 0;
       data.shift.lampOilBurnEveryShifts = 0;
       data.actionCosts.move = -1;
     });
-    expect(problems.some((p) => p.includes('avatar.startHealth'))).toBe(true);
+    expect(problems.some((p) => p.includes('crew.startHealth'))).toBe(true);
     expect(problems.some((p) => p.includes('avatar.torchLightRadius'))).toBe(true);
     expect(problems.some((p) => p.includes('shift.apPerShift'))).toBe(true);
     expect(problems.some((p) => p.includes('shift.lampOilBurnEveryShifts'))).toBe(true);
@@ -427,22 +427,17 @@ describe('M2 data (decision note 0014)', () => {
     expect(GAME_DATA.hazards).toEqual({
       caveIn: {
         crackTimer: 2,
-        rockfallDamage: 4,
         supportLiningReach: 2,
         tightCellSolidSides: 3,
         supportHoldSolidSides: 2,
       },
       water: { unitsPerCell: 1, floodedMoveExtraAp: 1, pumpUnitsPerShift: 3, pumpReach: 2 },
       gas: { pocketUnitsPerCell: 4, ventReach: 2 },
-      explosion: { damage: 6 },
       lava: {
         unitsPerCell: 1,
         flowEveryShifts: 2,
         sourcePocketCellsOver: 8,
-        damageInCell: 5,
-        damageBeside: 1,
       },
-      air: { max: 10, lossPerShift: 1 },
       forecast: { unseenBlock: 'stone' },
     });
     expect(GAME_DATA.tells.hazards).toEqual({
@@ -462,7 +457,6 @@ describe('M2 data (decision note 0014)', () => {
       restMinAp: 1,
       upkeepFuel: 1,
       upkeepEveryShifts: 4,
-      airLineMaxBadStretch: 8,
     });
     expect(GAME_DATA.campTools).toEqual({
       drillItem: 'drill',
@@ -590,6 +584,36 @@ describe('M2 data (decision note 0014)', () => {
     expect(problems[1]).toContain('unknown item "adamantium"');
   });
 
+  it('has the crew numbers of design doc 5.1 and 5.2', () => {
+    expect(GAME_DATA.crew).toEqual({
+      startHealth: 10,
+      damage: {
+        slump: 3,
+        water: 1,
+        lavaOn: 5,
+        lavaBeside: 1,
+        gas: 1,
+        gasExplosion: 3,
+        explosion: 6,
+      },
+    });
+  });
+
+  it('reports bad crew damage numbers', () => {
+    const problems = problemsAfter((data) => {
+      data.crew.damage.slump = -1;
+      data.crew.damage.gas = 1.5;
+      data.crew.damage.lavaOn = 0;
+    });
+    expect(problems).toHaveLength(3);
+    for (const part of ['crew.damage.slump', 'crew.damage.gas', 'crew.damage.lavaOn must be']) {
+      expect(
+        problems.some((p) => p.includes(part)),
+        `no problem mentions ${part}`,
+      ).toBe(true);
+    }
+  });
+
   it('reports bad hazard numbers', () => {
     const problems = problemsAfter((data) => {
       data.hazards.caveIn.crackTimer = -1;
@@ -597,18 +621,16 @@ describe('M2 data (decision note 0014)', () => {
       data.hazards.water.unitsPerCell = 2;
       data.hazards.gas.pocketUnitsPerCell = 300;
       data.hazards.lava.flowEveryShifts = 0;
-      data.hazards.air.max = 0;
       data.hazards.forecast.unseenBlock = 'air';
       data.tells.hazards.warmGlowDistance = 0;
     });
-    expect(problems).toHaveLength(8);
+    expect(problems).toHaveLength(7);
     for (const part of [
       'hazards.caveIn.crackTimer',
       'hazards.caveIn.tightCellSolidSides',
       'hazards.water.unitsPerCell',
       'hazards.gas.pocketUnitsPerCell',
       'hazards.lava.flowEveryShifts',
-      'hazards.air.max',
       'hazards.forecast.unseenBlock',
       'tells.hazards.warmGlowDistance',
     ]) {

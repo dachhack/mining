@@ -6,10 +6,10 @@ Recorded runs: seed + list of decisions → expected state hash. `golden.test.ts
 
 | File                            | What it is                                                                                                                                                                           | Decisions | Ends                   | Hash               |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- | ---------------------- | ------------------ |
-| `pit-seed-11.json`              | The pit policy: digs a terraced pit round the middle of the map under the level rule, cuts the trees in its way, crafts fuel from coal, and leaves when the fuel is about to run out | 125       | salvage, left          | `671d5c37caee7453` |
-| `pit-seed-31-traces.json`       | The pit policy on a seed where the pit gets deep enough for top blocks to lie near ore: mineral traces are seen, and stay on the map                                                 | 265       | salvage, left          | `8e6d149649a69031` |
-| `random-seed-9-forest.json`     | Random legal actions, never leaving, until the fuel runs out. It cuts 35 trees: some grow back, and none on a stump whose square was mined                                           | 104       | death, out of fuel     | `9c69c51a561aa26b` |
-| `random-seed-27-cut-short.json` | Random legal actions, stopped after 60 decisions with the run still going                                                                                                            | 60        | still going (`active`) | `c4323aa0100f8296` |
+| `pit-seed-11.json`              | The pit policy: digs a terraced pit round the middle of the map under the level rule, cuts the trees in its way, crafts fuel from coal, and leaves when the fuel is about to run out | 125       | salvage, left          | `b80122adc31adc90` |
+| `pit-seed-31-traces.json`       | The pit policy on a seed where the pit gets deep enough for top blocks to lie near ore: mineral traces are seen, and stay on the map                                                 | 265       | salvage, left          | `a0ff0c9d7ac34c33` |
+| `random-seed-9-forest.json`     | Random legal actions, never leaving, until the fuel runs out. It cuts 35 trees: some grow back, and none on a stump whose square was mined                                           | 104       | death, out of fuel     | `ad1f508b90d05514` |
+| `random-seed-27-cut-short.json` | Random legal actions, stopped after 60 decisions with the run still going                                                                                                            | 60        | still going (`active`) | `c2008dbccef7b6b3` |
 
 Each file holds:
 
@@ -49,5 +49,7 @@ If the rules, the data in `src/data`, cube generation, the RNG, `serialise` or t
    Add `--description "..."` to keep a sentence about the run.
 
 All the files were replaced for issue #86 (mine by square; engine 0.4.0; decision note 0025): there is no miner, so no recorded move replays, a mine names a square and not a cell, and the `staircase` and `wander` policies that recorded the old runs are gone. The new set is recorded with the `pit` and `random` policies. Earlier re-recordings (issues #75 and #80) are in the git history of this file.
+
+All four were re-hashed for issue #90 (crew health; decision note 0027): the state's shape changed (`crew` for `avatar`, no air, and the new `worked` squares), so every hash changed. Every recorded decision is still legal and every run ends as it did.
 
 Either way: update the table above, and say in the PR description which hashes changed and why (`CLAUDE.md`, working agreement).

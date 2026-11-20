@@ -16,18 +16,20 @@ import type { Vec3 } from '../data';
 export type RunOutcome = 'fullSuccess' | 'partial' | 'salvage' | 'death';
 
 /**
- * Why a run ended: the avatar left from the surface (salvage), or one of the
- * deaths of design doc 5.3 (0014 item 22).
+ * Why a run ended (design doc v0.2 section 5.3): the player left (salvage),
+ * the fuel ran out, or the crew was lost, named by what took its last health:
+ * buried (a slump), drowned (water), burned (lava or an explosion), poisoned
+ * (gas).
  */
-export type RunEndCause =
-  'left' | 'outOfFuel' | 'crushed' | 'drowned' | 'suffocated' | 'burned' | 'entombed';
+export type RunEndCause = 'left' | 'outOfFuel' | 'buried' | 'drowned' | 'burned' | 'poisoned';
 
 /**
- * Why the avatar took damage: a falling block, lava (in its cell or beside
- * it), or an explosion (design doc 5.1; 0014 items 8, 15, 16). The miner
- * never falls (issue #80), so a fall is not a cause.
+ * The kinds of hazard that hurt the crew when they reach a worked square
+ * (design doc 5.2): a slumping block, water, lava (on the square or beside
+ * it), gas, a gas explosion, and the explosion of a charge or of unstable
+ * ore. Each kind hurts at most once a shift.
  */
-export type DamageCause = 'rockfall' | 'lava' | 'explosion';
+export type DamageCause = 'slump' | 'water' | 'lava' | 'gas' | 'gasExplosion' | 'explosion';
 
 /** The two fluids. They flow by the same rules (0014 items 12 and 16). */
 export type FluidKind = 'water' | 'lava';
@@ -46,14 +48,11 @@ export type DestructionCause = 'rockfall' | 'water' | 'lava' | 'explosion' | 'no
 export type RemovalReason =
   'pumped' | 'vented' | 'burnt' | 'reachedSurface' | 'buried' | 'sealed' | 'turnedToStone';
 
-/** Why the air gauge changed. */
-export type AirChangeReason = 'noAir' | 'refilled' | 'rested';
-
 /** Why a gauge (fuel or lamp oil) changed. */
 export type GaugeChangeReason = 'upkeep' | 'crafted';
 
 export type GameEvent =
-  /** The avatar lost `amount` health and now has `health`. */
+  /** The crew lost `amount` health to a hazard of kind `cause` and now has `health`. */
   | { type: 'damageTaken'; amount: number; cause: DamageCause; health: number }
   /** The block at `pos` was mined out. `block` is the code of what was there. */
   | { type: 'blockMined'; pos: Vec3; block: number }
@@ -139,9 +138,7 @@ export type GameEvent =
   | { type: 'cellSealed'; pos: Vec3 }
   /** The scanner revealed the region centred on `centre` (0014 item 31). */
   | { type: 'scanned'; centre: Vec3 }
-  /** Air changed by `delta` and is now `air`. */
-  | { type: 'airChanged'; delta: number; air: number; reason: AirChangeReason }
-  /** Health was restored by `amount` (resting at a camp) and is now `health`. */
+  /** Crew health was restored by `amount` (resting at a camp) and is now `health`. */
   | { type: 'healthRestored'; amount: number; health: number }
   /** A camp was founded; `pos` is its `Camp.pos`. */
   | { type: 'campFounded'; pos: Vec3 }

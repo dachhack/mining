@@ -1,12 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { AVATAR, CONTRACT_IDS, LOADOUTS, SHIFT, WORLD } from '../../src/data';
-import { createRun, hashState, legalActions, previewCubePhase } from '../../src/engine';
+import { CONTRACT_IDS, CREW, LOADOUTS, SHIFT, WORLD } from '../../src/data';
+import {
+  createRun,
+  hashState,
+  legalActions,
+  previewCubePhase,
+  workedSquares,
+} from '../../src/engine';
 import { cellCount } from '../../src/engine/state';
 
 describe('createRun', () => {
-  it('has no miner on the board: the avatar is only its gauges (issue #86)', () => {
+  it('has a crew and no avatar: health, resting, and no air (issue #90)', () => {
     const state = createRun(1, 'none', 'standard');
-    expect(Object.keys(state.avatar).sort()).toEqual(['air', 'health', 'resting']);
+    expect(state.crew).toEqual({ health: CREW.startHealth, resting: false });
+    expect(Object.keys(state)).not.toContain('avatar');
+  });
+
+  it('starts with no worked square', () => {
+    const state = createRun(1, 'none', 'standard');
+    expect(state.worked).toHaveLength(WORLD.size.x * WORLD.size.y);
+    expect(workedSquares(state)).toEqual([]);
   });
 
   it('gives the starting kit of the loadout', () => {
@@ -32,14 +45,14 @@ describe('createRun', () => {
     expect(state.lampOil).toBe(3);
     // No ladders since issue #80.
     expect(state.inventory).toEqual({ timber: 2 });
-    expect(state.avatar.health).toBe(10);
+    expect(state.crew.health).toBe(10);
     expect(state.ap).toBe(5);
     expect(state.size).toEqual({ x: 32, y: 32, z: 32 });
   });
 
-  it('starts a full-health avatar on the first shift with a full shift of AP', () => {
+  it('starts a full-health crew on the first shift with a full shift of AP', () => {
     const state = createRun(1, 'none', 'standard');
-    expect(state.avatar.health).toBe(AVATAR.startHealth);
+    expect(state.crew.health).toBe(CREW.startHealth);
     expect(state.ap).toBe(SHIFT.apPerShift);
     expect(state.shift).toBe(SHIFT.firstShiftNumber);
     expect(state.status).toEqual({ kind: 'active' });

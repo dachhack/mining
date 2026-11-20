@@ -26,7 +26,7 @@ export function legalCampActions(_state: GameState): CampAction[] {
 /**
  * Contract for M2-7: carry out `action`, which the dispatcher has already
  * checked is legal. Does not spend the AP; the dispatcher has. Resting sets
- * `state.avatar.resting`; the rest itself is applied in step (e) of the cube
+ * `state.crew.resting`; the rest itself is applied in step (e) of the cube
  * phase (`applyRest` in camps.ts).
  */
 export function applyCampAction(
