@@ -7,12 +7,23 @@
 // deterministic, so that always arrives at the same state.
 
 import { CONTRACT_IDS, DEFAULT_LOADOUT_ID } from '../data';
-import { ENGINE_VERSION } from '../engine';
-import { logFromText, logToText, newSession, replayLog } from './text/log';
+import { ENGINE_VERSION, deserialise, knownSquare } from '../engine';
+import type { SerialisedState } from '../engine';
+import { LOG_FORMAT, logFromText, logToText, newSession, replayLog } from './text/log';
 import type { Session } from './text/log';
+import { buildView } from './text/view';
 
 /** The `localStorage` key the run is saved under. */
 export const SAVE_KEY = 'mining-game.preview.run';
+
+/**
+ * The `localStorage` key of a prepared state (issue #110): a whole game
+ * state, as the engine's `serialise` writes it, put there by a test or by
+ * someone taking screenshots. While it is there the screen opens on that
+ * state instead of on the saved run, and saves nothing. "New run" and
+ * "Restart" remove it. Players never have one: nothing in the game writes it.
+ */
+export const PREPARED_KEY = 'mining-game.preview.prepared';
 
 /** The largest seed the engine takes (`createRun` takes 0 to 2**32 - 1). */
 export const MAX_SEED = 4294967295;
@@ -134,5 +145,61 @@ export function loadRun(store: SaveStore | null): LoadResult {
         `Your saved run could not be resumed on this version of the game ` +
         `(engine ${ENGINE_VERSION}), so a new run was started.`,
     };
+  }
+}
+
+/**
+ * The prepared state in the store, as a run with no choices made yet, or
+ * `null` if there is none or it cannot be read (see `PREPARED_KEY`).
+ */
+export function loadPrepared(store: SaveStore | null): Session | null {
+  if (store === null) {
+    return null;
+  }
+  try {
+    const text = store.getItem(PREPARED_KEY);
+    if (text === null) {
+      return null;
+    }
+    // `as SerialisedState`: `deserialise` checks the shape and throws if it is wrong.
+    const state = deserialise(JSON.parse(text) as SerialisedState);
+    // The deepest square, as a run that had dug this pit would have counted it.
+    let deepestDepth = 0;
+    for (let y = 0; y < state.size.y; y += 1) {
+      for (let x = 0; x < state.size.x; x += 1) {
+        deepestDepth = Math.max(deepestDepth, knownSquare(state, x, y).depth);
+      }
+    }
+    // `deserialise` checks the shape, not every value (an item the data does
+    // not have, say). Build the view once here: if that throws, the state
+    // cannot be shown, and it is dropped like a saved run that does not replay.
+    buildView(state, { deepestDepth, audience: 'phone' });
+    return {
+      log: {
+        format: LOG_FORMAT,
+        engineVersion: ENGINE_VERSION,
+        seed: state.seed,
+        contractId: state.contractId,
+        loadoutId: state.loadoutId,
+        actions: [],
+        outcome: null,
+      },
+      state,
+      deepestDepth,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Forget the prepared state, if any. */
+export function clearPrepared(store: SaveStore | null): void {
+  if (store === null) {
+    return;
+  }
+  try {
+    store.removeItem(PREPARED_KEY);
+  } catch {
+    // Nothing to do.
   }
 }

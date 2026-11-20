@@ -9,13 +9,13 @@
 // knows and nothing else. It changes nothing itself: a tap is handed to
 // `onTap` as a square, and the screen decides what it does (preview.ts).
 
-import { BLOCKS } from '../../data';
+import { BLOCKS, CAMPS } from '../../data';
 import type { BlockId } from '../../data';
 import type { GameState } from '../../engine';
 import {
   VIEW_CELLS,
   cellAt,
-  centredOnMiddle,
+  centredOn,
   clampCamera,
   isInView,
   panned,
@@ -25,9 +25,10 @@ import {
 import type { Camera } from './camera';
 import { BLOCK_LOOKS, MARK_COLOURS, PREVIEW_MAP, SURFACE_LOOKS, UNKNOWN_LOOK } from './palette';
 import type { Pattern, SurfaceMark } from './palette';
+import { FLOODED_EXTRA_AP } from '../text/squares';
 import { NO_MARKS } from './targets';
 import type { MapMarks } from './targets';
-import { buildTiles, depthBrightness } from './tiles';
+import { NO_TELLS, buildTiles, depthBrightness, openingSquare } from './tiles';
 import type { Tile } from './tiles';
 
 /** What the screen gets back from `createTapMap`. */
@@ -40,7 +41,7 @@ export interface TapMap {
    * Show `state`, with `marks` drawn over it (the square a refused tap was
    * on, the neighbours that are too high, the squares a mine would make
    * unstable). `fresh` is true for a new or
-   * resumed run: the map then centres on the middle.
+   * resumed run: the map then opens on the pit, or on the nearest coal.
    */
   show(state: GameState, fresh: boolean, marks: MapMarks): void;
 }
@@ -238,6 +239,37 @@ function drawPattern(
   ctx.restore();
 }
 
+/** True if a square `c` pixels wide is too small for numbers (the whole-map zoom). */
+function isSmall(c: number): boolean {
+  return c < PREVIEW_MAP.numbersMinCellPx;
+}
+
+/**
+ * Stroke the path that `trace` draws twice: first wide and dark, then
+ * narrower in `colour`, so that a line shows on any rock.
+ */
+function strokeWithEdge(
+  ctx: CanvasRenderingContext2D,
+  colour: string,
+  width: number,
+  trace: () => void,
+): void {
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = MARK_COLOURS.tellOutline;
+  ctx.lineWidth = width + Math.max(1.5, width * 0.9);
+  ctx.beginPath();
+  trace();
+  ctx.stroke();
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = width;
+  ctx.beginPath();
+  trace();
+  ctx.stroke();
+  ctx.restore();
+}
+
 /** Draw one tile, with its top-left corner at (x, y) and side `c` pixels. */
 export function drawTile(
   ctx: CanvasRenderingContext2D,
@@ -285,11 +317,12 @@ export function drawTile(
   if (tile.higher.east) ctx.fillRect(x + c - w, y, w, c);
 
   drawMarks(ctx, tile, x, y, c);
-  drawBelowMarks(ctx, tile, x, y, c);
   if (tile.depth > 0 && c >= PREVIEW_MAP.depthNumberMinCellPx) {
-    // The depth as a number in the bottom-right corner, white with a dark edge.
+    // The depth: a plain white number in the bottom-right corner. The other
+    // numbers on a square sit in coloured badges in the top corners, so the
+    // three are never taken for one another (issue #110).
     ctx.save();
-    ctx.font = `bold ${Math.round(c * 0.42)}px system-ui, sans-serif`;
+    ctx.font = `bold ${Math.round(c * 0.38)}px system-ui, sans-serif`;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'alphabetic';
     ctx.lineWidth = Math.max(2, c / 10);
@@ -307,16 +340,54 @@ export function drawTile(
 }
 
 /**
+ * A number in a coloured badge in a top corner of a square: the units of
+ * water or lava on the left, a crack's countdown on the right. `ring` draws
+ * a bright edge round the badge (a lava source). Left out on a square too
+ * small to read a number on.
+ */
+function drawBadge(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  corner: 'left' | 'right',
+  fill: string,
+  ring: string | null,
+  x: number,
+  y: number,
+  c: number,
+): void {
+  if (isSmall(c)) {
+    return;
+  }
+  const fontPx = Math.max(9, Math.round(c * 0.36));
+  ctx.save();
+  ctx.font = `bold ${fontPx}px system-ui, sans-serif`;
+  const width = Math.max(fontPx * 0.95, ctx.measureText(text).width + fontPx * 0.45);
+  const height = fontPx * 1.05;
+  const left = corner === 'left' ? x + 1 : x + c - 1 - width;
+  const top = y + 1;
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.roundRect(left, top, width, height, fontPx * 0.3);
+  ctx.fill();
+  ctx.lineWidth = ring === null ? 1 : Math.max(1.5, c / 14);
+  ctx.strokeStyle = ring ?? MARK_COLOURS.fluidOutline;
+  ctx.stroke();
+  ctx.fillStyle = MARK_COLOURS.badgeInk;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, left + width / 2, top + height / 2 + fontPx * 0.06);
+  ctx.restore();
+}
+
+/**
  * Water or lava on a tile (design doc 6.3 and 6.4): a wash of colour over the
- * block, a pattern (waves for water, flames for lava, so the two never differ
- * by colour alone), and the number of units in the top-left corner. A lava
- * source has a ring round its number.
+ * block and a pattern (waves for water, flames for lava, so the two never
+ * differ by colour alone). The units are drawn later, in a badge
+ * (`drawFluidBadge`), so that nothing covers them.
  */
 function drawStanding(
   ctx: CanvasRenderingContext2D,
   fluid: 'water' | 'lava',
-  units: number,
-  source: boolean,
   x: number,
   y: number,
   c: number,
@@ -332,45 +403,47 @@ function drawStanding(
     // Two wave lines across the lower half.
     for (const fy of [0.62, 0.84]) {
       ctx.beginPath();
-      ctx.moveTo(x + 0.1 * c, y + fy * c);
-      ctx.quadraticCurveTo(x + 0.3 * c, y + (fy - 0.12) * c, x + 0.5 * c, y + fy * c);
-      ctx.quadraticCurveTo(x + 0.7 * c, y + (fy + 0.12) * c, x + 0.9 * c, y + fy * c);
+      ctx.moveTo(x + 0.08 * c, y + fy * c);
+      ctx.quadraticCurveTo(x + 0.2 * c, y + (fy - 0.12) * c, x + 0.33 * c, y + fy * c);
+      ctx.quadraticCurveTo(x + 0.46 * c, y + (fy + 0.12) * c, x + 0.6 * c, y + fy * c);
       ctx.stroke();
     }
   } else {
-    // Three small flames along the bottom edge.
-    for (const fx of [0.25, 0.5, 0.75]) {
+    // Two flames along the bottom edge, clear of the depth number on the right.
+    for (const fx of [0.2, 0.48]) {
       ctx.beginPath();
-      ctx.moveTo(x + (fx - 0.1) * c, y + 0.9 * c);
-      ctx.lineTo(x + fx * c, y + 0.6 * c);
-      ctx.lineTo(x + (fx + 0.1) * c, y + 0.9 * c);
+      ctx.moveTo(x + (fx - 0.12) * c, y + 0.92 * c);
+      ctx.lineTo(x + fx * c, y + 0.58 * c);
+      ctx.lineTo(x + (fx + 0.12) * c, y + 0.92 * c);
       ctx.closePath();
       ctx.fill();
     }
   }
-  // The units, top left (the depth number is bottom right, a crack's top right).
-  ctx.font = `bold ${Math.max(8, Math.round(c * 0.42))}px sans-serif`;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-  ctx.lineWidth = Math.max(2, c / 10);
-  ctx.strokeStyle = MARK_COLOURS.fluidOutline;
-  ctx.strokeText(String(units), x + 2, y + 1);
-  ctx.fillStyle = ink;
-  ctx.fillText(String(units), x + 2, y + 1);
-  if (source) {
-    ctx.strokeStyle = ink;
-    ctx.lineWidth = Math.max(1.5, c / 12);
-    ctx.beginPath();
-    ctx.arc(x + 0.24 * c, y + 0.26 * c, c * 0.24, 0, Math.PI * 2);
-    ctx.stroke();
-  }
   ctx.restore();
 }
 
+/** The units of water or lava on a tile, in a badge in the top-left corner. */
+function drawFluidBadge(
+  ctx: CanvasRenderingContext2D,
+  tile: Tile,
+  x: number,
+  y: number,
+  c: number,
+) {
+  if (tile.lava > 0) {
+    // A source has a bright ring round its badge: it keeps pouring.
+    const ring = tile.lavaSource ? MARK_COLOURS.lavaInk : null;
+    drawBadge(ctx, String(tile.lava), 'left', MARK_COLOURS.lavaBadge, ring, x, y, c);
+  } else if (tile.water > 0) {
+    drawBadge(ctx, String(tile.water), 'left', MARK_COLOURS.waterBadge, null, x, y, c);
+  }
+}
+
 /**
- * The mark for "water (or lava) flows onto this square when the shift ends":
- * an arrow head pointing down into the square, in the fluid's colour, with a
- * wave or a flame tip so that the two differ by shape as well.
+ * The mark for "water (or lava) flows onto this square when the shift ends".
+ * Water: a round blue drop with a white edge. Lava: an orange flame with two
+ * tongues and a yellow heart. They differ in shape as well as colour, and
+ * neither is a plain triangle, which is the camp's tent (issue #110).
  */
 function drawComing(
   ctx: CanvasRenderingContext2D,
@@ -380,37 +453,54 @@ function drawComing(
   c: number,
 ): void {
   // Water's mark sits left of the middle and lava's right, so a square that
-  // both will reach shows both.
-  const cx = x + (fluid === 'water' ? 0.3 : 0.7) * c;
-  const cy = y + 0.5 * c;
-  const r = c * 0.2;
+  // both will reach shows both. On a small square the marks are bigger.
+  const r = c * (isSmall(c) ? 0.3 : 0.24);
+  const cx = x + (fluid === 'water' ? 0.32 : 0.68) * c;
+  const cy = y + 0.52 * c;
   ctx.save();
+  ctx.lineJoin = 'round';
   ctx.lineWidth = Math.max(1, c / 16);
-  ctx.strokeStyle = MARK_COLOURS.fluidOutline;
-  ctx.fillStyle = fluid === 'water' ? MARK_COLOURS.waterInk : MARK_COLOURS.lavaInk;
-  ctx.beginPath();
   if (fluid === 'water') {
     // A drop: a point at the top, round at the bottom.
-    ctx.moveTo(cx, cy - r);
-    ctx.quadraticCurveTo(cx + r, cy + r * 0.2, cx, cy + r);
-    ctx.quadraticCurveTo(cx - r, cy + r * 0.2, cx, cy - r);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - r * 1.25);
+    ctx.bezierCurveTo(cx + r * 1.3, cy, cx + r * 0.9, cy + r, cx, cy + r);
+    ctx.bezierCurveTo(cx - r * 0.9, cy + r, cx - r * 1.3, cy, cx, cy - r * 1.25);
+    ctx.fillStyle = MARK_COLOURS.waterComing;
+    ctx.fill();
+    ctx.strokeStyle = MARK_COLOURS.waterComingEdge;
+    ctx.stroke();
   } else {
-    // A flame: a triangle standing on its base.
-    ctx.moveTo(cx, cy - r);
-    ctx.lineTo(cx + r, cy + r);
-    ctx.lineTo(cx - r, cy + r);
+    // A flame: a wide foot and two tongues, the left one taller.
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.9, cy + r);
+    ctx.lineTo(cx - r * 0.95, cy);
+    ctx.lineTo(cx - r * 0.35, cy - r * 1.25);
+    ctx.lineTo(cx + r * 0.05, cy - r * 0.2);
+    ctx.lineTo(cx + r * 0.6, cy - r * 0.85);
+    ctx.lineTo(cx + r * 0.95, cy + r * 0.2);
+    ctx.lineTo(cx + r * 0.9, cy + r);
     ctx.closePath();
+    ctx.fillStyle = MARK_COLOURS.lavaComing;
+    ctx.fill();
+    ctx.strokeStyle = MARK_COLOURS.fluidOutline;
+    ctx.stroke();
+    // The heart of the flame.
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.4, cy + r * 0.8);
+    ctx.lineTo(cx - r * 0.1, cy + r * 0.05);
+    ctx.lineTo(cx + r * 0.4, cy + r * 0.8);
+    ctx.closePath();
+    ctx.fillStyle = MARK_COLOURS.lavaComingHeart;
+    ctx.fill();
   }
-  ctx.fill();
-  ctx.stroke();
   ctx.restore();
 }
 
 /**
  * The marks for what is known under a square's top (design doc 7.2; owner
- * question 93), in a row from the left edge at mid-height (the corners hold
- * the traces, a crack's countdown, the depth and the camp tick): a gold
- * diamond for ore, a blue disc for a pocket, a white ring for a cavern. A scanned
+ * question 93), in a row from the left edge at mid-height: a gold diamond
+ * for ore, a blue disc for a pocket, a white ring for a cavern. A scanned
  * square with only plain rock under it gets a small grey bar, so that the
  * player sees it has been scanned. Shapes differ as well as colours.
  */
@@ -472,86 +562,65 @@ function drawBelowMarks(
 }
 
 /**
- * Gas on a tile (design doc 6.5): a green-yellow wash, three small rings
+ * Gas on a tile (design doc 6.5): a green-yellow wash and four small rings
  * (bubbles: neither waves nor flames, so gas never differs from water and
- * lava by colour alone), and the units half-way down the left edge.
+ * lava by colour alone). No number: the rules read only whether a square is
+ * gassy, and the units of settled gas flip by one every shift (owner
+ * question 120), so a number would flicker and say nothing. Inspect tells
+ * the units.
  */
-function drawGas(
-  ctx: CanvasRenderingContext2D,
-  units: number,
-  x: number,
-  y: number,
-  c: number,
-): void {
+function drawGas(ctx: CanvasRenderingContext2D, x: number, y: number, c: number): void {
   ctx.save();
   ctx.fillStyle = MARK_COLOURS.gas;
   ctx.fillRect(x, y, c, c);
   ctx.strokeStyle = MARK_COLOURS.gasInk;
   ctx.lineWidth = Math.max(1, c / 16);
   for (const [fx, fy, fr] of [
-    [0.62, 0.3, 0.1],
-    [0.8, 0.52, 0.07],
-    [0.5, 0.56, 0.08],
+    [0.26, 0.3, 0.11],
+    [0.62, 0.24, 0.08],
+    [0.48, 0.58, 0.12],
+    [0.22, 0.76, 0.07],
   ] as const) {
     ctx.beginPath();
     ctx.arc(x + fx * c, y + fy * c, fr * c, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  ctx.font = `bold ${Math.max(8, Math.round(c * 0.42))}px sans-serif`;
-  // Half-way down the left edge, a little way in: clear of the depth number
-  // (bottom right), of water's and lava's units (top left), and inside the
-  // dashed frame of a blast.
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.lineWidth = Math.max(2, c / 10);
-  ctx.strokeStyle = MARK_COLOURS.fluidOutline;
-  ctx.strokeText(String(units), x + 0.14 * c, y + 0.5 * c);
-  ctx.fillStyle = MARK_COLOURS.gasInk;
-  ctx.fillText(String(units), x + 0.14 * c, y + 0.5 * c);
-  ctx.restore();
-}
-
-/** "Gas spreads onto this square when the shift ends": one ring in the middle, in the gas colour. */
-function drawGasComing(ctx: CanvasRenderingContext2D, x: number, y: number, c: number): void {
-  ctx.save();
-  for (const [colour, width] of [
-    [MARK_COLOURS.fluidOutline, Math.max(3, c / 7)],
-    [MARK_COLOURS.gasInk, Math.max(1.5, c / 12)],
-  ] as const) {
-    ctx.strokeStyle = colour;
-    ctx.lineWidth = width;
-    ctx.beginPath();
-    ctx.arc(x + 0.5 * c, y + 0.5 * c, 0.17 * c, 0, Math.PI * 2);
     ctx.stroke();
   }
   ctx.restore();
 }
 
 /**
+ * "Gas spreads onto this square when the shift ends": a cluster of three
+ * rings in the middle, in the gas colour, with a dark edge. No wash: the gas
+ * is not there yet.
+ */
+function drawGasComing(ctx: CanvasRenderingContext2D, x: number, y: number, c: number): void {
+  const scale = isSmall(c) ? 1.3 : 1;
+  strokeWithEdge(ctx, MARK_COLOURS.gasInk, Math.max(1.2, c / 14), () => {
+    for (const [fx, fy, fr] of [
+      [0.4, 0.42, 0.13],
+      [0.64, 0.56, 0.1],
+      [0.42, 0.7, 0.08],
+    ] as const) {
+      ctx.moveTo(x + fx * c + fr * c * scale, y + fy * c);
+      ctx.arc(x + fx * c, y + fy * c, fr * c * scale, 0, Math.PI * 2);
+    }
+  });
+}
+
+/**
  * A square a vent will clear of gas when the shift ends (issue #107): an
- * arrow pointing up out of the pit, in the top-right of the square (clear of
- * the gas's number on the left), pale green with a dark edge. A shape of its own, beside the rings of gas.
+ * arrow pointing up out of the pit, along the right edge of the square, pale
+ * green with a dark edge. A shape of its own, beside the rings of gas.
  */
 function drawVented(ctx: CanvasRenderingContext2D, x: number, y: number, c: number): void {
-  ctx.save();
-  for (const [colour, width] of [
-    [MARK_COLOURS.fluidOutline, Math.max(3.5, c / 6)],
-    [MARK_COLOURS.vent, Math.max(1.8, c / 11)],
-  ] as const) {
-    ctx.strokeStyle = colour;
-    ctx.lineWidth = width;
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
-    ctx.beginPath();
+  strokeWithEdge(ctx, MARK_COLOURS.vent, Math.max(1.8, c / 11), () => {
     // The shaft, then the two sides of the head.
-    ctx.moveTo(x + 0.74 * c, y + 0.5 * c);
-    ctx.lineTo(x + 0.74 * c, y + 0.12 * c);
-    ctx.moveTo(x + 0.6 * c, y + 0.27 * c);
-    ctx.lineTo(x + 0.74 * c, y + 0.12 * c);
-    ctx.lineTo(x + 0.88 * c, y + 0.27 * c);
-    ctx.stroke();
-  }
-  ctx.restore();
+    ctx.moveTo(x + 0.84 * c, y + 0.56 * c);
+    ctx.lineTo(x + 0.84 * c, y + 0.12 * c);
+    ctx.moveTo(x + 0.72 * c, y + 0.26 * c);
+    ctx.lineTo(x + 0.84 * c, y + 0.12 * c);
+    ctx.lineTo(x + 0.96 * c, y + 0.26 * c);
+  });
 }
 
 /**
@@ -623,9 +692,243 @@ function drawBlast(ctx: CanvasRenderingContext2D, x: number, y: number, c: numbe
   ctx.restore();
 }
 
-/** The marks drawn over a tile: a camp, cheaper mining, water, lava and gas, mineral traces, scan marks, a structure, a charge, a blast and a crack. */
+/**
+ * The hazard tells on a top block (design doc 3.7), drawn on the rock itself,
+ * under whatever stands on the square. Each has a colour of the hazard it
+ * warns of and a shape of its own:
+ * - damp stone (water under or beside): two blue drips from the top edge;
+ * - pitted rock (gas under or beside): three black pits in a row;
+ * - warm glow (lava within 2): three orange heat lines rising from the bottom;
+ * - hairline glow (unstable ore): a thin pale ring round the ore's cross.
+ */
+function drawTells(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number, c: number) {
+  const tells = tile.tells;
+  if (tells.warm) {
+    strokeWithEdge(ctx, MARK_COLOURS.tellWarm, Math.max(1.2, c / 13), () => {
+      for (const fx of [0.3, 0.5, 0.7]) {
+        // An S-shaped line from near the bottom edge up to the middle.
+        ctx.moveTo(x + fx * c, y + 0.9 * c);
+        ctx.bezierCurveTo(
+          x + (fx - 0.14) * c,
+          y + 0.76 * c,
+          x + (fx + 0.14) * c,
+          y + 0.62 * c,
+          x + fx * c,
+          y + 0.46 * c,
+        );
+      }
+    });
+  }
+  if (tells.damp) {
+    // The drips hang between the three dots of mineral traces, so both show.
+    const drips: [number, number][] = [
+      [0.375, 0.4],
+      [0.625, 0.28],
+    ];
+    strokeWithEdge(ctx, MARK_COLOURS.tellDamp, Math.max(1.2, c / 13), () => {
+      for (const [fx, length] of drips) {
+        ctx.moveTo(x + fx * c, y + 0.04 * c);
+        ctx.lineTo(x + fx * c, y + length * c);
+      }
+    });
+    ctx.save();
+    ctx.fillStyle = MARK_COLOURS.tellDamp;
+    ctx.strokeStyle = MARK_COLOURS.tellOutline;
+    ctx.lineWidth = Math.max(0.8, c / 26);
+    for (const [fx, length] of drips) {
+      // The bead at the end of the drip.
+      ctx.beginPath();
+      ctx.arc(x + fx * c, y + length * c, Math.max(1.5, c * 0.085), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  if (tells.pitted) {
+    // Holes in the rock: three black dots in a row, each with a hair-thin
+    // pale grey edge so that it shows on dark rock. Filled, in a row and
+    // without colour, where gas that is arriving is hollow green bubbles in
+    // a cluster (issue #110, review).
+    ctx.save();
+    ctx.fillStyle = MARK_COLOURS.tellPit;
+    ctx.strokeStyle = MARK_COLOURS.tellPitRim;
+    ctx.lineWidth = Math.max(0.6, c / 36);
+    for (const fx of [0.26, 0.5, 0.74]) {
+      ctx.beginPath();
+      ctx.arc(x + fx * c, y + 0.62 * c, Math.max(1.6, c * 0.095), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  if (tells.hairline) {
+    // A thin pale ring round the ore's cross: the glow.
+    strokeWithEdge(ctx, MARK_COLOURS.tellHairline, Math.max(1, c / 20), () => {
+      ctx.moveTo(x + 0.9 * c, y + 0.5 * c);
+      ctx.arc(x + 0.5 * c, y + 0.5 * c, 0.4 * c, 0, Math.PI * 2);
+    });
+  }
+}
+
+/**
+ * The corners of a square the crew worked this shift (design doc 5.2): four
+ * white L shapes, dark underneath. A hazard that reaches the square when the
+ * shift ends hurts the crew. Corners only, so that it is not taken for the
+ * dashed frame of a blast, which may be on the same square.
+ */
+function drawWorked(ctx: CanvasRenderingContext2D, x: number, y: number, c: number): void {
+  const arm = c * 0.3;
+  const inset = Math.max(1.5, c * 0.06);
+  const left = x + inset;
+  const right = x + c - inset;
+  const top = y + inset;
+  const bottom = y + c - inset;
+  ctx.save();
+  ctx.lineCap = 'square';
+  for (const [colour, width] of [
+    [MARK_COLOURS.fluidOutline, Math.max(3, c / 7)],
+    [MARK_COLOURS.worked, Math.max(1.5, c / 13)],
+  ] as const) {
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(left, top + arm);
+    ctx.lineTo(left, top);
+    ctx.lineTo(left + arm, top);
+    ctx.moveTo(right - arm, top);
+    ctx.lineTo(right, top);
+    ctx.lineTo(right, top + arm);
+    ctx.moveTo(right, bottom - arm);
+    ctx.lineTo(right, bottom);
+    ctx.lineTo(right - arm, bottom);
+    ctx.moveTo(left + arm, bottom);
+    ctx.lineTo(left, bottom);
+    ctx.lineTo(left, bottom - arm);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * The edge of the area where mining is cheaper (a camp is near): a dashed
+ * green line along each side of the square that is on that edge. One line
+ * round the whole area, drawn over water and lava, in place of a tick on
+ * every square (issue #110).
+ */
+function drawCheaperEdge(
+  ctx: CanvasRenderingContext2D,
+  tile: Tile,
+  x: number,
+  y: number,
+  c: number,
+) {
+  const edge = tile.cheaperEdge;
+  if (!edge.north && !edge.east && !edge.south && !edge.west) {
+    return;
+  }
+  const inset = Math.max(1, c * 0.05);
+  ctx.save();
+  ctx.setLineDash([c * 0.22, c * 0.14]);
+  for (const [colour, width] of [
+    [MARK_COLOURS.fluidOutline, Math.max(2.5, c / 8)],
+    [MARK_COLOURS.cheaper, Math.max(1.2, c / 16)],
+  ] as const) {
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    if (edge.north) {
+      ctx.moveTo(x, y + inset);
+      ctx.lineTo(x + c, y + inset);
+    }
+    if (edge.south) {
+      ctx.moveTo(x, y + c - inset);
+      ctx.lineTo(x + c, y + c - inset);
+    }
+    if (edge.west) {
+      ctx.moveTo(x + inset, y);
+      ctx.lineTo(x + inset, y + c);
+    }
+    if (edge.east) {
+      ctx.moveTo(x + c - inset, y);
+      ctx.lineTo(x + c - inset, y + c);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** A structure in the middle of a square: a support (a T), a pump (a disc with P), a vent (a disc with V). */
+function drawStructure(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number, c: number) {
+  const mid = c / 2;
+  if (tile.structure === 'support') {
+    // A T: a beam on a post, dark underneath.
+    strokeWithEdge(ctx, MARK_COLOURS.support, Math.max(2, c / 7), () => {
+      ctx.moveTo(x + 0.22 * c, y + 0.27 * c);
+      ctx.lineTo(x + 0.78 * c, y + 0.27 * c);
+      ctx.moveTo(x + mid, y + 0.27 * c);
+      ctx.lineTo(x + mid, y + 0.82 * c);
+    });
+  } else if (tile.structure === 'pump' || tile.structure === 'vent') {
+    // A disc with a letter: blue with a white "P", pale green with a dark "V".
+    const pump = tile.structure === 'pump';
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x + mid, y + mid, 0.28 * c, 0, Math.PI * 2);
+    ctx.fillStyle = pump ? MARK_COLOURS.pump : MARK_COLOURS.vent;
+    ctx.fill();
+    ctx.lineWidth = Math.max(1, c / 14);
+    ctx.strokeStyle = MARK_COLOURS.belowOutline;
+    ctx.stroke();
+    ctx.font = `bold ${Math.max(7, Math.round(c * 0.4))}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = pump ? MARK_COLOURS.pumpInk : MARK_COLOURS.ventInk;
+    ctx.fillText(pump ? 'P' : 'V', x + mid, y + mid + 0.02 * c);
+    ctx.restore();
+  } else if (tile.structure === 'other') {
+    ctx.strokeStyle = MARK_COLOURS.otherStructure;
+    ctx.lineWidth = Math.max(1.5, c / 10);
+    ctx.strokeRect(x + 0.25 * c, y + 0.25 * c, 0.5 * c, 0.5 * c);
+  }
+}
+
+/** A crack on a top block: a jagged line from corner to corner, and its countdown in a badge. */
+function drawCrack(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number, c: number) {
+  if (tile.crack === null) {
+    return;
+  }
+  // Red while the countdown is running; pale grey when it has stopped.
+  const colour = tile.crackRunning ? MARK_COLOURS.crack : MARK_COLOURS.crackStopped;
+  const zigzag: [number, number][] = [
+    [0.08, 0.3],
+    [0.4, 0.46],
+    [0.3, 0.62],
+    [0.66, 0.72],
+    [0.9, 0.94],
+  ];
+  strokeWithEdge(ctx, colour, Math.max(1.5, c / 11), () => {
+    zigzag.forEach(([fx, fy], index) => {
+      if (index === 0) {
+        ctx.moveTo(x + fx * c, y + fy * c);
+      } else {
+        ctx.lineTo(x + fx * c, y + fy * c);
+      }
+    });
+  });
+  const badge = tile.crackRunning ? MARK_COLOURS.crackBadge : MARK_COLOURS.crackStoppedBadge;
+  drawBadge(ctx, String(tile.crack), 'right', badge, null, x, y, c);
+}
+
+/**
+ * Everything drawn over a tile's rock, from the bottom up: the tells on the
+ * rock; a camp; water, lava and gas; the edge of the cheaper area; mineral
+ * traces; a structure or a charge; what is coming when the shift ends; the
+ * blast frame and, over it, the scan marks and the corners of a worked square;
+ * and last the crack and the number badges, which nothing may cover.
+ */
 function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number, c: number) {
   const mid = c / 2;
+  drawTells(ctx, tile, x, y, c);
   if (tile.camp) {
     // A camp square: a pale wash and a tent (a triangle with a door), dark
     // underneath so that it shows on any rock.
@@ -646,22 +949,33 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
     ctx.lineTo(x + mid, y + 0.8 * c);
     ctx.stroke();
   }
-  if (tile.cheaper) {
-    // Mining is cheaper here (a camp is near): a green tick in the bottom-left
-    // corner, where neither the depth number nor a crack's countdown is.
-    ctx.lineWidth = Math.max(1.5, c / 10);
-    ctx.strokeStyle = MARK_COLOURS.cheaper;
-    ctx.beginPath();
-    ctx.moveTo(x + 0.1 * c, y + 0.72 * c);
-    ctx.lineTo(x + 0.22 * c, y + 0.88 * c);
-    ctx.lineTo(x + 0.42 * c, y + 0.6 * c);
-    ctx.stroke();
-  }
   if (tile.water > 0) {
-    drawStanding(ctx, 'water', tile.water, false, x, y, c);
+    drawStanding(ctx, 'water', x, y, c);
   }
   if (tile.lava > 0) {
-    drawStanding(ctx, 'lava', tile.lava, tile.lavaSource, x, y, c);
+    drawStanding(ctx, 'lava', x, y, c);
+  }
+  if (tile.gas > 0) {
+    drawGas(ctx, x, y, c);
+  }
+  drawCheaperEdge(ctx, tile, x, y, c);
+  if (tile.traced) {
+    // Three small gold dots along the top edge: mineral traces seen on this rock.
+    ctx.save();
+    ctx.fillStyle = MARK_COLOURS.traces;
+    ctx.strokeStyle = MARK_COLOURS.tellOutline;
+    ctx.lineWidth = Math.max(0.8, c / 26);
+    for (const fx of [0.25, 0.5, 0.75]) {
+      ctx.beginPath();
+      ctx.arc(x + fx * c, y + 0.16 * c, Math.max(1.2, c / 11), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  drawStructure(ctx, tile, x, y, c);
+  if (tile.charge !== null) {
+    drawCharge(ctx, tile.charge, x, y, c);
   }
   if (tile.waterComing) {
     drawComing(ctx, 'water', x, y, c);
@@ -669,110 +983,25 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
   if (tile.lavaComing) {
     drawComing(ctx, 'lava', x, y, c);
   }
-  if (tile.gas > 0) {
-    drawGas(ctx, tile.gas, x, y, c);
-  }
   if (tile.gasComing) {
     drawGasComing(ctx, x, y, c);
   }
   if (tile.vented) {
     drawVented(ctx, x, y, c);
   }
-  if (tile.traced) {
-    // Three small gold dots along the top edge: mineral traces seen on this rock.
-    ctx.fillStyle = MARK_COLOURS.traces;
-    for (const fx of [0.25, 0.5, 0.75]) {
-      ctx.beginPath();
-      ctx.arc(x + fx * c, y + 0.16 * c, Math.max(1.2, c / 11), 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-  if (tile.structure === 'support') {
-    // A T: a beam on a post.
-    ctx.strokeStyle = MARK_COLOURS.support;
-    ctx.lineWidth = Math.max(2, c / 7);
-    ctx.beginPath();
-    ctx.moveTo(x + 0.2 * c, y + 0.25 * c);
-    ctx.lineTo(x + 0.8 * c, y + 0.25 * c);
-    ctx.moveTo(x + mid, y + 0.25 * c);
-    ctx.lineTo(x + mid, y + 0.85 * c);
-    ctx.stroke();
-  } else if (tile.structure === 'pump') {
-    // A blue disc with a white "P".
-    ctx.beginPath();
-    ctx.arc(x + mid, y + mid, 0.3 * c, 0, Math.PI * 2);
-    ctx.fillStyle = MARK_COLOURS.pump;
-    ctx.fill();
-    ctx.lineWidth = Math.max(1, c / 14);
-    ctx.strokeStyle = MARK_COLOURS.belowOutline;
-    ctx.stroke();
-    ctx.font = `bold ${Math.max(7, Math.round(c * 0.4))}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = MARK_COLOURS.pumpInk;
-    ctx.fillText('P', x + mid, y + mid + 0.02 * c);
-  } else if (tile.structure === 'vent') {
-    // A pale green disc with a dark "V".
-    ctx.beginPath();
-    ctx.arc(x + mid, y + mid, 0.3 * c, 0, Math.PI * 2);
-    ctx.fillStyle = MARK_COLOURS.vent;
-    ctx.fill();
-    ctx.lineWidth = Math.max(1, c / 14);
-    ctx.strokeStyle = MARK_COLOURS.belowOutline;
-    ctx.stroke();
-    ctx.font = `bold ${Math.max(7, Math.round(c * 0.4))}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = MARK_COLOURS.ventInk;
-    ctx.fillText('V', x + mid, y + mid + 0.02 * c);
-  } else if (tile.structure === 'other') {
-    ctx.strokeStyle = MARK_COLOURS.otherStructure;
-    ctx.lineWidth = Math.max(1.5, c / 10);
-    ctx.strokeRect(x + 0.25 * c, y + 0.25 * c, 0.5 * c, 0.5 * c);
-  }
-  if (tile.charge !== null) {
-    drawCharge(ctx, tile.charge, x, y, c);
-  }
   if (tile.blast) {
     drawBlast(ctx, x, y, c);
   }
-  if (tile.crack !== null) {
-    // A jagged line from corner to corner, dark underneath so that it shows
-    // on any rock, and the countdown in the top-right corner. Red while the
-    // countdown is running; pale grey when it has stopped.
-    const crackColour = tile.crackRunning ? MARK_COLOURS.crack : MARK_COLOURS.crackStopped;
-    const zigzag: [number, number][] = [
-      [0.1, 0.15],
-      [0.42, 0.4],
-      [0.3, 0.58],
-      [0.7, 0.7],
-      [0.9, 0.92],
-    ];
-    for (const [colour, width] of [
-      [MARK_COLOURS.crackOutline, Math.max(3, c / 6)],
-      [crackColour, Math.max(1.5, c / 11)],
-    ] as const) {
-      ctx.strokeStyle = colour;
-      ctx.lineWidth = width;
-      ctx.beginPath();
-      zigzag.forEach(([fx, fy], index) => {
-        if (index === 0) {
-          ctx.moveTo(x + fx * c, y + fy * c);
-        } else {
-          ctx.lineTo(x + fx * c, y + fy * c);
-        }
-      });
-      ctx.stroke();
-    }
-    ctx.font = `bold ${Math.max(8, Math.round(c * 0.42))}px sans-serif`;
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'top';
-    ctx.lineWidth = Math.max(2, c / 10);
-    ctx.strokeStyle = MARK_COLOURS.crackOutline;
-    ctx.strokeText(String(tile.crack), x + c - 2, y + 1);
-    ctx.fillStyle = crackColour;
-    ctx.fillText(String(tile.crack), x + c - 2, y + 1);
+  // The scan marks and the worked corners go over the blast frame, so that
+  // the frame hides neither: a square that is worked and in a blast is the
+  // one that matters most.
+  drawBelowMarks(ctx, tile, x, y, c);
+  // (The corners are drawn after the scan marks, which sit at the left edge.)
+  if (tile.worked) {
+    drawWorked(ctx, x, y, c);
   }
+  drawCrack(ctx, tile, x, y, c);
+  drawFluidBadge(ctx, tile, x, y, c);
 }
 
 // ---------------------------------------------------------------------------
@@ -788,6 +1017,9 @@ function sampleTile(overrides: Partial<Tile>): Tile {
     kind: 'block',
     block: 'stone',
     traced: false,
+    tells: NO_TELLS,
+    worked: false,
+    cheaperEdge: { north: false, east: false, south: false, west: false },
     structure: null,
     crack: null,
     crackRunning: false,
@@ -815,7 +1047,7 @@ function legendEntry(tile: Tile, label: string): HTMLElement {
   const entry = document.createElement('span');
   entry.className = 'legend-entry';
   const swatch = document.createElement('canvas');
-  const px = 18;
+  const px = 24;
   const dpr = window.devicePixelRatio || 1;
   swatch.width = px * dpr;
   swatch.height = px * dpr;
@@ -834,61 +1066,17 @@ function legendEntry(tile: Tile, label: string): HTMLElement {
 /** The legend for what is on screen now: only the things actually drawn. */
 function legendFor(tiles: Tile[]): HTMLElement[] {
   const entries: HTMLElement[] = [];
-  const blocks = new Set<BlockId>();
-  const surfaceKinds = new Set<SurfaceMark>();
-  const structures = new Set<string>();
-  let floor = false;
-  let dug = false;
-  let traced = false;
-  let cracked = false;
-  let stoppedCrack = false;
-  let water = false;
-  let lava = false;
-  let lavaSource = false;
-  let waterComing = false;
-  let lavaComing = false;
-  let gas = false;
-  let gasComing = false;
-  let vented = false;
-  let explosive = false;
-  let armedOre = false;
-  let blast = false;
-  let camp = false;
-  let cheaper = false;
-  let belowOre = false;
-  let belowPocket = false;
-  let belowCavern = false;
-  let belowPlain = false;
-  for (const tile of tiles) {
-    if (tile.gas > 0) gas = true;
-    if (tile.gasComing) gasComing = true;
-    if (tile.vented) vented = true;
-    if (tile.charge === 'explosive') explosive = true;
-    if (tile.charge === 'armedOre') armedOre = true;
-    if (tile.blast) blast = true;
-    if (tile.below.ore) belowOre = true;
-    if (tile.below.pocket) belowPocket = true;
-    if (tile.below.cavern) belowCavern = true;
-    if (tile.below.any && !tile.below.ore && !tile.below.pocket && !tile.below.cavern) {
-      belowPlain = true;
+  /** Add an entry if any tile on screen passes `shown`. */
+  const add = (shown: (tile: Tile) => boolean, sample: Partial<Tile>, label: string): void => {
+    if (tiles.some(shown)) {
+      entries.push(legendEntry(sampleTile(sample), label));
     }
-    if (tile.camp) camp = true;
-    if (tile.cheaper) cheaper = true;
-    if (tile.water > 0) water = true;
-    if (tile.lava > 0) lava = true;
-    if (tile.lavaSource) lavaSource = true;
-    if (tile.waterComing) waterComing = true;
-    if (tile.lavaComing) lavaComing = true;
-    if (tile.crack !== null && tile.crackRunning) cracked = true;
-    if (tile.crack !== null && !tile.crackRunning) stoppedCrack = true;
-    if (tile.kind === 'block' && tile.block !== null) blocks.add(tile.block);
-    if (tile.kind === 'floor') floor = true;
-    if (tile.surface !== null) surfaceKinds.add(tile.surface);
-    if (tile.structure !== null) structures.add(tile.structure);
-    if (tile.depth > 0) dug = true;
-    if (tile.traced) traced = true;
-  }
-  // The surface kinds (issue #70), in a fixed order.
+  };
+  const noSides = { north: false, east: false, south: false, west: false };
+  const none = { any: true, ore: false, pocket: false, cavern: false };
+
+  // The surface kinds (issue #70), in a fixed order. Shown over dirt, as on
+  // the map (a tree hides it anyway).
   const surfaceLabels: [SurfaceMark, string][] = [
     ['tree', 'tree (tap to cut; hides the block under it)'],
     ['stump', 'stump (a tree grows back)'],
@@ -897,192 +1085,149 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
     ['outcrop', 'stone outcrop'],
   ];
   for (const [kind, label] of surfaceLabels) {
-    if (surfaceKinds.has(kind)) {
-      // Shown over dirt, as on the map (a tree hides it anyway).
-      entries.push(legendEntry(sampleTile({ block: 'dirt', surface: kind }), label));
-    }
+    add((t) => t.surface === kind, { block: 'dirt', surface: kind }, label);
   }
-  // In the order of the data's block list, so the legend does not jump about.
+  // The blocks, in the order of the data's block list, so the legend does not jump about.
   for (const id of Object.keys(BLOCKS) as BlockId[]) {
-    if (blocks.has(id)) {
-      entries.push(legendEntry(sampleTile({ block: id }), BLOCKS[id].name));
-    }
+    add((t) => t.kind === 'block' && t.block === id, { block: id }, BLOCKS[id].name);
   }
-  if (floor) {
-    entries.push(legendEntry(sampleTile({ kind: 'floor', block: null }), 'bedrock floor'));
-  }
-  if (dug) {
-    entries.push(legendEntry(sampleTile({ depth: 3 }), 'dug: deeper is darker'));
-    entries.push(
-      legendEntry(
-        sampleTile({
-          depth: 1,
-          higher: { north: true, east: false, south: false, west: true },
-        }),
-        'shadow: that side is higher',
-      ),
-    );
-  }
-  if (traced) {
-    entries.push(legendEntry(sampleTile({ traced: true }), 'mineral traces'));
-  }
-  if (structures.has('support')) {
-    entries.push(legendEntry(sampleTile({ structure: 'support' }), 'support'));
-  }
-  if (structures.has('pump')) {
-    entries.push(
-      legendEntry(
-        sampleTile({ structure: 'pump' }),
-        'pump: takes water from the squares near it when a shift ends',
-      ),
-    );
-  }
-  if (structures.has('vent')) {
-    entries.push(
-      legendEntry(
-        sampleTile({ structure: 'vent' }),
-        'vent: clears all the gas on the squares near it when a shift ends',
-      ),
-    );
-  }
-  if (structures.has('other')) {
-    entries.push(legendEntry(sampleTile({ structure: 'other' }), 'other structure'));
-  }
+  add((t) => t.kind === 'floor', { kind: 'floor', block: null }, 'bedrock floor');
+  add((t) => t.depth > 0, { depth: 3 }, 'dug: deeper is darker; the white number is the depth');
+  add(
+    (t) => t.depth > 0,
+    { depth: 1, higher: { ...noSides, north: true, west: true } },
+    'shadow: that side is higher',
+  );
+
+  // Tells on top blocks (design doc 3.7).
+  add((t) => t.traced, { traced: true }, 'mineral traces (gold dots): ore is near');
+  add(
+    (t) => t.tells.damp,
+    { tells: { ...NO_TELLS, damp: true } },
+    'damp stone (blue drips): water under or beside',
+  );
+  add(
+    (t) => t.tells.pitted,
+    { tells: { ...NO_TELLS, pitted: true } },
+    'pitted rock (a row of black pits): gas under or beside',
+  );
+  add(
+    (t) => t.tells.warm,
+    { tells: { ...NO_TELLS, warm: true } },
+    'warm glow (orange heat lines): lava within 2',
+  );
+  add(
+    (t) => t.tells.hairline,
+    { block: 'unstableOre', tells: { ...NO_TELLS, hairline: true } },
+    'hairline glow (pale ring): unstable ore; mining beside it arms it, so brace it or mine it first',
+  );
+
+  // What the crew did and built.
+  add(
+    (t) => t.worked,
+    { worked: true },
+    'white corners: the crew worked here this shift; a hazard that reaches it hurts the crew',
+  );
+  add((t) => t.structure === 'support', { structure: 'support' }, 'support: holds the square');
+  add(
+    (t) => t.structure === 'pump',
+    { structure: 'pump' },
+    'pump: takes water from the squares near it when a shift ends',
+  );
+  add(
+    (t) => t.structure === 'vent',
+    { structure: 'vent' },
+    'vent: clears all the gas on the squares near it when a shift ends',
+  );
+  add((t) => t.structure === 'other', { structure: 'other' }, 'other structure');
+  add((t) => t.camp, { camp: true }, 'camp square (cannot be mined)');
+  add(
+    (t) => t.cheaperEdge.north || t.cheaperEdge.east || t.cheaperEdge.south || t.cheaperEdge.west,
+    { cheaperEdge: { ...noSides, north: true, west: true } },
+    `green dashed line: inside it (near a camp) mining costs ${CAMPS.mineDiscountAp} AP less, ` +
+      `never below ${CAMPS.mineMinAp}`,
+  );
+
   // What a scan has shown under the tops (hold a square for the list).
-  const none = { any: true, ore: false, pocket: false, cavern: false };
-  if (belowOre) {
-    entries.push(
-      legendEntry(sampleTile({ below: { ...none, ore: true } }), 'gold diamond: ore known below'),
-    );
-  }
-  if (belowPocket) {
-    entries.push(
-      legendEntry(
-        sampleTile({ below: { ...none, pocket: true } }),
-        'blue disc: a pocket (water, lava or gas) known below',
-      ),
-    );
-  }
-  if (belowCavern) {
-    entries.push(
-      legendEntry(sampleTile({ below: { ...none, cavern: true } }), 'ring: a cavern known below'),
-    );
-  }
-  if (belowPlain) {
-    entries.push(legendEntry(sampleTile({ below: none }), 'grey bar: plain rock known below'));
-  }
-  if (camp) {
-    entries.push(legendEntry(sampleTile({ camp: true }), 'camp square (cannot be mined)'));
-  }
-  if (cheaper) {
-    entries.push(
-      legendEntry(sampleTile({ cheaper: true }), 'green tick: mining costs less (a camp is near)'),
-    );
-  }
-  if (cracked) {
-    entries.push(
-      legendEntry(
-        sampleTile({ block: 'dirt', crack: 1, crackRunning: true }),
-        'crack: the block slumps into the pit; the number is its countdown (1 = when this shift ends)',
-      ),
-    );
-  }
-  if (water) {
-    entries.push(
-      legendEntry(
-        sampleTile({ depth: 2, water: 2 }),
-        'water: the number is its units; mining there costs 1 AP more',
-      ),
-    );
-  }
-  if (lava) {
-    entries.push(
-      legendEntry(
-        sampleTile({ depth: 2, lava: 2 }),
-        'lava: the number is its units; the square cannot be mined',
-      ),
-    );
-  }
-  if (lavaSource) {
-    entries.push(
-      legendEntry(
-        sampleTile({ depth: 2, lava: 2, lavaSource: true }),
-        'ringed number: a lava source, which keeps pouring',
-      ),
-    );
-  }
-  if (waterComing) {
-    entries.push(
-      legendEntry(
-        sampleTile({ depth: 2, waterComing: true }),
-        'drop: water flows here when this shift ends',
-      ),
-    );
-  }
-  if (lavaComing) {
-    entries.push(
-      legendEntry(
-        sampleTile({ depth: 2, lavaComing: true }),
-        'flame: lava flows here when this shift ends',
-      ),
-    );
-  }
-  if (gas) {
-    entries.push(
-      legendEntry(
-        sampleTile({ depth: 2, gas: 4 }),
-        'gas (rings): the number is its units; it hurts a crew working there, and lava or a blast sets it off',
-      ),
-    );
-  }
-  if (gasComing) {
-    entries.push(
-      legendEntry(
-        sampleTile({ depth: 2, gasComing: true }),
-        'ring: gas spreads here when this shift ends',
-      ),
-    );
-  }
-  if (vented) {
-    entries.push(
-      legendEntry(
-        sampleTile({ depth: 2, gas: 4, vented: true }),
-        'arrow: a vent clears the gas here when this shift ends',
-      ),
-    );
-  }
-  if (explosive) {
-    entries.push(
-      legendEntry(
-        sampleTile({ charge: 'explosive' }),
-        'charge with a fuse: a placed explosive; it goes off when this shift ends',
-      ),
-    );
-  }
-  if (armedOre) {
-    entries.push(
-      legendEntry(
-        sampleTile({ block: 'unstableOre', charge: 'armedOre' }),
-        'red starburst: armed unstable ore; it goes off when this shift ends',
-      ),
-    );
-  }
-  if (blast) {
-    entries.push(
-      legendEntry(
-        sampleTile({ blast: true }),
-        'dashed yellow frame: in an explosion when this shift ends (a charge, armed ore, or burning gas)',
-      ),
-    );
-  }
-  if (stoppedCrack) {
-    entries.push(
-      legendEntry(
-        sampleTile({ block: 'dirt', crack: 1, crackRunning: false }),
-        'pale crack: countdown stopped (the square is stable or held); it goes on if that changes',
-      ),
-    );
-  }
+  add((t) => t.below.ore, { below: { ...none, ore: true } }, 'gold diamond: ore known below');
+  add(
+    (t) => t.below.pocket,
+    { below: { ...none, pocket: true } },
+    'blue disc: a pocket (water, lava or gas) known below',
+  );
+  add((t) => t.below.cavern, { below: { ...none, cavern: true } }, 'ring: a cavern known below');
+  add(
+    (t) => t.below.any && !t.below.ore && !t.below.pocket && !t.below.cavern,
+    { below: none },
+    'grey bar: plain rock known below',
+  );
+
+  // Hazards standing on squares, and what happens when this shift ends.
+  add(
+    (t) => t.crack !== null && t.crackRunning,
+    { block: 'dirt', crack: 1, crackRunning: true },
+    'crack: the block slumps into the pit; the red number is its countdown (1 = when this shift ends)',
+  );
+  add(
+    (t) => t.crack !== null && !t.crackRunning,
+    { block: 'dirt', crack: 1, crackRunning: false },
+    'grey crack: countdown stopped (the square is stable or held); it goes on if that changes',
+  );
+  add(
+    (t) => t.water > 0,
+    { depth: 2, water: 2 },
+    `water (waves): the blue number is its units; mining there costs ${FLOODED_EXTRA_AP} AP more`,
+  );
+  add(
+    (t) => t.lava > 0,
+    { depth: 2, lava: 2 },
+    'lava (flames): the dark red number is its units; the square cannot be mined',
+  );
+  add(
+    (t) => t.lavaSource,
+    { depth: 2, lava: 2, lavaSource: true },
+    'ringed number: a lava source, which keeps pouring',
+  );
+  add(
+    (t) => t.gas > 0,
+    { depth: 2, gas: 4 },
+    'gas (bubbles): it hurts a crew working there, and lava or a blast sets it off; Inspect says how much',
+  );
+  add(
+    (t) => t.waterComing,
+    { depth: 2, waterComing: true },
+    'blue drop: water flows here when this shift ends',
+  );
+  add(
+    (t) => t.lavaComing,
+    { depth: 2, lavaComing: true },
+    'orange flame: lava flows here when this shift ends',
+  );
+  add(
+    (t) => t.gasComing,
+    { depth: 2, gasComing: true },
+    'bubbles with no wash: gas spreads here when this shift ends',
+  );
+  add(
+    (t) => t.vented,
+    { depth: 2, gas: 4, vented: true },
+    'arrow: a vent clears the gas here when this shift ends',
+  );
+  add(
+    (t) => t.charge === 'explosive',
+    { charge: 'explosive' },
+    'charge with a fuse: a placed explosive; it goes off when this shift ends',
+  );
+  add(
+    (t) => t.charge === 'armedOre',
+    { block: 'unstableOre', charge: 'armedOre' },
+    'red starburst: armed unstable ore; it goes off when this shift ends',
+  );
+  add(
+    (t) => t.blast,
+    { blast: true },
+    'dashed yellow frame: in an explosion when this shift ends (a charge, armed ore, or burning gas)',
+  );
   return entries;
 }
 
@@ -1169,8 +1314,51 @@ export function createTapMap(
   // The zoom starts where the player left it last time on this device.
   let camera: Camera = { x: 0, y: 0, cells: loadZoom() ?? VIEW_CELLS };
 
+  // The map is square. Strips along its top and left hold the rulers (the x
+  // and y of the squares), so the squares themselves start `ruler` pixels in
+  // from the canvas's top-left corner.
+  const ruler = PREVIEW_MAP.rulerPx;
+
+  /** The width (and height) in pixels of the part of the canvas that shows squares. */
+  function mapPixels(): number {
+    return Math.max(1, frame.clientWidth - ruler);
+  }
+
   function cellPixels(): number {
-    return frame.clientWidth / camera.cells;
+    return mapPixels() / camera.cells;
+  }
+
+  /**
+   * The rulers: the x of the squares along the top and the y down the left,
+   * so that "x17 y12" in the text under the map can be found. Every square is
+   * named while the squares are big enough, and every fifth when they are not.
+   */
+  function drawRulers(ctx: CanvasRenderingContext2D, c: number, sidePx: number): void {
+    ctx.save();
+    ctx.fillStyle = MARK_COLOURS.rulerBackground;
+    ctx.fillRect(0, 0, sidePx, ruler);
+    ctx.fillRect(0, 0, ruler, sidePx);
+    ctx.fillStyle = MARK_COLOURS.ruler;
+    ctx.font = '9px system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    const every = c >= PREVIEW_MAP.rulerEveryCellPx ? 1 : 5;
+    const first = Math.floor(camera.x);
+    const firstY = Math.floor(camera.y);
+    ctx.textAlign = 'center';
+    for (let x = first; x <= first + Math.ceil(camera.cells); x += 1) {
+      const px = ruler + (x - camera.x + 0.5) * c;
+      if (x % every === 0 && px > ruler + 4 && px < sidePx - 4) {
+        ctx.fillText(String(x), px, ruler / 2 + 0.5);
+      }
+    }
+    ctx.textAlign = 'right';
+    for (let y = firstY; y <= firstY + Math.ceil(camera.cells); y += 1) {
+      const py = ruler + (y - camera.y + 0.5) * c;
+      if (y % every === 0 && py > ruler + 4 && py < sidePx - 4) {
+        ctx.fillText(String(y), ruler - 2, py + 0.5);
+      }
+    }
+    ctx.restore();
   }
 
   /** A dashed outline round the square (x, y). */
@@ -1179,7 +1367,12 @@ export function createTapMap(
     ctx.strokeStyle = colour;
     ctx.lineWidth = Math.max(2.5, c / 7);
     ctx.setLineDash([c / 4, c / 8]);
-    ctx.strokeRect((x - camera.x) * c + 1.5, (y - camera.y) * c + 1.5, c - 3, c - 3);
+    ctx.strokeRect(
+      ruler + (x - camera.x) * c + 1.5,
+      ruler + (y - camera.y) * c + 1.5,
+      c - 3,
+      c - 3,
+    );
     ctx.restore();
   }
 
@@ -1211,7 +1404,14 @@ export function createTapMap(
     const drawn: Tile[] = [];
     for (const row of buildTiles(s, { x0, y0, size: span })) {
       for (const tile of row) {
-        drawTile(ctx, tile, (tile.x - camera.x) * c, (tile.y - camera.y) * c, c, grid);
+        drawTile(
+          ctx,
+          tile,
+          ruler + (tile.x - camera.x) * c,
+          ruler + (tile.y - camera.y) * c,
+          c,
+          grid,
+        );
         if (isInView(camera, tile.x, tile.y)) {
           drawn.push(tile);
         }
@@ -1269,16 +1469,38 @@ export function createTapMap(
       outline(ctx, marks.selected.x, marks.selected.y, c, MARK_COLOURS.selected);
     }
 
+    // The rulers go on last, over the part-squares that reach into their strips.
+    drawRulers(ctx, c, sidePx);
+
     const across = Math.round(camera.cells);
     mapLabel.textContent =
       across >= Math.max(s.size.x, s.size.y)
-        ? 'The whole map · tap a square'
-        : `${across} of ${s.size.x} squares across · tap a square`;
+        ? 'The whole map'
+        : `${across} of ${s.size.x} squares across`;
 
     // For the tests: where the camera is, how big a cell is, what is marked.
     canvas.dataset['camX'] = String(camera.x);
     canvas.dataset['camY'] = String(camera.y);
     canvas.dataset['cellPx'] = String(c);
+    // Where the squares start on the canvas: after the rulers.
+    canvas.dataset['originPx'] = String(ruler);
+    canvas.dataset['worked'] = list((t) => (t.worked ? at(t) : null));
+    // The cracks in view with their countdowns: "3,4:2", or "3,4:2:stopped".
+    canvas.dataset['cracks'] = list((t) => {
+      if (t.crack === null) {
+        return null;
+      }
+      return `${at(t)}:${t.crack}${t.crackRunning ? '' : ':stopped'}`;
+    });
+    // The tells in view: "3,4:dp" (d damp, p pitted, w warm glow, h hairline glow).
+    canvas.dataset['tells'] = list((t) => {
+      const letters =
+        (t.tells.damp ? 'd' : '') +
+        (t.tells.pitted ? 'p' : '') +
+        (t.tells.warm ? 'w' : '') +
+        (t.tells.hairline ? 'h' : '');
+      return letters === '' ? null : `${at(t)}:${letters}`;
+    });
     canvas.dataset['cells'] = String(camera.cells);
     canvas.dataset['selected'] =
       marks.selected === null ? '' : `${marks.selected.x},${marks.selected.y}`;
@@ -1309,6 +1531,9 @@ export function createTapMap(
   function tap(px: number, py: number): void {
     if (state === null) {
       return;
+    }
+    if (px < 0 || py < 0) {
+      return; // on a ruler
     }
     const cell = cellAt(camera, px, py, cellPixels());
     if (cell.x < 0 || cell.y < 0 || cell.x >= state.size.x || cell.y >= state.size.y) {
@@ -1360,8 +1585,8 @@ export function createTapMap(
     }
     const rect = canvas.getBoundingClientRect();
     return {
-      midX: (a.x + b.x) / 2 - rect.left,
-      midY: (a.y + b.y) / 2 - rect.top,
+      midX: (a.x + b.x) / 2 - rect.left - ruler,
+      midY: (a.y + b.y) / 2 - rect.top - ruler,
       distance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
     };
   }
@@ -1381,8 +1606,8 @@ export function createTapMap(
       };
       // If the finger stays down and still for `holdMs`, this is a hold.
       const rect = canvas.getBoundingClientRect();
-      const px = event.clientX - rect.left;
-      const py = event.clientY - rect.top;
+      const px = event.clientX - rect.left - ruler;
+      const py = event.clientY - rect.top - ruler;
       cancelHold();
       holdTimer = setTimeout(() => {
         holdTimer = null;
@@ -1392,7 +1617,8 @@ export function createTapMap(
         // Not a tap any more: lifting the finger then does nothing.
         gesture.kind = 'held';
         const cell = cellAt(camera, px, py, cellPixels());
-        if (cell.x >= 0 && cell.y >= 0 && cell.x < state.size.x && cell.y < state.size.y) {
+        const onMap = px >= 0 && py >= 0;
+        if (onMap && cell.x >= 0 && cell.y >= 0 && cell.x < state.size.x && cell.y < state.size.y) {
           onHold(cell.x, cell.y);
         }
       }, PREVIEW_MAP.holdMs);
@@ -1429,7 +1655,7 @@ export function createTapMap(
         gesture.pinchMidY,
         fingers.midX,
         fingers.midY,
-        frame.clientWidth,
+        mapPixels(),
         state.size,
       );
       draw();
@@ -1478,7 +1704,7 @@ export function createTapMap(
       saveZoom(camera.cells);
     } else if (ended.kind === 'press' && !cancelled) {
       const rect = canvas.getBoundingClientRect();
-      tap(event.clientX - rect.left, event.clientY - rect.top);
+      tap(event.clientX - rect.left - ruler, event.clientY - rect.top - ruler);
     }
   }
   canvas.addEventListener('pointerup', (event) => {
@@ -1499,11 +1725,11 @@ export function createTapMap(
       }
       event.preventDefault();
       const rect = canvas.getBoundingClientRect();
-      const px = event.clientX - rect.left;
-      const py = event.clientY - rect.top;
+      const px = event.clientX - rect.left - ruler;
+      const py = event.clientY - rect.top - ruler;
       // Wheel down (positive deltaY) zooms out: more cells across.
       const cells = camera.cells * Math.exp(event.deltaY * PREVIEW_MAP.wheelZoomRate);
-      camera = zoomedAbout(camera, cells, px, py, px, py, frame.clientWidth, state.size);
+      camera = zoomedAbout(camera, cells, px, py, px, py, mapPixels(), state.size);
       draw();
       saveZoom(camera.cells);
     },
@@ -1516,17 +1742,8 @@ export function createTapMap(
     if (state === null) {
       return;
     }
-    const middle = frame.clientWidth / 2;
-    camera = zoomedAbout(
-      camera,
-      cells,
-      middle,
-      middle,
-      middle,
-      middle,
-      frame.clientWidth,
-      state.size,
-    );
+    const middle = mapPixels() / 2;
+    camera = zoomedAbout(camera, cells, middle, middle, middle, middle, mapPixels(), state.size);
     draw();
     saveZoom(camera.cells);
   }
@@ -1545,9 +1762,15 @@ export function createTapMap(
   function show(next: GameState, fresh: boolean, nextMarks: MapMarks): void {
     state = next;
     marks = nextMarks;
-    // A new or resumed run starts on the middle of the map, at the zoom the
-    // player last used; otherwise the map stays where the player left it.
-    camera = fresh ? centredOnMiddle(next.size, camera.cells) : clampCamera(camera, next.size);
+    // A new or resumed run opens on its pit, or, with nothing dug yet, on the
+    // nearest coal in sight (`openingSquare`), at the zoom the player last
+    // used; otherwise the map stays where the player left it.
+    if (fresh) {
+      const opening = openingSquare(next);
+      camera = centredOn(opening.x, opening.y, next.size, camera.cells);
+    } else {
+      camera = clampCamera(camera, next.size);
+    }
     draw();
   }
 

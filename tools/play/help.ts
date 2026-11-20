@@ -126,11 +126,12 @@ READING A VIEW
   pump, an explosive, armed unstable ore), the pumps and their range, what you know under the
   tops from scans (ore, a pocket, a cavern: "look X,Y" lists a square's known blocks), the
   stumps, each camp, and the squares where mining is cheaper because a camp is near. Then
-  "Hazards": every cracked
-  square, when it falls and where its block will land, and every placed explosive and armed
-  unstable ore block with the squares of its blast. Then what ending the shift now would
-  do, including which blocks slump, which squares crack, where water and lava flow, where gas
-  spreads, and what explodes. A line starting "Not possible now:" says what costs more AP than you have left.
+  "Hazards", one line each: every cracked
+  square, when it is due to fall and where its block would land, every placed explosive and
+  armed unstable ore block with the squares of its blast, and how many squares water, lava
+  and gas stand on. Then "If you end the shift now", one line for each thing that will
+  happen, the most dangerous first: what explodes, which blocks slump, where lava and water
+  flow, where gas spreads, which squares crack, and last the fuel. A line starting "Not possible now:" says what costs more AP than you have left.
   Last comes how to mine, cut, place a support or an explosive and found a camp, with how many squares can be
   mined and trees cut now, and the list of everything else you may do, each with its number, its name and its cost in AP.
 
@@ -149,7 +150,7 @@ THE GAME
   Fuel
   - When a shift ends: if you have no fuel, the run ends. Otherwise the shift uses up ${SHIFT.fuelPerShift} fuel,
     and each camp uses up ${CAMPS.upkeepFuel} more every ${CAMPS.upkeepEveryShifts} shifts (see "Camps").
-    Nothing refills fuel except crafting it. The "If you end the shift now" line says exactly
+    Nothing refills fuel except crafting it. The "If you end the shift now" list says exactly
     what will happen, including when it would end the run. So with fuel at 0 you may still play
     one shift: that line warns you ("FUEL WILL BE 0") at the end of the shift before it.
 
@@ -196,7 +197,9 @@ THE GAME
   - If the square stops being unstable (you make the slope gentler, or rubble fills the hole
     below it), its countdown stops where it is. It goes on from there if the square becomes
     unstable again. A stopped crack reads "a crack, stopped at N" in the notes, and the
-    Hazards line says its countdown is stopped. Mind one stopped at 1: it falls at the end of
+    Hazards list says its countdown is stopped. The Hazards list says a running crack is
+    "due", not that it falls: an earlier slump of the same end of shift can fill the hole
+    first. The "If you end the shift now" list names the blocks that will fall. Mind one stopped at 1: it falls at the end of
     the shift in which the square becomes unstable again.
   - Mining a cracked block removes it, crack and all, like any other block.
   - A tree holds its square: a square with a tree never cracks. Cutting the tree ends that.
@@ -224,8 +227,8 @@ THE GAME
     work collects it.
   - Nothing stands above ground level: what a square cannot hold drains away. Water never
     flows onto a square at ground level, or off the map.
-  - LAVA flows by the same rule, but only at the end of even-numbered shifts. A big lava
-    pocket leaves a SOURCE on the square you broke in on: it gives ${HAZARDS.lava.sourceUnitsPerStep} more lava each time lava
+  - LAVA flows by the same rule (across a drop of ${HAZARDS.lava.flowMinDrop} or more), but only at the end of even-numbered
+    shifts. A big lava pocket leaves a SOURCE on the square you broke in on: it gives ${HAZARDS.lava.sourceUnitsPerStep} more lava each time lava
     flows, and that square always keeps lava on it.
   - Lava destroys a support on a square it stands on, and nothing can be placed on lava.
   - Where water and lava come onto the same square, one unit of each turns into a block of
@@ -233,7 +236,7 @@ THE GAME
     stone stops.
   - If rubble slumps onto a square with water or lava on it, they are pushed up on top of
     the rubble: none is lost, unless it is then above ground level.
-  - The "If you end the shift now" line says where water and lava will flow.
+  - The "If you end the shift now" list says where water and lava will flow.
 
   Camp tools (made at a camp; see "Camp recipes")
   - DRILL. While you have a drill, hard rock costs ${drilledCost} AP to mine instead of ${highestMineCost}. It is not used
@@ -249,13 +252,14 @@ THE GAME
   - VENT. "vent X,Y" (${ACTION_COSTS.placeVent} AP) places a vent on a square. When a shift ends, after the gas has
     spread and before anything explodes, each vent clears ALL the gas on the squares within
     ${HAZARDS.gas.ventReach} steps of it, its own square included. So gas in a vent's reach cannot be lit and does
-    not poison the crew there. Gas further off is left, and spreads back in on later shifts:
+    not poison the crew there. One exception: gas that a blast lets out of a hidden pocket
+    there in the same end of shift comes after the vents have acted, and can burn. Gas further off is left, and spreads back in on later shifts:
     a vent in the middle of the gassy part of a pit clears it in a few shifts. A vent goes
     where a pump may go (gas on the square does not matter) and is lost the same ways; an
     explosion on its square or beside it destroys it too.
   - SEALANT. "seal X,Y" (${ACTION_COSTS.seal} AP, 1 sealant) puts a block of sealed rock on top of a square: the
     square comes up 1 level, and all the water, lava and gas standing on it are destroyed.
-    Use it as a dam (water and lava flow only across a drop of ${HAZARDS.water.flowMinDrop} or more), or to plug a lava
+    Use it as a dam (water flows only across a drop of ${HAZARDS.water.flowMinDrop} or more, and lava of ${HAZARDS.lava.flowMinDrop} or more), or to plug a lava
     source: a sealed source stops for good. Lava does not stop a seal. A square cannot be
     sealed at ground level, on a camp square, while something is placed on it, or when a
     square beside it is deeper (the sealed rock would stand 2 levels above it: seal the deeper
@@ -270,7 +274,7 @@ THE GAME
     cavern (empty open space) is known to lie below; "look X,Y" lists a square's known blocks
     at any time. Scanned blocks show mineral traces and hazard tells like top blocks. Under a
     tree the scan shows the 3 blocks below the hidden ground block, which stays hidden. The
-    "If you end the shift now" line uses what you have scanned.
+    "If you end the shift now" list uses what you have scanned.
   - Placing a pump or sealing a square makes it a square the crew worked this shift (see
     "Crew health"). A scan does not.
 
@@ -300,10 +304,10 @@ THE GAME
     end, and its squares can be mined again. The kit is not given back.
   - A camp is DESTROYED, and lost with its kit, if a block slumps from one of its squares or
     comes to rest on one. A cracked camp square, or a cracked square whose block will land on
-    the camp, is in the Hazards line; the "If you end the shift now" line says when a slump
+    the camp, is in the Hazards list; the "If you end the shift now" list says when a slump
     will destroy a camp. A crew resting there is hurt by that slump and gets no rest.
   - Water or lava that flows onto one of a camp's squares destroys it in the same way; the
-    "If you end the shift now" line says so beforehand.
+    "If you end the shift now" list says so beforehand.
 
   The forest
   - Most of the surface is forest. The rest is open ground (meadow, dirt paths, stone
@@ -314,7 +318,7 @@ THE GAME
     square's top block.
   - A tree grows back on a stump ${SURFACE.regrowShifts} shifts after the cut (the shift of the cut counts), at the
     end of a shift. The block under it stays on your map, drawn after the "Y". Once a square
-    has been mined, no tree ever grows on it again. The "If you end the shift now" line says
+    has been mined, no tree ever grows on it again. The "If you end the shift now" list says
     where a tree will grow back.
 
   What you can see
@@ -331,8 +335,8 @@ THE GAME
     other ore is near. Coal and timber-root give no traces.
   - Hazard tells: a top block shows what is hidden close to it. They are listed under the map
     ("Tells on top blocks"), and named when you mine down to a block that has one.
-      damp           a water pocket lies directly under or beside the block (within ${dampSteps} step)
-      pitted         a gas pocket lies directly under or beside the block (within ${pittedSteps} step)
+      damp           a water pocket lies directly under or beside the block (within ${dampSteps} step): damp stone
+      pitted         a gas pocket lies directly under or beside the block (within ${pittedSteps} step): pitted rock
       warm glow      a lava pocket lies within ${glowSteps} steps
       hairline glow  the block itself is unstable ore
     Steps are counted through the rock, down as well as sideways. So a pocket right under a

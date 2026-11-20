@@ -388,6 +388,8 @@ export function validateData(data: GameData): string[] {
     }
   }
   requireWholeAtLeast(hazards.lava.flowEveryShifts, 1, 'hazards.lava.flowEveryShifts');
+  // As for water: with a drop of 1, a unit of lava would move back and forth for ever.
+  requireWholeAtLeast(hazards.lava.flowMinDrop, 2, 'hazards.lava.flowMinDrop');
   requireWholeAtLeast(hazards.lava.sourcePocketCellsOver, 0, 'hazards.lava.sourcePocketCellsOver');
   requireWholeAtLeast(hazards.lava.sourceUnitsPerStep, 1, 'hazards.lava.sourceUnitsPerStep');
   // A cell with no lava is never a source (state.ts), so a source keeps some.

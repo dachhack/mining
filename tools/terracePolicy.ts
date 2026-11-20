@@ -158,8 +158,8 @@ function craftOf(legal: Action[], recipeId: string): Action | undefined {
  *     among those the nearest to the corner. A tree on such a square is cut.
  *     A mine is taken only if every square it would make unstable can be
  *     held: it is at its final depth, and the stockpile already holds a
- *     support for it. A mine that would arm
- *     unstable ore (design doc 6.6) waits until the ore is braced.
+ *     support for it. A mine that would arm unstable ore (design doc 6.6)
+ *     waits until the ore is braced.
  *  9. Short of supports: craft one; with no timber, cut the nearest tree;
  *     with no stone, mine the nearest stone in sight.
  * 10. The plan is finished, or nothing at all can be done with a full

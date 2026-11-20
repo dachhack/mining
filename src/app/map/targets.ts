@@ -17,7 +17,9 @@
 // (design doc 7.2: "listed when the player holds it").
 //
 // Everything is read through `knownSquare` and `mineCheck`, which look at
-// nothing the player has not been shown.
+// nothing the player has not been shown. This file is the phone's: every
+// refusal it asks for is worded for the phone (`'phone'`), which names a
+// button where the play tool names a command to type.
 
 import { HAZARDS, STRUCTURES } from '../../data';
 import {
@@ -209,7 +211,7 @@ export function squareSummary(state: GameState, x: number, y: number): string {
 function explosiveTap(state: GameState, x: number, y: number, confirmed: boolean): TapOutcome {
   // Whether it may be placed, and the sentence if not, are the play tool's
   // (`explosiveChoice` in ../text/squares.ts), so both views say the same.
-  const choice = explosiveChoice(state, x, y);
+  const choice = explosiveChoice(state, x, y, 'phone');
   if (choice.entry === null) {
     const refusal = choice.refusal ?? 'An explosive cannot be placed there.';
     if (!isRunActive(state) || !isSquare(state, x, y)) {
@@ -259,19 +261,19 @@ export function tapOutcome(
   if (tool === 'explosive') {
     return explosiveTap(state, x, y, confirmed);
   }
-  let choice = tapChoice(state, x, y);
+  let choice = tapChoice(state, x, y, 'phone');
   if (tool === 'support') {
-    choice = supportChoice(state, x, y);
+    choice = supportChoice(state, x, y, 'phone');
   } else if (tool === 'camp') {
-    choice = campChoice(state, x, y);
+    choice = campChoice(state, x, y, 'phone');
   } else if (tool === 'pump') {
-    choice = pumpChoice(state, x, y);
+    choice = pumpChoice(state, x, y, 'phone');
   } else if (tool === 'vent') {
-    choice = ventChoice(state, x, y);
+    choice = ventChoice(state, x, y, 'phone');
   } else if (tool === 'seal') {
-    choice = sealChoice(state, x, y);
+    choice = sealChoice(state, x, y, 'phone');
   } else if (tool === 'scan') {
-    choice = scanChoice(state, x, y);
+    choice = scanChoice(state, x, y, 'phone');
   } else if (tool === 'look') {
     return lookOutcome(state, x, y);
   }

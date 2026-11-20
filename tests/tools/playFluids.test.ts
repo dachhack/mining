@@ -89,10 +89,15 @@ describe('the forecast says where water and lava will flow (design doc 11)', () 
   it('says what a source will pour, what will drain, and where stone will form', () => {
     const state = pit(['030', '000'], { shift: 2 });
     setLavaOn(state, 1, 0, 3, true); // full: what it pours is over the brim
-    expect(forecastOf(state)).toContain('The lava source on x1 y0 will pour 1 more lava.');
+    // One sentence for a full source, not "will pour" and then "will drain" (issue #110).
     expect(forecastOf(state)).toContain(
-      '1 lava on x1 y0 stands above ground level and will drain away.',
+      'The lava source on x1 y0 is full to ground level: the 1 lava it pours will drain away.',
     );
+    expect(forecastOf(state)).not.toContain('will pour 1 more lava');
+    // A source with room pours as before.
+    const room = pit(['030', '000'], { shift: 2 });
+    setLavaOn(room, 1, 0, 1, true);
+    expect(forecastOf(room)).toContain('The lava source on x1 y0 will pour 1 more lava.');
 
     const meeting = pit(['3'], { shift: 3 });
     setWaterOn(meeting, 0, 0, 1);
@@ -193,7 +198,9 @@ describe('the rules text', () => {
     const help = runCli(['--help']).output;
     expect(help).toContain('Water and lava');
     expect(help).toContain('WATER FLOWS when a shift ends');
-    expect(help).toContain('LAVA flows by the same rule, but only at the end of even-numbered');
+    expect(help).toContain(
+      'LAVA flows by the same rule (across a drop of 2 or more), but only at the end of even-numbered',
+    );
     expect(help).toContain('A square with lava on it cannot be');
     expect(help).toContain('one unit of each turns into a block of');
     expect(help).toContain('"~" water, "!" lava');

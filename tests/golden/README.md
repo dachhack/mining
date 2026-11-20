@@ -79,7 +79,7 @@ Nothing was recorded again for issue #103 (gas, ignition, unstable ore and explo
 
 Nothing was re-hashed for issue #107 (the vent; decision note 0036) either: no recorded run holds a vent.
 
-For issue #108 (task T15: every way a run ends, the sim policies, acceptance, the depth survey; decision note 0037) no rule changed, and the six `pit`, `greedy` and `camp` files are untouched: `npm run golden -- --rehash` reports their hashes unchanged. What changed:
+For issue #108 (task T15: every way a run ends, the sim policies, acceptance, the depth survey; decision note 0038) no rule changed, and the six `pit`, `greedy` and `camp` files are untouched: `npm run golden -- --rehash` reports their hashes unchanged. What changed:
 
 - **The two `random` files were recorded again, because the policy changed and not the rules.** The `random` policy now picks a kind of action first and then an action of that kind, so that it crafts, places and founds as well as mines. `--record-all` would no longer have produced the old files, so they were recorded with the new policy. `random-seed-9-forest` became `random-seed-22-forest`: on seed 9 the new policy mines no stump, so that seed no longer covered "no regrowth once mined".
 - **Three files are new.** `terrace-seed-4` pins the terracing policy and supports placed in time. `terrace-8-seed-8-traces` brings mineral traces back into a golden run (they left with `pit-seed-31-traces` in issue #94) and is the deepest golden run: its corner square reaches layer 8. `random-kit-seed-27-blast` pins explosives, pumps, vents, sealant and scans on a generated cube; it starts with the sim-only tool kit because no run with the standard loadout gets the iron, copper and crystal those need.

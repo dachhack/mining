@@ -18,9 +18,11 @@ async function tapSquare(page: Page, canvas: Locator, x: number, y: number): Pro
     throw new Error('the map is not on screen');
   }
   const cellPx = Number(data['cellPx']);
+  // The squares start after the rulers along the top and the left of the map.
+  const originPx = Number(data['originPx']);
   await page.touchscreen.tap(
-    box.x + (x - Number(data['camX']) + 0.5) * cellPx,
-    box.y + (y - Number(data['camY']) + 0.5) * cellPx,
+    box.x + originPx + (x - Number(data['camX']) + 0.5) * cellPx,
+    box.y + originPx + (y - Number(data['camY']) + 0.5) * cellPx,
   );
 }
 
@@ -39,7 +41,7 @@ test('the camp tool founds a camp; mining near it is cheaper; the crew rests', a
   const outcome = page.getByTestId('outcome');
   const gauges = page.getByTestId('gauges');
   const campTool = page.getByTestId('tool-camp');
-  await expect(campTool).toHaveText('Found camp (1)');
+  await expect(campTool).toHaveText('Camp (1)');
   await expect(campTool).toHaveAttribute('aria-pressed', 'false');
 
   // The camp tool on: a tap on a patch with a tree is refused and marked.
@@ -61,9 +63,15 @@ test('the camp tool founds a camp; mining near it is cheaper; the crew rests', a
   // The kit is used up: the tool is gone, and a tap mines again.
   await expect(campTool).toBeHidden();
   await expect(page.getByTestId('map-notes')).toContainText('Camp at x17 y12 (ground level)');
-  await expect(page.getByTestId('map-notes')).toContainText('Mining costs 1 AP less');
+  // The squares where mining is cheaper are not listed on the phone: the map
+  // draws a line round them, and the legend says what it means.
+  await expect(page.getByTestId('map-notes')).not.toContainText('by row');
+  await expect(page.getByTestId('map-notes')).toContainText('under "Other actions"');
+  await expect(page.getByTestId('map-notes')).not.toContainText('"rest 17,12"');
   await expect(page.getByTestId('map-legend')).toContainText('camp square');
-  await expect(page.getByTestId('map-legend')).toContainText('mining costs less');
+  await expect(page.getByTestId('map-legend')).toContainText(
+    'mining costs 1 AP less, never below 1',
+  );
   await page.getByTestId('end-shift').click();
   await expect(gauges).toContainText('Shift 2');
 
@@ -77,7 +85,7 @@ test('the camp tool founds a camp; mining near it is cheaper; the crew rests', a
   await expect(gauges).toContainText('AP 4/5');
 
   // Rest is on the list of other actions; it takes the rest of the shift.
-  await page.getByText('Other actions').click();
+  await page.locator('.actions-heading').click();
   await page.locator('[data-choice="rest 17,12"]').click();
   await expect(outcome).toContainText('The crew rests at the camp at x17 y12');
   await expect(gauges).toContainText('AP 0/5');

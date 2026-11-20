@@ -1,6 +1,6 @@
-# 0037 — T15: every way a run ends, the sim policies, acceptance, and the depth survey
+# 0038 — T15: every way a run ends, the sim policies, acceptance, and the depth survey
 
-Date: 2026-11-20. Status: accepted for the code as it stands (issue #108, task T15 of decision note 0025; it replaces #59). No rule and no number of the game changes, and `ENGINE_VERSION` stays 0.4.0. The survey's findings and the choice they leave to the owner are in `docs/surveys/depth-survey.md` and questions 126 to 128 of `docs/owner-questions.md`.
+Date: 2026-11-20. Status: accepted for the code as it stands (issue #108, task T15 of decision note 0025; it replaces #59). No rule and no number of the game changes, and `ENGINE_VERSION` stays 0.4.0. The survey's findings and the choice they leave to the owner are in `docs/surveys/depth-survey.md` and questions 128 to 130 of `docs/owner-questions.md`.
 
 ## What was built
 
@@ -15,7 +15,7 @@ Date: 2026-11-20. Status: accepted for the code as it stands (issue #108, task T
 
 ## Readings and choices
 
-- **The terracing policy digs in a corner.** The bedrock sides do not count for the level rule (question 84, assumed), so a corner pit costs about a third of a pit in the middle. A careful player would find this, so the policy uses it; question 127 asks the owner whether it is wanted.
+- **The terracing policy digs in a corner.** The bedrock sides do not count for the level rule (question 84, assumed), so a corner pit costs about a third of a pit in the middle. A careful player would find this, so the policy uses it; question 129 asks the owner whether it is wanted.
 - **The terracing policy has a target depth and stops there.** A support is lost when its square is mined, so a pit cannot be deepened without losing every support on its wall. The policy therefore plans the whole pit first. The survey tries targets 4 to 10 and reports each; the plain `terrace` uses 6, the deepest target that most runs finish.
 - **What-if trials change the data in memory, not in `src/data`.** The issue asked for the owner's three options to be modelled "on paper". The survey does that (table 6 is arithmetic) and also plays each option: a worker process changes the numbers in its own copy of the data tables (`tools/whatIf.ts`) and plays the same seeds. This measures the effect instead of predicting it, and nothing in the repository's data changes.
 - **"Nothing above ground level" as checked:** after every cube phase no square holds more water, or more lava, than it is deep, and a square at ground level holds no gas. Between a breach and the next cube phase a square may hold more (the pocket's contents are put on it and what is over drains in step (b)), so the check runs after the cube phase only.

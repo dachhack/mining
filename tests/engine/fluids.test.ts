@@ -391,6 +391,27 @@ describe('lava flows like water, on even-numbered shifts only (design doc 6.4)',
     expect(seen).toEqual(['100', '010', '010', '001']);
   });
 
+  it("reads its own flowMinDrop, not water's (issue #110)", () => {
+    // One unit on x0 (depth 2) stands 2 levels above x1 (depth 3). With the data as it is, both fluids flow.
+    // The number is changed for this test only and put back afterwards.
+    const before = HAZARDS.lava.flowMinDrop;
+    try {
+      HAZARDS.lava.flowMinDrop = 3;
+      const lava = pit(['23'], { shift: LAVA_SHIFT });
+      setLavaOn(lava, 0, 0, 1, false);
+      expect(moves(runStep(lava).events, 'lava')).toEqual([]);
+      // Water still goes by its own number.
+      const water = pit(['23'], { shift: LAVA_SHIFT });
+      setWaterOn(water, 0, 0, 1);
+      expect(moves(runStep(water).events, 'water')).toHaveLength(1);
+    } finally {
+      HAZARDS.lava.flowMinDrop = before;
+    }
+    const lava = pit(['23'], { shift: LAVA_SHIFT });
+    setLavaOn(lava, 0, 0, 1, false);
+    expect(moves(runStep(lava).events, 'lava')).toHaveLength(1);
+  });
+
   it('spreads by the same rule as water', () => {
     const water = pit(['44444', '44444', '44444', '44444', '44444'], { shift: LAVA_SHIFT });
     const lava = pit(['44444', '44444', '44444', '44444', '44444'], { shift: LAVA_SHIFT });

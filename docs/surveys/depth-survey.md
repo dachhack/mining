@@ -12,9 +12,9 @@ Task T15 (issue #108), for the owner's question 85: "Measure first." Engine 0.4.
    - (b) more fuel or AP: runs reach depth 8 (67% to 100%), but at most 2% release water or gas, for the same reason;
    - (c) larger slump limits: almost no effect (19% reach depth 8 today, 27% with every limit 2 higher).
 5. **Combinations do work, if pocket and ore density go up too.** Three candidate settings are measured below (table 9). Under each, a careful player releases water or gas in about half of runs and mines ore in 6 or 7 runs of 10, and a greedy player is still buried every time. Each needs four numbers to change: where the bands start, the starting fuel, how many pockets, how many ore veins.
-6. **Two things the survey found on the way:** a pit in a corner costs about a third of a pit in the middle, so a careful player always digs in a corner (question 127); and the starting camp makes a careful digger slightly worse off, not better (table 10; question 128).
+6. **Two things the survey found on the way:** a pit in a corner costs about a third of a pit in the middle, so a careful player always digs in a corner (question 129); and the starting camp makes a careful digger slightly worse off, not better (table 10; question 130).
 
-The choice is the owner's: question 126 in `docs/owner-questions.md`.
+The choice is the owner's: question 128 in `docs/owner-questions.md`.
 
 ## How it was measured
 
@@ -136,7 +136,7 @@ The coordinator asked for the mildest settings under which a careful player meet
 
 ### A corner pit costs a third of a middle pit
 
-The cube's bedrock sides do not count for the level rule (question 84, an assumed default). So a pit in a corner needs a quarter of each ring. To depth 8: 120 blocks in a corner, 204 against a side, 344 in the middle. Every careful player will dig in a corner once they see this. If that is not wanted, the fix is a rule choice (the wall counts as ground level), which would put depth 8 at about 500 AP for everyone. Question 127.
+The cube's bedrock sides do not count for the level rule (question 84, an assumed default). So a pit in a corner needs a quarter of each ring. To depth 8: 120 blocks in a corner, 204 against a side, 344 in the middle. Every careful player will dig in a corner once they see this. If that is not wanted, the fix is a rule choice (the wall counts as ground level), which would put depth 8 at about 500 AP for everyone. Question 129.
 
 ### The starting camp does not pay for itself
 
@@ -147,7 +147,7 @@ Table 10: the `terrace` policy aiming 7 deep reaches it in 48% of runs without a
 - reach of 8 steps instead of 4: 43%;
 - reach of 8 steps and upkeep every 8 shifts: 51%, the first setting where the camp is worth founding.
 
-The camp's other use, rest, matters only to a player who gets hurt; the careful script never is. Question 128.
+The camp's other use, rest, matters only to a player who gets hurt; the careful script never is. Question 130.
 
 ### Coal is the real clock
 

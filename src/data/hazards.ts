@@ -27,10 +27,11 @@ export const HAZARDS: HazardData = {
     // Extra AP to mine a square that water stands on (design doc 4.2;
     // owner question 91).
     floodedMineExtraAp: 1,
-    // Water (and lava) moves from a square to a neighbour only when the
-    // neighbour's level is at least this many levels lower. With 2, one unit
-    // on a flat floor stays where it is, and a pit ends up level to within 1.
-    // Must be at least 2: with 1, a unit would swap back and forth for ever.
+    // Water moves from a square to a neighbour only when the neighbour's
+    // level is at least this many levels lower. With 2, one unit on a flat
+    // floor stays where it is, and a pit ends up level to within 1. Must be
+    // at least 2: with 1, a unit would swap back and forth for ever. Lava
+    // has its own number, `lava.flowMinDrop`.
     flowMinDrop: 2,
     // A pump takes up to this many units of water a shift (design doc 6.3)...
     pumpUnitsPerShift: 3,
@@ -68,6 +69,10 @@ export const HAZARDS: HazardData = {
     unitsPerCell: 1,
     // Lava flows in the cube phase of every shift whose number divides by this.
     flowEveryShifts: 2,
+    // Lava moves to a neighbour only when the neighbour's level is at least
+    // this many levels lower: the same rule as `water.flowMinDrop`, with a
+    // number of its own (issue #110). Must be at least 2, for the same reason.
+    flowMinDrop: 2,
     // Every cell of a generated pocket of more than this many cells is a source.
     sourcePocketCellsOver: 8,
     // A lava source gives this many units on every lava step (design doc 6.2).

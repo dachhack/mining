@@ -3,10 +3,10 @@
 // marks the neighbours that are too high, tap a tree to cut it; drag to pan,
 // and the two zoom buttons.
 //
-// Seed 110 (see `npm run play -- --seed 110`): the map starts on its middle.
-// x12..x16 of row y16 are dirt on open ground, x17 y16 is stone, and a tree
-// stands on x19 y15. There is no start clearing any more (issue #95), so on
-// most seeds the middle is forest: the seed was picked for this layout.
+// Seed 110 (see `npm run play -- --seed 110`): the map opens on the coal in
+// sight that is nearest its middle, x17 y18 (issue #110), so it shows the
+// squares x10..x23, y11..y24. x12..x16 of row y16 are dirt on open ground,
+// x17 y16 is stone, and a tree stands on x19 y15.
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 
@@ -20,9 +20,17 @@ async function startRun(page: Page, seed: number): Promise<void> {
 }
 
 /** Where the map's camera is: the square at its top-left corner, and the square size in pixels. */
-async function camera(canvas: Locator): Promise<{ x: number; y: number; cellPx: number }> {
+async function camera(
+  canvas: Locator,
+): Promise<{ x: number; y: number; cellPx: number; originPx: number }> {
   const data = await canvas.evaluate((el) => ({ ...(el as HTMLElement).dataset }));
-  return { x: Number(data['camX']), y: Number(data['camY']), cellPx: Number(data['cellPx']) };
+  return {
+    x: Number(data['camX']),
+    y: Number(data['camY']),
+    cellPx: Number(data['cellPx']),
+    // The squares start after the rulers along the top and the left of the map.
+    originPx: Number(data['originPx']),
+  };
 }
 
 /** Tap the square (x, y) of the map, as a finger would. */
@@ -33,8 +41,8 @@ async function tapSquare(page: Page, canvas: Locator, x: number, y: number): Pro
     throw new Error('the map is not on screen');
   }
   await page.touchscreen.tap(
-    box.x + (x - cam.x + 0.5) * cam.cellPx,
-    box.y + (y - cam.y + 0.5) * cam.cellPx,
+    box.x + cam.originPx + (x - cam.x + 0.5) * cam.cellPx,
+    box.y + cam.originPx + (y - cam.y + 0.5) * cam.cellPx,
   );
 }
 
@@ -48,13 +56,16 @@ test.beforeEach(async ({ page }) => {
   await startRun(page, 110);
 });
 
-test('the map starts on the middle, with squares big enough to tap', async ({ page }) => {
+test('the map opens on the nearest coal in sight, with squares big enough to tap', async ({
+  page,
+}) => {
   const canvas = page.getByTestId('map-canvas');
   const cam = await camera(canvas);
   expect(cam.cellPx).toBeGreaterThanOrEqual(24);
   await expect(canvas).toHaveAttribute('data-cells', '14');
-  expect(cam.x).toBe(9);
-  expect(cam.y).toBe(9);
+  // Centred on x17 y18: 7 squares to its left and above it.
+  expect(cam.x).toBe(10);
+  expect(cam.y).toBe(11);
   await expect(page.getByTestId('map-label')).toContainText('14 of 32 squares across');
   // The legend names what is on screen; nothing is said of layers or a miner.
   await expect(page.getByTestId('map-legend')).toContainText('Dirt');

@@ -63,6 +63,10 @@ import type {
   UnstableSquare,
 } from '../../engine';
 
+// `import type` brings in a type only, so describe.ts and this file may
+// import from each other.
+import type { Audience } from './describe';
+
 /** The actions that name a square: what `SquareChoice.entry` may hold. */
 export type SquareEntry =
   | MineAction
@@ -125,6 +129,20 @@ function refused(refusal: string, blockedSquares: Square[] = []): SquareChoice {
   };
 }
 
+/**
+ * The hint that ends a refusal, saying how to do what is needed first: the
+ * command to type in the play tool, or the button to press on the phone
+ * (issue #110). `typed` is the play tool's command; `onPhone` the phone's words.
+ */
+function howTo(audience: Audience, typed: string, onPhone: string): string {
+  return audience === 'phone' ? onPhone : `"${typed}"`;
+}
+
+/** The phone's words for a recipe's button: 'the "Craft Support" button under "Other actions"'. */
+function craftButton(recipeName: string): string {
+  return `"Craft ${recipeName}" under "Other actions"`;
+}
+
 /** "x3 y4": how a square is written in every sentence. */
 export function squareText(x: number, y: number): string {
   return `x${x} y${y}`;
@@ -154,7 +172,12 @@ function joinWithAnd(parts: string[]): string {
  * off the map, a tree, no block left, the level rule (naming each neighbour
  * that is too high and its depth: design doc 4.2), or too little AP.
  */
-export function mineChoice(state: GameState, x: number, y: number): SquareChoice {
+export function mineChoice(
+  state: GameState,
+  x: number,
+  y: number,
+  audience: Audience = 'playTool',
+): SquareChoice {
   if (!isRunActive(state)) {
     return refused('The run has ended.');
   }
@@ -165,7 +188,9 @@ export function mineChoice(state: GameState, x: number, y: number): SquareChoice
   const where = squareText(x, y);
   const check = mineCheck(state, x, y);
   if (check.refusal === 'tree') {
-    return refused(`A tree stands on ${where}: cut it first ("cut ${x},${y}").`);
+    return refused(
+      `A tree stands on ${where}: cut it first (${howTo(audience, `cut ${x},${y}`, 'tap the tree')}).`,
+    );
   }
   if (check.refusal === 'bottom') {
     return refused(`${where} has no block left: it is at the bedrock floor of the cube.`);
@@ -173,7 +198,14 @@ export function mineChoice(state: GameState, x: number, y: number): SquareChoice
   if (check.refusal === 'camp') {
     const camp = campAtSquare(state, x, y);
     // The camp is named by its centre square.
-    const command = camp === null ? '' : ` ("decommission ${camp.pos.x},${camp.pos.y}")`;
+    const command =
+      camp === null
+        ? ''
+        : ` (${howTo(
+            audience,
+            `decommission ${camp.pos.x},${camp.pos.y}`,
+            '"Decommission" under "Other actions"',
+          )})`;
     return refused(
       `A camp stands on ${where}: its squares cannot be mined while it stands. ` +
         `To mine there, decommission the camp first${command}.`,
@@ -296,7 +328,12 @@ function unstableWarning(
  * why it is refused: off the map, no support to place, a tree, no block
  * left, something already placed there, or too little AP.
  */
-export function supportChoice(state: GameState, x: number, y: number): SquareChoice {
+export function supportChoice(
+  state: GameState,
+  x: number,
+  y: number,
+  audience: Audience = 'playTool',
+): SquareChoice {
   if (!isRunActive(state)) {
     return refused('The run has ended.');
   }
@@ -307,7 +344,9 @@ export function supportChoice(state: GameState, x: number, y: number): SquareCho
   const where = squareText(x, y);
   const check = supportCheck(state, x, y);
   if (check.refusal === 'noSupport') {
-    return refused('You have no support to place: craft one first ("craft-support").');
+    return refused(
+      `You have no support to place: craft one first (${howTo(audience, 'craft-support', craftButton('Support'))}).`,
+    );
   }
   if (check.refusal === 'tree') {
     return refused(
@@ -343,7 +382,12 @@ export function supportChoice(state: GameState, x: number, y: number): SquareCho
  * or why it is refused: off the map, no explosive to place, a tree, no block
  * left, something already placed there, lava, a camp, or too little AP.
  */
-export function explosiveChoice(state: GameState, x: number, y: number): SquareChoice {
+export function explosiveChoice(
+  state: GameState,
+  x: number,
+  y: number,
+  audience: Audience = 'playTool',
+): SquareChoice {
   if (!isRunActive(state)) {
     return refused('The run has ended.');
   }
@@ -355,7 +399,7 @@ export function explosiveChoice(state: GameState, x: number, y: number): SquareC
   const check = explosiveCheck(state, x, y);
   if (check.refusal === 'noExplosive') {
     return refused(
-      'You have no explosive to place: a camp makes one ("craft-explosive" while a camp stands).',
+      `You have no explosive to place: a camp makes one (${howTo(audience, 'craft-explosive', craftButton('Explosive'))} while a camp stands).`,
     );
   }
   if (check.refusal === 'tree') {
@@ -412,7 +456,12 @@ export const SCAN_WIDTH = 2 * CAMP_TOOLS.scanHalfWidth + 1;
  * is refused: off the map, no pump to place, a tree, no block left,
  * something already placed there, lava, a camp, or too little AP.
  */
-export function pumpChoice(state: GameState, x: number, y: number): SquareChoice {
+export function pumpChoice(
+  state: GameState,
+  x: number,
+  y: number,
+  audience: Audience = 'playTool',
+): SquareChoice {
   if (!isRunActive(state)) {
     return refused('The run has ended.');
   }
@@ -423,7 +472,9 @@ export function pumpChoice(state: GameState, x: number, y: number): SquareChoice
   const where = squareText(x, y);
   const check = pumpCheck(state, x, y);
   if (check.refusal === 'noItem') {
-    return refused('You have no pump to place: one is crafted at a camp ("craft-pump").');
+    return refused(
+      `You have no pump to place: one is crafted at a camp (${howTo(audience, 'craft-pump', craftButton('Pump'))}).`,
+    );
   }
   if (check.refusal === 'tree') {
     return refused(`A tree stands on ${where}: nothing is placed on a tree.`);
@@ -454,7 +505,12 @@ export function pumpChoice(state: GameState, x: number, y: number): SquareChoice
  * is refused: the same reasons as for a pump. Gas on the square does not
  * stop it.
  */
-export function ventChoice(state: GameState, x: number, y: number): SquareChoice {
+export function ventChoice(
+  state: GameState,
+  x: number,
+  y: number,
+  audience: Audience = 'playTool',
+): SquareChoice {
   if (!isRunActive(state)) {
     return refused('The run has ended.');
   }
@@ -465,7 +521,9 @@ export function ventChoice(state: GameState, x: number, y: number): SquareChoice
   const where = squareText(x, y);
   const check = ventCheck(state, x, y);
   if (check.refusal === 'noItem') {
-    return refused('You have no vent to place: one is crafted at a camp ("craft-vent").');
+    return refused(
+      `You have no vent to place: one is crafted at a camp (${howTo(audience, 'craft-vent', craftButton('Vent'))}).`,
+    );
   }
   if (check.refusal === 'tree') {
     return refused(`A tree stands on ${where}: nothing is placed on a tree.`);
@@ -496,7 +554,12 @@ export function ventChoice(state: GameState, x: number, y: number): SquareChoice
  * it is refused: off the map, no sealant, a square at ground level, a camp,
  * something placed there, or too little AP.
  */
-export function sealChoice(state: GameState, x: number, y: number): SquareChoice {
+export function sealChoice(
+  state: GameState,
+  x: number,
+  y: number,
+  audience: Audience = 'playTool',
+): SquareChoice {
   if (!isRunActive(state)) {
     return refused('The run has ended.');
   }
@@ -507,7 +570,9 @@ export function sealChoice(state: GameState, x: number, y: number): SquareChoice
   const where = squareText(x, y);
   const check = sealCheck(state, x, y);
   if (check.refusal === 'noSealant') {
-    return refused('You have no sealant: it is crafted at a camp ("craft-sealant").');
+    return refused(
+      `You have no sealant: it is crafted at a camp (${howTo(audience, 'craft-sealant', craftButton('Sealant'))}).`,
+    );
   }
   if (check.refusal === 'groundLevel') {
     return refused(
@@ -573,7 +638,12 @@ export function sealChoice(state: GameState, x: number, y: number): SquareChoice
  * "scan x,y": the action that aims a scan at the square (x, y), or why it is
  * refused: off the map, no scanner charge, or too little AP.
  */
-export function scanChoice(state: GameState, x: number, y: number): SquareChoice {
+export function scanChoice(
+  state: GameState,
+  x: number,
+  y: number,
+  audience: Audience = 'playTool',
+): SquareChoice {
   if (!isRunActive(state)) {
     return refused('The run has ended.');
   }
@@ -584,7 +654,7 @@ export function scanChoice(state: GameState, x: number, y: number): SquareChoice
   const check = scanCheck(state, x, y);
   if (check.refusal === 'noCharge') {
     return refused(
-      'You have no scanner charge: one is crafted at a camp ("craft-scanner-charge"). A scan uses one up.',
+      `You have no scanner charge: one is crafted at a camp (${howTo(audience, 'craft-scanner-charge', craftButton('Scanner charge'))}). A scan uses one up.`,
     );
   }
   if (check.ap === null) {
@@ -646,14 +716,20 @@ export function patchText(x: number, y: number): string {
  * The sentence for a patch `foundCampCheck` refuses: the reason, and the
  * squares in the way. `x`, `y` is the centre square that was asked about.
  */
-function foundRefusalText(state: GameState, x: number, y: number, check: FoundCampCheck): string {
+function foundRefusalText(
+  state: GameState,
+  x: number,
+  y: number,
+  check: FoundCampCheck,
+  audience: Audience,
+): string {
   const patch = `the 3 x 3 patch round ${squareText(x, y)} (${patchText(x, y)})`;
   const which = squareListText(check.squares);
   switch (check.refusal) {
     case 'noKit':
       return (
         `You have no ${itemDef(CAMPS.kitItem).name.toLowerCase()}: founding a camp uses one up. ` +
-        'One is crafted at a camp ("craft-camp-kit").'
+        `One is crafted at a camp (${howTo(audience, 'craft-camp-kit', craftButton('Camp kit'))}).`
       );
     case 'offMap':
       return (
@@ -695,7 +771,12 @@ function foundRefusalText(state: GameState, x: number, y: number, check: FoundCa
  * centre square is (x, y), or why it is refused, with the squares in the way
  * (`blockedSquares`). Founding costs all the AP left in the shift.
  */
-export function campChoice(state: GameState, x: number, y: number): SquareChoice {
+export function campChoice(
+  state: GameState,
+  x: number,
+  y: number,
+  audience: Audience = 'playTool',
+): SquareChoice {
   if (!isRunActive(state)) {
     return refused('The run has ended.');
   }
@@ -705,7 +786,7 @@ export function campChoice(state: GameState, x: number, y: number): SquareChoice
   }
   const check = foundCampCheck(state, x, y);
   if (!check.allowed) {
-    return refused(foundRefusalText(state, x, y, check), check.squares);
+    return refused(foundRefusalText(state, x, y, check, audience), check.squares);
   }
   if (state.ap < CAMPS.foundMinAp) {
     return refused(
@@ -784,11 +865,16 @@ export function decommissionChoice(state: GameState, x: number, y: number): Squa
  * otherwise mine it (design doc 11: "a tap on a square mines it, or cuts its
  * tree"). The refusal is the one of the action the tap stood for.
  */
-export function tapChoice(state: GameState, x: number, y: number): SquareChoice {
+export function tapChoice(
+  state: GameState,
+  x: number,
+  y: number,
+  audience: Audience = 'playTool',
+): SquareChoice {
   if (isRunActive(state) && isSquare(state, x, y) && knownSquare(state, x, y).tree) {
     return cutChoice(state, x, y);
   }
-  return mineChoice(state, x, y);
+  return mineChoice(state, x, y, audience);
 }
 
 /** The words that name a square action, as they are typed. */
