@@ -2,6 +2,8 @@
 
 Date: 2026-11-18. Status: accepted with M1 task 7 (issue #9).
 
+**Partly superseded by 0025 (design doc v0.2):** the map of layers round the avatar and the move wording go with the avatar; the play tool shows a top-down map of the surface. The single view function, the log format, refusals and the leak test stand.
+
 ## Context
 
 Playtest agents play through `npm run play` and nothing else (agent plan 3.1). The issue fixed what a step prints and the two ways to drive the tool; these are the choices it left open.

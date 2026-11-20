@@ -2,6 +2,8 @@
 
 Date: 2026-11-18. Issue #51; decision note 0014 item 33; owner question 53.
 
+**Partly superseded by 0025 (design doc v0.2):** the survey's walking player no longer exists. Starting fuel 24, and the owner's rule that it must reach coal, stand.
+
 ## Decision
 
 The standard loadout's `fuel` stays at 24. No number in `src/data` changed.

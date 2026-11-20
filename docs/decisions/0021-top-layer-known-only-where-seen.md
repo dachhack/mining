@@ -2,6 +2,8 @@
 
 Date: 2026-11-19. Status: accepted (owner's request after PR #72).
 
+**Superseded by 0025 (design doc v0.2, top-down terrain; owner, issue #82):** the owner chose "Whole surface": every square's top block is always shown. Kept as history.
+
 ## Context
 
 Owner, after PR #72 was merged: "you can see the entire level when you dig down. we need to only show what has been discovered". Up to then daylight revealed the whole top layer from the start (except under trees, issue #70), so the layer-0 map showed nearly all of it. Deeper layers already showed only what the lamp had found. Asked what "discovered" should mean for the top layer, the owner chose "only near the miner": daylight no longer reveals the whole top layer; a top-layer block is revealed by the miner's light and reach, like any deeper block.

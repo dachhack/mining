@@ -2,6 +2,8 @@
 
 Date: 2026-11-18. Status: assumed by the coordinator under agent plan section 6, except where an item quotes the owner. Every assumed item is a reading of a [Default] or of a point the design doc leaves open, and the owner can change any of them. No [Decided] item is changed. Section 8 (camps) is [Decided]; items 26–31 fill in what it leaves open and do not alter it.
 
+**Partly superseded by 0025 (design doc v0.2, top-down terrain; owner, issue #82).** Superseded: items 2, 5–11 (cave-ins, spans, shafts, overhead mining; replaced by wall slump), 12, 13 and 16 as 3D flows (replaced by flows on squares), 14 (lamp, torches), 20–24 (air, entombment), 26 and 29 (founding, air line), 31 (weights, 3D scan), 32 (hauling timber). Still standing, some re-expressed for squares: items 1 (in outline), 3, 4, 15, 17, 18, 19 (in part), 25, 27, 28, 30, 33–36. See design doc sections 5–8.
+
 ## Context
 
 Milestone M2 (hazards and camps) needs answers to owner questions 4 and 8–13, and a concrete form for two answers the owner gave on 2026-11-18 after playtest round m1-r2: "Straight shafts should have cave in risk" (question 52) and "Start with fuel to get to coal so we don't need to have close coal necessary" (question 53). So that every developer builds on the same reading, the coordinator fixed one here. Every number below lives in `src/data`. Section numbers refer to `docs/game-design-doc.md`.

@@ -2,6 +2,8 @@
 
 Date: 2026-11-19. Status: accepted (owner's request after trying the preview; issue #66). Builds on 0018.
 
+**Partly superseded by 0025 (design doc v0.2):** layers, taps that move, and the camera that follows the miner are gone; the map shows the whole surface from above. Tiles built from `knownCell`, colour plus pattern, and pinch zoom stand.
+
 ## Decision
 
 - **The preview's map is a canvas of coloured tiles**, 16 × 16 cells of one layer, in place of the text map. One colour and one pattern per block (`src/app/map/palette.ts`), so no two blocks differ by colour alone. The text map stays in `npm run play`, unchanged.

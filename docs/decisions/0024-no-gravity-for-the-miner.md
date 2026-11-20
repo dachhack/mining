@@ -2,6 +2,8 @@
 
 Date: 2026-11-19. Status: accepted (owner, issue #80).
 
+**Partly superseded by 0025 (design doc v0.2, top-down terrain; owner, issue #82):** there is no miner, so its movement, digging down, the ▲ Go up / ▼ Go down buttons and Look up / Look down are gone. Ladders stay removed; blocks and rubble still fall.
+
 ## Context
 
 PR #79 made a tap on the phone map mine a block instead of opening a chooser. The coordinator then asked the owner how a phone player should climb out of a hole. Owner: "Let's scrap the movement in space limits for the miner. Ladders and scaffolding are not needed." Asked to choose, the owner picked **no gravity at all**, and for the tap: **a tap on a solid block mines it, a tap on an open cell moves there**.

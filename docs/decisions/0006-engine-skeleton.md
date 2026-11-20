@@ -2,6 +2,8 @@
 
 Date: 2026-11-18. Status: accepted with M1 task 1 (issue #3). The readings marked "assumed" are owner questions 25–28.
 
+**Partly superseded by 0025 (design doc v0.2):** the surface layer `z = -1` and carry weight go with the avatar. The state layout, copying, canonical order, hash and RNG stand.
+
 ## Context
 
 M1 task 1 fixes the shapes the other M1 tasks build on, so that they can work in separate files at the same time.

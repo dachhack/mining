@@ -2,6 +2,8 @@
 
 Date: 2026-11-18. Status: the owner's direction ("make light matter", the answer to questions 22 and 40 after playtest round m1-r1, finding 4, issue #24), in the form the coordinator assumed in issue #33. The form is for the owner to confirm.
 
+**Superseded by 0025 (design doc v0.2, top-down terrain; owner, issue #82):** there is no light; every square's top block is always known. Kept as history.
+
 **Changed by 0022 (owner, issue #75):** lamp lit or not, only light and touch reveal cells now: the 17-cell reach, the cell overhead and looking over an edge (`edgeLookCells`) reveal nothing, and the pick reaches the face neighbours only. The "lamp out" rules below for touch now hold with the lamp lit too.
 
 ## Context

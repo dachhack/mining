@@ -2,6 +2,8 @@
 
 Date: 2026-11-19. Status: accepted with issue #70. The owner asked for it directly; design doc section 3 (not marked [Decided]) is changed in the same PR. Numbers marked [Default] live in `src/data/surface.ts`.
 
+**Partly superseded by 0025 (design doc v0.2):** nobody walks, so trees no longer block a way, there is no start clearing, paths wear nothing, and coal in sight means on open ground anywhere. Trees, cutting, the hidden ground under a tree and the regrowth count stand; a square once mined never regrows.
+
 ## Context
 
 Owner, 2026-11-19: "We need the surface to be mostly trees you can cut for timber then this exposes rock or dirt or other. Trees grow back if their spot isnt mined in a few turns." Asked by the coordinator: trees block walking, "but there are dirt paths and stone outcroppings and meadows"; the ground under a tree is "Hidden until cut"; regrowth takes "10 shifts". Issue #70 gives the coordinator's reading in eight items; this note records how it was built and the choices the issue left open.
