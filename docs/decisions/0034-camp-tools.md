@@ -1,6 +1,6 @@
 # 0034 — T13: camp tools (pump, sealant, scanner, drill)
 
-Date: 2026-11-20. Status: accepted for the code as it stands (issue #104, task T13 of decision note 0025; it reworks issue #58). It builds design doc v0.2 section 7.2 with 3.4 (what the player knows), 3.5 (the drill), 4.1 (the actions), 5.2 (worked squares) and 6.3 (pumps), all [Default]; question 93 (the scan) is an assumed default. The readings below are the developer's, made where the design doc leaves a detail open; the ones an owner might want to change are questions 112 to 118 in `docs/owner-questions.md`. None changes a [Decided] item, and the design doc is not changed. The vent is described at the end.
+Date: 2026-11-20. Status: accepted for the code as it stands (issue #104, task T13 of decision note 0025; it reworks issue #58). It builds design doc v0.2 section 7.2 with 3.4 (what the player knows), 3.5 (the drill), 4.1 (the actions), 5.2 (worked squares) and 6.3 (pumps), all [Default]; question 93 (the scan) is an assumed default. The readings below are the developer's, made where the design doc leaves a detail open; the ones an owner might want to change are questions 112 to 118 in `docs/owner-questions.md`. None changes a [Decided] item, and the design doc is not changed. The vent is split off: see the end.
 
 ## Context
 
@@ -52,7 +52,7 @@ A scan is the one sanctioned way to learn what lies below a top. The tests say s
 
 ## The vent
 
-Built last, after T11 (gas): see the section "The vent" added to this note when it lands, or the follow-up issue if it is split off.
+Not in this task. The vent needs gas (T11), which was still being built, so the coordinator split it off into a follow-up issue. What is ready for it: the `placeVent x,y` action type and its key, the `vent` structure and recipe, `HAZARDS.gas.ventReach`, the shared placing rules in `actions/campTools.ts` (`toolCheck` takes `'vent'`), and the play tool's wording for the action. Until then `legalActions` never offers `placeVent`, and `isLegalAction` refuses it.
 
 ## Consequences
 
