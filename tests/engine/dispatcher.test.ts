@@ -41,6 +41,7 @@ const FAKE_FORECAST: ShiftForecast = {
   flows: [],
   upkeep: {
     fuelConsumed: 1,
+    campFuelConsumed: 0,
     fuelAfter: 9,
     runEnds: null,
   },

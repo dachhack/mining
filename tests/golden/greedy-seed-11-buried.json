@@ -5,7 +5,7 @@
   "loadoutId": "standard",
   "recordedWith": "greedy",
   "expectedStatus": "ended: lost, buried",
-  "expectedHash": "5bfdf79bd3be26c7",
+  "expectedHash": "ddd7ace31b48cf7d",
   "decisions": [
     "mine 16,16 ap 2",
     "cutTree 15,16 ap 2",

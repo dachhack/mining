@@ -13,16 +13,17 @@
 // that water stands on costs 1 AP more, and a square with lava on it cannot
 // be mined at all.
 //
-// Not here yet, because its rule is not built: a camp's squares cannot be
-// mined (T12).
-//
 // A support (or any other structure) on the square is stored with its top
 // block, so mining the block takes it away and it is lost (owner question 82;
 // issue #94).
+//
+// Camps (design doc 8; issue #100): a camp's 9 squares cannot be mined while
+// it stands, and a mine near a camp costs 1 AP less (camps.ts).
 
 import { BLOCKS, HAZARDS, SURFACE } from '../../data';
 import type { MineAction } from '../actionTypes';
 import { collapseSpaceUnder, contentsOn } from '../breach';
+import { campAtSquare, discountedMineCost } from '../camps';
 import { markWorked } from '../crew';
 import { destroyStructure } from '../destroy';
 import type { GameEvent } from '../events';
@@ -41,7 +42,9 @@ export type MineRefusalReason =
   /** The level rule: at least one face neighbour is higher than the square. */
   | 'neighbourHigher'
   /** Lava stands on the square (design doc 4.2). */
-  | 'lava';
+  | 'lava'
+  /** A camp stands on the square: decommission it first (design doc 8). */
+  | 'camp';
 
 /** The answer of `mineCheck`. */
 export interface MineCheck {
@@ -56,10 +59,17 @@ export interface MineCheck {
    */
   higherNeighbours: HigherNeighbour[];
   /**
-   * What the mine costs in AP; `null` when it is not allowed. On a square
-   * that water stands on it includes `HAZARDS.water.floodedMineExtraAp`.
+   * What the mine costs in AP, with the camp discount already taken off and,
+   * on a square that water stands on, `HAZARDS.water.floodedMineExtraAp`
+   * added after it (owner question 107); `null` when it is not allowed.
    */
   ap: number | null;
+  /**
+   * How many AP the camp discount took off (design doc 8): 0 away from any
+   * camp, and 0 when the block already costs the least a mine may cost.
+   * `null` when the mine is not allowed.
+   */
+  campDiscount: number | null;
 }
 
 /**
@@ -67,12 +77,12 @@ export interface MineCheck {
  * at the AP left: `legalActions` in index.ts removes what costs too much.
  *
  * Everything read here is something the player sees: the tree, the depths of
- * the square and its neighbours, the top block (which is known whenever no
- * tree hides it), and the water and lava standing on the square. Nothing
- * below a top block is read.
+ * the square and its neighbours, the camps, the top block (which is known
+ * whenever no tree hides it), and the water and lava standing on the square.
+ * Nothing below a top block is read.
  *
  * When more than one thing stops the mine, the reason given is the first of:
- * a tree, no block left, lava, the level rule.
+ * a tree, a camp, no block left, lava, the level rule.
  *
  * Throws if (x, y) is not a square. Does not change `state`.
  */
@@ -81,7 +91,11 @@ export function mineCheck(state: GameState, x: number, y: number): MineCheck {
   // A tree is asked about first, so that the answer for a square under a tree
   // never depends on the block the tree hides.
   if (hasTree(state, surfaceCellAbove({ x, y, z: 0 }))) {
-    return { allowed: false, refusal: 'tree', higherNeighbours: [], ap: null };
+    return { allowed: false, refusal: 'tree', higherNeighbours: [], ap: null, campDiscount: null };
+  }
+  // A camp's squares cannot be mined while it stands. Camps are always seen.
+  if (campAtSquare(state, x, y) !== null) {
+    return { allowed: false, refusal: 'camp', higherNeighbours: [], ap: null, campDiscount: null };
   }
   const level = mayMine(state, x, y);
   if (level.refusal === 'bottom') {
@@ -90,12 +104,13 @@ export function mineCheck(state: GameState, x: number, y: number): MineCheck {
       refusal: 'bottom',
       higherNeighbours: [],
       ap: null,
+      campDiscount: null,
     };
   }
   // What stands on the square, in the open: the player sees it.
   const contents = contentsOn(state, x, y);
   if (contents.lava > 0) {
-    return { allowed: false, refusal: 'lava', higherNeighbours: [], ap: null };
+    return { allowed: false, refusal: 'lava', higherNeighbours: [], ap: null, campDiscount: null };
   }
   if (!level.allowed) {
     return {
@@ -103,6 +118,7 @@ export function mineCheck(state: GameState, x: number, y: number): MineCheck {
       refusal: level.refusal,
       higherNeighbours: level.higherNeighbours,
       ap: null,
+      campDiscount: null,
     };
   }
   const cost = blockDefAt(state, { x, y, z: depth }).mineCost;
@@ -111,14 +127,25 @@ export function mineCheck(state: GameState, x: number, y: number): MineCheck {
     // bedrock have none, and neither is ever a top block above the floor).
     throw new Error(`The top block of square (${x}, ${y}) has no mine cost`);
   }
+  // Mining near a camp is cheaper (design doc 4.2 and 8). The camp discount
+  // comes first, and its floor of the least a mine may cost; the extra AP for
+  // a flooded square is added after it (owner question 107).
+  const discounted = discountedMineCost(state, x, y, cost);
   const floodedExtraAp = contents.water > 0 ? HAZARDS.water.floodedMineExtraAp : 0;
-  return { allowed: true, refusal: null, higherNeighbours: [], ap: cost + floodedExtraAp };
+  return {
+    allowed: true,
+    refusal: null,
+    higherNeighbours: [],
+    ap: discounted + floodedExtraAp,
+    campDiscount: cost - discounted,
+  };
 }
 
 /**
  * Every `MineAction` the player could take now: one for each square
  * `mineCheck` allows, row by row (y, then x), with `ap` set to the top
- * block's mine cost from `BLOCKS`, plus 1 on a flooded square.
+ * block's mine cost from `BLOCKS`, less the camp discount near a camp, plus
+ * 1 on a flooded square.
  *
  * - Does not change `state`. Lists actions as if AP were unlimited; the
  *   dispatcher in index.ts removes the ones that cost too much, which is what

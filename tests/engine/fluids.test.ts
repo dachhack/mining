@@ -7,7 +7,7 @@
 //   pit(['111', '121', '111'])   a 3 x 3 pit 1 level deep, 2 in the middle
 
 import { describe, expect, it } from 'vitest';
-import { BLOCKS, CREW, HAZARDS, STRUCTURES } from '../../src/data';
+import { BLOCKS, CAMPS, CREW, HAZARDS, STRUCTURES } from '../../src/data';
 import {
   depthAt,
   endShift,
@@ -742,6 +742,7 @@ describe('mining with water or lava on the square (design doc 4.2; question 91)'
       refusal: 'lava',
       higherNeighbours: [],
       ap: null,
+      campDiscount: null,
     });
     expect(
       legalActions(state).some(
@@ -754,6 +755,34 @@ describe('mining with water or lava on the square (design doc 4.2; question 91)'
     const state = pit(['21']);
     setLavaOn(state, 0, 0, 1, false);
     expect(mineCheck(state, 0, 0).refusal).toBe('lava');
+  });
+
+  it('near a camp: the discount first, with its floor, then the 1 AP for water (question 107)', () => {
+    // A camp on the west of a flat dirt field; the square beside it is near.
+    const dirt = ['ddddd', 'ddddd', 'ddddd'];
+    const state = pit(
+      ['11111', '11111', '11111'],
+      { camps: [{ pos: { x: 1, y: 1, z: 1 }, foundedShift: 1 }] },
+      dirt,
+    );
+    const dirtAp = BLOCKS.dirt.mineCost ?? 0;
+    // Dirt already costs the least a mine may cost, so the discount takes nothing off.
+    expect(mineCheck(state, 3, 1)).toMatchObject({ ap: dirtAp, campDiscount: 0 });
+    setWaterOn(state, 3, 1, 1);
+    expect(mineCheck(state, 3, 1)).toMatchObject({
+      ap: dirtAp + HAZARDS.water.floodedMineExtraAp,
+      campDiscount: 0,
+    });
+
+    // Stone: 1 off for the camp, then 1 on for the water.
+    const stone = pit(['11111', '11111', '11111'], {
+      camps: [{ pos: { x: 1, y: 1, z: 1 }, foundedShift: 1 }],
+    });
+    setWaterOn(stone, 3, 1, 1);
+    expect(mineCheck(stone, 3, 1)).toMatchObject({
+      ap: STONE_AP - CAMPS.mineDiscountAp + HAZARDS.water.floodedMineExtraAp,
+      campDiscount: CAMPS.mineDiscountAp,
+    });
   });
 
   it('once the lava has gone the square can be mined again', () => {
@@ -1191,6 +1220,6 @@ describe('a pinned flood (in place of a golden run that floods)', () => {
     ]);
     // The lava breach burned the crew once (5), on the square it had mined.
     expect(state.crew.health).toBe(40 - CREW.damage.lavaOn);
-    expect(hashState(state)).toBe('09526538cce51c62');
+    expect(hashState(state)).toBe('2008a9ed8739b913');
   });
 });

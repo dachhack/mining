@@ -450,15 +450,19 @@ describe('M2 data (decision note 0014)', () => {
     });
   });
 
-  it('has the camp numbers of design doc 8 and the note (items 25 to 31)', () => {
+  it('has the camp numbers of design doc 8, and the camp tools of the note (item 31)', () => {
     expect(GAME_DATA.camps).toEqual({
       kitItem: 'campKit',
       halfWidth: 1,
-      height: 2,
       foundMinAp: 1,
       restMinAp: 1,
       upkeepFuel: 1,
       upkeepEveryShifts: 4,
+      // Mining near a camp is cheaper (owner, question 90).
+      mineDiscountAp: 1,
+      mineMinAp: 1,
+      mineDiscountSteps: 4,
+      mineDiscountMaxDeeper: 4,
     });
     expect(GAME_DATA.campTools).toEqual({
       drillItem: 'drill',
@@ -644,15 +648,15 @@ describe('M2 data (decision note 0014)', () => {
   it('reports bad camp numbers and unknown camp items', () => {
     const problems = problemsAfter((data) => {
       data.camps.kitItem = 'tent';
-      data.camps.height = 0;
+      data.camps.mineMinAp = 0;
       data.camps.upkeepEveryShifts = 0;
       data.campTools.scanChargeItem = 'battery';
       data.campTools.scanReach = -1;
     });
     expect(problems).toHaveLength(5);
     expect(problems[0]).toContain('unknown item "tent"');
-    expect(problems[1]).toContain('camps.height');
-    expect(problems[2]).toContain('camps.upkeepEveryShifts');
+    expect(problems[1]).toContain('camps.upkeepEveryShifts');
+    expect(problems[2]).toContain('camps.mineMinAp');
     expect(problems[3]).toContain('unknown item "battery"');
     expect(problems[4]).toContain('campTools.scanReach');
   });

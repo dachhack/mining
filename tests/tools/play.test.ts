@@ -214,7 +214,7 @@ describe('the top-down map', () => {
     expect(view.hud[0]).not.toContain('Lamp oil');
     expect(view.hud[0]).toContain(`Crew health ${CREW.startHealth}/${CREW.startHealth}`);
     expect(view.hud[1]).toBe('Deepest square so far: depth 3');
-    expect(view.hud[2]).toBe('Stockpile: 2 Timber');
+    expect(view.hud[2]).toBe('Stockpile: 1 Camp kit, 2 Timber');
   });
 });
 
@@ -249,6 +249,8 @@ describe('the action list', () => {
       supportsHeld: 0,
       supports: 0,
       supportAp: 1,
+      campKitsHeld: 0,
+      campSites: 0,
     });
   });
 
@@ -738,7 +740,6 @@ describe('the help text', () => {
       `warm glow      a lava pocket lies within ${TELLS.hazards.warmGlowDistance} steps`,
     );
     expect(help).toContain('Gas that comes out of a pocket stays on the square');
-    expect(help).toContain('camps and contracts are not built yet');
     expect(help).toContain('goes straight into the stockpile');
     expect(help).toContain('The stockpile has no limit');
     expect(help).toContain('close-mine               close the mine (ends the run alive)');
@@ -755,7 +756,7 @@ describe('the help text', () => {
     expect(help).toContain('shows a countdown of 2');
     expect(help).toContain('A SUPPORT holds the square it is placed on, and only that square');
     expect(help).toContain(`A slump takes ${CREW.damage.slump} health`);
-    expect(help).toContain('camps and contracts are not built yet');
+    expect(help).toContain('Contracts are not built yet');
     // Nothing of the miner is left in it.
     for (const gone of [
       'mine-down',

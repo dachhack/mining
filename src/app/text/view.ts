@@ -21,6 +21,7 @@
 // gives them marks.
 
 import {
+  CAMPS,
   CREW,
   NO_STRUCTURE,
   SHIFT,
@@ -31,10 +32,13 @@ import {
   itemDef,
 } from '../../data';
 import {
+  campAtSquare,
+  campUpkeepIsDue,
   countItem,
   isRunActive,
   knownSquare,
   legalActions,
+  mineDiscountAt,
   previewCubePhase,
   shiftsUntilRegrowth,
   slumpCheck,
@@ -55,11 +59,12 @@ import {
 import { END_SHIFT, listedChoices } from './log';
 import type { LogEntry } from './log';
 import { tooLittleApNote } from './missing';
-import { FLOODED_EXTRA_AP, SUPPORT_AP, squareText } from './squares';
+import { FLOODED_EXTRA_AP, SUPPORT_AP, patchText, squareText } from './squares';
 import {
   MARK_GROUND,
   MARK_STUMP,
   MARK_UNSEEN,
+  SYMBOL_CAMP,
   SYMBOL_FLOOR,
   SYMBOL_LAVA,
   SYMBOL_TRACES,
@@ -111,6 +116,10 @@ export interface SquareChoicesView {
   supports: number;
   /** What placing a support costs, in AP. */
   supportAp: number;
+  /** How many camp kits are in the stockpile. */
+  campKitsHeld: number;
+  /** How many centre squares a camp can be founded round now. */
+  campSites: number;
 }
 
 /** The summary printed once the run is over. */
@@ -176,16 +185,17 @@ function blockMeaning(code: number): string {
  * The two map characters of a square, from what `knownSquare` says of it.
  *
  * - First character: `Y` for a tree; `X` for a square with no block left;
- *   `!` for a square with lava on it and `~` for one with water on it (the
- *   notes under the map name the block under it); otherwise the top block's
- *   character (its "traced" character if the map shows mineral traces on it).
+ *   `A` for a camp square (`isCamp`); `!` for a square with lava on it and
+ *   `~` for one with water on it (the notes under the map name the block
+ *   under it); otherwise the top block's character (its "traced" character
+ *   if the map shows mineral traces on it).
  * - Second character: for a dug square, its depth (`depthMark`). At ground
  *   level there is no depth to show, so it is a space for open ground and
  *   `,` for a stump. Under a tree it is what is known of the ground: a space
  *   if it was never seen, or the block's character if the tree grew back
  *   over ground the player had seen.
  */
-function squareCell(square: KnownSquare, bottomDepth: number): SquareCellView {
+function squareCell(square: KnownSquare, bottomDepth: number, isCamp: boolean): SquareCellView {
   if (square.tree) {
     const under = square.top === null ? MARK_UNSEEN : blockSymbol(square.top.block);
     return {
@@ -206,6 +216,13 @@ function squareCell(square: KnownSquare, bottomDepth: number): SquareCellView {
   let mark = depthMark(square.depth);
   if (square.depth === 0) {
     mark = square.surfaceKind === SURFACE.kinds.stump.code ? MARK_STUMP : MARK_GROUND;
+  }
+  if (isCamp) {
+    return {
+      text: SYMBOL_CAMP + mark,
+      symbol: SYMBOL_CAMP,
+      meaning: 'camp square (cannot be mined while the camp stands)',
+    };
   }
   // Lava and water are drawn over the block: where they are matters most.
   if (square.contents.lava > 0) {
@@ -312,6 +329,69 @@ function hudLines(state: GameState, options: ViewOptions): string[] {
   return [gauges, deepest, stockpile];
 }
 
+/** "x2-5": a run of squares in one row, or "x3" for a single square. */
+function runText(from: number, to: number): string {
+  return from === to ? `x${from}` : `x${from}-${to}`;
+}
+
+/**
+ * The notes about camps (design doc 8): one line for each camp, one line
+ * that lists the squares where mining is cheaper, and one if the crew is
+ * resting. Camps, depths and the crew's rest are all seen by the player.
+ */
+function campNotes(state: GameState): string[] {
+  const notes: string[] = [];
+  for (const camp of state.camps) {
+    const due = campUpkeepIsDue(state, camp)
+      ? `it burns ${CAMPS.upkeepFuel} fuel when this shift ends`
+      : `it burns ${CAMPS.upkeepFuel} fuel every ${CAMPS.upkeepEveryShifts} shifts`;
+    notes.push(
+      `Camp at ${squareText(camp.pos.x, camp.pos.y)} (${depthName(camp.pos.z)}), on ` +
+        `${patchText(camp.pos.x, camp.pos.y)}: ${due}. ` +
+        `"rest ${camp.pos.x},${camp.pos.y}" or "decommission ${camp.pos.x},${camp.pos.y}".`,
+    );
+  }
+  if (state.camps.length === 0) {
+    return notes;
+  }
+
+  // Where mining is cheaper, row by row, as runs of x: "y2 x1-5".
+  const rows: string[] = [];
+  for (let y = 0; y < state.size.y; y += 1) {
+    const runs: string[] = [];
+    let runStart: number | null = null;
+    for (let x = 0; x <= state.size.x; x += 1) {
+      // One step past the end of the row closes a run that reaches the edge.
+      const cheaper =
+        x < state.size.x && campAtSquare(state, x, y) === null && mineDiscountAt(state, x, y) > 0;
+      if (cheaper && runStart === null) {
+        runStart = x;
+      } else if (!cheaper && runStart !== null) {
+        runs.push(runText(runStart, x - 1));
+        runStart = null;
+      }
+    }
+    if (runs.length > 0) {
+      rows.push(`y${y} ${runs.join(' ')}`);
+    }
+  }
+  if (rows.length > 0) {
+    notes.push(
+      `Mining costs ${CAMPS.mineDiscountAp} AP less (never below ${CAMPS.mineMinAp}) near a camp: ` +
+        `within ${CAMPS.mineDiscountSteps} steps of a camp square and no more than ` +
+        `${CAMPS.mineDiscountMaxDeeper} levels below the camp. Those squares now, by row: ${rows.join('; ')}`,
+    );
+  }
+  const restingAt = state.crew.restingAt;
+  if (restingAt !== null) {
+    notes.push(
+      `The crew is resting at the camp at ${squareText(restingAt.x, restingAt.y)}: its squares ` +
+        'count as worked this shift, and crew health is back to full when the shift ends if the camp still stands.',
+    );
+  }
+  return notes;
+}
+
 /**
  * Build the player's view of `state`. Reads only what the player could know;
  * see the note at the top of this file.
@@ -331,7 +411,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     let row = '';
     for (let x = 0; x < state.size.x; x += 1) {
       const square = knownSquare(state, x, y);
-      const cell = squareCell(square, state.size.z);
+      const cell = squareCell(square, state.size.z, campAtSquare(state, x, y) !== null);
       row += cell.text;
       legend.set(cell.symbol, cell.meaning);
       if (square.depth > 0) {
@@ -369,6 +449,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       `Stumps, and the shifts until a tree grows back (1 is the end of this shift): ${stumps.join('; ')}`,
     );
   }
+  notes.push(...campNotes(state));
 
   const legendLines: string[] = [];
   for (const symbol of [...legend.keys()].sort()) {
@@ -439,7 +520,12 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     // Unspent AP is lost at the end of a shift (issue #32); say so only when
     // there is some, so a player does not end a shift early by oversight.
     const unspent = state.ap > 0 ? `${state.ap} unspent AP will be lost, ` : '';
-    forecast = `${unspent}fuel ${state.fuel} -> ${upkeep.fuelAfter} (-${upkeep.fuelConsumed} shift).`;
+    const shiftFuel = upkeep.fuelConsumed - upkeep.campFuelConsumed;
+    const campFuel = upkeep.campFuelConsumed > 0 ? `, -${upkeep.campFuelConsumed} camp upkeep` : '';
+    forecast = `${unspent}fuel ${state.fuel} -> ${upkeep.fuelAfter} (-${shiftFuel} shift${campFuel}).`;
+    if (state.crew.restingAt !== null && state.crew.health < CREW.startHealth) {
+      forecast += ` The crew rests: health ${state.crew.health} -> ${CREW.startHealth}, if nothing hurts it or reaches the camp first.`;
+    }
     // What step (a) of the cube phase will do: slumps, then new cracks.
     for (const sentence of describeForecastSlumps(preview.slumps)) {
       forecast += ` ${sentence}`;
@@ -465,6 +551,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   // The mines, cuts and supports on offer are counted from the engine's own list.
   let cuts = 0;
   let supports = 0;
+  let campSites = 0;
   for (const action of legalActions(state)) {
     if (action.type === 'mine') {
       mines += 1;
@@ -472,6 +559,8 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       cuts += 1;
     } else if (action.type === 'placeSupport') {
       supports += 1;
+    } else if (action.type === 'foundCamp') {
+      campSites += 1;
     }
   }
 
@@ -517,6 +606,8 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       supportsHeld: countItem(state, STRUCTURES.support.placedFromItem),
       supports,
       supportAp: SUPPORT_AP,
+      campKitsHeld: countItem(state, CAMPS.kitItem),
+      campSites,
     },
     choices,
   };
@@ -594,8 +685,8 @@ export function forecastLine(view: PlayerView): string {
 }
 
 /**
- * The three lines that say how to mine, cut and place a support: the squares
- * are named, not listed. Empty once the run is over.
+ * The lines that say how to mine, cut, place a support and found a camp:
+ * the squares are named, not listed. Empty once the run is over.
  */
 export function squareChoiceLines(view: PlayerView): string[] {
   const squares = view.squares;
@@ -608,12 +699,20 @@ export function squareChoiceLines(view: PlayerView): string[] {
     squares.supportsHeld === 0
       ? 'You have none: craft-support makes one.'
       : `You have ${squares.supportsHeld}.`;
+  const siteCount =
+    squares.campSites === 1 ? '1 centre square' : `${squares.campSites} centre squares`;
+  const kits =
+    squares.campKitsHeld === 0
+      ? 'You have no camp kit.'
+      : `You have ${squares.campKitsHeld} camp kit${squares.campKitsHeld === 1 ? '' : 's'}; ${siteCount} can take a camp now.`;
   return [
     `    mine X,Y     [AP by block: see the legend] Mine the top block of square x X, y Y. ` +
       `${mineCount} can be mined now.`,
     `    cut X,Y      [${squares.cutAp}] Cut the tree on square x X, y Y. ${cutCount} can be cut now.`,
     `    support X,Y  [${squares.supportAp}] Place a support on square x X, y Y: ` +
       `it holds that square against slumping. ${held}`,
+    `    camp X,Y     [all AP left] Found a camp on the flat 3 x 3 patch whose centre is square x X, y Y ` +
+      `(no tree, water, lava, gas or structure on it). ${kits}`,
   ];
 }
 

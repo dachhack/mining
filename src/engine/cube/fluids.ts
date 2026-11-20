@@ -226,8 +226,8 @@ function flow(pit: Pit, fluid: FluidKind): Move[] {
 
 /**
  * Every cell of a square's column from layer 0 down to its top block: where a
- * structure or a camp on the square can be. (The top block's own cell is
- * included: a structure placed on a square may be stored there.)
+ * structure on the square can be. (A structure placed on a square is stored
+ * with its top block; the cells above are looked at too, to be safe.)
  */
 function cellsOnSquare(state: GameState, pit: Pit, square: number): Vec3[] {
   const cells: Vec3[] = [];
@@ -351,9 +351,8 @@ export function stepFluids(state: GameState, events: GameEvent[], phase: CubePha
       from: cellAbove(pit, move.from),
       to: cellAbove(pit, move.to),
     });
-    for (const cell of cellsOnSquare(state, pit, move.to)) {
-      destroyCampsAt(state, cell, 'water', events);
-    }
+    // A camp covers its squares whatever the layer, so one cell names the square.
+    destroyCampsAt(state, cellAbove(pit, move.to), 'water', events);
     recordDamage(
       state,
       phase,
@@ -398,8 +397,8 @@ export function stepFluids(state: GameState, events: GameEvent[], phase: CubePha
     }
     for (const cell of cellsOnSquare(state, pit, square)) {
       destroyStructure(state, cell, 'lava', events);
-      destroyCampsAt(state, cell, 'lava', events);
     }
+    destroyCampsAt(state, cellAbove(pit, square), 'lava', events);
   }
 
   // 4. Water meets lava.

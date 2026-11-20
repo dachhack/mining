@@ -19,6 +19,8 @@ export const SYMBOL_FLOOR = 'X';
 export const SYMBOL_WATER = '~';
 /** Lava stands on the square (design doc 6.4): it cannot be mined. */
 export const SYMBOL_LAVA = '!';
+/** A camp square (design doc 8). The camp hides the block it stands on, which cannot be mined. */
+export const SYMBOL_CAMP = 'A';
 /** Traced rock of a kind that has no character of its own in `TRACED_SYMBOLS`. */
 export const SYMBOL_TRACES = '%';
 

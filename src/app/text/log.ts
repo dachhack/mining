@@ -108,13 +108,26 @@ export function menuChoices(state: GameState): LogEntry[] {
 
 /**
  * The choices that are printed as a list, in menu order: every legal action
- * that does not name a square (crafting, closing the mine), then "end shift". Mines,
- * cuts and supports are named by their square instead ("mine 3,4",
- * "support 3,4"; see squares.ts). Empty once the run has ended.
+ * that is not offered for hundreds of squares (crafting, resting at a camp,
+ * decommissioning one, closing the mine), then "end shift". Mines, cuts,
+ * supports and the founding of a camp are named by their square instead
+ * ("mine 3,4", "support 3,4", "camp 3,4"; see squares.ts). Empty once the run
+ * has ended.
  */
 export function listedChoices(state: GameState): LogEntry[] {
-  return menuChoices(state).filter(
-    (entry) => entry.type !== 'mine' && entry.type !== 'cutTree' && entry.type !== 'placeSupport',
+  return menuChoices(state).filter((entry) => !isNamedBySquareOnly(entry));
+}
+
+/**
+ * True for the kinds of choice that are never lines of the list, because
+ * there can be hundreds of each: the player names a square instead.
+ */
+export function isNamedBySquareOnly(entry: LogEntry): boolean {
+  return (
+    entry.type === 'mine' ||
+    entry.type === 'cutTree' ||
+    entry.type === 'placeSupport' ||
+    entry.type === 'foundCamp'
   );
 }
 

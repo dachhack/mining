@@ -7,18 +7,20 @@
 
 import {
   BLOCKS,
+  CAMPS,
   STRUCTURES,
   SURFACE,
   TELLS,
   blockDefByCode,
+  findCampRecipe,
   findRecipe,
   itemDef,
 } from '../../data';
 import type { ItemStack } from '../../data';
-import { isSquare, knownSquare } from '../../engine';
+import { isSquare, knownSquare, mineCheck } from '../../engine';
 import type { Action, GameEvent, GameState, KnownSquare } from '../../engine';
 import type { LogEntry } from './log';
-import { squareText } from './squares';
+import { patchText, squareText } from './squares';
 import { tracedSymbolsText } from './symbols';
 
 /** "2 Stone, 1 Coal", or "nothing". */
@@ -113,7 +115,11 @@ function describeAction(state: GameState, action: Action): string {
         return `Mine ${where}`;
       }
       const depth = depthName(knownSquare(state, action.x, action.y).depth);
-      return `Mine ${where} (${depth}): ${topBlockText(state, action.x, action.y)}`;
+      // Near a camp a mine costs less (design doc 8); say so, so the lower
+      // cost is not a puzzle.
+      const discount = mineCheck(state, action.x, action.y).campDiscount ?? 0;
+      const cheaper = discount > 0 ? ` (${discount} AP less: near a camp)` : '';
+      return `Mine ${where} (${depth}): ${topBlockText(state, action.x, action.y)}${cheaper}`;
     }
     case 'cutTree':
       return (
@@ -121,11 +127,15 @@ function describeAction(state: GameState, action: Action): string {
         `gives ${stackListText(SURFACE.cutTree.yields)}; the ground under it shows`
       );
     case 'craft': {
-      const recipe = findRecipe(action.recipe);
-      if (recipe === undefined) {
-        return `Craft ${action.recipe}`;
+      const fieldRecipe = findRecipe(action.recipe);
+      if (fieldRecipe !== undefined) {
+        return `Craft ${fieldRecipe.name} from ${stackListText(fieldRecipe.inputs)}`;
       }
-      return `Craft ${recipe.name} from ${stackListText(recipe.inputs)}`;
+      const campRecipe = findCampRecipe(action.recipe);
+      if (campRecipe !== undefined) {
+        return `At the camp, craft ${campRecipe.name} from ${stackListText(campRecipe.inputs)}`;
+      }
+      return `Craft ${action.recipe}`;
     }
     case 'closeMine':
       return 'Close the mine: ends the run alive, with what is in the stockpile';
@@ -145,9 +155,20 @@ function describeAction(state: GameState, action: Action): string {
     case 'scan':
       return `scan around ${squareText(action.centre.x, action.centre.y)}`;
     case 'foundCamp':
+      return (
+        `Found a camp round ${squareText(action.x, action.y)} (${patchText(action.x, action.y)}): ` +
+        `uses up 1 ${itemDef(CAMPS.kitItem).name.toLowerCase()} and takes the rest of the shift`
+      );
     case 'rest':
+      return (
+        `Rest at the camp at ${squareText(action.x, action.y)}: takes the rest of the shift; ` +
+        'crew health is back to full when the shift ends, if the camp still stands'
+      );
     case 'decommissionCamp':
-      return action.type;
+      return (
+        `Decommission the camp at ${squareText(action.x, action.y)}: its upkeep, its recipes and ` +
+        'its cheaper mining end, its squares can be mined again, and the kit is not given back'
+      );
   }
 }
 
@@ -165,6 +186,8 @@ function idInLowerCase(id: string): string {
  * - "mine 3,4": mine the top block of the square x 3, y 4;
  * - "cut 3,4": cut the tree on that square;
  * - "support 3,4": place a support on that square;
+ * - "camp 3,4": found a camp whose centre square that is;
+ * - "rest 3,4", "decommission 3,4": the camp centred on that square;
  * - craft-fuel, craft-support, ...: "craft-" and the recipe;
  * - close-mine, and end for "end the shift".
  */
@@ -191,9 +214,11 @@ export function choiceName(entry: LogEntry): string {
     case 'scan':
       return `scan ${entry.centre.x},${entry.centre.y}`;
     case 'foundCamp':
+      return `camp ${entry.x},${entry.y}`;
     case 'rest':
+      return `rest ${entry.x},${entry.y}`;
     case 'decommissionCamp':
-      return idInLowerCase(entry.type);
+      return `decommission ${entry.x},${entry.y}`;
   }
 }
 
@@ -341,10 +366,20 @@ export function describeForecastFlows(flows: GameEvent[]): string[] {
         `The ${structureNameByCode(event.structure)} on ${squareText(event.pos.x, event.pos.y)} ` +
           `will be destroyed by ${event.cause}.`,
       );
+    } else if (event.type === 'campDestroyed') {
+      const fluid = event.cause === 'lava' ? 'LAVA' : 'WATER';
+      sentences.push(`THE ${fluid} DESTROYS THE CAMP at ${squareText(event.pos.x, event.pos.y)}.`);
     }
   }
   return sentences;
 }
+/** What destroyed a camp, in words. The keys are the engine's `DestructionCause`. */
+const CAMP_DESTRUCTION_CAUSES: Record<string, string> = {
+  rockfall: 'a slump reached one of its squares',
+  water: 'water entered one of its squares',
+  lava: 'lava entered one of its squares',
+  explosion: 'an explosion reached it',
+};
 
 /** "it falls at the end of this shift" / "... of the next shift" / "... in 3 shifts". */
 export function crackFallsText(shown: number): string {
@@ -365,6 +400,7 @@ export function crackFallsText(shown: number): string {
 export function describeForecastSlumps(slumps: GameEvent[]): string[] {
   const falls: string[] = [];
   const cracks: string[] = [];
+  const campsLost: string[] = [];
   for (const event of slumps) {
     if (event.type === 'blockFell') {
       falls.push(
@@ -372,11 +408,16 @@ export function describeForecastSlumps(slumps: GameEvent[]): string[] {
       );
     } else if (event.type === 'blockCracked') {
       cracks.push(squareText(event.pos.x, event.pos.y));
+    } else if (event.type === 'campDestroyed') {
+      campsLost.push(squareText(event.pos.x, event.pos.y));
     }
   }
   const sentences: string[] = [];
   if (falls.length > 0) {
     sentences.push(`THE PIT WALL SLUMPS: ${falls.join('; ')}.`);
+  }
+  if (campsLost.length > 0) {
+    sentences.push(`THE SLUMP DESTROYS THE CAMP at ${campsLost.join(', ')}.`);
   }
   if (cracks.length > 0) {
     sentences.push(
@@ -494,8 +535,37 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
             `${squareText(event.to.x, event.to.y)} and lies there as rubble.`,
         );
         break;
-      case 'crafted':
-        lines.push(`Crafted ${findRecipe(event.recipe)?.name ?? event.recipe}.`);
+      case 'crafted': {
+        const recipe = findRecipe(event.recipe) ?? findCampRecipe(event.recipe);
+        lines.push(`Crafted ${recipe?.name ?? event.recipe}.`);
+        break;
+      }
+      case 'campFounded':
+        lines.push(
+          `The camp stands on ${patchText(event.pos.x, event.pos.y)} (${depthName(event.pos.z)}). ` +
+            'Its squares cannot be mined; mining near it is cheaper; camp recipes are on the list; ' +
+            `"rest ${event.pos.x},${event.pos.y}" restores crew health.`,
+        );
+        break;
+      case 'restStarted':
+        lines.push(
+          `The crew rests at the camp at ${squareText(event.pos.x, event.pos.y)} for the rest of the shift. ` +
+            "The camp's squares count as worked this shift: a hazard that reaches them hurts the crew.",
+        );
+        break;
+      case 'healthRestored':
+        lines.push(`The crew rested: health +${event.amount}, now ${event.health}.`);
+        break;
+      case 'campDestroyed':
+        lines.push(
+          `THE CAMP at ${squareText(event.pos.x, event.pos.y)} IS DESTROYED: ` +
+            `${CAMP_DESTRUCTION_CAUSES[event.cause] ?? 'a hazard reached it'}. It is lost, with its kit.`,
+        );
+        break;
+      case 'campDecommissioned':
+        lines.push(
+          `The camp at ${squareText(event.pos.x, event.pos.y)} is taken down. Its squares can be mined again.`,
+        );
         break;
       case 'shiftEnded':
         lines.push(`Shift ${event.shift} ended; shift ${event.nextShift} begins.`);

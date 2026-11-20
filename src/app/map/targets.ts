@@ -12,9 +12,10 @@
 // nothing below a top block.
 
 import { isRunActive, isSquare, knownSquare, mineCheck } from '../../engine';
-import type { CutTreeAction, GameState, MineAction, PlaceSupportAction } from '../../engine';
+import type { GameState } from '../../engine';
 import { contentsNames, depthName, topBlockText } from '../text/describe';
-import { squareText, supportChoice, tapChoice } from '../text/squares';
+import { campChoice, squareText, supportChoice, tapChoice } from '../text/squares';
+import type { SquareEntry } from '../text/squares';
 
 /** A square of the map. */
 export interface MapSquare {
@@ -26,9 +27,10 @@ export interface MapSquare {
  * What a tap on the map does (design doc 11: "other actions are chosen from a
  * tool bar and then aimed with a tap"):
  * - 'dig': mine the square, or cut its tree;
- * - 'support': place a support on the square (issue #94).
+ * - 'support': place a support on the square (issue #94);
+ * - 'camp': found a camp on the 3 x 3 patch round the square (issue #100).
  */
-export type MapTool = 'dig' | 'support';
+export type MapTool = 'dig' | 'support' | 'camp';
 
 /**
  * What the map marks after a tap that was not taken: one the rules refused,
@@ -42,15 +44,20 @@ export interface MapMarks {
   tooHigh: MapSquare[];
   /** The squares the mine would make unstable (design doc 11). */
   unstable: MapSquare[];
+  /**
+   * The squares of a 3 x 3 patch that stop a camp being founded there: the
+   * ones with a tree, the ones off the level, and so on (issue #100).
+   */
+  blocked: MapSquare[];
 }
 
 /** No marks at all. */
-export const NO_MARKS: MapMarks = { selected: null, tooHigh: [], unstable: [] };
+export const NO_MARKS: MapMarks = { selected: null, tooHigh: [], unstable: [], blocked: [] };
 
 /** What a tap on a square came to. */
 export interface TapOutcome {
   /** The action to take, or `null` if the tap is refused or needs a second tap. */
-  entry: MineAction | CutTreeAction | PlaceSupportAction | null;
+  entry: SquareEntry | null;
   /** The lines to show the player when nothing is taken; empty when `entry` is set. */
   lines: string[];
   /** What to mark on the map when nothing is taken; `NO_MARKS` when `entry` is set. */
@@ -94,7 +101,12 @@ export function tapOutcome(
   tool: MapTool = 'dig',
   confirmed = false,
 ): TapOutcome {
-  const choice = tool === 'support' ? supportChoice(state, x, y) : tapChoice(state, x, y);
+  let choice = tapChoice(state, x, y);
+  if (tool === 'support') {
+    choice = supportChoice(state, x, y);
+  } else if (tool === 'camp') {
+    choice = campChoice(state, x, y);
+  }
   const risky = choice.entry !== null && choice.warning !== null;
   if (choice.entry !== null && (!risky || confirmed)) {
     return { entry: choice.entry, lines: [], marks: NO_MARKS, needsConfirm: false };
@@ -112,6 +124,7 @@ export function tapOutcome(
         selected: { x, y },
         tooHigh: [],
         unstable: choice.makesUnstable.map((square) => ({ x: square.x, y: square.y })),
+        blocked: [],
       },
       needsConfirm: true,
     };
@@ -132,7 +145,13 @@ export function tapOutcome(
   return {
     entry: null,
     lines: [`${squareSummary(state, x, y)}.`, refusal],
-    marks: { selected: { x, y }, tooHigh, unstable: [] },
+    marks: {
+      selected: { x, y },
+      tooHigh,
+      unstable: [],
+      // For a refused camp: the squares of the patch that are in the way.
+      blocked: choice.blockedSquares.map((square) => ({ x: square.x, y: square.y })),
+    },
     needsConfirm: false,
   };
 }

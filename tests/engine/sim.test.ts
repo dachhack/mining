@@ -199,20 +199,22 @@ describe('playRun', () => {
   });
 
   it('counts a shift that begins with no fuel', () => {
-    // The random policy on seed 9 crafts nothing. So its 24 fuel last 24
-    // shifts, the 25th begins at 0, and its upkeep ends the run.
+    // The random policy on seed 9 crafts nothing. It founds a camp in shift 2
+    // and takes it down in shift 16, and the camp's upkeep burns 1 fuel at
+    // the end of shifts 5, 9 and 13 (design doc 4). So its 24 fuel last 21
+    // shifts, the 22nd begins at 0, and its upkeep ends the run.
     const metrics = run('random', 9);
     expect(metrics.cause).toBe('outOfFuel');
     expect(metrics.recipesUsed['fuel']).toBe(0);
     expect(metrics.fuelAtEnd).toBe(0);
-    expect(metrics.shiftsPlayed).toBe(25);
+    expect(metrics.shiftsPlayed).toBe(22);
     expect(metrics.shiftsAtZeroFuel).toBe(1);
     // The random policy never closes the mine, and hardly ever goes a second level down.
     expect(metrics.deepestSquare).toBeGreaterThanOrEqual(1);
   });
 
   it('knows each policy name, and refuses any other', () => {
-    expect(POLICY_NAMES).toEqual(['random', 'pit', 'greedy']);
+    expect(POLICY_NAMES).toEqual(['random', 'pit', 'greedy', 'camp']);
     for (const name of POLICY_NAMES) {
       expect(makePolicy(name, 1).name).toBe(name);
     }

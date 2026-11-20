@@ -394,11 +394,15 @@ export function validateData(data: GameData): string[] {
   const camps = data.camps;
   requireKnownItem(camps.kitItem, 'camps.kitItem');
   requireWholeAtLeast(camps.halfWidth, 0, 'camps.halfWidth');
-  requireWholeAtLeast(camps.height, 1, 'camps.height');
   requireWholeAtLeast(camps.foundMinAp, 0, 'camps.foundMinAp');
   requireWholeAtLeast(camps.restMinAp, 0, 'camps.restMinAp');
   requireWholeAtLeast(camps.upkeepFuel, 0, 'camps.upkeepFuel');
   requireWholeAtLeast(camps.upkeepEveryShifts, 1, 'camps.upkeepEveryShifts');
+  requireWholeAtLeast(camps.mineDiscountAp, 0, 'camps.mineDiscountAp');
+  // A mine that cost 0 AP could be repeated without end in one shift.
+  requireWholeAtLeast(camps.mineMinAp, 1, 'camps.mineMinAp');
+  requireWholeAtLeast(camps.mineDiscountSteps, 0, 'camps.mineDiscountSteps');
+  requireWholeAtLeast(camps.mineDiscountMaxDeeper, 0, 'camps.mineDiscountMaxDeeper');
   const campTools = data.campTools;
   requireKnownItem(campTools.drillItem, 'campTools.drillItem');
   requireKnownItem(campTools.sealantItem, 'campTools.sealantItem');

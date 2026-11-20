@@ -8,6 +8,8 @@
 import {
   ACTION_COSTS,
   BLOCKS,
+  CAMPS,
+  CAMP_RECIPES,
   CREW,
   FIELD_RECIPES,
   HAZARDS,
@@ -38,6 +40,13 @@ export function helpText(): string {
   const hardLimit = BLOCKS.hardRock.slumpLimit ?? 0;
   const steepStep = HAZARDS.slump.steepStep;
   const crackCountdown = HAZARDS.slump.crackCountdown;
+  // Camps (design doc 8).
+  const campRecipes = CAMP_RECIPES.map(
+    (recipe) => `    ${recipe.name}: from ${stackListText(recipe.inputs)}`,
+  ).join('\n');
+  const campSide = 2 * CAMPS.halfWidth + 1;
+  const campSquareCount = campSide * campSide;
+  const stoneCost = BLOCKS.stone.mineCost ?? 0;
 
   return `Mining game: text play interface
 
@@ -62,13 +71,18 @@ CHOICES
     cut X,Y                  cut down the tree on that square
     support X,Y              place a support on that square (you need one: craft-support)
     mine! X,Y                mine a square although it would make others unstable (see below)
+    camp X,Y                 found a camp on the ${campSide} x ${campSide} patch whose centre square is x X, y Y
+    rest X,Y                 rest the crew at the camp whose centre square that is
+    decommission X,Y         take that camp down
   Any square of the map may be named; nothing has to be near anything. A square that cannot be
-  mined, cut or supported is refused with the reason, and nothing is done.
+  mined, cut, supported or camped on is refused with the reason, and nothing is done. A refused
+  "camp X,Y" names the squares of the patch that are in the way.
   A mine that would make other squares unstable is not done the first time: you get a warning
   that names those squares, and nothing happens. Type it as "mine! X,Y" to do it all the same.
   Everything else you may do is a line of the action list, with a number and a name. --do and
   the prompt take either:
     craft-fuel, craft-support, ...     craft; the list shows each name
+    rest X,Y, decommission X,Y         also listed, once for each camp that stands
     close-mine               close the mine (ends the run alive)
     end (or 0)               end the shift
   - A NAME means the same at every step. In a chain, use names.
@@ -84,7 +98,8 @@ READING A VIEW
   The map is the whole surface seen from above: x grows to the east (right), y grows to the
   south (down the page). The two lines over it give each column's x (tens over ones); each row
   starts with its y. Every square is two characters:
-  - the first is what is on top: "Y" a tree, "~" water, "!" lava, otherwise the square's top
+  - the first is what is on top: "Y" a tree, "A" a camp square, "~" water, "!" lava, otherwise
+    the square's top
     block ("d" dirt, "#" stone, "c" coal, ...); the legend under the map names every character
     on it, with what the block costs to mine;
   - the second is the square's depth: how many blocks have been taken from it. Blank is ground
@@ -92,12 +107,13 @@ READING A VIEW
     a stump. Straight after a tree's "Y" it is blank (the ground under it is hidden), or the
     block you saw there before the tree grew back.
   Under the map: the legend, then notes: what lies on a square that two characters cannot
-  show (water or lava and the block under it, a crack and its countdown, a support), and
-  the stumps. Then "Hazards": every cracked
+  show (water or lava and the block under it, a crack and its countdown, a support), the
+  stumps, each camp, and the squares where mining is cheaper because a camp is near. Then
+  "Hazards": every cracked
   square, when it falls and where its block will land. Then what ending the shift now would
   do, including which blocks slump, which squares crack, and where water and lava flow. A line starting "Not possible now:" says what costs more AP than you have left.
-  Last comes how to mine, cut and place a support, with how many squares can be mined and
-  trees cut now, and the list of everything else you may do, each with its number, its name and its cost in AP.
+  Last comes how to mine, cut, place a support and found a camp, with how many squares can be
+  mined and trees cut now, and the list of everything else you may do, each with its number, its name and its cost in AP.
 
 THE GAME
   You look down on a cube of rock ${WORLD.size.x} squares by ${WORLD.size.y} and ${WORLD.size.z} blocks deep (x 0 to ${lastX}, y 0 to ${lastY}),
@@ -112,7 +128,8 @@ THE GAME
   - Unspent AP is lost when the shift ends. It is not carried over and does not turn into fuel.
 
   Fuel
-  - When a shift ends: if you have no fuel, the run ends. Otherwise the shift uses up ${SHIFT.fuelPerShift} fuel.
+  - When a shift ends: if you have no fuel, the run ends. Otherwise the shift uses up ${SHIFT.fuelPerShift} fuel,
+    and each camp uses up ${CAMPS.upkeepFuel} more every ${CAMPS.upkeepEveryShifts} shifts (see "Camps").
     Nothing refills fuel except crafting it. The "If you end the shift now" line says exactly
     what will happen, including when it would end the run. So with fuel at 0 you may still play
     one shift: that line warns you ("FUEL WILL BE 0") at the end of the shift before it.
@@ -199,6 +216,37 @@ THE GAME
     the rubble: none is lost, unless it is then above ground level.
   - The "If you end the shift now" line says where water and lava will flow.
 
+  Camps
+  - You start with 1 camp kit. "camp X,Y" founds a camp on the ${campSide} x ${campSide} patch of squares whose
+    centre is the square you name. It uses up the kit and takes the rest of the shift: all the
+    AP you have left, and at least ${CAMPS.foundMinAp}.
+  - The patch must be FLAT: all ${campSquareCount} squares at the same depth, at ground level or on the floor of
+    your pit. None may have a tree, water, lava, gas, a support or another camp on it, and the
+    whole patch must be on the map. A stump on the patch is cleared for good.
+  - While the camp stands, its ${campSquareCount} squares cannot be mined and nothing can be placed on them. They
+    are drawn "A" on the map.
+  - MINING NEAR A CAMP IS CHEAPER: a mine costs ${CAMPS.mineDiscountAp} AP less (never less than ${CAMPS.mineMinAp}) on a square that
+    is within ${CAMPS.mineDiscountSteps} steps of a camp square and no more than ${CAMPS.mineDiscountMaxDeeper} levels deeper than the camp. A step is
+    to a square beside (north, east, south, west), so ${CAMPS.mineDiscountSteps} steps is not ${CAMPS.mineDiscountSteps} squares diagonally. So stone
+    costs ${stoneCost - CAMPS.mineDiscountAp} instead of ${stoneCost} there, and dirt still costs ${lowestMineCost}. The notes under the map list the squares
+    where it applies now. As the pit spreads and deepens away from the camp, the cheap squares
+    run out: a camp further down the pit brings them back.
+  - "rest X,Y" rests the crew at a camp. It takes the rest of the shift (all the AP left, at
+    least ${CAMPS.restMinAp}). When the shift ends, crew health is back to full: after any damage of that shift,
+    and only if the crew is still alive and the camp still stands. While the crew rests, the
+    camp's squares count as squares it worked this shift (see "Crew health").
+  - A camp also gives the camp recipes below, from anywhere on the map.
+  - UPKEEP: each camp uses up ${CAMPS.upkeepFuel} fuel at the end of every ${CAMPS.upkeepEveryShifts}th shift, counting the shift it was
+    founded in as the first. The camp's note under the map says when it is due.
+  - "decommission X,Y" (${ACTION_COSTS.decommissionCamp} AP) takes a camp down: its upkeep, its recipes and its cheaper mining
+    end, and its squares can be mined again. The kit is not given back.
+  - A camp is DESTROYED, and lost with its kit, if a block slumps from one of its squares or
+    comes to rest on one. A cracked camp square, or a cracked square whose block will land on
+    the camp, is in the Hazards line; the "If you end the shift now" line says when a slump
+    will destroy a camp. A crew resting there is hurt by that slump and gets no rest.
+  - Water or lava that flows onto one of a camp's squares destroys it in the same way; the
+    "If you end the shift now" line says so beforehand.
+
   The forest
   - Most of the surface is forest. The rest is open ground (meadow, dirt paths, stone
     outcrops), where you see the top block from the start. Some coal always shows on open
@@ -242,16 +290,23 @@ THE GAME
 ${recipes}
     Fuel keeps the run going. A support holds one square of a pit wall: see "Pit walls slump".
 
+  Camp recipes (${ACTION_COSTS.campCraft} AP each; on the list only while a camp stands)
+${campRecipes}
+    Raw ore is smelted into ingots, and the other recipes take ingots. A camp kit founds another
+    camp. The drill, pump, vent, scanner charge, sealant and explosive can be made but do
+    nothing yet (see "Not in this version").
+
   Crew health
   - Your crew starts with ${CREW.startHealth} health ("Crew health" among the gauges). The crew is not on the map.
   - A hazard hurts the crew only where it worked this shift: on a square you mined, cut a tree
-    on, or built on since the shift began. When the shift ends, each kind of hazard that
+    on, or built on since the shift began, and the squares of a camp it is resting at. When the shift ends, each kind of hazard that
     reaches such a square takes health once. Squares you left alone this shift are safe for
     the crew.
   - A slump takes ${CREW.damage.slump} health if the block falls from a square the crew worked this shift, or
     comes to rest on one. Several slumps in one end of shift still take ${CREW.damage.slump} in all. The Hazards
     line says which squares are about to slump and where the blocks will land, so you can
     keep the crew off them in the shift they fall.
+  - Resting at a camp brings crew health back to full (see "Camps"). Nothing else restores it.
   - Water takes ${CREW.damage.water} health if it flows onto a square the crew worked this shift. Water that
     already stands on a square you mine does not hurt; it only costs AP.
   - Lava takes ${CREW.damage.lavaOn} health if it stands on a square the crew worked this shift when the shift
@@ -268,7 +323,9 @@ ${recipes}
   Not in this version of the game
   - Gas that comes out of a pocket stays on the square it came out on: it does not spread,
     burn or hurt the crew yet. Unstable ore does not explode yet: it is mined like any ore.
-  - Pumps, sealant, camps and contracts are not built yet. Slumping pit walls, water and lava
-    are what takes crew health today.
+  - The tools made at a camp (drill, pump, vent, scanner charge, sealant, explosive) cannot be
+    used yet.
+  - Contracts are not built yet. Slumping pit walls, water and lava are what takes crew
+    health or destroys a camp today.
 `;
 }

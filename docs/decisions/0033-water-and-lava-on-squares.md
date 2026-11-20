@@ -18,7 +18,7 @@ After T9 a breach put a pocket's water or lava on the mined square, and it staye
 6. **Water meets lava.** On a square that holds both after the flows, one unit of water and one of lava become one stone block (`stoneFormed`), which raises the square by 1, again and again until one of the two is used up. This is checked every shift. Each fluid already fits under ground level, so the square never rises above it. The lava left on the square is no longer a source.
 7. **What is destroyed.** Lava destroys the support, pump, vent or explosive, and any camp, on every square it stands on after it has flowed (`structureDestroyed`, `campDestroyed`, cause `lava`), every shift. A destroyed explosive is disarmed, and this happens before step (c). Water entering a square destroys a camp there (cause `water`) and leaves structures alone.
 8. **The crew** (T5's `recordDamage`). Water: `CREW.damage.water` (1) for each move onto a worked square. Lava: `CREW.damage.lavaOn` (5) on a worked square and `CREW.damage.lavaBeside` (1) beside one, from where the lava is at the end of the step, every shift.
-9. **Mining** (`mineCheck`). A square with water on it costs `HAZARDS.water.floodedMineExtraAp` (1) more; the water stays on the square. A square with lava on it is refused with the reason `lava`. When several things stop a mine the reason is the first of: tree, no block left, lava, the level rule. `supportCheck` also refuses a square with lava on it (design doc 4.1: nothing is placed on lava), which note 0031 left to this task.
+9. **Mining** (`mineCheck`). A square with water on it costs `HAZARDS.water.floodedMineExtraAp` (1) more; the water stays on the square. A square with lava on it is refused with the reason `lava`. When several things stop a mine the reason is the first of: tree, camp, no block left, lava, the level rule. `supportCheck` also refuses a square with lava on it (design doc 4.1: nothing is placed on lava), which note 0031 left to this task.
 10. **Under rubble** (issue #99; review of PR #97). T8 already lifts what stands on a square onto rubble that lands there (question 100). T10 keeps that: nothing is buried, the square comes up 1 and keeps all its water and lava, and what is then above ground level drains in step (b) of the same cube phase.
 11. **Order inside step (b):** water drains, water flows; sources pour, lava drains, lava flows; lava destroys; stone forms; the cube is written; lava hurts the crew. The step uses no randomness.
 12. **Sources and sinks.** In: a breach (player phase), a source's pour. Out: what drains at ground level, and stone (one unit of each fluid a block). Everything else conserves units. A property test checks this from the events on 150 random pits for 12 cube phases each, with: every move is to a face neighbour, lava moves only on lava steps, nothing stands above ground level, no square holds both after a step, and a source always has lava. A second property test checks that water alone always comes to rest.
@@ -29,7 +29,7 @@ A move across a drop of 2 or more leaves the two squares closer in level. A move
 
 ### Where it is stored, and the state
 
-What stands on a square is the sum over the open cells above its top block, as T9 left it (`contentsOn`). `src/engine/standing.ts` writes a square's water or lava in one fixed place, the open cell directly above the top block, which is the cell a breach writes. The shape of the state did not change, so `STATE_VERSION` stays 11 and the six golden hashes are unchanged. `ENGINE_VERSION` stays 0.4.0.
+What stands on a square is the sum over the open cells above its top block, as T9 left it (`contentsOn`). `src/engine/standing.ts` writes a square's water or lava in one fixed place, the open cell directly above the top block, which is the cell a breach writes. The shape of the state did not change, so `STATE_VERSION` stays where the camps task left it (12) and no golden hash changed. `ENGINE_VERSION` stays 0.4.0.
 
 ### Events
 
@@ -59,7 +59,7 @@ What stands on a square is the sum over the open cells above its top block, as T
 - **T11 (gas):** `lavaOn(state, x, y)` says whether lava stands on a square after step (b); `cube/gas.ts` has the note.
 - **T13 (pumps):** `stepFluids` marks where pumps act (after the water drains, before it flows); `setWaterOn` takes water off a square.
 - **T13 (sealant):** before placing the block, set the square's water and lava to 0 (`setWaterOn`, `setLavaOn`), which also ends a source.
-- **T12 (camps):** water and lava call `destroyCampsAt` for every cell of a square's column down to its top block.
+- **T12 (camps), merged before this:** water calls `destroyCampsAt` for each square it enters and lava for each square it stands on; a crew resting at that camp is hurt as on any worked square and gets no rest. The 1 AP for a flooded square is added after the camp discount and its floor (question 107), so a flooded square always costs 1 more than the same square dry. `foundCampCheck` already refuses a patch with water or lava on it.
 
 ## What could not be done: a golden run that floods
 

@@ -5,7 +5,7 @@
   "loadoutId": "standard",
   "recordedWith": "pit",
   "expectedStatus": "ended: salvage, mineClosed",
-  "expectedHash": "2db74e9c6a682898",
+  "expectedHash": "9a0291a68ce5cd06",
   "decisions": [
     "mine 16,16 ap 1",
     "mine 16,15 ap 2",

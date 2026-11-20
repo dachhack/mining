@@ -114,6 +114,18 @@ describe('the forecast says where water and lava will flow (design doc 11)', () 
     expect(describeEvents(after, events)).toContain('The support on x1 y0 was destroyed by lava.');
   });
 
+  it('says when water will destroy a camp, and then that it did', () => {
+    // A camp on a floor 2 deep (x 0..2); a full hole 3 deep east of it.
+    const state = pit(['2220', '2223', '2220'], {
+      camps: [{ pos: { x: 1, y: 1, z: 2 }, foundedShift: 1 }],
+    });
+    setWaterOn(state, 3, 1, 3);
+    expect(forecastOf(state)).toContain('THE WATER DESTROYS THE CAMP at x1 y1.');
+    const { state: after, events } = endShift(state);
+    expect(after.camps).toEqual([]);
+    expect(describeEvents(after, events).join(' ')).toContain('water entered one of its squares');
+  });
+
   it('a dry pit forecasts no flow', () => {
     expect(forecastOf(pit(['121']))).not.toContain('FLOW');
   });
