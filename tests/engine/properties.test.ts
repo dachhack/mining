@@ -21,7 +21,9 @@ import {
   ITEMS,
   SHIFT,
   STRUCTURES,
+  TELLS,
 } from '../../src/data';
+import type { Vec3 } from '../../src/data';
 import {
   actionKey,
   applyAction,
@@ -251,8 +253,12 @@ const SOLID_CODES: number[] = Object.values(BLOCKS)
  * What the player has been shown is left exactly as it is, and so are the
  * mineral traces already noted on it (`tracesSeen`): a tell is the one thing
  * that may depend on a hidden block (design doc 3.4).
+ *
+ * `keepNear` is for the test of the hazard tells: hidden cells within that
+ * many steps (through the grid, in 3D) of a top block are left as they are.
+ * 0, the default, scrambles every hidden cell.
  */
-function scrambleHidden(state: GameState, rng: RngState): GameState {
+function scrambleHidden(state: GameState, rng: RngState, keepNear = 0): GameState {
   const copy = cloneState(state);
   for (let y = 0; y < copy.size.y; y += 1) {
     for (let x = 0; x < copy.size.x; x += 1) {
@@ -263,6 +269,9 @@ function scrambleHidden(state: GameState, rng: RngState): GameState {
       }
       for (let z = depth + 1; z < copy.size.z; z += 1) {
         const pos = { x, y, z };
+        if (keepNear > 0 && stepsToNearestTop(state, pos) <= keepNear) {
+          continue;
+        }
         // 1 time in 4 open space, otherwise a random solid block.
         const open = nextInt(rng, 4) === 0;
         const code = open
@@ -282,13 +291,50 @@ function scrambleHidden(state: GameState, rng: RngState): GameState {
   return copy;
 }
 
-/** Everything the player is offered or shown, as one string. */
-function playerSees(state: GameState): string {
+/**
+ * How many steps (through the grid, in 3D) the cell `pos` is from the nearest
+ * top block. Only squares close by are looked at, which is enough to tell
+ * whether the answer is at most `TELL_REACH`.
+ */
+function stepsToNearestTop(state: GameState, pos: Vec3): number {
+  let nearest = Infinity;
+  for (let dy = -TELL_REACH; dy <= TELL_REACH; dy += 1) {
+    for (let dx = -TELL_REACH; dx <= TELL_REACH; dx += 1) {
+      const x = pos.x + dx;
+      const y = pos.y + dy;
+      if (x < 0 || x >= state.size.x || y < 0 || y >= state.size.y) {
+        continue;
+      }
+      const steps = Math.abs(dx) + Math.abs(dy) + Math.abs(pos.z - depthAt(state, x, y));
+      nearest = Math.min(nearest, steps);
+    }
+  }
+  return nearest;
+}
+
+/** The farthest any hazard tell reaches (design doc 3.7: warm glow, 2 steps). */
+const TELL_REACH = Math.max(
+  TELLS.hazards.dampStoneDistance,
+  TELLS.hazards.pittedRockDistance,
+  TELLS.hazards.warmGlowDistance,
+);
+
+/**
+ * Everything the player is offered or shown, as one string.
+ *
+ * The hazard tells (`KnownSquare.tells`) are left out unless `withTells` is
+ * true: like mineral traces they are the deliberate exception (design doc
+ * 3.4), a hint of something hidden near a block. They have a test of their
+ * own below, which checks how far that hint reaches.
+ */
+function playerSees(state: GameState, withTells = false): string {
   const squares = [];
   const checks = [];
   for (let y = 0; y < state.size.y; y += 1) {
     for (let x = 0; x < state.size.x; x += 1) {
-      squares.push(knownSquare(state, x, y));
+      const square = knownSquare(state, x, y);
+      // `{ ...square, tells: null }` is a copy of the square without its tells.
+      squares.push(withTells ? square : { ...square, tells: null });
       checks.push(mineCheck(state, x, y));
     }
   }
@@ -321,6 +367,33 @@ describe('property tests: hidden blocks change nothing the player gets (issue #8
         expect(playerSees(other) === playerSees(state), label).toBe(true);
       });
       expect(compared).toBeGreaterThan(10);
+    },
+    60000,
+  );
+
+  it.each([5, 12])(
+    'seed %i: a hazard tell depends only on hidden cells within its reach (design doc 3.7)',
+    (seed) => {
+      // Scramble every hidden cell that is more than 2 steps from every top
+      // block: the tells must not change. And the test has teeth: scrambling
+      // the near cells as well does change them.
+      const scrambler = createRng(seed + 9000);
+      let compared = 0;
+      let nearScrambleChangedTells = false;
+      playRandomly(seed, 60, (state, label) => {
+        compared += 1;
+        if (compared % 20 !== 1 || !isRunActive(state)) {
+          return;
+        }
+        const farOnly = scrambleHidden(state, scrambler, TELL_REACH);
+        expect(snapshot(farOnly) === snapshot(state), `${label}: scramble`).toBe(false);
+        expect(playerSees(farOnly, true) === playerSees(state, true), label).toBe(true);
+        const everything = scrambleHidden(state, scrambler);
+        if (playerSees(everything, true) !== playerSees(state, true)) {
+          nearScrambleChangedTells = true;
+        }
+      });
+      expect(nearScrambleChangedTells).toBe(true);
     },
     60000,
   );

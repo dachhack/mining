@@ -61,6 +61,14 @@ const STANDARD_RUNS: RecordSpec[] = [
       'The pit policy on a seed where its pit gets deep enough for top blocks to lie near ore: mineral traces are seen and stay on the map.',
   },
   {
+    name: 'pit-seed-24-caverns',
+    seed: 24,
+    policyName: 'pit',
+    maxDecisions: undefined,
+    description:
+      'The pit policy on a seed where its pit breaks into two caverns: each collapses to rubble at once and the square drops exactly 1 level, so the level rule holds (design doc 6.2).',
+  },
+  {
     name: 'random-seed-9-forest',
     seed: 9,
     policyName: 'random',

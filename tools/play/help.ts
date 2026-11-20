@@ -24,6 +24,9 @@ export function helpText(): string {
   const lastX = WORLD.size.x - 1;
   const lastY = WORLD.size.y - 1;
   const traceSteps = TELLS.mineralTraces.distance;
+  const dampSteps = TELLS.hazards.dampStoneDistance;
+  const pittedSteps = TELLS.hazards.pittedRockDistance;
+  const glowSteps = TELLS.hazards.warmGlowDistance;
   const cutYield = stackListText(SURFACE.cutTree.yields);
   const lowestMineCost = BLOCKS.dirt.mineCost ?? 0;
   const highestMineCost = BLOCKS.hardRock.mineCost ?? 0;
@@ -112,9 +115,12 @@ THE GAME
   - Each kind of rock costs its own AP (from ${lowestMineCost} for dirt to ${highestMineCost} for hard rock; the legend gives each),
     and a block is mined in one action: if it costs more AP than you have left, it waits for
     the next shift.
-  - Under the surface there can be open spaces. If the block you mine was the roof of one, the
-    space falls in: the square still goes down by exactly 1, and its new top is rubble, which
-    costs ${rubbleCost} AP and gives nothing.
+  - Under the surface there are open spaces: empty caverns, and pockets of water, gas (both in
+    the middle layers) or lava (deep down). If the block you mine was the roof of one, the
+    whole space falls in at once: the square still goes down by exactly 1, and its new top is
+    rubble, which costs ${rubbleCost} AP and gives nothing. What a pocket held comes out and stands on
+    the square you mined: the game says how much, and the notes under the map list it. A big
+    lava pocket is a source, which keeps pouring.
   - Harder rock and different ores lie deeper. Timber-root grows only in the upper layers;
     the trees on the surface are the other source of timber.
   - A square mined all the way down shows the bedrock floor and cannot be mined further.
@@ -142,6 +148,15 @@ THE GAME
     after the ore is mined, so an old mark can point at ore that is gone. Traces you first
     notice are always from ore still in the rock: if you notice some just after mining ore,
     other ore is near. Coal and timber-root give no traces.
+  - Hazard tells: a top block shows what is hidden close to it. They are listed under the map
+    ("Tells on top blocks"), and named when you mine down to a block that has one.
+      damp           a water pocket lies directly under or beside the block (within ${dampSteps} step)
+      pitted         a gas pocket lies directly under or beside the block (within ${pittedSteps} step)
+      warm glow      a lava pocket lies within ${glowSteps} steps
+      hairline glow  the block itself is unstable ore
+    Steps are counted through the rock, down as well as sideways. So a pocket right under a
+    top block shows its tell before the mine that would break into it. An empty cavern gives
+    no tell. A tell goes away when its pocket has fallen in.
 
   The stockpile
   - Everything you mine, cut or craft goes straight into the stockpile, wherever on the map it
@@ -168,8 +183,10 @@ ${recipes}
     finish alive, and a closed mine cannot be opened again.
 
   Not in this version of the game
-  - Hazards (pit walls that slump, water, lava, gas), supports that hold a wall, camps and
-    contracts are not built yet. So nothing takes crew health today; the only way to lose
-    the run is to run out of fuel.
+  - Water, lava and gas that come out of a pocket stay on the square they came out on: they do
+    not spread, and they do not hurt the crew or stop you mining yet. Unstable ore does not
+    explode yet: it is mined like any ore.
+  - Pit walls that slump, supports that hold a wall, camps and contracts are not built yet. So
+    nothing takes crew health today; the only way to lose the run is to run out of fuel.
 `;
 }

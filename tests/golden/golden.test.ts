@@ -5,7 +5,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { WORLD } from '../../src/data';
+import { BLOCKS, WORLD } from '../../src/data';
 import {
   depthAt,
   hasStump,
@@ -42,8 +42,8 @@ function squareOf(decision: string): { x: number; y: number } {
 }
 
 describe('golden runs', () => {
-  it('there are at least four', () => {
-    expect(files.length).toBeGreaterThanOrEqual(4);
+  it('there are at least five', () => {
+    expect(files.length).toBeGreaterThanOrEqual(5);
   });
 
   // `it.each` makes one test per file, named after it.
@@ -86,6 +86,22 @@ describe('golden runs', () => {
     const flags = state.tracesSeen.reduce((total, flag) => total + flag, 0);
     expect(flags).toBeGreaterThan(0);
     expect(visibleMineralTraces(state).length).toBeGreaterThan(0);
+  });
+
+  // Breaking into an underground space (design doc 6.2; issue #88 item 2):
+  // this run's pit takes the roof off caverns. The hash pins the collapse to
+  // rubble; rubble comes from nothing else in a pit-policy run today.
+  it('pit-seed-24-caverns.json breaks into a cavern, and the level rule still holds', () => {
+    const state = replayFile('pit-seed-24-caverns.json');
+    expect(state.blocks.includes(BLOCKS.rubble.code)).toBe(true);
+    for (let y = 0; y < state.size.y; y += 1) {
+      for (let x = 0; x < state.size.x; x += 1) {
+        const depth = depthAt(state, x, y);
+        for (const higher of mayMine(state, x, y).higherNeighbours) {
+          expect(depth - higher.depth).toBe(1);
+        }
+      }
+    }
   });
 
   // The surface forest (issue #70; design doc 3.2): this run cuts trees. A

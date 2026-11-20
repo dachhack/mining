@@ -37,9 +37,8 @@ export interface DepthBand {
 
 export interface WorldData {
   size: CubeSize;
-  /** The `z` of the open-air layer the avatar starts on (0005 item 2). */
+  /** The `z` of the open-air layer above the cube (0005 item 2). */
   surfaceZ: number;
-  startPosition: Vec3;
   depthBands: DepthBand[];
 }
 
@@ -180,6 +179,23 @@ export interface VeinDef {
   maxSize: number;
 }
 
+/**
+ * The four kinds of underground space (design doc 3.6): a cavern is empty; a
+ * water, lava or gas pocket is full of what it is named after.
+ */
+export type SpaceKind = 'cavern' | 'water' | 'lava' | 'gas';
+
+/** One kind of underground space in one depth band, and how many and how big. */
+export interface SpaceDef {
+  kind: SpaceKind;
+  /** How many spaces to place for each 1000 cells of the band. */
+  spacesPer1000Cells: number;
+  /** The fewest cells in a space. */
+  minSize: number;
+  /** The most cells in a space. */
+  maxSize: number;
+}
+
 /** What one depth band is made of (design doc 3.1). */
 export interface BandGenerationDef {
   /** The id of a depth band in `WorldData.depthBands`. */
@@ -188,6 +204,11 @@ export interface BandGenerationDef {
   rock: RockWeight[];
   /** The ores that then replace some of that rock, in connected veins. */
   veins: VeinDef[];
+  /**
+   * The underground spaces then opened in the band's plain rock (design doc
+   * 3.3 and 3.6). May be empty.
+   */
+  spaces: SpaceDef[];
 }
 
 /** Every number cube generation uses (design doc 3.1 and 3.3). */
@@ -199,6 +220,8 @@ export interface GenerationData {
    * start fails when the vein cannot reach its smallest size there.
    */
   veinPlacementTries: number;
+  /** The same for one underground space. */
+  spacePlacementTries: number;
 }
 
 /** The mineral-traces tell: rock near ore shows it (decision note 0012). */

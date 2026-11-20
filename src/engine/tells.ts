@@ -1,8 +1,8 @@
 // Tells: what a block shows the player about something hidden near it.
 //
-// Design doc 6 gives every hazard a tell on the blocks around it ("damp stone
-// within 1 of a water pocket"). Those arrive with the hazards in M2 and belong
-// in this file. The first tell is for ore (decision note 0012):
+// Design doc 3.7 gives every hazard a tell on the blocks around it ("damp
+// stone within 1 of a water pocket"). They are at the bottom of this file
+// (`hazardTellsAt`). The first tell is for ore (decision note 0012):
 //
 //   MINERAL TRACES. Plain rock that lies within `TELLS.mineralTraces.distance`
 //   steps of an ore block carries mineral traces. The player sees them on a
@@ -26,7 +26,17 @@ import { BLOCKS, TELLS } from '../data';
 import type { Vec3 } from '../data';
 import type { GameEvent } from './events';
 import { depthAt } from './heightmap';
-import { blockAt, cellCount, cellIndex, cellPosition, inGrid, isRevealed } from './state';
+import {
+  blockAt,
+  cellCount,
+  cellIndex,
+  cellPosition,
+  gasAt,
+  inGrid,
+  isRevealed,
+  lavaAt,
+  waterAt,
+} from './state';
 import type { GameState } from './state';
 
 /** The block codes (the numbers stored in the cube) of the blocks with these ids. */
@@ -167,4 +177,97 @@ export function visibleMineralTraces(state: GameState): Vec3[] {
     }
   }
   return traced;
+}
+
+// ---------------------------------------------------------------------------
+// Hazard tells (design doc v0.2 section 3.7; 0014 item 18; issue #95)
+// ---------------------------------------------------------------------------
+//
+//   DAMP STONE    a block within `dampStoneDistance` (1) of a water pocket
+//   PITTED ROCK   a block within `pittedRockDistance` (1) of a gas pocket
+//   WARM GLOW     a block within `warmGlowDistance` (2) of a lava pocket
+//   HAIRLINE GLOW unstable ore itself
+//
+// Distances are counted in steps through the grid, down as well as sideways,
+// like mineral traces. So a pocket one block under a top block shows its tell
+// on that block, before the mine that would break into it.
+//
+// Unlike mineral traces, these are worked out from where the hazard is now
+// and never stored (0014 item 18): when a pocket has collapsed, its tell is
+// gone.
+//
+// A "pocket" here is water, lava or gas in a cell UNDERGROUND: below the top
+// block of its own square. Water, lava or gas standing on a square in the
+// open is seen as it is (`KnownSquare.contents`) and gives no tell.
+
+/** The hazard tells one block shows. */
+export interface HazardTells {
+  /** Damp stone: water under or beside. */
+  dampStone: boolean;
+  /** Pitted rock: gas under or beside. */
+  pittedRock: boolean;
+  /** Warm glow: lava near. */
+  warmGlow: boolean;
+  /** Hairline glow: the block is unstable ore. */
+  hairlineGlow: boolean;
+}
+
+/** No tell at all. Copy it (`{ ...NO_HAZARD_TELLS }`) rather than change it. */
+export const NO_HAZARD_TELLS: Readonly<HazardTells> = {
+  dampStone: false,
+  pittedRock: false,
+  warmGlow: false,
+  hairlineGlow: false,
+};
+
+/** Which of a cell's contents a tell looks for. */
+type PocketKind = 'water' | 'gas' | 'lava';
+
+/**
+ * True if a cell within `distance` steps of `pos` (Manhattan distance, the
+ * cell `pos` itself not counted) is underground and holds `kind`.
+ */
+function pocketWithin(state: GameState, pos: Vec3, distance: number, kind: PocketKind): boolean {
+  for (let dz = -distance; dz <= distance; dz += 1) {
+    const leftForY = distance - Math.abs(dz);
+    for (let dy = -leftForY; dy <= leftForY; dy += 1) {
+      const leftForX = leftForY - Math.abs(dy);
+      for (let dx = -leftForX; dx <= leftForX; dx += 1) {
+        const near = { x: pos.x + dx, y: pos.y + dy, z: pos.z + dz };
+        if (!inGrid(state.size, near)) {
+          continue;
+        }
+        let units = 0;
+        if (kind === 'water') units = waterAt(state, near);
+        if (kind === 'gas') units = gasAt(state, near);
+        if (kind === 'lava') units = lavaAt(state, near);
+        // Underground: below the top block of its own square.
+        if (units > 0 && near.z > depthAt(state, near.x, near.y)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * The hazard tells the block at `pos` carries (see the table above).
+ *
+ * This reads hidden cells near `pos`: that is the tell. A view must show it
+ * only for a block the player knows; `knownSquare` (known.ts) does that for
+ * top blocks, and is what the views use. Open space carries no tell.
+ * Does not change `state`.
+ */
+export function hazardTellsAt(state: GameState, pos: Vec3): HazardTells {
+  if (!inGrid(state.size, pos) || blockAt(state, pos) === BLOCKS.air.code) {
+    return { ...NO_HAZARD_TELLS };
+  }
+  const distances = TELLS.hazards;
+  return {
+    dampStone: pocketWithin(state, pos, distances.dampStoneDistance, 'water'),
+    pittedRock: pocketWithin(state, pos, distances.pittedRockDistance, 'gas'),
+    warmGlow: pocketWithin(state, pos, distances.warmGlowDistance, 'lava'),
+    hairlineGlow: blockAt(state, pos) === BLOCKS.unstableOre.code,
+  };
 }

@@ -56,6 +56,8 @@ export interface RunMetrics {
   deepestSquare: number;
   blocksMined: number;
   treesCut: number;
+  /** How many caverns and pockets a mine broke into (design doc 6.2). */
+  spacesBrokenInto: number;
   /** `blocksMined` divided by the number of cells in the cube (0.02 is 2%). */
   shareOfCubeMined: number;
   /** How many of the mined blocks were ore that gives mineral traces (iron, copper, crystal). */
@@ -212,6 +214,7 @@ export function playRun(options: PlayOptions): RunResult {
   let shiftsAtZeroFuel = 0;
   let deepestSquare = 0;
   let treesCut = 0;
+  let spacesBrokenInto = 0;
   let atPhaseStart = true;
   let hitShiftCap = false;
 
@@ -233,6 +236,8 @@ export function playRun(options: PlayOptions): RunResult {
         }
       } else if (event.type === 'treeCut') {
         treesCut += 1;
+      } else if (event.type === 'spaceCollapsed') {
+        spacesBrokenInto += 1;
       } else if (event.type === 'crafted') {
         addCount(recipesUsed, event.recipe, 1);
         const output = recipeOutputId(event.recipe);
@@ -314,6 +319,7 @@ export function playRun(options: PlayOptions): RunResult {
     deepestSquare,
     blocksMined,
     treesCut,
+    spacesBrokenInto,
     shareOfCubeMined: blocksMined / cubeCells,
     oreBlocksMined,
     tracesSeenBeforeFirstOre,
@@ -347,6 +353,8 @@ export interface AggregateMetrics {
   deepestSquare: SpreadWithMedian;
   blocksMined: SpreadWithMedian;
   treesCut: SpreadWithMedian;
+  /** Runs in which at least one mine broke into a cavern or pocket. */
+  runsThatBrokeIntoASpace: number;
   shareOfCubeMined: SpreadWithMedian;
   /** Runs that mined at least one ore block that gives mineral traces. */
   runsThatMinedOre: number;
@@ -441,6 +449,7 @@ export function aggregate(runs: RunMetrics[]): AggregateMetrics {
     deepestSquare: spreadWithMedianOf(runs.map((run) => run.deepestSquare)),
     blocksMined: spreadWithMedianOf(runs.map((run) => run.blocksMined)),
     treesCut: spreadWithMedianOf(runs.map((run) => run.treesCut)),
+    runsThatBrokeIntoASpace: runs.filter((run) => run.spacesBrokenInto > 0).length,
     shareOfCubeMined: spreadWithMedianOf(runs.map((run) => run.shareOfCubeMined)),
     runsThatMinedOre: runs.filter((run) => run.oreBlocksMined > 0).length,
     runsWithTracesSeenBeforeFirstOre: runs.filter((run) => run.tracesSeenBeforeFirstOre).length,
@@ -533,6 +542,7 @@ export function formatSummary(report: SimReport): string {
     `deepest square:     ${spreadLine(a.deepestSquare, 1)}   (levels down; 0 is untouched ground)`,
     `blocks mined:       ${spreadLine(a.blocksMined, 1)}`,
     `trees cut:          ${spreadLine(a.treesCut, 1)}`,
+    `caverns, pockets:   a mine broke into one in ${a.runsThatBrokeIntoASpace} runs`,
     `share of cube (%):  mean ${fixed(percent(share.mean), 3)}, median ${fixed(percent(share.median), 3)}, min ${fixed(percent(share.min), 3)}, max ${fixed(percent(share.max), 3)}`,
     `mineral traces:     seen before the first ore was mined (or at all, if none was) in ${a.runsWithTracesSeenBeforeFirstOre} runs; ore mined in ${a.runsThatMinedOre} runs, ${a.runsThatMinedOreAfterSeeingTraces} of them after seeing traces`,
     `legal actions at the start of a player phase: mean ${fixed(a.legalActionsPerPhase.mean, 1)}, min ${a.legalActionsPerPhase.min}, max ${a.legalActionsPerPhase.max}`,

@@ -15,7 +15,10 @@
 // Mineral traces (decision note 0012) are the one thing shown that depends on
 // blocks the player has not seen: rock near ore is drawn with its own
 // "traced" character (`D`, `%`, `h`: see symbols.ts). That is the hint the
-// rule intends, and the engine decides it.
+// rule intends, and the engine decides it. The hazard tells (damp stone,
+// pitted rock, warm glow, hairline glow; design doc 3.7) are the same kind of
+// hint; they are listed under the map, square by square, until task T14
+// gives them marks.
 
 import {
   CREW,
@@ -36,7 +39,14 @@ import {
   stockpileEntries,
 } from '../../engine';
 import type { GameState, KnownSquare } from '../../engine';
-import { choiceName, depthName, describeChoice, runEndText } from './describe';
+import {
+  choiceName,
+  contentsNames,
+  depthName,
+  describeChoice,
+  runEndText,
+  tellNames,
+} from './describe';
 import { END_SHIFT, listedChoices } from './log';
 import type { LogEntry } from './log';
 import { tooLittleApNote } from './missing';
@@ -221,18 +231,16 @@ function structureName(code: number): string | null {
 /**
  * What stands or lies on a square's top that two characters cannot show
  * (water, lava, gas, a crack, a structure), or `null` if there is nothing.
- * None of these is made by the game yet (the hazards are not built); the
- * line is here so that nothing on a top can go unseen when they are.
+ * Water, lava and gas come from a pocket the player broke into (design doc
+ * 6.2). Cracks and structures are not made by the game yet; the line is here
+ * so that nothing on a top can go unseen when they are.
  */
 function onTopNote(square: KnownSquare): string | null {
   const top = square.top;
   if (top === null || square.tree) {
     return null;
   }
-  const things: string[] = [];
-  if (top.water > 0) things.push(`water ${top.water}`);
-  if (top.lava > 0) things.push(`lava ${top.lava}`);
-  if (top.gas > 0) things.push(`gas ${top.gas}`);
+  const things: string[] = contentsNames(square);
   if (top.crackTimer !== null) things.push(`cracked (falls in ${top.crackTimer + 1})`);
   const structure = structureName(top.structure);
   if (structure !== null) things.push(`a ${structure}`);
@@ -271,6 +279,8 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   const legend = new Map<string, string>();
   const notes: string[] = [];
   const stumps: string[] = [];
+  // Squares whose top block shows a hazard tell: "x3 y4 damp".
+  const tells: string[] = [];
   let anyDug = false;
   let anyStump = false;
   let mines = 0;
@@ -288,6 +298,10 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       if (note !== null) {
         notes.push(note);
       }
+      const tellsHere = tellNames(square);
+      if (tellsHere.length > 0) {
+        tells.push(`${squareText(x, y)} ${tellsHere.join(', ')}`);
+      }
       // A stump: say when its tree grows back, which the map cannot show.
       const shifts = shiftsUntilRegrowth(state, { x, y, z: WORLD.surfaceZ });
       if (shifts !== null) {
@@ -296,6 +310,12 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       }
     }
     rows.push(row.trimEnd());
+  }
+  if (tells.length > 0) {
+    notes.push(
+      'Tells on top blocks (damp: water under or beside; pitted: gas under or beside; ' +
+        `warm glow: lava within 2; hairline glow: unstable ore): ${tells.join('; ')}`,
+    );
   }
   if (stumps.length > 0) {
     notes.push(

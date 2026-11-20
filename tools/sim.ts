@@ -33,6 +33,7 @@
 //                                      untouched ground
 //       "blocksMined":      spread+,
 //       "treesCut":         spread+,
+//       "runsThatBrokeIntoASpace": n,  a mine broke into a cavern or pocket
 //       "shareOfCubeMined": spread+,   a fraction: 0.02 is 2% of the cube's cells
 //       "runsThatMinedOre": n,         ore that gives mineral traces: iron, copper, crystal
 //       "runsWithTracesSeenBeforeFirstOre": n,    see "tracesSeenBeforeFirstOre" below
@@ -60,6 +61,7 @@
 //         "shiftsPlayed": n,        shifts started, counting the one the run ended in
 //         "actionsTaken": n,        not counting ends of shift
 //         "deepestSquare": n, "blocksMined": n, "treesCut": n, "shareOfCubeMined": x,
+//         "spacesBrokenInto": n,    caverns and pockets a mine broke into
 //         "oreBlocksMined": n,      mined blocks of ore that gives mineral traces
 //         "tracesSeenBeforeFirstOre": true | false,
 //                                   were mineral traces seen on any block before the
