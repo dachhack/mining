@@ -38,7 +38,27 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      # The browser is kept between runs, under the Playwright version it
+      # belongs to (issue #110): downloading it, and above all fetching its
+      # system packages from a slow mirror, once took over six minutes.
+      - name: Read the Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v5
+        id: browser-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Download Chromium (only when it is not in the cache)
+        if: steps.browser-cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium
+      # The runner image already has the libraries Chromium needs; the
+      # packages `--with-deps` used to add were fonts. So try to start the
+      # browser, and install the system packages only if that fails.
+      - name: Install Chromium's system packages (only if the browser does not start)
+        run: |
+          node -e "require('@playwright/test').chromium.launch().then((browser) => browser.close())" \
+            || npx playwright install-deps chromium
       - run: npm run e2e
       - if: failure()
         uses: actions/upload-artifact@v7

@@ -198,7 +198,9 @@ describe('the rules text', () => {
     const help = runCli(['--help']).output;
     expect(help).toContain('Water and lava');
     expect(help).toContain('WATER FLOWS when a shift ends');
-    expect(help).toContain('LAVA flows by the same rule, but only at the end of even-numbered');
+    expect(help).toContain(
+      'LAVA flows by the same rule (across a drop of 2 or more), but only at the end of even-numbered',
+    );
     expect(help).toContain('A square with lava on it cannot be');
     expect(help).toContain('one unit of each turns into a block of');
     expect(help).toContain('"~" water, "!" lava');

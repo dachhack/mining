@@ -116,6 +116,33 @@ describe('mineral traces', () => {
   });
 });
 
+// Issue #88 item 5: the whole table, so that a change to a tell's reach or to
+// the blocks it comes from and shows on is seen in a test, not only in play.
+describe('the tells data table (design doc 3.7)', () => {
+  it('is the table the design doc gives', () => {
+    expect(TELLS).toEqual({
+      mineralTraces: {
+        distance: 2,
+        sourceBlocks: ['ironOre', 'copperOre', 'crystal'],
+        shownOnBlocks: ['dirt', 'stone', 'hardRock'],
+      },
+      hazards: {
+        dampStoneDistance: 1,
+        pittedRockDistance: 1,
+        warmGlowDistance: 2,
+      },
+    });
+  });
+
+  it('names only blocks the data has, all of them solid', () => {
+    const named = [...TELLS.mineralTraces.sourceBlocks, ...TELLS.mineralTraces.shownOnBlocks];
+    for (const id of named) {
+      // `as keyof typeof BLOCKS`: the table holds block ids as plain strings.
+      expect(BLOCKS[id as keyof typeof BLOCKS]?.solid, id).toBe(true);
+    }
+  });
+});
+
 describe('when traces are seen', () => {
   it('not on a block under a tree, until the tree is cut', () => {
     const state = strip({ surface: ['.T...'] });

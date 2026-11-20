@@ -550,7 +550,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   }
   if (tells.length > 0 && !mapDrawsMarks) {
     notes.push(
-      'Tells on top blocks (damp stone: water under or beside; pitted rock: gas under or beside; ' +
+      'Tells on top blocks (damp: damp stone, water under or beside; pitted: pitted rock, gas under or beside; ' +
         'warm glow: lava within 2; hairline glow: unstable ore, which is armed by mining beside it): ' +
         tells.join('; '),
     );
