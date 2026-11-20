@@ -77,6 +77,22 @@ const STANDARD_RUNS: RecordSpec[] = [
       'The pit policy on a seed where its pit breaks into two caverns: each collapses to rubble at once and the square drops exactly 1 level, so the level rule holds (design doc 6.2).',
   },
   {
+    name: 'camp-seed-10-rest',
+    seed: 10,
+    policyName: 'camp',
+    maxDecisions: undefined,
+    description:
+      'The camp policy (the greedy digger with a camp): it founds a camp near the middle with its starting kit, mines more cheaply near it, pays its upkeep, and rests there each time a slump has hurt the crew. It lives to close the mine.',
+  },
+  {
+    name: 'camp-seed-25-destroyed',
+    seed: 25,
+    policyName: 'camp',
+    maxDecisions: undefined,
+    description:
+      'The camp policy on a seed where the pit reaches the camp: the crew rests there twice, then a slump destroys the camp, there is nowhere left to rest, and the crew is buried.',
+  },
+  {
     name: 'random-seed-9-forest',
     seed: 9,
     policyName: 'random',

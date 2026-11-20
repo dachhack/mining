@@ -10,8 +10,13 @@ import {
   depthAt,
   hasStump,
   hasTree,
+  applyAction,
+  actionKey,
+  endShift,
   hashState,
+  legalActions,
   mayMine,
+  mineCheck,
   slumpCheck,
   structureOnSquare,
   topBlockAt,
@@ -42,6 +47,18 @@ function replayFile(name: string): GameState {
 function squareOf(decision: string): { x: number; y: number } {
   const [x, y] = (decision.split(' ')[1] ?? '').split(',').map(Number);
   return { x: x ?? 0, y: y ?? 0 };
+}
+
+/** Take one recorded decision from `state` and return the state it leads to. */
+function replayFrom(state: GameState, decision: string): GameState {
+  if (decision === 'endShift') {
+    return endShift(state).state;
+  }
+  const action = legalActions(state).find((legal) => actionKey(legal) === decision);
+  if (action === undefined) {
+    throw new Error(`The recorded decision "${decision}" is not legal here`);
+  }
+  return applyAction(state, action).state;
 }
 
 describe('golden runs', () => {
@@ -131,6 +148,62 @@ describe('golden runs', () => {
       }
     }
     expect(rubbleTops).toBeGreaterThan(0);
+  });
+
+  // Camps (design doc 8; issue #100). The camp policy founds a camp with the
+  // starting kit and rests there when the crew is hurt. The hash pins the
+  // founding, the camp in the state, the cheaper mines, the upkeep and the rest.
+  it('camp-seed-10-rest.json founds a camp, mines more cheaply near it, and rests', () => {
+    const golden = loadGolden('camp-seed-10-rest.json');
+    const founded = golden.decisions.filter((decision) => decision.startsWith('foundCamp'));
+    expect(founded).toHaveLength(1);
+    expect(
+      golden.decisions.filter((decision) => decision.startsWith('rest')).length,
+    ).toBeGreaterThan(1);
+    expect(golden.decisions[golden.decisions.length - 1]).toBe('closeMine ap 0');
+
+    const state = replayFile('camp-seed-10-rest.json');
+    const centre = squareOf(founded[0] ?? '');
+    expect(state.camps.map((camp) => ({ x: camp.pos.x, y: camp.pos.y }))).toEqual([centre]);
+    expect(state.stockpile['campKit']).toBe(0);
+
+    // Replay up to the founding, and look at the mines recorded after it:
+    // some square near the camp was mined for less than its block costs.
+    const foundedAt = golden.decisions.indexOf(founded[0] ?? '');
+    let current = replayDecisions(
+      golden.seed,
+      golden.contractId,
+      golden.loadoutId,
+      golden.decisions.slice(0, foundedAt + 1),
+    );
+    let cheaperMines = 0;
+    for (const decision of golden.decisions.slice(foundedAt + 1)) {
+      if (decision.startsWith('mine')) {
+        const square = squareOf(decision);
+        if ((mineCheck(current, square.x, square.y).campDiscount ?? 0) > 0) {
+          cheaperMines += 1;
+        }
+      }
+      current = replayFrom(current, decision);
+    }
+    expect(cheaperMines).toBeGreaterThan(0);
+  });
+
+  // On this seed the greedy pit reaches the camp: a slump destroys it. The
+  // hash pins `destroyCampsAt` from the slump step, and a crew that then has
+  // nowhere to rest.
+  it('camp-seed-25-destroyed.json rests at its camp, then loses it to a slump', () => {
+    const golden = loadGolden('camp-seed-25-destroyed.json');
+    expect(golden.decisions.some((decision) => decision.startsWith('foundCamp'))).toBe(true);
+    expect(golden.decisions.some((decision) => decision.startsWith('rest'))).toBe(true);
+    // It never takes the camp down itself, yet no camp is left at the end.
+    expect(golden.decisions.some((decision) => decision.startsWith('decommissionCamp'))).toBe(
+      false,
+    );
+    expect(golden.expectedStatus).toBe('ended: lost, buried');
+    const state = replayFile('camp-seed-25-destroyed.json');
+    expect(state.camps).toEqual([]);
+    expect(state.stockpile['campKit']).toBe(0);
   });
 
   // Breaking into an underground space (design doc 6.2; issue #88 item 2):

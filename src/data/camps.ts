@@ -1,6 +1,6 @@
 import type { CampData, CampToolData } from './types';
 
-// Camps: design doc v0.2 section 8 (issue #100; decision note 0031). The
+// Camps: design doc v0.2 section 8 (issue #100; decision note 0032). The
 // numbers are [Default]: tune them here.
 export const CAMPS: CampData = {
   kitItem: 'campKit',

@@ -5,7 +5,7 @@
 //
 // This file is also the dispatcher: it owns what is common to every action
 // (copying the state, checking legality, spending AP, then reveal) and hands the rest to one module per rule. The modules of the M2
-// actions (explosives, camp tools, camps) are stubs until
+// actions (explosives, camp tools) are stubs until
 // their tasks fill them in; each stub's doc comment is its contract
 // (decision note 0015).
 

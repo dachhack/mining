@@ -1,4 +1,4 @@
-// Camps (design doc v0.2 section 8; issue #100; decision note 0031).
+// Camps (design doc v0.2 section 8; issue #100; decision note 0032).
 //
 // A camp stands on a flat 3 x 3 patch of squares. This file holds what the
 // rest of the engine asks about camps:
@@ -359,7 +359,7 @@ export function campFuelDue(state: GameState): number {
  * - If the camp the crew rested at still stands, crew health goes back to
  *   full (`healthRestored`; no event if it was full already).
  * - If a hazard destroyed that camp earlier in this cube phase, there is no
- *   rest: the camp is gone (decision note 0031, reading 4).
+ *   rest: the camp is gone (decision note 0032, reading 4).
  * - Does not clear `state.crew.restingAt`: `stepCrewEffects` does.
  */
 export function applyRest(state: GameState, events: GameEvent[]): void {

@@ -20,7 +20,10 @@ import type { RngState } from './rng';
 
 /**
  * Bumped whenever the shape of GameState changes, so old saves can be told
- * apart. 11: pit walls slump (issue #94): a structure on a square is stored
+ * apart. 12: camps (issue #100): `crew.restingAt` (which camp, or null)
+ * replaces the flag `crew.resting`, and a camp's `pos` is its centre square
+ * and the depth of its patch; a version-11 save has the flag.
+ * 11: pit walls slump (issue #94): a structure on a square is stored
  * in the cell of the square's top block, and a crack belongs to a top block
  * and counts down by the slump rule; a version-10 save could hold either
  * somewhere else.
@@ -33,7 +36,7 @@ import type { RngState } from './rng';
  * it, and may hold torches or safety lamps.
  * 7: the avatar has no position (issue #86, mine by square).
  */
-export const STATE_VERSION = 11;
+export const STATE_VERSION = 12;
 
 /** Whether the run is still going, and if not, how it ended. */
 export type RunStatus =

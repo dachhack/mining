@@ -1,5 +1,5 @@
 // Camp actions: found, rest, decommission (design doc v0.2 sections 4.1 and
-// 8; issue #100; decision note 0031). Camp recipes are crafted with the
+// 8; issue #100; decision note 0032). Camp recipes are crafted with the
 // ordinary `craft` action (actions/craft.ts).
 //
 // Each action names a camp by its centre square (x, y). The crew is abstract,
@@ -71,7 +71,7 @@ function requireCamp(state: GameState, x: number, y: number): Camp {
  *
  * - `foundCamp`: takes one camp kit from the stockpile and adds the camp
  *   (`campFounded`). A stump on a camp square is cleared for good, as mining
- *   it would: no tree grows on a camp (decision note 0031, reading 2).
+ *   it would: no tree grows on a camp (decision note 0032, reading 2).
  *   Founding does not make the squares worked squares (design doc 5.2 does
  *   not list it).
  * - `rest`: notes which camp the crew rests at (`restStarted`) and marks the
@@ -81,7 +81,7 @@ function requireCamp(state: GameState, x: number, y: number): Camp {
  *   applied in step (e) (`applyRest` in camps.ts).
  * - `decommissionCamp`: the camp is gone (`campDecommissioned`), and with it
  *   its upkeep, its discount and its hold on the 9 squares. The kit is not
- *   given back (decision note 0031, reading 5).
+ *   given back (decision note 0032, reading 5).
  */
 export function applyCampAction(state: GameState, action: CampAction, events: GameEvent[]): void {
   switch (action.type) {

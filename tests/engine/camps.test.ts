@@ -1,5 +1,5 @@
 // Scenario tests for camps (design doc v0.2 sections 4.1, 5 and 8; issue
-// #100; decision note 0031): founding on a flat 3 x 3 patch, the mining
+// #100; decision note 0032): founding on a flat 3 x 3 patch, the mining
 // discount near a camp, rest, camp recipes, upkeep and decommissioning.
 //
 // What a slump does to a camp is tested with the slump rule, in
