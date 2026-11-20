@@ -53,15 +53,17 @@ export type AirChangeReason = 'noAir' | 'refilled' | 'rested';
 export type GaugeChangeReason = 'upkeep' | 'crafted';
 
 export type GameEvent =
-  /**
-   * The avatar moved under its own power from one cell to another: a move,
-   * or digging down into the cell it dug (it follows that `blockMined`).
-   */
-  | { type: 'moved'; from: Vec3; to: Vec3 }
   /** The avatar lost `amount` health and now has `health`. */
   | { type: 'damageTaken'; amount: number; cause: DamageCause; health: number }
   /** The block at `pos` was mined out. `block` is the code of what was there. */
   | { type: 'blockMined'; pos: Vec3; block: number }
+  /**
+   * The mined block was the roof of an open space, which fell in: the cell
+   * `pos`, the square's new top, is now rubble (decision note 0026). It
+   * follows the `blockMined` of the same action. How deep the space was is
+   * not said: that is below the top, which the player does not see.
+   */
+  | { type: 'roofCollapsed'; pos: Vec3 }
   /** The block at `pos` became known to the player. `block` is its code. */
   | { type: 'blockRevealed'; pos: Vec3; block: number }
   /**

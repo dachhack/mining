@@ -111,7 +111,7 @@ button.small {
   margin-top: 8px;
 }
 
-/* ----- The tap map (issue #66) ----- */
+/* ----- The tap map (issues #66 and #86) ----- */
 
 .tap-map {
   margin: 8px 0;
@@ -125,7 +125,7 @@ button.small {
   margin-bottom: 6px;
 }
 
-/* Every button in the row shares the width; the layer label has a row of its own. */
+/* Every button in the row shares the width; the label has a row of its own. */
 .map-bar > button {
   flex: 1 1 auto;
   padding: 0 6px;
@@ -133,42 +133,11 @@ button.small {
   white-space: nowrap;
 }
 
-/* Go up / Go down (issue #80): one row under the map, half the width each. */
-.move-bar {
-  display: flex;
-  gap: 6px;
-  margin-top: 6px;
-}
-
-.move-bar > button {
-  flex: 1 1 0;
-  font-size: 0.95rem;
-  white-space: nowrap;
-}
-
-.move-bar > button:disabled {
-  opacity: 0.4;
-}
-
-.layer-button {
-  padding: 0 10px;
-}
-
-.layer-button:disabled {
-  opacity: 0.4;
-}
-
-.layer-label {
+.map-label {
   flex: 1 1 100%;
   text-align: center;
   font-size: 0.85rem;
   color: #c9c0b3;
-}
-
-/* The miner's own layer is marked in its label and by the map's border. */
-.layer-label.mine {
-  color: #ffb380;
-  font-weight: bold;
 }
 
 .map-frame {
@@ -181,10 +150,6 @@ button.small {
   overflow: hidden;
 }
 
-.map-frame.mine {
-  border-color: #ff8a5c;
-}
-
 .map-canvas {
   display: block;
   width: 100%;
@@ -193,23 +158,6 @@ button.small {
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
-}
-
-.map-hint {
-  position: absolute;
-  left: 50%;
-  bottom: 8px;
-  transform: translateX(-50%);
-  /* Long enough for a risky tap's warning (issue #78); it wraps inside the map. */
-  width: max-content;
-  max-width: calc(100% - 16px);
-  box-sizing: border-box;
-  text-align: center;
-  padding: 6px 12px;
-  background: rgba(0, 0, 0, 0.8);
-  border-radius: 12px;
-  font-size: 0.85rem;
-  pointer-events: none;
 }
 
 .map-legend {
@@ -254,6 +202,16 @@ button.small {
   padding: 8px;
   border-left: 3px solid #d9c38a;
   background: #1d1915;
+}
+
+/* End shift: a wide button of its own under the map (design doc 11). */
+.end-shift {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  margin: 8px 0;
+  font-size: 1rem;
+  font-weight: bold;
 }
 
 .actions-heading {

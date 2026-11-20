@@ -6,30 +6,28 @@
 // which stumps will grow (`forecastRegrowth`).
 //
 // The rule, for each stump in the order the surface is stored:
-// 1. If its layer-0 block is not solid (it was mined, or fell), the count goes
-//    back to 0: a tree needs ground to grow in, and counts again from the
-//    start once there is some.
+// 1. If its layer-0 block is not solid (something took it), the count goes
+//    back to 0: a tree needs ground to grow in.
 // 2. Otherwise the count goes up by one, to at most `SURFACE.regrowShifts`.
-// 3. When the count has reached `regrowShifts` and nothing stands on the
-//    stump (the miner, loose items), a tree grows and the count is cleared.
-//    If something does stand there, the count waits at `regrowShifts`, and the
-//    tree grows at the end of the first shift the stump is clear.
+// 3. When the count has reached `regrowShifts` and nothing lies on the stump
+//    (loose items), a tree grows and the count is cleared. If something does
+//    lie there, the count waits at `regrowShifts`.
 //
 // So a tree cut in shift N grows at the end of shift N + regrowShifts - 1:
-// the shift of the cut counts as one of the ten. A surface cell never holds a
-// structure (structures are only ever placed in the grid), so "a structure"
-// on a stump cannot happen; one in the layer-0 cell under it stands in an
-// open cell, and rule 1 covers it. (Issue #70 named a ladder; ladders are
-// gone since issue #80.)
+// the shift of the cut counts as one of the ten.
 //
-// Everything read here is something the player sees: the stump, its layer-0
-// block (revealed when the tree was cut), the miner, and loose items on the
-// surface (always seen).
+// A square that has been mined never grows a tree again (design doc 3.2):
+// mining a stump's square turns the stump to meadow (`applyMine`), and a
+// meadow never grows one. Rule 1 is kept for the hazards that may take a
+// stump's ground without a mine (tasks T8 and T11).
+//
+// Everything read here is something the player sees: the stump, whether its
+// square is still at ground level, and loose items on the surface.
 
 import { SURFACE } from '../../data';
 import type { Vec3 } from '../../data';
 import type { GameEvent } from '../events';
-import { isSolid, looseItemsAt, samePosition } from '../state';
+import { isSolid, looseItemsAt } from '../state';
 import type { GameState } from '../state';
 import { hasStump, setStumpAge, setSurfaceKind, stumpAgeAt, surfaceCells } from './state';
 
@@ -38,9 +36,13 @@ function groundUnder(pos: Vec3): Vec3 {
   return { x: pos.x, y: pos.y, z: 0 };
 }
 
-/** True if the miner or loose items stand on the surface cell `pos`. */
+/**
+ * True if loose items lie on the surface cell `pos`. Nothing leaves loose
+ * items today (decision note 0026), so this is always false until task T4
+ * removes them.
+ */
 function somethingStandsOn(state: GameState, pos: Vec3): boolean {
-  return samePosition(state.avatar.pos, pos) || looseItemsAt(state, pos).length > 0;
+  return looseItemsAt(state, pos).length > 0;
 }
 
 /**

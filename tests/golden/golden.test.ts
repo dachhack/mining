@@ -5,7 +5,15 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { countItem, hasStump, hasTree, hashState, visibleMineralTraces } from '../../src/engine';
+import { WORLD } from '../../src/data';
+import {
+  depthAt,
+  hasStump,
+  hasTree,
+  hashState,
+  mayMine,
+  visibleMineralTraces,
+} from '../../src/engine';
 import type { GameState } from '../../src/engine';
 import { replayDecisions, statusText } from '../../tools/simRun';
 import type { GoldenRun } from '../../tools/simRun';
@@ -27,6 +35,12 @@ function replayFile(name: string): GameState {
   return replayDecisions(golden.seed, golden.contractId, golden.loadoutId, golden.decisions);
 }
 
+/** The square a recorded "mine x,y ap n" or "cutTree x,y ap n" decision names. */
+function squareOf(decision: string): { x: number; y: number } {
+  const [x, y] = (decision.split(' ')[1] ?? '').split(',').map(Number);
+  return { x: x ?? 0, y: y ?? 0 };
+}
+
 describe('golden runs', () => {
   it('there are at least four', () => {
     expect(files.length).toBeGreaterThanOrEqual(4);
@@ -34,62 +48,76 @@ describe('golden runs', () => {
 
   // `it.each` makes one test per file, named after it.
   it.each(files)('%s replays to its recorded hash', (name) => {
-    // `as GoldenRun`: we trust the files in our own repository to have this shape.
-    const golden = JSON.parse(readFileSync(path.join(GOLDEN_DIR, name), 'utf8')) as GoldenRun;
-    const state = replayDecisions(
-      golden.seed,
-      golden.contractId,
-      golden.loadoutId,
-      golden.decisions,
-    );
+    const golden = loadGolden(name);
+    const state = replayFile(name);
     expect(statusText(state)).toBe(golden.expectedStatus);
     expect(hashState(state)).toBe(golden.expectedHash);
   });
 
-  // A hash only pins a rule if the run exercises it. The other runs
-  // never light rock near ore, so their `tracesSeen` is all zeros; this one
-  // is here for the mineral-traces rule (decision note 0012), and this test
-  // fails if a new recording of it no longer covers that.
-  it('staircase-seed-11-traces.json sees mineral traces and keeps them after mining ore', () => {
-    const state = replayFile('staircase-seed-11-traces.json');
+  // A hash only pins a rule if the run exercises it. The tests below fail if
+  // a new recording no longer covers what its file is there for.
+
+  it('pit-seed-11.json digs a terraced pit, cuts trees, crafts fuel and leaves', () => {
+    const golden = loadGolden('pit-seed-11.json');
+    expect(golden.decisions.some((decision) => decision.startsWith('cutTree'))).toBe(true);
+    expect(golden.decisions.some((decision) => decision.startsWith('craft fuel'))).toBe(true);
+    expect(golden.decisions[golden.decisions.length - 1]).toMatch(/^leave/);
+
+    const state = replayFile('pit-seed-11.json');
+    let deepest = 0;
+    for (let y = 0; y < state.size.y; y += 1) {
+      for (let x = 0; x < state.size.x; x += 1) {
+        const depth = depthAt(state, x, y);
+        deepest = Math.max(deepest, depth);
+        // The level rule, seen afterwards: no square is more than 1 level
+        // below a neighbour. `mayMine` lists the neighbours that are higher.
+        for (const higher of mayMine(state, x, y).higherNeighbours) {
+          expect(depth - higher.depth).toBe(1);
+        }
+      }
+    }
+    expect(deepest).toBeGreaterThanOrEqual(4);
+  });
+
+  // The pit of this run gets deep enough for top blocks to lie within reach
+  // of ore (decision note 0012), so its `tracesSeen` is not all zeros.
+  it('pit-seed-31-traces.json sees mineral traces, and they stay on the map', () => {
+    const state = replayFile('pit-seed-31-traces.json');
     const flags = state.tracesSeen.reduce((total, flag) => total + flag, 0);
     expect(flags).toBeGreaterThan(0);
     expect(visibleMineralTraces(state).length).toBeGreaterThan(0);
-    // It mined an ore block on the way. The pack was full of stone by then,
-    // so the raw ore lies where it was mined; count the pack and the floor.
-    // Crystal is not counted: this run mines iron ore, and one kind is enough here.
-    const ores = ['rawIronOre', 'rawCopperOre'];
-    let rawOre = 0;
-    for (const item of ores) {
-      rawOre += countItem(state, item);
-    }
-    for (const loose of state.looseItems) {
-      if (ores.includes(loose.item)) {
-        rawOre += loose.count;
-      }
-    }
-    expect(rawOre).toBeGreaterThan(0);
-    // The lamp was lit to the end, so the traces were seen by lamp light.
-    expect(state.lampOil).toBeGreaterThan(0);
   });
 
-  // The same for the surface forest (issue #70): this run cuts trees, and
-  // some grow back, so the hash pins cutting, stumps and regrowth.
-  it('wander-seed-150-forest.json cuts trees, and some grow back on their stumps', () => {
-    const golden = loadGolden('wander-seed-150-forest.json');
+  // The surface forest (issue #70; design doc 3.2): this run cuts trees. A
+  // stump left alone grows a tree again; a stump whose square is mined never
+  // does. The hash pins cutting, stumps, regrowth and "no regrowth once mined".
+  it('random-seed-9-forest.json cuts trees; some grow back, and none on a mined square', () => {
+    const golden = loadGolden('random-seed-9-forest.json');
     const cuts = golden.decisions.filter((decision) => decision.startsWith('cutTree'));
     expect(cuts.length).toBeGreaterThan(0);
-    const state = replayFile('wander-seed-150-forest.json');
+    const state = replayFile('random-seed-9-forest.json');
     let stumps = 0;
     let regrown = 0;
+    let minedAfterCut = 0;
     for (const decision of cuts) {
-      // "cutTree x,y,-1 ap 2": the cell whose tree was cut.
-      const [x, y] = (decision.split(' ')[1] ?? '').split(',').map(Number);
-      const cell = { x: x ?? 0, y: y ?? 0, z: -1 };
-      if (hasStump(state, cell)) stumps += 1;
-      if (hasTree(state, cell)) regrown += 1;
+      const square = squareOf(decision);
+      const cell = { x: square.x, y: square.y, z: WORLD.surfaceZ };
+      if (depthAt(state, square.x, square.y) > 0) {
+        minedAfterCut += 1;
+        expect(hasTree(state, cell)).toBe(false);
+        expect(hasStump(state, cell)).toBe(false);
+      } else if (hasStump(state, cell)) {
+        stumps += 1;
+      } else if (hasTree(state, cell)) {
+        regrown += 1;
+      }
     }
     expect(stumps).toBeGreaterThan(0);
     expect(regrown).toBeGreaterThan(0);
+    expect(minedAfterCut).toBeGreaterThan(0);
+  });
+
+  it('random-seed-27-cut-short.json stops with the run still going', () => {
+    expect(loadGolden('random-seed-27-cut-short.json').expectedStatus).toBe('active');
   });
 });

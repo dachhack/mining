@@ -1,31 +1,24 @@
-// Words for the play interface: what each choice in the action list means,
-// and what happened after one was taken.
+// Words for the play interface: what each choice means, and what happened
+// after one was taken.
 //
-// Like view.ts, these functions say only what the avatar could know. A choice
-// is described from the action itself (which the engine offers only for cells
-// in reach, all of them revealed) and from the data tables.
+// Like view.ts, these functions say only what the player could know. A
+// square is read only through the engine's `knownSquare`, which never answers
+// for a block below a top or under a tree that was never cut.
 
 import {
   BLOCKS,
   STRUCTURES,
   SURFACE,
   TELLS,
-  WORLD,
   blockDefByCode,
   findRecipe,
   itemDef,
 } from '../../data';
-import type { ItemStack, Vec3 } from '../../data';
-import {
-  blockDefAt,
-  canCarry,
-  countItem,
-  isRevealed,
-  looseItemsAt,
-  showsMineralTraces,
-} from '../../engine';
+import type { ItemStack } from '../../data';
+import { isSquare, knownSquare } from '../../engine';
 import type { Action, GameEvent, GameState } from '../../engine';
 import type { LogEntry } from './log';
+import { squareText } from './squares';
 import { tracedSymbolsText } from './symbols';
 
 /** "2 Stone, 1 Coal", or "nothing". */
@@ -36,51 +29,15 @@ export function stackListText(stacks: ItemStack[]): string {
   return stacks.map((stack) => `${stack.count} ${itemDef(stack.item).name}`).join(', ');
 }
 
-/** "the surface" or "layer 3". Layer 0 is the top layer of rock. */
-export function layerName(z: number): string {
-  return z === WORLD.surfaceZ ? 'the surface' : `layer ${z}`;
-}
-
-/** Compass word for a sideways offset, e.g. (1, -1) -> "north-east". '' for none. */
-export function compass(dx: number, dy: number): string {
-  const northSouth = dy < 0 ? 'north' : dy > 0 ? 'south' : '';
-  const eastWest = dx > 0 ? 'east' : dx < 0 ? 'west' : '';
-  if (northSouth !== '' && eastWest !== '') {
-    return `${northSouth}-${eastWest}`;
-  }
-  return northSouth + eastWest;
-}
-
-/**
- * Where the cell `to` is, seen from `from`, for a cell that touches it:
- * "your cell", "above you", "below you", "north", "north-east",
- * "north-east, one layer down", "north, one layer up".
- */
-function whereFrom(from: Vec3, to: Vec3): string {
-  const side = compass(to.x - from.x, to.y - from.y);
-  const dz = to.z - from.z;
-  if (side === '') {
-    return dz === 0 ? 'your cell' : dz < 0 ? 'above you' : 'below you';
-  }
-  if (dz === 0) {
-    return side;
-  }
-  return `${side}, one layer ${dz < 0 ? 'up' : 'down'}`;
-}
-
-/** True if `target` is the block directly below `here`: mining it is digging down. */
-function isDigDownTarget(here: Vec3, target: Vec3): boolean {
-  return target.x === here.x && target.y === here.y && target.z === here.z + 1;
-}
-
-function blocksText(count: number): string {
-  return count === 1 ? '1 block' : `${count} blocks`;
+/** "ground level" or "depth 3". A square's depth is how many blocks were taken from it. */
+export function depthName(depth: number): string {
+  return depth === 0 ? 'ground level' : `depth ${depth}`;
 }
 
 /** What the player is told when the run is over, in words (the engine's ids are not shown). */
 const RUN_END_TEXT: Record<string, string> = {
-  left: 'you left the cube alive with what you carried (a "salvage" run)',
-  outOfFuel: 'you ran out of fuel and died',
+  left: 'you left the mine alive with what you had gathered (a "salvage" run)',
+  outOfFuel: 'you ran out of fuel and the run is lost',
 };
 
 /** How a run ended, in words. `cause` is the engine's `RunEndCause`. */
@@ -89,50 +46,37 @@ export function runEndText(cause: string): string {
 }
 
 /**
- * What mining the revealed block at `target` gives: "Stone, mineral traces,
- * gives 1 Stone". `underfoot` is put after the block's name; it is the note
- * for the block the avatar stands on, and '' otherwise.
+ * What the top block of the square (x, y) is and gives, as far as the player
+ * knows: "Stone, mineral traces, gives 1 Stone". "ground you have not seen"
+ * under a tree that was never cut.
  */
-function mineOutcomeText(state: GameState, target: Vec3, underfoot: string): string {
-  const block = blockDefAt(state, target);
-  // A yield that does not fit the carry limit is left in the hole.
-  const fits = block.yields.every((stack) => canCarry(state, stack.item, stack.count));
-  const tooHeavy = fits ? '' : ' (too heavy to carry: it will be left lying there)';
-  // Shown only for a block the player has seen traces on; the engine decides.
-  const traces = showsMineralTraces(state, target) ? ', mineral traces' : '';
-  return `${block.name}${traces}${underfoot}, gives ${stackListText(block.yields)}${tooHeavy}`;
+export function topBlockText(state: GameState, x: number, y: number): string {
+  const square = knownSquare(state, x, y);
+  if (square.top === null) {
+    return square.depth >= state.size.z ? 'the bedrock floor' : 'ground you have not seen';
+  }
+  const block = blockDefByCode(square.top.block);
+  const traces = square.traces ? ', mineral traces' : '';
+  return `${block.name}${traces}, gives ${stackListText(block.yields)}`;
 }
 
-/**
- * How a choice is worded: `'choice'` for the action list and the chooser,
- * before it is taken; `'result'` for the line that says what was done,
- * after it (see `takeTurn`). The result form leaves out the note on a dig
- * down that the miner will move into the dug cell: that is in the future
- * tense, and the view after the dig shows where the miner is (review of
- * PR #74).
- */
-export type ChoiceForm = 'choice' | 'result';
-
-function describeAction(state: GameState, action: Action, form: ChoiceForm): string {
-  const here = state.avatar.pos;
+function describeAction(state: GameState, action: Action): string {
   switch (action.type) {
-    case 'move': {
-      // The miner has no gravity (issue #80): a move goes 1 block to any
-      // open face neighbour and ends there.
-      const side = compass(action.to.x - here.x, action.to.y - here.y);
-      if (side !== '') {
-        return `Move ${side}`;
-      }
-      return `Move ${action.to.z < here.z ? 'up' : 'down'} to ${layerName(action.to.z)}`;
-    }
     case 'mine': {
-      const isUnderfoot = isDigDownTarget(here, action.target);
-      const underfoot =
-        isUnderfoot && form === 'choice' ? ' (you are standing on it: you move down into it)' : '';
-      return `Mine ${whereFrom(here, action.target)}: ${mineOutcomeText(state, action.target, underfoot)}`;
+      const where = squareText(action.x, action.y);
+      // An entry from a log may name a square that is not on the map; the
+      // engine refuses it, but this line is worked out first.
+      if (!isSquare(state, action.x, action.y)) {
+        return `Mine ${where}`;
+      }
+      const depth = depthName(knownSquare(state, action.x, action.y).depth);
+      return `Mine ${where} (${depth}): ${topBlockText(state, action.x, action.y)}`;
     }
-    case 'placeTorch':
-      return `Place a torch in ${placeWhere(here, action.target)}`;
+    case 'cutTree':
+      return (
+        `Cut the tree on ${squareText(action.x, action.y)}: ` +
+        `gives ${stackListText(SURFACE.cutTree.yields)}; the ground under it shows`
+      );
     case 'craft': {
       const recipe = findRecipe(action.recipe);
       if (recipe === undefined) {
@@ -140,54 +84,20 @@ function describeAction(state: GameState, action: Action, form: ChoiceForm): str
       }
       return `Craft ${recipe.name} from ${stackListText(recipe.inputs)}`;
     }
-    case 'pickUp': {
-      const stack = [{ item: action.item, count: action.count }];
-      const from = placeWhere(here, action.from);
-      // The engine offers as much of a pile as fits the carry limit. When that
-      // is not the whole pile, say so, or "Pick up 4 Stone" beside "Loose in
-      // your cell: 5 Stone" looks like a mistake (issue #47 item 6). The pile
-      // is in a cell touching the avatar's, which is always revealed; the
-      // check is there so that this function can never read an unseen cell.
-      let pile = action.count;
-      if (isRevealed(state, action.from)) {
-        for (const loose of looseItemsAt(state, action.from)) {
-          if (loose.item === action.item) {
-            pile = loose.count;
-          }
-        }
-      }
-      if (pile > action.count) {
-        const name = itemDef(action.item).name;
-        return `Pick up ${action.count} of the ${pile} ${name} from ${from} (only ${action.count} fit your carry limit)`;
-      }
-      return `Pick up ${stackListText(stack)} from ${from}`;
-    }
-    case 'drop': {
-      const name = itemDef(action.item).name;
-      return action.count === 1 ? `Drop 1 ${name}` : `Drop all ${action.count} ${name}`;
-    }
     case 'leave':
-      return 'Leave the cube with what you carry (ends the run alive)';
-    case 'cutTree': {
-      // Like mining: say what it gives, and if that is too heavy to carry.
-      const yields = SURFACE.cutTree.yields;
-      const fits = yields.every((stack) => canCarry(state, stack.item, stack.count));
-      const tooHeavy = fits ? '' : ' (too heavy to carry: it will be left lying there)';
-      const side = compass(action.target.x - here.x, action.target.y - here.y);
-      return `Cut the tree ${side}: gives ${stackListText(yields)}${tooHeavy}; the ground under it shows, and a tree grows back in ${SURFACE.regrowShifts} shifts if the stump is left alone`;
-    }
+      return 'Leave the mine with what you have gathered (ends the run alive)';
     // The M2 actions. The engine offers none of them yet (their modules are
     // stubs; decision note 0015), so these plain lines are never shown. The
-    // play-tool task (M2-6) gives each its wording.
+    // play-tool task for the hazards (T14) gives each its wording.
     case 'placeSupport':
     case 'placeExplosive':
     case 'placePump':
     case 'placeVent':
     case 'placeSafetyLamp':
     case 'seal':
-      return `${action.type} in ${placeWhere(here, action.target)}`;
+      return `${action.type} at ${squareText(action.target.x, action.target.y)}`;
     case 'scan':
-      return `scan around x${action.centre.x} y${action.centre.y} ${layerName(action.centre.z)}`;
+      return `scan around ${squareText(action.centre.x, action.centre.y)}`;
     case 'stashPut':
     case 'stashTake':
       return `${action.type} ${action.count} ${itemDef(action.item).name}`;
@@ -199,94 +109,44 @@ function describeAction(state: GameState, action: Action, form: ChoiceForm): str
   }
 }
 
-/** "your cell", "the cell above you", "the cell north". */
-function placeWhere(here: Vec3, target: Vec3): string {
-  const where = whereFrom(here, target);
-  return where === 'your cell' ? where : `the cell ${where}`;
-}
-
-/** "n", "ne", "sw", ... for a sideways offset; '' for none. The short form of `compass`. */
-function compassShort(dx: number, dy: number): string {
-  return (dy < 0 ? 'n' : dy > 0 ? 's' : '') + (dx > 0 ? 'e' : dx < 0 ? 'w' : '');
-}
-
-/**
- * The short form of `whereFrom`, for the names of choices: "here", "up",
- * "down", "n", "ne", "n-down" (north, one layer down), "n-up".
- */
-function whereShort(from: Vec3, to: Vec3): string {
-  const side = compassShort(to.x - from.x, to.y - from.y);
-  const dz = to.z - from.z;
-  const level = dz === 0 ? '' : dz < 0 ? 'up' : 'down';
-  if (side === '') {
-    return level === '' ? 'here' : level;
-  }
-  return level === '' ? side : `${side}-${level}`;
-}
-
 /** "lampOil" -> "lamp-oil": an id from src/data in the lower case a choice is typed in. */
 function idInLowerCase(id: string): string {
   return id.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
 }
 
 /**
- * The name of a choice: what the player may type instead of its number.
- *
- * A number says where a choice stands in the list, and the list changes
- * after every action. A name says what the choice does, seen from where the
- * avatar stands ("e" is always "go east", "mine-down" is always "mine the
- * block underfoot"), so it means the same thing at every step and is safe in
- * a chain (issue #30). It is made from the action alone, never from the cube.
+ * The name of a choice: what the player types to take it. It is made from
+ * the action alone, never from the cube, so it means the same at every step
+ * and is safe in a chain (issue #30).
  *
  * The names:
- * - moves: n, e, s, w, up and down (issue #80: any open face neighbour);
- * - mine-n, mine-e, mine-s, mine-w beside you; mine-down for the block
- *   underfoot; mine-up overhead (only with a support, issue #75);
- * - torch-here, torch-n, torch-up, torch-down, ...: place a torch;
- * - craft-torch, craft-lamp-oil, ...: "craft-" and the recipe;
- * - take-here-stone, take-n-coal, ...: "take-", where from, and the item;
- * - drop-stone (one) and drop-all-stone (the whole stack);
- * - cut-n, cut-e, cut-s, cut-w: cut the tree in that direction (issue #70);
+ * - "mine 3,4": mine the top block of the square x 3, y 4;
+ * - "cut 3,4": cut the tree on that square;
+ * - craft-fuel, craft-lamp-oil, ...: "craft-" and the recipe;
  * - leave, and end for "end the shift".
  */
-export function choiceName(state: GameState, entry: LogEntry): string {
-  const here = state.avatar.pos;
+export function choiceName(entry: LogEntry): string {
   switch (entry.type) {
     case 'endShift':
       return 'end';
-    case 'move': {
-      const side = compassShort(entry.to.x - here.x, entry.to.y - here.y);
-      if (side !== '') {
-        return side;
-      }
-      return entry.to.z < here.z ? 'up' : 'down';
-    }
     case 'mine':
-      return `mine-${whereShort(here, entry.target)}`;
-    case 'placeTorch':
-      return `torch-${whereShort(here, entry.target)}`;
+      return `mine ${entry.x},${entry.y}`;
+    case 'cutTree':
+      return `cut ${entry.x},${entry.y}`;
     case 'craft':
       return `craft-${idInLowerCase(entry.recipe)}`;
-    case 'pickUp':
-      return `take-${whereShort(here, entry.from)}-${idInLowerCase(entry.item)}`;
-    case 'drop':
-      return entry.count === 1
-        ? `drop-${idInLowerCase(entry.item)}`
-        : `drop-all-${idInLowerCase(entry.item)}`;
     case 'leave':
       return 'leave';
-    case 'cutTree':
-      return `cut-${whereShort(here, entry.target)}`;
-    // The M2 actions: never offered yet (see `describeAction`). M2-6 names them.
+    // The M2 actions: never offered yet (see `describeAction`).
     case 'placeSupport':
     case 'placeExplosive':
     case 'placePump':
     case 'placeVent':
     case 'placeSafetyLamp':
     case 'seal':
-      return `${idInLowerCase(entry.type)}-${whereShort(here, entry.target)}`;
+      return `${idInLowerCase(entry.type)} ${entry.target.x},${entry.target.y}`;
     case 'scan':
-      return `scan-${whereShort(here, entry.centre)}`;
+      return `scan ${entry.centre.x},${entry.centre.y}`;
     case 'stashPut':
     case 'stashTake':
       return `${idInLowerCase(entry.type)}-${entry.count}-${idInLowerCase(entry.item)}`;
@@ -299,44 +159,15 @@ export function choiceName(state: GameState, entry: LogEntry): string {
 }
 
 /**
- * What a choice has in common with others that may share its line of the
- * list, or `null` for a choice that always has a line of its own.
- *
- * - A mine action: "Mine Stone, gives 1 Stone". Mine actions with the same
- *   words here and the same AP cost differ only in direction (issue #30).
- *   `null` for the block underfoot, whose line says the miner moves into it.
- * - A drop: "Drop Stone (one, or all 3)". The two drops of an item, one and
- *   the whole stack, share a line (issue #46 item 3). With one carried there
- *   is a single drop, which then has a line of its own.
+ * The words for a choice: a line of the action list, and the start of the
+ * line that says what was done (`takeTurn`). Describe the choice in the state
+ * before it is taken.
  */
-export function choiceGroupText(state: GameState, entry: LogEntry): string | null {
-  if (entry.type === 'drop') {
-    const carried = countItem(state, entry.item);
-    return `Drop ${itemDef(entry.item).name} (one, or all ${carried})`;
-  }
-  if (entry.type !== 'mine') {
-    return null;
-  }
-  if (isDigDownTarget(state.avatar.pos, entry.target)) {
-    return null;
-  }
-  return `Mine ${mineOutcomeText(state, entry.target, '')}`;
-}
-
-/**
- * The text of one line of the action list (`form` 'choice', the default), or
- * of what was done, for the result line (`form` 'result'; see `ChoiceForm`).
- * Describe the choice in the state before it is taken.
- */
-export function describeChoice(
-  state: GameState,
-  entry: LogEntry,
-  form: ChoiceForm = 'choice',
-): string {
+export function describeChoice(state: GameState, entry: LogEntry): string {
   if (entry.type === 'endShift') {
     return 'End the shift';
   }
-  return describeAction(state, entry, form);
+  return describeAction(state, entry);
 }
 
 /** The display name of the structure with this code. */
@@ -358,20 +189,33 @@ const GAUGE_REASONS: Record<string, string> = {
 const DAMAGE_CAUSES: Record<string, string> = { rockfall: 'a falling block' };
 
 /**
+ * What the player now sees on top of the square (x, y) of `after`, as a
+ * sentence: "The top block there is now Coal seam (depth 2)."
+ */
+function newTopText(after: GameState, x: number, y: number): string {
+  const square = knownSquare(after, x, y);
+  if (square.top === null) {
+    return `Nothing is left there: ${squareText(x, y)} is at the bedrock floor.`;
+  }
+  const block = blockDefByCode(square.top.block);
+  const traces = square.traces ? ', with mineral traces' : '';
+  return `The top block there is now ${block.name}${traces} (${depthName(square.depth)}).`;
+}
+
+/**
  * What happened in one step, as short sentences. `after` is the state the
- * step led to; it is used only to check that a place is one the player can
- * see before naming it.
+ * step led to; it is read only through `knownSquare`, to say what a square
+ * shows now.
  */
 export function describeEvents(after: GameState, events: GameEvent[]): string[] {
   const lines: string[] = [];
   // Said once for a step, however many blocks it was seen on.
   let tracesSaid = false;
   const tracesLine = tracesSeenText(events);
+  // A roof that fell in says what the new top is itself.
+  const roofFell = events.some((event) => event.type === 'roofCollapsed');
   for (const event of events) {
     switch (event.type) {
-      case 'moved':
-        // The new position is in the view; no need to say it twice.
-        break;
       case 'damageTaken':
         lines.push(
           `You lost ${event.amount} health from ${DAMAGE_CAUSES[event.cause] ?? event.cause} (now ${event.health}).`,
@@ -379,6 +223,14 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
         break;
       case 'blockMined':
         lines.push(`Mined ${blockDefByCode(event.block).name}.`);
+        if (!roofFell) {
+          lines.push(newTopText(after, event.pos.x, event.pos.y));
+        }
+        break;
+      case 'roofCollapsed':
+        lines.push(
+          "It was the roof of an open space, which fell in: the square's new top is rubble.",
+        );
         break;
       case 'blockRevealed':
         // The map shows what is newly known.
@@ -392,27 +244,20 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
       case 'itemGained':
         lines.push(`Got ${event.count} ${itemDef(event.item).name}.`);
         break;
+      // Loose items: nothing leaves any today (decision note 0026). The
+      // wording stays until task T4 removes them from the engine.
       case 'itemPickedUp':
         lines.push(`Picked up ${event.count} ${itemDef(event.item).name}.`);
         break;
       case 'itemLeft':
-        lines.push(
-          `${event.count} ${itemDef(event.item).name} did not fit your carry limit and was left there.`,
-        );
+        lines.push(`${event.count} ${itemDef(event.item).name} was left lying there.`);
         break;
       case 'itemDropped':
         lines.push(`Dropped ${event.count} ${itemDef(event.item).name}.`);
         break;
-      case 'itemFell': {
-        // Where it came to rest is said only if the player can see that cell.
-        const where = isRevealed(after, event.to)
-          ? `${blocksText(event.to.z - event.from.z)} to ${layerName(event.to.z)}`
-          : 'out of sight';
-        // "A loose pile of": so that "Got 1 Stone. 1 Stone fell ..." is not
-        // read as the stone just got falling (issue #47 item 6).
-        lines.push(`A loose pile of ${event.count} ${itemDef(event.item).name} fell ${where}.`);
+      case 'itemFell':
+        lines.push(`A loose pile of ${event.count} ${itemDef(event.item).name} fell.`);
         break;
-      }
       case 'structurePlaced':
         lines.push(`Placed a ${structureNameByCode(event.structure)}.`);
         break;
@@ -429,23 +274,20 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
         break;
       case 'lampOilChanged':
         lines.push(
-          `Lamp oil ${signed(event.delta)} (${GAUGE_REASONS[event.reason] ?? event.reason}), now ${event.lampOil}.` +
-            (event.lampOil === 0 ? ' The lamp is out.' : ''),
+          `Lamp oil ${signed(event.delta)} (${GAUGE_REASONS[event.reason] ?? event.reason}), now ${event.lampOil}.`,
         );
         break;
       case 'runEnded':
         // The view that follows opens with the outcome.
         break;
       case 'treeCut':
-        lines.push('You cut down the tree; a stump is left.');
+        lines.push(
+          `You cut down the tree; a stump is left. ${newTopText(after, event.pos.x, event.pos.y)}`,
+        );
         break;
-      case 'treeGrew': {
-        const here = after.avatar.pos;
-        const side = compass(event.pos.x - here.x, event.pos.y - here.y);
-        const where = side === '' ? '' : ` at x${event.pos.x} y${event.pos.y} (${side} of you)`;
-        lines.push(`A tree grew back on a stump${where}.`);
+      case 'treeGrew':
+        lines.push(`A tree grew back on the stump at ${squareText(event.pos.x, event.pos.y)}.`);
         break;
-      }
     }
   }
   return lines;
@@ -455,12 +297,12 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
  * The sentence for a step in which mineral traces were first seen.
  *
  * The engine notes traces after the action is done (`applyAction`: the mine,
- * then gravity, reveal, traces). So when a step mines an ore and traces are
- * then noticed on rock it uncovered, the mined ore is already gone from the
+ * then reveal, then traces). So when a step mines an ore and traces are then
+ * noticed on the rock it uncovered, the mined ore is already gone from the
  * cube: those traces come from OTHER ore, still in the rock. The sentence
  * says so, because a player may otherwise take them for traces of the ore
- * now in the pack (issue #47 item 6; review of PR #48). Only the step's
- * events are read: which block was mined, and that traces were seen.
+ * just mined (issue #47 item 6; review of PR #48). Only the step's events are
+ * read: which block was mined, and that traces were seen.
  */
 function tracesSeenText(events: GameEvent[]): string {
   const onMap = `(On the map: ${tracedSymbolsText()}.)`;
@@ -490,39 +332,4 @@ function blockIdByCode(code: number): string {
 /** "+3" or "-1". */
 function signed(value: number): string {
   return value > 0 ? `+${value}` : String(value);
-}
-
-/**
- * True if a tap on the map should take this choice at once, without opening
- * the chooser: a choice with no warning (`choiceWarning`). Since the miner
- * has no gravity (issue #80) the only warning left on a tap is a yield too
- * heavy to carry.
- */
-export function tapActsAtOnce(state: GameState, entry: LogEntry): boolean {
-  return choiceWarning(state, entry) === null;
-}
-
-/**
- * The warning a choice carries, or `null` if it carries none: a yield (of
- * mining or of cutting a tree) too heavy to carry. The tap map of the phone
- * preview (src/app/map) acts at once on a tap only for a choice with no
- * warning; one with a warning is shown first, with this text. Worked out
- * from revealed cells only, like the rest of this file.
- */
-export function choiceWarning(state: GameState, entry: LogEntry): string | null {
-  if (entry.type === 'mine') {
-    const block = blockDefAt(state, entry.target);
-    const fits = block.yields.every((stack) => canCarry(state, stack.item, stack.count));
-    if (!fits) {
-      return 'too heavy to carry: it will be left lying there';
-    }
-  }
-  if (entry.type === 'cutTree') {
-    // Like mining: timber that does not fit is left on the stump (issue #70).
-    const fits = SURFACE.cutTree.yields.every((stack) => canCarry(state, stack.item, stack.count));
-    if (!fits) {
-      return 'too heavy to carry: the timber will be left lying on the stump';
-    }
-  }
-  return null;
 }

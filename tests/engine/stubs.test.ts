@@ -19,12 +19,9 @@ import { buildState } from './helpers';
 describe('actionKey and sameAction', () => {
   // One of each kind of action.
   const actions: Action[] = [
-    { type: 'move', to: { x: 1, y: 2, z: 3 }, ap: 1 },
-    { type: 'mine', target: { x: 1, y: 2, z: 3 }, ap: 2 },
-    { type: 'placeTorch', target: { x: 1, y: 2, z: 3 }, ap: 1 },
+    { type: 'mine', x: 1, y: 2, ap: 2 },
+    { type: 'cutTree', x: 1, y: 2, ap: 2 },
     { type: 'craft', recipe: 'torch', ap: 1 },
-    { type: 'pickUp', from: { x: 1, y: 2, z: 3 }, item: 'coal', count: 2, ap: 0 },
-    { type: 'drop', item: 'coal', count: 2, ap: 0 },
     { type: 'leave', ap: 0 },
     // The M2 actions (decision note 0015).
     { type: 'placeSupport', target: { x: 1, y: 2, z: 3 }, ap: 1 },
@@ -53,17 +50,13 @@ describe('actionKey and sameAction', () => {
       expect(sameAction(action, structuredClone(action))).toBe(true);
       expect(sameAction(action, { ...action, ap: action.ap + 1 })).toBe(false);
     }
-    const move: Action = { type: 'move', to: { x: 1, y: 2, z: 3 }, ap: 1 };
-    expect(sameAction(move, { ...move, to: { x: 1, y: 2, z: 4 } })).toBe(false);
-    const pickUp: Action = {
-      type: 'pickUp',
-      from: { x: 0, y: 0, z: 0 },
-      item: 'coal',
-      count: 1,
-      ap: 0,
-    };
-    expect(sameAction(pickUp, { ...pickUp, item: 'stone' })).toBe(false);
-    expect(sameAction(pickUp, { ...pickUp, count: 2 })).toBe(false);
+    const mine: Action = { type: 'mine', x: 1, y: 2, ap: 2 };
+    expect(sameAction(mine, { ...mine, x: 2 })).toBe(false);
+    expect(sameAction(mine, { ...mine, y: 1 })).toBe(false);
+    // The same square, another kind of action.
+    expect(sameAction(mine, { ...mine, type: 'cutTree' })).toBe(false);
+    const craft: Action = { type: 'craft', recipe: 'torch', ap: 1 };
+    expect(sameAction(craft, { ...craft, recipe: 'fuel' })).toBe(false);
     const scan: Action = { type: 'scan', centre: { x: 1, y: 2, z: 3 }, ap: 2 };
     expect(sameAction(scan, { ...scan, centre: { x: 1, y: 2, z: 4 } })).toBe(false);
     const stash: Action = { type: 'stashPut', item: 'coal', count: 2, ap: 0 };
@@ -80,7 +73,6 @@ describe('the M2 action modules are stubs (decision note 0015)', () => {
   // is needed, like an `import` statement inside a Python function.
   const state = buildState({
     layers: [['#.#'], ['###']],
-    avatar: { x: 1, y: 0, z: 0 },
     revealAll: true,
     inventory: { support: 2, explosive: 1, pump: 1, vent: 1, safetyLamp: 1, sealant: 1 },
   });

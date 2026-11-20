@@ -49,9 +49,13 @@ export interface RunMetrics {
   shiftsPlayed: number;
   /** Actions taken, not counting ends of shift. */
   actionsTaken: number;
-  /** The deepest layer the avatar stood in; -1 if it never left the surface. */
-  deepestLayer: number;
+  /**
+   * How deep the deepest square got by mining: the most blocks mined from any
+   * one square. 0 if nothing was mined.
+   */
+  deepestSquare: number;
   blocksMined: number;
+  treesCut: number;
   /** `blocksMined` divided by the number of cells in the cube (0.02 is 2%). */
   shareOfCubeMined: number;
   /** How many of the mined blocks were ore that gives mineral traces (iron, copper, crystal). */
@@ -78,7 +82,11 @@ export interface RunMetrics {
   lampOilAtEnd: number;
   /** Shifts that began with 0 fuel, that is, fuel was 0 after the upkeep before them. */
   shiftsAtZeroFuel: number;
-  /** Shifts that began with the lamp out, that is, lamp oil was 0 after the upkeep before them. */
+  /**
+   * Shifts that began with the lamp out, that is, lamp oil was 0 after the
+   * upkeep before them. The lamp does nothing since issue #86; task T3
+   * removes it and this number.
+   */
   shiftsInTheDark: number;
   /** Item id -> count carried at the end. Every item is listed, so absent ones show 0. */
   finalInventory: Record<string, number>;
@@ -210,7 +218,8 @@ export function playRun(options: PlayOptions): RunResult {
   let actionsTaken = 0;
   let shiftsAtZeroFuel = 0;
   let shiftsInTheDark = 0;
-  let deepestLayer = state.avatar.pos.z;
+  let deepestSquare = 0;
+  let treesCut = 0;
   let atPhaseStart = true;
   let hitShiftCap = false;
 
@@ -219,6 +228,8 @@ export function playRun(options: PlayOptions): RunResult {
     for (const event of events) {
       if (event.type === 'blockMined') {
         blocksMined += 1;
+        // The block came out of layer `pos.z`, so its square is now 1 deeper.
+        deepestSquare = Math.max(deepestSquare, event.pos.z + 1);
         if (oreCodes.has(event.block)) {
           oreBlocksMined += 1;
         }
@@ -228,6 +239,8 @@ export function playRun(options: PlayOptions): RunResult {
         if (oreBlocksMined === 0) {
           tracesSeenBeforeFirstOre = true;
         }
+      } else if (event.type === 'treeCut') {
+        treesCut += 1;
       } else if (event.type === 'crafted') {
         addCount(recipesUsed, event.recipe, 1);
         const output = recipeOutputId(event.recipe);
@@ -281,7 +294,6 @@ export function playRun(options: PlayOptions): RunResult {
       record(result.events);
       actionsTaken += 1;
     }
-    deepestLayer = Math.max(deepestLayer, state.avatar.pos.z);
   }
 
   // The run ended by itself, hit the shift cap, or was cut short on purpose.
@@ -310,8 +322,9 @@ export function playRun(options: PlayOptions): RunResult {
     cause,
     shiftsPlayed,
     actionsTaken,
-    deepestLayer,
+    deepestSquare,
     blocksMined,
+    treesCut,
     shareOfCubeMined: blocksMined / cubeCells,
     oreBlocksMined,
     tracesSeenBeforeFirstOre,
@@ -344,8 +357,9 @@ export interface AggregateMetrics {
   /** Cause -> number of runs. 'left', 'outOfFuel' and 'shiftCap' are always listed. */
   causes: Record<string, number>;
   shiftsPlayed: SpreadWithMedian;
-  deepestLayer: SpreadWithMedian;
+  deepestSquare: SpreadWithMedian;
   blocksMined: SpreadWithMedian;
+  treesCut: SpreadWithMedian;
   shareOfCubeMined: SpreadWithMedian;
   /** Runs that mined at least one ore block that gives mineral traces. */
   runsThatMinedOre: number;
@@ -441,8 +455,9 @@ export function aggregate(runs: RunMetrics[]): AggregateMetrics {
     outcomes,
     causes,
     shiftsPlayed: spreadWithMedianOf(runs.map((run) => run.shiftsPlayed)),
-    deepestLayer: spreadWithMedianOf(runs.map((run) => run.deepestLayer)),
+    deepestSquare: spreadWithMedianOf(runs.map((run) => run.deepestSquare)),
     blocksMined: spreadWithMedianOf(runs.map((run) => run.blocksMined)),
+    treesCut: spreadWithMedianOf(runs.map((run) => run.treesCut)),
     shareOfCubeMined: spreadWithMedianOf(runs.map((run) => run.shareOfCubeMined)),
     runsThatMinedOre: runs.filter((run) => run.oreBlocksMined > 0).length,
     runsWithTracesSeenBeforeFirstOre: runs.filter((run) => run.tracesSeenBeforeFirstOre).length,
@@ -534,8 +549,9 @@ export function formatSummary(report: SimReport): string {
     `outcomes:           ${countsLine(a.outcomes)}`,
     `causes:             ${countsLine(a.causes)}`,
     `shifts played:      ${spreadLine(a.shiftsPlayed, 1)}`,
-    `deepest layer:      ${spreadLine(a.deepestLayer, 1)}   (-1 is the surface)`,
+    `deepest square:     ${spreadLine(a.deepestSquare, 1)}   (levels down; 0 is untouched ground)`,
     `blocks mined:       ${spreadLine(a.blocksMined, 1)}`,
+    `trees cut:          ${spreadLine(a.treesCut, 1)}`,
     `share of cube (%):  mean ${fixed(percent(share.mean), 3)}, median ${fixed(percent(share.median), 3)}, min ${fixed(percent(share.min), 3)}, max ${fixed(percent(share.max), 3)}`,
     `mineral traces:     seen before the first ore was mined (or at all, if none was) in ${a.runsWithTracesSeenBeforeFirstOre} runs; ore mined in ${a.runsThatMinedOre} runs, ${a.runsThatMinedOreAfterSeeingTraces} of them after seeing traces`,
     `legal actions at the start of a player phase: mean ${fixed(a.legalActionsPerPhase.mean, 1)}, min ${a.legalActionsPerPhase.min}, max ${a.legalActionsPerPhase.max}`,
@@ -547,7 +563,7 @@ export function formatSummary(report: SimReport): string {
     `structures placed:  ${countsLine(a.structuresPlaced)}`,
     `fuel at end:        ${spreadLine(a.fuelAtEnd, 1)}`,
     `shifts at 0 fuel:   ${spreadLine(a.shiftsAtZeroFuel, 2)}; runs with at least one: ${a.runsWithAShiftAtZeroFuel}`,
-    `shifts in the dark: ${spreadLine(a.shiftsInTheDark, 2)}; runs with at least one: ${a.runsWithAShiftInTheDark}   (shifts begun with the lamp out)`,
+    `shifts in the dark: ${spreadLine(a.shiftsInTheDark, 2)}; runs with at least one: ${a.runsWithAShiftInTheDark}   (shifts begun with the lamp out; the lamp does nothing since issue #86)`,
     `final inventory (mean per run): ${Object.entries(a.finalInventoryMean)
       .map(([item, mean]) => `${item} ${fixed(mean, 2)}`)
       .join(', ')}`,

@@ -1,77 +1,60 @@
-// The tap map's model of one layer (issue #66): what the player knows of
-// each cell, as plain data. The canvas code (mapView.ts) draws only from
-// this, never from the game state.
+// The tap map's model (issues #66 and #86): what the player knows of each
+// square of the map, as plain data. The canvas code (mapView.ts) draws only
+// from this, never from the game state.
 //
-// The one rule: a cell's contents are read only through the engine's
-// `knownCell`, which answers `null` for a cell the player has not seen. So
-// nothing about an unseen cell (its block, its contents) can reach a tile.
-// The other inputs are the avatar's own state (where it is, its lamp oil),
-// which the player always knows, and `visibleMineralTraces`, which names
-// revealed blocks only (decision note 0012).
-//
-// "Lit" is worked out here from known cells only, the way the engine's light
-// works (light spreads through open cells, round corners, never through
-// rock; reveal.ts), so it can never be told by an unseen cell either.
+// The one rule: a square is read only through the engine's `knownSquare`,
+// which gives its depth, what stands on it, and its top block if the player
+// has seen it. Nothing below a top block, and nothing under a tree that was
+// never cut, can reach a tile.
 
-import { AVATAR, BLOCKS, STRUCTURES, SURFACE, WORLD, blockDefByCode } from '../../data';
-import type { BlockId, Vec3 } from '../../data';
-import {
-  cellPosition,
-  isSurface,
-  knownCell,
-  surfaceKindAt,
-  visibleMineralTraces,
-} from '../../engine';
+import { BLOCKS, STRUCTURES, SURFACE } from '../../data';
+import type { BlockId } from '../../data';
+import { isSquare, knownSquare } from '../../engine';
 import type { GameState } from '../../engine';
+import { PREVIEW_MAP } from './palette';
 import type { SurfaceMark } from './palette';
 
-/** What a tile shows. */
-export type TileKind = 'unknown' | 'open' | 'block';
+/**
+ * What a tile shows:
+ * - 'block': the square's top block;
+ * - 'hidden': a tree stands on the square and hides its ground;
+ * - 'floor': the square has no block left (the bedrock floor of the cube).
+ */
+export type TileKind = 'block' | 'hidden' | 'floor';
 
 /** A mark drawn on top of a tile. */
-export type StructureMark = 'torch' | 'support' | 'other';
+export type StructureMark = 'support' | 'other';
 
-/** One cell of the map, as far as the player knows it. */
+/** Which of a square's four neighbours are higher than it (they cast a shadow on it). */
+export interface HigherSides {
+  north: boolean;
+  east: boolean;
+  south: boolean;
+  west: boolean;
+}
+
+/** One square of the map, as far as the player knows it. */
 export interface Tile {
   x: number;
   y: number;
+  /** How many levels down the square is. */
+  depth: number;
   kind: TileKind;
   /** The block id ("stone", "coalSeam") for a 'block' tile; `null` otherwise. */
   block: BlockId | null;
-  /** True if the cell is in light now (always false for an unseen cell). */
-  lit: boolean;
-  /** True for a seen block the player has noticed mineral traces on. */
+  /** True for a top block the player has noticed mineral traces on. */
   traced: boolean;
   structure: StructureMark | null;
-  /** True if loose items lie in the cell. */
-  items: boolean;
   /**
-   * True if the miner is here. On the top view (layer 0) that includes the
-   * miner standing on the surface over this cell (issue #78).
-   */
-  miner: boolean;
-  /** True if the miner is in this column on another layer (drawn as a faint ring). */
-  minerColumn: boolean;
-  /**
-   * On the top view (layer 0) and on the surface itself: what grows or lies
-   * on the surface over this cell (issue #70); `null` on deeper layers. The
-   * surface is always seen. A tree hides the cell under it when drawn.
+   * What is on the surface of a square at ground level: a tree (it hides the
+   * block), or a stump, a path, a meadow or an outcrop (drawn faintly over
+   * the block). `null` once the square has been dug.
    */
   surface: SurfaceMark | null;
+  higher: HigherSides;
 }
 
-/** The kind of the surface cell `pos`, as the tiles name it. */
-function surfaceMark(state: GameState, pos: Vec3): SurfaceMark {
-  const code = surfaceKindAt(state, pos);
-  const kinds = SURFACE.kinds;
-  if (code === kinds.tree.code) return 'tree';
-  if (code === kinds.stump.code) return 'stump';
-  if (code === kinds.path.code) return 'path';
-  if (code === kinds.outcrop.code) return 'outcrop';
-  return 'meadow';
-}
-
-/** A square window of a layer: the cells x0..x0+size-1 and y0..y0+size-1. */
+/** A square window of the map: the squares x0..x0+size-1 and y0..y0+size-1. */
 export interface TileWindow {
   x0: number;
   y0: number;
@@ -85,180 +68,103 @@ for (const [id, def] of Object.entries(BLOCKS)) {
   BLOCK_ID_BY_CODE.set(def.code, id as BlockId);
 }
 
-function key(pos: Vec3): string {
-  return `${pos.x},${pos.y},${pos.z}`;
-}
-
-/** The six cells that share a face with `pos`. */
-function faceNeighbours(pos: Vec3): Vec3[] {
-  return [
-    { x: pos.x + 1, y: pos.y, z: pos.z },
-    { x: pos.x - 1, y: pos.y, z: pos.z },
-    { x: pos.x, y: pos.y + 1, z: pos.z },
-    { x: pos.x, y: pos.y - 1, z: pos.z },
-    { x: pos.x, y: pos.y, z: pos.z + 1 },
-    { x: pos.x, y: pos.y, z: pos.z - 1 },
-  ];
-}
-
-/** True if the player knows `pos` is open (seen, and not solid). */
-function knownOpen(state: GameState, pos: Vec3): boolean {
-  const cell = knownCell(state, pos);
-  return cell !== null && !blockDefByCode(cell.block).solid;
-}
-
-/**
- * The open cells in light, as "x,y,z" keys: from the lamp (while it has oil)
- * and from every torch the player can see, spreading through known open
- * cells only. Daylight is handled in `buildLayer` (the surface and the top
- * layer are always in light).
- */
-export function knownLitCells(state: GameState): Set<string> {
-  const lit = new Set<string>();
-  function flood(source: Vec3, radius: number): void {
-    if (!knownOpen(state, source)) {
-      return;
-    }
-    const seen = new Set<string>([key(source)]);
-    lit.add(key(source));
-    let frontier = [source];
-    for (let step = 1; step <= radius; step += 1) {
-      const next: Vec3[] = [];
-      for (const pos of frontier) {
-        for (const near of faceNeighbours(pos)) {
-          if (!seen.has(key(near)) && knownOpen(state, near)) {
-            seen.add(key(near));
-            lit.add(key(near));
-            next.push(near);
-          }
-        }
-      }
-      frontier = next;
-    }
-  }
-  if (state.lampOil > 0) {
-    flood(state.avatar.pos, AVATAR.lightRadiusWithOil);
-  }
-  // Torches: only those in cells the player has seen. To find them quickly,
-  // the places holding a torch code are listed first; each is then checked
-  // through `knownCell`, so an unseen torch is never used (only skipped).
-  state.structures.forEach((code, index) => {
-    if (code !== STRUCTURES.torch.code) {
-      return;
-    }
-    const pos = cellPosition(state.size, index);
-    const cell = knownCell(state, pos);
-    if (cell !== null && cell.structure === STRUCTURES.torch.code) {
-      flood(pos, AVATAR.torchLightRadius);
-    }
-  });
-  return lit;
+/** The surface kind with this code, as the tiles name it. */
+function surfaceMark(code: number): SurfaceMark {
+  const kinds = SURFACE.kinds;
+  if (code === kinds.tree.code) return 'tree';
+  if (code === kinds.stump.code) return 'stump';
+  if (code === kinds.path.code) return 'path';
+  if (code === kinds.outcrop.code) return 'outcrop';
+  return 'meadow';
 }
 
 function structureMark(code: number): StructureMark | null {
-  if (code === STRUCTURES.torch.code) return 'torch';
   if (code === STRUCTURES.support.code) return 'support';
-  // Any other structure (M2: vents, pumps, ...) gets a plain mark for now.
+  // Any other structure (pumps, vents, ...) gets a plain mark for now.
   return code === 0 ? null : 'other';
 }
 
 /**
- * What `buildLayer` works out once for the whole cube: the lit open cells and
- * the blocks with traces. Worth keeping while the state does not change (the
- * map draws many times during a drag).
+ * How bright a square `depth` levels down is drawn: 1 at ground level, less
+ * with every level, never below `PREVIEW_MAP.depthMinBrightness`. Deeper is
+ * darker, so the terraces of a pit read at a glance (design doc 11).
  */
-export interface LayerContext {
-  lit: Set<string>;
-  traced: Set<string>;
+export function depthBrightness(depth: number): number {
+  const brightness = PREVIEW_MAP.depthBrightnessPerLevel ** Math.max(0, depth);
+  return Math.max(PREVIEW_MAP.depthMinBrightness, brightness);
 }
 
-export function layerContext(state: GameState): LayerContext {
+/** True if the square (x, y) exists and is higher (shallower) than `depth`. */
+function isHigher(state: GameState, x: number, y: number, depth: number): boolean {
+  // A square's depth is always seen, so this tells nothing hidden.
+  return isSquare(state, x, y) && knownSquare(state, x, y).depth < depth;
+}
+
+/** The tile of the square (x, y). Throws if it is not a square of the map. */
+export function buildTile(state: GameState, x: number, y: number): Tile {
+  const square = knownSquare(state, x, y);
+  const higher: HigherSides = {
+    north: isHigher(state, x, y - 1, square.depth),
+    east: isHigher(state, x + 1, y, square.depth),
+    south: isHigher(state, x, y + 1, square.depth),
+    west: isHigher(state, x - 1, y, square.depth),
+  };
+  if (square.tree) {
+    // A tree is drawn solid. Whatever the player may know of the block under
+    // it (after a tree grew back) is left out: the map shows the tree.
+    return {
+      x,
+      y,
+      depth: square.depth,
+      kind: 'hidden',
+      block: null,
+      traced: false,
+      structure: null,
+      surface: 'tree',
+      higher,
+    };
+  }
+  const atGroundLevel = square.depth === 0;
+  const surface = atGroundLevel ? surfaceMark(square.surfaceKind) : null;
+  if (square.top === null) {
+    // No tree and no known top block: the square has no block left.
+    return {
+      x,
+      y,
+      depth: square.depth,
+      kind: 'floor',
+      block: null,
+      traced: false,
+      structure: null,
+      surface: null,
+      higher,
+    };
+  }
   return {
-    lit: knownLitCells(state),
-    traced: new Set<string>(visibleMineralTraces(state).map(key)),
+    x,
+    y,
+    depth: square.depth,
+    kind: 'block',
+    block: BLOCK_ID_BY_CODE.get(square.top.block) ?? null,
+    traced: square.traces,
+    structure: structureMark(square.top.structure),
+    surface,
+    higher,
   };
 }
 
 /**
- * The tiles of layer `z` in `window`, row by row (y first, then x): what the
- * player knows of each cell. Cells outside the cube are left out (the camera
- * keeps the window inside it).
- *
- * Layer 0 is the top view (issue #78): each cell also carries what is on
- * the surface over it (a tree, a stump, a path, a meadow or an outcrop), and
- * the miner standing on the surface is drawn on the cell under it. There is
- * no separate surface layer on the map.
- * `context` may be passed in when it was already worked out for this state.
+ * The tiles of `window`, row by row (y first, then x). Squares outside the
+ * map are left out (a window may reach past its edge while the player drags).
  */
-export function buildLayer(
-  state: GameState,
-  z: number,
-  window: TileWindow,
-  context: LayerContext = layerContext(state),
-): Tile[][] {
-  const here = state.avatar.pos;
-  const { lit, traced } = context;
-  const topView = z === WORLD.surfaceZ + 1;
-  const minerOnSurface = here.z === WORLD.surfaceZ;
-  // Daylight: the surface, and every cell of the top layer, which touches it.
-  const daylight = z <= WORLD.surfaceZ + 1;
-
+export function buildTiles(state: GameState, window: TileWindow): Tile[][] {
   const rows: Tile[][] = [];
   for (let y = window.y0; y < window.y0 + window.size; y += 1) {
     const row: Tile[] = [];
     for (let x = window.x0; x < window.x0 + window.size; x += 1) {
-      const pos = { x, y, z };
-      const inMinersColumn = here.x === x && here.y === y;
-      const miner = inMinersColumn && (here.z === z || (topView && minerOnSurface));
-      // What stands on the surface over this cell, on the top view; the
-      // surface's own cells too (the cube's footprint only: a zoomed-out
-      // window can reach one column past the edge, PR #71).
-      const surfacePos = { x, y, z: WORLD.surfaceZ };
-      const surface =
-        (topView || z === WORLD.surfaceZ) && isSurface(state.size, surfacePos)
-          ? surfaceMark(state, surfacePos)
-          : null;
-      const minerColumn = !miner && inMinersColumn;
-      const cell = knownCell(state, pos);
-      if (cell === null) {
-        row.push({
-          x,
-          y,
-          kind: 'unknown',
-          block: null,
-          lit: false,
-          traced: false,
-          structure: null,
-          items: false,
-          miner,
-          minerColumn,
-          surface,
-        });
-        continue;
+      if (isSquare(state, x, y)) {
+        row.push(buildTile(state, x, y));
       }
-      const def = blockDefByCode(cell.block);
-      let isLit: boolean;
-      if (daylight) {
-        isLit = true;
-      } else if (!def.solid) {
-        isLit = lit.has(key(pos));
-      } else {
-        // A block is in light when one of its faces touches a lit open cell.
-        isLit = faceNeighbours(pos).some((near) => lit.has(key(near)));
-      }
-      row.push({
-        x,
-        y,
-        kind: def.solid ? 'block' : 'open',
-        block: def.solid ? (BLOCK_ID_BY_CODE.get(cell.block) ?? null) : null,
-        lit: isLit,
-        traced: def.solid && traced.has(key(pos)),
-        structure: structureMark(cell.structure),
-        items: cell.looseItems.length > 0,
-        miner,
-        minerColumn,
-        surface,
-      });
     }
     rows.push(row);
   }

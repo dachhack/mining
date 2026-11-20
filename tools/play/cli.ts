@@ -7,21 +7,22 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname } from 'node:path';
 
 import { CONTRACT_IDS, DEFAULT_LOADOUT_ID, GAME_DATA, validateData } from '../../src/data';
-import { ENGINE_VERSION, countItem, hashState, isRunActive, legalActions } from '../../src/engine';
+import { ENGINE_VERSION, hashState, isRunActive } from '../../src/engine';
 import type { GameState } from '../../src/engine';
 import { choiceName } from '../../src/app/text/describe';
 import { helpText } from './help';
 import {
   END_SHIFT,
+  listedChoices,
   logFromText,
   logToText,
-  menuChoices,
   newSession,
   replayLog,
 } from '../../src/app/text/log';
 import type { LogEntry, PlayLog, Session } from '../../src/app/text/log';
+import { cutChoice, mineChoice, parseSquareChoice } from '../../src/app/text/squares';
 import { takeTurn } from '../../src/app/text/turn';
-import { DEFAULT_LAYERS, buildView, renderView } from '../../src/app/text/view';
+import { buildView, renderView } from '../../src/app/text/view';
 
 /** What the command line asked for. `null` means "not given". */
 export interface CliOptions {
@@ -33,9 +34,6 @@ export interface CliOptions {
   /** The choices of `--do`, split at the commas. */
   choices: string[];
   loadoutId: string;
-  /** `null` if --radius was not given: the view then chooses (see `ViewOptions`). */
-  radius: number | null;
-  layers: number;
 }
 
 export interface CliResult {
@@ -56,8 +54,6 @@ export function parseArgs(args: string[]): CliOptions {
     replayPath: null,
     choices: [],
     loadoutId: DEFAULT_LOADOUT_ID,
-    radius: null,
-    layers: DEFAULT_LAYERS,
   };
 
   // The value that follows the option at position `i`.
@@ -97,12 +93,6 @@ export function parseArgs(args: string[]): CliOptions {
     } else if (arg === '--loadout') {
       options.loadoutId = valueAfter(i);
       i += 1;
-    } else if (arg === '--radius') {
-      options.radius = wholeNumber(i);
-      i += 1;
-    } else if (arg === '--layers') {
-      options.layers = wholeNumber(i);
-      i += 1;
     } else {
       throw new Error(`unknown argument ${arg ?? ''}`);
     }
@@ -110,61 +100,73 @@ export function parseArgs(args: string[]): CliOptions {
   return options;
 }
 
-/** "3, 1,end" -> ["3", "1", "end"]. */
+/**
+ * Split a chain of choices at its commas:
+ * "mine 3,4, cut 5,6,end" -> ["mine 3,4", "cut 5,6", "end"].
+ *
+ * A square is written with a comma too ("mine 3,4"), so a comma that stands
+ * between the two numbers of a mine or a cut is not a break. A semicolon is
+ * always a break, for anyone who would rather not rely on that.
+ */
 export function splitChoices(text: string): string[] {
-  return text
-    .split(',')
-    .map((part) => part.trim().toLowerCase())
-    .filter((part) => part !== '');
+  // The pattern matches, from left to right, either a whole square choice
+  // ("mine 3 , 4") or a run of characters with no comma or semicolon in it.
+  // The `g` flag makes `match` return every match, not just the first.
+  const pieces = text.toLowerCase().match(/ *(?:mine|cut)[ -]*\d+ *, *\d+|[^,;]+/g) ?? [];
+  return pieces.map((piece) => piece.trim()).filter((piece) => piece !== '');
+}
+
+/** What a typed choice stands for: the entry to take, or why it is refused. */
+export interface ResolvedChoice {
+  entry: LogEntry | null;
+  /** Why the choice is refused; `null` when `entry` is set. */
+  refusal: string | null;
 }
 
 /**
- * The menu entry a typed choice stands for, or `null` if it is not on the
- * list. A choice is a number or a name, exactly as the view prints them:
- * - 1, 2, ... are the engine's legal actions in order, and 0 ends the shift;
- * - a name ("e", "mine-down", "drop-all-stone", "end") is the choice on the
- *   list now that has that name. If the list has no such choice (the move
- *   is not possible here, say), the answer is `null`: a name never stands
- *   for some other action. One name is also taken when it is not printed:
- *   "drop-all-X" while exactly one X is carried means "drop-X". Nothing else
- *   is read that way: "drop-all-all-X" is not a choice (issue #46 item 4).
+ * The entry a typed choice stands for, or the reason it is refused.
+ *
+ * - "mine 3,4" and "cut 3,4" name a square. A refused one says why (a tree,
+ *   the level rule and which neighbours are too high, too little AP, ...):
+ *   see squares.ts.
+ * - 1, 2, ... are the lines of the action list in order, and 0 ends the
+ *   shift.
+ * - A name ("craft-fuel", "leave", "end") is the line of the list that has
+ *   that name now. If there is none, the choice is refused: a name never
+ *   stands for some other action.
  */
-export function resolveChoice(state: GameState, choice: string): LogEntry | null {
+export function resolveChoice(state: GameState, choice: string): ResolvedChoice {
   if (!isRunActive(state)) {
-    return null;
+    return { entry: null, refusal: 'The run has ended.' };
   }
+  const square = parseSquareChoice(choice);
+  if (square !== null) {
+    return square.kind === 'mine'
+      ? mineChoice(state, square.x, square.y)
+      : cutChoice(state, square.x, square.y);
+  }
+  const listed = listedChoices(state);
+  // "End shift" is the last entry of `listed`; the numbered lines are the rest.
+  const numbered = listed.filter((entry) => entry.type !== END_SHIFT.type);
+  let found: LogEntry | undefined;
   if (choice === '0') {
-    return END_SHIFT;
+    found = END_SHIFT;
+  } else if (/^\d+$/.test(choice)) {
+    // An index past the end of the list gives `undefined`.
+    found = numbered[Number(choice) - 1];
+  } else {
+    // `find` gives `undefined` when nothing matches.
+    found = listed.find((entry) => choiceName(entry) === choice);
   }
-  if (/^\d+$/.test(choice)) {
-    // An index past the end of the list gives `undefined`, hence the `??`.
-    return legalActions(state)[Number(choice) - 1] ?? null;
+  if (found !== undefined) {
+    return { entry: found, refusal: null };
   }
-  // `find` gives `undefined` when nothing matches.
-  const named = menuChoices(state).find((entry) => choiceName(state, entry) === choice);
-  if (named !== undefined) {
-    return named;
-  }
-  // "drop-all-stone" with exactly one stone carried: the list then has only
-  // "drop-stone" (the engine offers "drop all" from two up), and dropping
-  // that one is dropping them all. So the name is read as that choice.
-  // Only that: the choice found must be a drop of one item while exactly one
-  // is carried. Without the check "drop-all-all-stone" was read as
-  // "drop-all-stone".
-  const dropAll = 'drop-all-';
-  if (choice.startsWith(dropAll)) {
-    const dropOne = `drop-${choice.slice(dropAll.length)}`;
-    const found = menuChoices(state).find((entry) => choiceName(state, entry) === dropOne);
-    if (
-      found !== undefined &&
-      found.type === 'drop' &&
-      found.count === 1 &&
-      countItem(state, found.item) === 1
-    ) {
-      return found;
-    }
-  }
-  return null;
+  return {
+    entry: null,
+    refusal:
+      'It is not a choice as things stand now. Type "mine X,Y" or "cut X,Y" for a square, ' +
+      `a number from 1 to ${numbered.length} or a name from the list, or 0 / end to end the shift.`,
+  };
 }
 
 /** What `takeChoices` did. */
@@ -178,7 +180,7 @@ export interface ChoicesResult {
 }
 
 /**
- * Take the choices in order, stopping at the first that is not on the list.
+ * Take the choices in order, stopping at the first that is refused.
  * Choices before it stay taken (and in the log); it and the rest are not.
  */
 export function takeChoices(session: Session, choices: string[]): ChoicesResult {
@@ -189,32 +191,23 @@ export function takeChoices(session: Session, choices: string[]): ChoicesResult 
     if (!isRunActive(session.state)) {
       return { lines, taken, refused: `Refused ${position}: the run has ended.` };
     }
-    const entry = resolveChoice(session.state, choice);
-    if (entry === null) {
-      const count = legalActions(session.state).length;
+    const resolved = resolveChoice(session.state, choice);
+    if (resolved.entry === null) {
       return {
         lines,
         taken,
-        refused:
-          `Refused ${position}: it is not on the action list as it stands now ` +
-          `(a number from 1 to ${count}, a name from the list, or 0 / end to end the shift). ` +
-          'Nothing was done from it on.',
+        refused: `Refused ${position}: ${resolved.refusal ?? ''} Nothing was done from it on.`,
       };
     }
-    lines.push(takeTurn(session, entry));
+    lines.push(takeTurn(session, resolved.entry));
     taken += 1;
   }
   return { lines, taken, refused: null };
 }
 
 /** The current view of a session, as text. */
-export function sessionView(session: Session, options: CliOptions): string {
-  const view = buildView(session.state, {
-    radius: options.radius,
-    layers: options.layers,
-    deepestZ: session.deepestZ,
-  });
-  return renderView(view);
+export function sessionView(session: Session): string {
+  return renderView(buildView(session.state, { deepestDepth: session.deepestDepth }));
 }
 
 /**
@@ -362,7 +355,7 @@ export function runCli(args: string[]): CliResult {
     if (result.refused !== null) {
       lines.push(result.refused);
     }
-    lines.push(sessionView(opened.session, options));
+    lines.push(sessionView(opened.session));
     return { output: lines.join('\n'), exitCode: result.refused === null ? 0 : 1 };
   } catch (error) {
     return { output: `play: ${messageOf(error)}\n${USAGE_HINT}`, exitCode: 1 };

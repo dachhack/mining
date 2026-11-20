@@ -5,7 +5,7 @@
 // 2. air;
 // 3. rest, only if the avatar is still alive.
 // Loose items that lost their floor fall straight after (`settle`, in the
-// dispatcher in index.ts). The avatar never falls (issue #80).
+// dispatcher in index.ts).
 //
 // Steps 2 and 3 call one function each from air.ts (M2-4) and camps.ts
 // (M2-7), which do nothing until those tasks fill them in.
@@ -13,7 +13,7 @@
 import { updateAir } from '../air';
 import { applyRest } from '../camps';
 import type { DamageCause, GameEvent, RunEndCause } from '../events';
-import { endRun, isRunActive, waterAt } from '../state';
+import { endRun, isRunActive } from '../state';
 import type { GameState } from '../state';
 import type { CubePhase, RecordedDamage } from './phase';
 
@@ -68,16 +68,16 @@ export function applyRecordedDamage(
 }
 
 /**
- * End the run if the air has run out (0014 item 20): drowned if the avatar's
- * cell is flooded, suffocated otherwise. This reads the true cube, like the
- * air rule itself (0014 item 21).
+ * End the run if the air has run out (0014 item 20). "Drowned if the
+ * avatar's cell is flooded" needed the avatar's cell, which is gone (issue
+ * #86), so the cause is always suffocated (decision note 0026). Nothing
+ * changes air today; task T5 removes it.
  */
 function checkAir(state: GameState, events: GameEvent[]): void {
   if (state.avatar.air > 0) {
     return;
   }
-  const cause: RunEndCause = waterAt(state, state.avatar.pos) > 0 ? 'drowned' : 'suffocated';
-  endRun(state, 'death', cause, events);
+  endRun(state, 'death', 'suffocated', events);
 }
 
 /**

@@ -1,11 +1,13 @@
-// The early phone preview screen (issue #64). A throwaway screen that plays
-// the current engine the way `npm run play` does, with a button to tap for
-// each choice instead of a number to type. M3 replaces it.
+// The early phone preview screen (issues #64 and #86). A throwaway screen
+// that plays the current engine the way `npm run play` does: a top-down map
+// to tap instead of "mine x,y" to type, and a button for each listed choice.
+// M3 replaces it.
 //
-// It draws only from the player's view (`buildView` in text/view.ts), the
-// same data the play tool prints from, and it changes the game only by
-// taking a choice from that view's list (`takeTurn`, which calls the
-// engine's `applyAction` or `endShift`). It never edits the state itself.
+// It draws only from the player's view (`buildView` in text/view.ts, the
+// same data the play tool prints from, and the map's tiles), and it changes
+// the game only by taking a choice: one from that view's list, or the mine or
+// cut a tap on the map stands for (`takeTurn`, which calls the engine's
+// `applyAction` or `endShift`). It never edits the state itself.
 
 import { ENGINE_VERSION, isRunActive } from '../engine';
 import {
@@ -19,15 +21,11 @@ import {
 } from './previewSession';
 import type { SaveStore } from './previewSession';
 import { createTapMap } from './map/mapView';
+import { NO_MARKS, tapOutcome } from './map/targets';
+import type { MapMarks } from './map/targets';
 import type { LogEntry, Session } from './text/log';
 import { takeTurn } from './text/turn';
-import {
-  DEFAULT_LAYERS,
-  buildView,
-  forecastLine,
-  hazardsLine,
-  renderEndedLines,
-} from './text/view';
+import { buildView, forecastLine, hazardsLine, renderEndedLines } from './text/view';
 import type { ChoiceView, PlayerView } from './text/view';
 
 /**
@@ -122,46 +120,57 @@ export function mountPreview(root: HTMLElement): void {
 
   const ended = element('section', 'ended');
   ended.dataset['testid'] = 'ended';
-  // The map: coloured tiles, drag to pan, tap a cell to act on it (issue #66).
-  const tapMap = createTapMap((action) => {
-    take(action, false);
+  // The map: the whole surface from above. Drag to pan, pinch to zoom, tap a
+  // square to mine it or cut its tree (issue #86).
+  const tapMap = createTapMap((x, y) => {
+    tapSquare(x, y);
   });
-  // What the map cannot show: loose items on the surface, and the like.
+  // What the map cannot show.
   const mapNotes = element('section', 'map-notes');
   mapNotes.dataset['testid'] = 'map-notes';
   const forecast = element('section', 'forecast');
   forecast.dataset['testid'] = 'forecast';
   const outcome = element('section', 'outcome');
   outcome.dataset['testid'] = 'outcome';
-  // The full list of choices, folded away: the map covers moving and mining,
-  // and this list has everything else (crafting, placing, dropping, leaving,
-  // ending the shift).
+  // End shift: an explicit button of its own, right under the map (design
+  // doc 11).
+  const endShiftButton = element('button', 'end-shift', 'End shift');
+  endShiftButton.type = 'button';
+  endShiftButton.dataset['testid'] = 'end-shift';
+  // The other listed choices, folded away: the map covers mining and
+  // cutting, and this list has crafting and leaving.
   const allActions = element('details', 'all-actions');
-  const actionsHeading = element('summary', 'actions-heading', 'All actions');
+  const actionsHeading = element('summary', 'actions-heading', 'Other actions');
   const actions = element('section', 'actions');
   actions.dataset['testid'] = 'actions';
   allActions.append(actionsHeading, actions);
 
+  // What came of the last tap or choice sits under the map, so that the map
+  // does not move under the finger when the text changes length.
   page.append(
     header,
     note,
     playTop,
     gauges,
     ended,
-    outcome,
     tapMap.element,
+    outcome,
+    endShiftButton,
     mapNotes,
     forecast,
     allActions,
+    tapMap.legend,
   );
   root.replaceChildren(page);
 
   // ----- The run -----
   // `session` is replaced on a new run or restart; `lastLines` holds what
-  // came of the last choice.
+  // came of the last tap or choice, and `marks` what a refused tap marks on
+  // the map (cleared by the next tap or choice).
   const loaded = loadRun(store);
   let session: Session = loaded.session ?? startRun(randomSeed(Math.random));
   let lastLines: string[] = [];
+  let marks: MapMarks = NO_MARKS;
   note.textContent = loaded.note ?? '';
   note.hidden = loaded.note === null;
   if (loaded.session === null) {
@@ -170,30 +179,29 @@ export function mountPreview(root: HTMLElement): void {
 
   /**
    * Redraw everything from the player's view of the current state. `fresh`
-   * is true for a new or resumed run: the map then centres on the miner.
+   * is true for a new or resumed run: the map then centres on its middle.
    */
   function draw(fresh: boolean): void {
-    const view: PlayerView = buildView(session.state, {
-      // `null`: let the view choose, as the play tool does with no --radius.
-      radius: null,
-      layers: DEFAULT_LAYERS,
-      deepestZ: session.deepestZ,
-    });
+    const view: PlayerView = buildView(session.state, { deepestDepth: session.deepestDepth });
     seedText.textContent = `Seed ${session.log.seed}`;
     showLines(gauges, view.hud);
     showLines(ended, renderEndedLines(view));
-    tapMap.show(session.state, fresh);
+    tapMap.show(session.state, fresh, marks);
     showLines(mapNotes, view.notes);
     if (view.ended === null) {
-      const notOffered = view.notOffered.map((line) => `Not on the list: ${line}`);
+      const notOffered = view.notOffered.map((line) => `Not possible now: ${line}`);
       showLines(forecast, [hazardsLine(view), forecastLine(view), ...notOffered]);
     } else {
       showLines(forecast, []);
     }
     showLines(outcome, lastLines);
 
-    // One button per choice on the list, in the list's order.
-    const buttons = view.choices.map((choice) => {
+    // End shift has its own button; it is hidden once the run is over.
+    endShiftButton.hidden = view.ended !== null;
+
+    // One button per other choice on the list, in the list's order.
+    const others = view.choices.filter((choice) => choice.entry.type !== 'endShift');
+    const buttons = others.map((choice) => {
       const button = element('button', 'choice');
       button.type = 'button';
       button.dataset['choice'] = choice.name;
@@ -202,13 +210,38 @@ export function mountPreview(root: HTMLElement): void {
         element('span', 'choice-meta', choiceMeta(choice)),
       );
       button.addEventListener('click', () => {
+        // Leaving ends the run: ask first, a mis-tap would lose it.
+        const leaving = choice.entry.type === 'leave';
+        if (leaving && !window.confirm('Leave the mine? This ends the run.')) {
+          return;
+        }
         take(choice.entry, true);
       });
       return button;
     });
     actions.replaceChildren(...buttons);
-    actionsHeading.textContent = `All actions (${buttons.length})`;
+    actionsHeading.textContent = `Other actions (${buttons.length})`;
     allActions.hidden = buttons.length === 0;
+  }
+
+  /**
+   * A tap on the square (x, y) of the map: mine it, or cut its tree. A tap
+   * the rules refuse changes nothing: the reason is shown under the map, and
+   * the map marks the square and, for the level rule, the neighbours that
+   * are too high.
+   */
+  function tapSquare(x: number, y: number): void {
+    if (!isRunActive(session.state)) {
+      return;
+    }
+    const outcome = tapOutcome(session.state, x, y);
+    if (outcome.entry !== null) {
+      take(outcome.entry, false);
+      return;
+    }
+    lastLines = outcome.lines;
+    marks = outcome.marks;
+    draw(false);
   }
 
   /**
@@ -220,10 +253,12 @@ export function mountPreview(root: HTMLElement): void {
     if (!isRunActive(session.state)) {
       return;
     }
+    marks = NO_MARKS;
     try {
       lastLines = [takeTurn(session, entry)];
     } catch (error) {
-      // Should not happen: the button came from the list of legal choices.
+      // Should not happen: the choice came from the list of legal choices,
+      // or from a tap the rules had just allowed.
       lastLines = [`That could not be done: ${error instanceof Error ? error.message : ''}`];
     }
     note.hidden = true;
@@ -239,6 +274,7 @@ export function mountPreview(root: HTMLElement): void {
     clearSavedRun(store);
     session = startRun(seed);
     lastLines = [];
+    marks = NO_MARKS;
     saveRun(store, session);
     note.textContent = message;
     note.hidden = false;
@@ -246,6 +282,10 @@ export function mountPreview(root: HTMLElement): void {
     draw(true);
     window.scrollTo(0, 0);
   }
+
+  endShiftButton.addEventListener('click', () => {
+    take({ type: 'endShift' }, false);
+  });
 
   // ----- The buttons of the run bar -----
   restartButton.addEventListener('click', () => {

@@ -4,8 +4,7 @@
 // types re-exported at the bottom, and nothing else from this folder.
 //
 // This file is also the dispatcher: it owns what is common to every action
-// (copying the state, checking legality, spending AP, then gravity and
-// reveal) and hands the rest to one module per rule. The modules of the M2
+// (copying the state, checking legality, spending AP, then reveal) and hands the rest to one module per rule. The modules of the M2
 // actions (supports, explosives, camp tools, camps, giving up) are stubs until
 // their tasks fill them in; each stub's doc comment is its contract
 // (decision note 0015).
@@ -18,13 +17,10 @@ import { legalCampToolActions, applyCampToolAction } from './actions/campTools';
 import { legalCraftActions, applyCraft } from './actions/craft';
 import { legalCutTreeActions, applyCutTree } from './actions/cutTree';
 import { legalGiveUpActions, applyGiveUp } from './actions/giveUp';
-import { legalDropActions, legalPickUpActions, applyDrop, applyPickUp } from './actions/items';
 import { legalLeaveActions, applyLeave } from './actions/leave';
 import { legalMineActions, applyMine } from './actions/mine';
-import { legalMoveActions, applyMove } from './actions/move';
 import { legalPlaceExplosiveActions, applyPlaceExplosive } from './actions/placeExplosive';
 import { legalPlaceSupportActions, applyPlaceSupport } from './actions/placeSupport';
-import { legalPlaceTorchActions, applyPlaceTorch } from './actions/placeTorch';
 import type { GameEvent } from './events';
 import { generateCube } from './generation/cube';
 import { settle } from './gravity';
@@ -44,8 +40,10 @@ import type { GameState } from './state';
  * of such changes between two playtest rounds (CLAUDE.md).
  * 0.2.0: no fuel refill (issue #32).
  * 0.3.0: milestone M2, hazards and camps (0014 item 35; set by issue #50).
+ * 0.4.0: the top-down model of design doc v0.2 (decision note 0025; set by
+ *        issue #86, mine by square). Covers the whole batch T2 to T15.
  */
-export const ENGINE_VERSION = '0.3.0';
+export const ENGINE_VERSION = '0.4.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
@@ -79,7 +77,6 @@ export function createRun(seed: number, contractId: string, loadoutId: string): 
   // The forest on the surface (issue #70), drawn from the same generator.
   generateSurface(state);
 
-  state.avatar.pos = { ...WORLD.startPosition };
   state.avatar.health = AVATAR.startHealth;
   state.avatar.air = HAZARDS.air.max;
   state.shift = SHIFT.firstShiftNumber;
@@ -89,12 +86,12 @@ export function createRun(seed: number, contractId: string, loadoutId: string): 
   for (const stack of loadout.items) {
     addItem(state, stack.item, stack.count);
   }
-  // Coal in sight at the start (owner's decision on PR #72): needs the miner
-  // on its start cell with its lamp, so it comes after the surface.
+  // Coal in sight at the start (design doc 3.2): reads the surface, so it
+  // comes after it.
   ensureCoalInSight(state);
 
-  // Reveal what can be seen from the start. Nobody is watching yet, so the
-  // events are dropped.
+  // Reveal every top block that no tree hides. Nobody is watching yet, so
+  // the events are dropped.
   updateReveal(state, []);
   updateMineralTraces(state, []);
   return state;
@@ -112,21 +109,17 @@ export function legalActions(state: GameState): Action[] {
     return [];
   }
   const all: Action[] = [
-    ...legalMoveActions(state),
     ...legalCutTreeActions(state),
     ...legalMineActions(state),
-    ...legalPlaceTorchActions(state),
     ...legalPlaceSupportActions(state),
     ...legalPlaceExplosiveActions(state),
     ...legalCampToolActions(state),
     ...legalCraftActions(state),
-    ...legalPickUpActions(state),
-    ...legalDropActions(state),
     ...legalCampActions(state),
     ...legalLeaveActions(state),
     ...legalGiveUpActions(state),
   ];
-  // An action the avatar cannot afford is not legal (0005 item 12). The rule
+  // An action the player cannot afford is not legal (0005 item 12). The rule
   // modules list actions without looking at AP; this is the one place it is
   // checked.
   return all.filter((action) => action.ap <= state.ap);
@@ -152,23 +145,11 @@ export function applyAction(state: GameState, action: Action): StepResult {
 
   // TypeScript knows, inside each `case`, which kind of action this is.
   switch (action.type) {
-    case 'move':
-      applyMove(next, action, events);
-      break;
     case 'mine':
       applyMine(next, action, events);
       break;
-    case 'placeTorch':
-      applyPlaceTorch(next, action, events);
-      break;
     case 'craft':
       applyCraft(next, action, events);
-      break;
-    case 'pickUp':
-      applyPickUp(next, action, events);
-      break;
-    case 'drop':
-      applyDrop(next, action, events);
       break;
     case 'leave':
       applyLeave(next, action, events);
@@ -203,9 +184,9 @@ export function applyAction(state: GameState, action: Action): StepResult {
       break;
   }
 
-  // After any action: loose items with nothing under them fall, then light
-  // shows what is newly visible, and any mineral traces on the blocks it
-  // falls on. The avatar never falls (owner, issue #80).
+  // After any action: loose items with nothing under them fall (there are
+  // none today; task T4 removes them), then the new top block is revealed,
+  // with any mineral traces on it.
   settle(next, events);
   updateReveal(next, events);
   updateMineralTraces(next, events);
@@ -218,11 +199,10 @@ export function applyAction(state: GameState, action: Action): StepResult {
  * changed. Throws if the run has already ended.
  *
  * The order: the cube phase's steps (a) to (e) (shift.ts); `settle` once
- * (loose items fall if the phase took their floor; the avatar never falls,
- * issue #80); if the avatar
- * is still alive, trees grow back on stumps (surface/regrowth.ts) and then
- * upkeep; reveal. The forecast for the next shift is not
- * stored: `previewCubePhase` works it out from the new state when asked.
+ * (loose items fall if the phase took their floor); if the run is still
+ * going, trees grow back on stumps (surface/regrowth.ts) and then upkeep;
+ * reveal. The forecast for the next shift is not stored: `previewCubePhase`
+ * works it out from the new state when asked.
  */
 export function endShift(state: GameState): StepResult {
   if (!isRunActive(state)) {
@@ -232,8 +212,7 @@ export function endShift(state: GameState): StepResult {
   const events: GameEvent[] = [];
 
   runCubePhase(next, events);
-  // Loose items whose floor the cube phase took fall. The avatar does not,
-  // even if its floor went (issue #80).
+  // Loose items whose floor the cube phase took fall.
   settle(next, events);
   if (isRunActive(next)) {
     // Trees grow back on stumps left alone long enough (issue #70; decision
@@ -241,7 +220,7 @@ export function endShift(state: GameState): StepResult {
     regrowTrees(next, events);
     runUpkeep(next, events);
   }
-  // The light radius can change at upkeep (lamp oil running out).
+  // The cube phase can change the tops (once its hazards are built).
   updateReveal(next, events);
   updateMineralTraces(next, events);
   return { state: next, events };
@@ -269,18 +248,14 @@ export type {
   CraftAction,
   CutTreeAction,
   DecommissionCampAction,
-  DropAction,
   FoundCampAction,
   GiveUpAction,
   LeaveAction,
   MineAction,
-  MoveAction,
-  PickUpAction,
   PlaceExplosiveAction,
   PlacePumpAction,
   PlaceSafetyLampAction,
   PlaceSupportAction,
-  PlaceTorchAction,
   PlaceVentAction,
   RestAction,
   ScanAction,
@@ -308,8 +283,12 @@ export type { SerialisedState } from './serialise';
 // What the player sees of a cell (0014 item 3). Tools and the renderer read a
 // cell's water, lava, gas, cracks, structures and loose items through
 // `knownCell`, which answers `null` for a cell the player has not seen.
-export { knownCell } from './known';
-export type { KnownCell } from './known';
+export { knownCell, knownSquare } from './known';
+export type { KnownCell, KnownSquare } from './known';
+// The mine action's own check, with the reason for a refusal: what a tap on
+// a square the rules forbid shows the player (design doc 4.2).
+export { mineCheck } from './actions/mine';
+export type { MineCheck, MineRefusalReason } from './actions/mine';
 export type { CountdownForecast } from './forecast';
 export type { ShiftForecast, UpkeepForecast } from './shift';
 export {
@@ -356,11 +335,12 @@ export {
 } from './surface/state';
 export { shiftsUntilRegrowth } from './surface/regrowth';
 // The cube seen from above (design doc v0.2 section 3.1; issue #84): a
-// square's depth, its top block, and the level rule. Nothing in the rules
-// uses these yet.
+// square's depth, its top block, and the level rule. `topBlockAt` reads the
+// true cube, under a tree too: a view must use `knownSquare` instead.
 export { depthAt, isSquare, mayMine, topBlockAt, SQUARE_STEPS } from './heightmap';
 export type {
   HigherNeighbour,
+  Square,
   MayMineResult,
   MineRefusal,
   SquareDirection,

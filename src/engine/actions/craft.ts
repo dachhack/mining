@@ -4,7 +4,6 @@ import { ACTION_COSTS, FIELD_RECIPES, findRecipe } from '../../data';
 import type { RecipeDef } from '../../data';
 import type { CraftAction } from '../actionTypes';
 import type { GameEvent } from '../events';
-import { carriedWeight, carryCapacity, stackWeight } from '../inventory';
 import { addItem, countItem, removeItem } from '../state';
 import type { GameState } from '../state';
 
@@ -19,31 +18,12 @@ function hasInputs(state: GameState, recipe: RecipeDef): boolean {
 }
 
 /**
- * The weight the avatar would carry after crafting `recipe` once: what it
- * carries now, less the inputs, plus the output. Fuel and lamp oil are gauges
- * and weigh nothing (0005 item 18).
- */
-function weightAfterCraft(state: GameState, recipe: RecipeDef): number {
-  let weight = carriedWeight(state);
-  for (const input of recipe.inputs) {
-    weight -= stackWeight(input.item, input.count);
-  }
-  if (recipe.output.kind === 'item') {
-    weight += stackWeight(recipe.output.item, recipe.output.count);
-  }
-  return weight;
-}
-
-/**
  * Every `CraftAction` the player could take now.
  *
  * - One action for each recipe in `FIELD_RECIPES` whose inputs the avatar
  *   carries (design doc 7.1), in `FIELD_RECIPES` order.
- * - Only if the result fits the carry limit, counting the inputs as gone.
- *   The same test is applied to every recipe, including the two that fill a
- *   gauge. With the M1 recipes and weights no craft makes the load heavier,
- *   so this only ever refuses a craft when the avatar is already over the
- *   limit.
+ * - The carry limit is not enforced (decision note 0026): with no miner
+ *   there is no way to drop anything, and task T4 removes carrying.
  * - `ap` is `ACTION_COSTS.craft`.
  * - Does not change `state`.
  * - Lists actions as if the avatar had unlimited AP; the dispatcher in
@@ -55,9 +35,6 @@ export function legalCraftActions(state: GameState): CraftAction[] {
   const actions: CraftAction[] = [];
   for (const recipe of FIELD_RECIPES) {
     if (!hasInputs(state, recipe)) {
-      continue;
-    }
-    if (weightAfterCraft(state, recipe) > carryCapacity()) {
       continue;
     }
     actions.push({ type: 'craft', recipe: recipe.id, ap: ACTION_COSTS.craft });
@@ -75,7 +52,7 @@ export function legalCraftActions(state: GameState): CraftAction[] {
  * - Changes `state` in place (it is the dispatcher's private copy) and
  *   appends what happened to `events`.
  * - Does not spend the AP: the dispatcher has already taken `action.ap` off.
- * - Does not apply gravity or reveal: the dispatcher does that afterwards.
+ * - Does not reveal: the dispatcher does that afterwards.
  */
 export function applyCraft(state: GameState, action: CraftAction, events: GameEvent[]): void {
   const recipe = findRecipe(action.recipe);

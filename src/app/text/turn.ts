@@ -7,15 +7,15 @@ import { step } from './log';
 import type { LogEntry, Session } from './log';
 
 /**
- * Take `entry` (it must be on the menu now) and return the line the play
- * tool prints for it: "> what was chosen. What happened.". Throws, changing
- * nothing, if the entry is not legal (see `step`).
+ * Take `entry` (a listed choice, or a square action from squares.ts) and
+ * return the line the play tool prints for it: "> what was chosen. What
+ * happened.". Throws, changing nothing, if the entry is not legal (see
+ * `step`).
  */
 export function takeTurn(session: Session, entry: LogEntry): string {
   // The choice is described before it is taken: afterwards the state has
-  // moved on. In its 'result' form: no forecast of a fall, since the event
-  // lines say what did happen.
-  const text = describeChoice(session.state, entry, 'result');
+  // moved on.
+  const text = describeChoice(session.state, entry);
   const events = step(session, entry);
   return `> ${text}. ${describeEvents(session.state, events).join(' ')}`.trimEnd();
 }

@@ -1,4 +1,5 @@
-// The characters the map is drawn with. One character per cell.
+// The characters the map is drawn with. A square of the map is two
+// characters: what is on top of it, then how deep it is (see view.ts).
 //
 // They are in a file of their own because two files need them: view.ts draws
 // the map, and describe.ts names the characters in the line that says mineral
@@ -7,22 +8,34 @@
 import { BLOCKS } from '../../data';
 import type { BlockId } from '../../data';
 
-// Map characters for everything that is not a block.
-export const SYMBOL_AVATAR = '@';
+// First character of a square, for everything that is not a known block.
+/** A block the map has no character for (a block added to the data without one). */
 export const SYMBOL_UNKNOWN = '?';
-export const SYMBOL_OPEN = '.';
-export const SYMBOL_EDGE = 'X';
-export const SYMBOL_ITEMS = '*';
-export const SYMBOL_TORCH = '!';
-export const SYMBOL_SUPPORT = 'T';
-// The surface forest (issue #70): one character for each kind of surface cell.
+/** A tree. The second character then says what is known of the ground under it. */
 export const SYMBOL_TREE = 'Y';
-export const SYMBOL_STUMP = ',';
-export const SYMBOL_PATH = ':';
-export const SYMBOL_MEADOW = '"';
-export const SYMBOL_OUTCROP = '^';
+/** A square with no block left: the bedrock floor of the cube. */
+export const SYMBOL_FLOOR = 'X';
 /** Traced rock of a kind that has no character of its own in `TRACED_SYMBOLS`. */
 export const SYMBOL_TRACES = '%';
+
+// Second character of a square at ground level (depth 0), where there is no
+// depth to show.
+/** Open ground at depth 0: meadow, dirt path or stone outcrop. */
+export const MARK_GROUND = ' ';
+/** A stump at depth 0: a tree grows back on it. */
+export const MARK_STUMP = ',';
+/** Under a tree: the ground has never been seen. Blank, like ground level: nothing more is known. */
+export const MARK_UNSEEN = ' ';
+
+/**
+ * The second character of a dug square: its depth as one character. 1 to 9
+ * are the digits; 10 and deeper go on through the alphabet (a = 10, b = 11,
+ * ... w = 32), so that every square stays two characters wide.
+ */
+export function depthMark(depth: number): string {
+  // `toString(36)` writes a number with the digits 0-9 and then a-z.
+  return depth.toString(36);
+}
 
 // One character for each block that can be stored in the cube: the same
 // characters as tools/ascii.ts and the test helper.
@@ -38,6 +51,9 @@ const BLOCK_SYMBOLS: Partial<Record<BlockId, string>> = {
   unstableOre: 'U',
   relic: 'r',
   keystone: 'k',
+  // Left by a roof that fell in (and, later, by slumps): cheap, gives nothing.
+  rubble: ':',
+  sealed: '=',
 };
 
 // Rock the player has seen mineral traces on (decision note 0012) has a

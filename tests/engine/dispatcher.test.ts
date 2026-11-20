@@ -55,7 +55,6 @@ vi.mock('../../src/engine/actions/leave', () => ({
     state.blocks.fill(0);
     state.revealed.fill(1);
     state.structures.fill(1);
-    state.avatar.pos.x += 1;
     state.avatar.health -= 1;
     state.fuel -= 3;
     state.rng.s += 1;
@@ -77,9 +76,8 @@ vi.mock('../../src/engine/reveal', () => ({
   },
 }));
 
-// Coal in sight at the start (owner, PR #72) runs the real reveal on a copy;
-// with reveal faked it would find nothing in sight. Here it only records that
-// `createRun` calls it, and when.
+// Coal in sight at the start: here it only records that `createRun` calls
+// it, and when.
 vi.mock('../../src/engine/surface/generation', async () => ({
   ...(await vi.importActual<typeof import('../../src/engine/surface/generation')>(
     '../../src/engine/surface/generation',
@@ -123,6 +121,8 @@ function startState(ap: number): GameState {
     ap,
     fuel: 10,
     inventory: { timber: 1 },
+    // The helper would call the (faked) reveal and so add to `calls`.
+    revealTops: false,
   });
 }
 
@@ -143,7 +143,6 @@ describe('applyAction', () => {
 
     expect(hashState(state)).toBe(before);
     expect(state.blocks).toEqual(beforeBlocks);
-    expect(state.avatar.pos).toEqual({ x: 0, y: 0, z: -1 });
     expect(state.inventory).toEqual({ timber: 1 });
     expect(state.looseItems).toEqual([]);
     expect(state.ap).toBe(5);
@@ -152,7 +151,7 @@ describe('applyAction', () => {
     expect(result.state).not.toBe(state);
     expect(result.state.blocks).not.toBe(state.blocks);
     expect(result.state.fuel).toBe(7);
-    expect(result.state.avatar.pos.x).toBe(1);
+    expect(result.state.avatar.health).toBe(state.avatar.health - 1);
     expect(hashState(result.state)).not.toBe(before);
   });
 
@@ -161,9 +160,9 @@ describe('applyAction', () => {
     expect(calls).toEqual(['applyLeave', 'settle', 'updateReveal', 'updateMineralTraces']);
   });
 
-  it('calls gravity after a move as after anything else (issue #80: no kinds of fall)', () => {
-    // The move module is the real one: a walk east along the surface.
-    act(startState(5), { type: 'move', to: { x: 1, y: 0, z: -1 } });
+  it('calls gravity and reveal after a mine as after anything else', () => {
+    // The mine module is the real one.
+    act(startState(5), { type: 'mine', x: 1, y: 0 });
     expect(calls).toEqual(['settle', 'updateReveal', 'updateMineralTraces']);
   });
 
@@ -185,8 +184,8 @@ describe('applyAction', () => {
   it('rejects an action that is not in the legal list, and leaves the state alone', () => {
     const state = startState(5);
     const before = hashState(state);
-    // Mining is not legal here (its module is still a stub that offers nothing).
-    const mine: Action = { type: 'mine', target: { x: 0, y: 0, z: 0 }, ap: 2 };
+    // A mine of a square the cube does not have.
+    const mine: Action = { type: 'mine', x: 5, y: 0, ap: 2 };
     expect(() => applyAction(state, mine)).toThrow('Not a legal action');
     // The right kind of action with a wrong field is not legal either.
     expect(() => applyAction(state, { type: 'leave', ap: 0 })).toThrow('Not a legal action');
@@ -194,7 +193,7 @@ describe('applyAction', () => {
     expect(hashState(state)).toBe(before);
   });
 
-  it('rejects an action that costs more AP than the avatar has', () => {
+  it('rejects an action that costs more AP than there is left', () => {
     const state = startState(FAKE_LEAVE_COST - 1);
     expect(findActions(state, { type: 'leave' })).toEqual([]);
     expect(() => applyAction(state, LEAVE)).toThrow('Not a legal action');
@@ -298,8 +297,10 @@ describe('the act and findActions test helpers', () => {
   it('find a legal action from a partial description and apply it', () => {
     const state = startState(5);
     expect(findActions(state, { type: 'leave' })).toEqual([LEAVE]);
-    expect(findActions(state, { type: 'move', to: { x: 9, y: 9, z: 9 } })).toEqual([]);
+    expect(findActions(state, { type: 'mine', x: 9, y: 9 })).toEqual([]);
     expect(act(state, { type: 'leave' }).state.ap).toBe(5 - FAKE_LEAVE_COST);
-    expect(() => act(state, { type: 'mine' })).toThrow('found 0');
+    expect(() => act(state, { type: 'cutTree' })).toThrow('found 0');
+    // Every square of the 2 x 2 cube can be mined: too many to pick one.
+    expect(() => act(state, { type: 'mine' })).toThrow('found 4');
   });
 });

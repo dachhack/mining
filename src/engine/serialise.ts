@@ -7,7 +7,7 @@
 // the armed charges and the camps are sorted (with each stash like the
 // inventory).
 
-import type { CubeSize, Vec3 } from '../data';
+import type { CubeSize } from '../data';
 import {
   STATE_VERSION,
   canonicalArmed,
@@ -16,7 +16,6 @@ import {
   cellCount,
   compareStrings,
   inGrid,
-  isSurface,
 } from './state';
 import type { ArmedCharge, Camp, GameState, LooseItems, RunStatus } from './state';
 
@@ -44,7 +43,7 @@ export interface SerialisedState {
   /** One entry per surface cell (issue #70), run-length encoded like the cube arrays. */
   surface: number[];
   stumpAge: number[];
-  avatar: { pos: Vec3; health: number; air: number; resting: boolean };
+  avatar: { health: number; air: number; resting: boolean };
   ap: number;
   fuel: number;
   lampOil: number;
@@ -139,7 +138,6 @@ export function serialise(state: GameState): SerialisedState {
     surface: runLengthEncode(state.surface),
     stumpAge: runLengthEncode(state.stumpAge),
     avatar: {
-      pos: { x: state.avatar.pos.x, y: state.avatar.pos.y, z: state.avatar.pos.z },
       health: state.avatar.health,
       air: state.avatar.air,
       resting: state.avatar.resting,
@@ -162,8 +160,8 @@ export function serialise(state: GameState): SerialisedState {
 /**
  * Rebuild a GameState from the output of `serialise` (for example after
  * `JSON.parse`). Throws if the value is from another state version, its cube
- * arrays do not match its size, the avatar, an armed charge or a camp is
- * outside the cube, or the run status is not one this build knows. It does not check
+ * arrays do not match its size, an armed charge or a camp is outside the
+ * cube, or the run status is not one this build knows. It does not check
  * every field: a save edited by hand can still be wrong in other ways.
  */
 export function deserialise(saved: SerialisedState): GameState {
@@ -174,12 +172,6 @@ export function deserialise(saved: SerialisedState): GameState {
   }
   const size: CubeSize = { x: saved.size.x, y: saved.size.y, z: saved.size.z };
   const cells = cellCount(size);
-  const avatarPos = { x: saved.avatar.pos.x, y: saved.avatar.pos.y, z: saved.avatar.pos.z };
-  if (!inGrid(size, avatarPos) && !isSurface(size, avatarPos)) {
-    throw new Error(
-      `Saved state is damaged: the avatar is at (${avatarPos.x}, ${avatarPos.y}, ${avatarPos.z}), outside the cube`,
-    );
-  }
   // `as string` because a damaged save may hold a kind the type does not allow.
   const statusKind = saved.status.kind as string;
   if (statusKind !== 'active' && statusKind !== 'ended') {
@@ -220,7 +212,6 @@ export function deserialise(saved: SerialisedState): GameState {
     surface: runLengthDecode(saved.surface, size.x * size.y, 'surface'),
     stumpAge: runLengthDecode(saved.stumpAge, size.x * size.y, 'stumpAge'),
     avatar: {
-      pos: avatarPos,
       health: saved.avatar.health,
       air: saved.avatar.air,
       resting: saved.avatar.resting,

@@ -1,5 +1,5 @@
-// The tap map's camera (issues #66 and #69): which square window of a layer
-// is on screen, and how many cells it shows across. Plain numbers only, so
+// The tap map's camera (issues #66, #69 and #86): which square window of the
+// top-down map is on screen, and how many cells it shows across. Plain numbers only, so
 // the tests can check it without a browser.
 //
 // `x` and `y` are the cell at the window's top-left corner, and `cells` is
@@ -20,13 +20,13 @@ export interface Camera {
 /** How many cells the window shows across at the default zoom. */
 export const VIEW_CELLS = PREVIEW_MAP.viewCells;
 
-/** The size of a cube's layer, in cells. */
+/** The size of the map, in squares. */
 export interface LayerSize {
   x: number;
   y: number;
 }
 
-/** The fewest cells across (most zoomed in) and the most (a whole layer, at most). */
+/** The fewest cells across (most zoomed in) and the most (the whole map, at most). */
 export function zoomRange(size: LayerSize): { min: number; max: number } {
   const max = Math.min(PREVIEW_MAP.maxCells, Math.max(size.x, size.y));
   return { min: Math.min(PREVIEW_MAP.minCells, max), max };
@@ -143,25 +143,13 @@ export function cellAt(
   return { x: Math.floor(camera.x + px / cellPixels), y: Math.floor(camera.y + py / cellPixels) };
 }
 
-/**
- * The camera after the miner has moved to (x, y). A tap can only reach a
- * cell that is drawn, so the miner's four neighbours must all be on screen
- * (those inside the cube; there is nothing to reach beyond its edge).
- * If one is not, the map recentres on the miner at the same zoom; otherwise
- * it stays put, so the map does not jump about on every step (review of
- * PR #67). This holds at every zoom (issue #69).
- */
-export function followMiner(camera: Camera, x: number, y: number, size: LayerSize): Camera {
-  const neighbours = [
-    { x: x - 1, y },
-    { x: x + 1, y },
-    { x, y: y - 1 },
-    { x, y: y + 1 },
-  ];
-  const insideCube = (cell: { x: number; y: number }) =>
-    cell.x >= 0 && cell.y >= 0 && cell.x < size.x && cell.y < size.y;
-  const allReachable =
-    isInView(camera, x, y) &&
-    neighbours.every((cell) => !insideCube(cell) || isInView(camera, cell.x, cell.y));
-  return allReachable ? camera : centredOn(x, y, size, camera.cells);
+/** The camera showing the whole map, or as much of it as the zoom range allows. */
+export function wholeMap(size: LayerSize): Camera {
+  return clampCamera({ x: 0, y: 0, cells: Math.max(size.x, size.y) }, size);
+}
+
+/** The camera at zoom `cells`, centred on the middle of the map. */
+export function centredOnMiddle(size: LayerSize, cells: number = VIEW_CELLS): Camera {
+  const zoom = clampCells(cells, size);
+  return clampCamera({ x: (size.x - zoom) / 2, y: (size.y - zoom) / 2, cells: zoom }, size);
 }

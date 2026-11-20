@@ -1,34 +1,35 @@
-// Scenario tests for leaving from the surface (0005 item 23; design doc 9.4).
+// Scenario tests for leaving (0005 item 23; design doc 9.4). There is no
+// miner since issue #86, so leaving is offered at any time (decision note
+// 0026) until task T6 turns it into "close the mine".
 
 import { describe, expect, it } from 'vitest';
 import { ACTION_COSTS } from '../../src/data';
 import { applyAction, endShift, legalActions } from '../../src/engine';
 import { act, buildState, findActions } from './helpers';
 
-// A 3 x 3 x 2 stone cube with a one-cell pit in the middle of the top layer.
+// A 3 x 3 x 2 stone cube with a one-square pit in the middle.
 const LAYERS = [
   ['###', '#.#', '###'],
   ['###', '###', '###'],
 ];
 
 describe('leave', () => {
-  it('is legal on the surface, and costs what the data says', () => {
-    const state = buildState({ layers: LAYERS, avatar: { x: 1, y: 1, z: -1 } });
+  it('is always legal, and costs what the data says', () => {
+    const state = buildState({ layers: LAYERS });
     expect(findActions(state, { type: 'leave' })).toEqual([
       { type: 'leave', ap: ACTION_COSTS.leave },
     ]);
   });
 
-  it('is legal on the surface with no AP left, because it costs 0', () => {
+  it('is legal with no AP left, because it costs 0', () => {
     expect(ACTION_COSTS.leave).toBe(0);
     const state = buildState({ layers: LAYERS, ap: 0 });
     expect(findActions(state, { type: 'leave' })).toHaveLength(1);
   });
 
-  it('is not legal below the surface', () => {
-    const state = buildState({ layers: LAYERS, avatar: { x: 1, y: 1, z: 0 } });
-    expect(findActions(state, { type: 'leave' })).toEqual([]);
-    expect(() => applyAction(state, { type: 'leave', ap: ACTION_COSTS.leave })).toThrow(
+  it('is refused with the wrong cost', () => {
+    const state = buildState({ layers: LAYERS });
+    expect(() => applyAction(state, { type: 'leave', ap: ACTION_COSTS.leave + 1 })).toThrow(
       'Not a legal action',
     );
   });

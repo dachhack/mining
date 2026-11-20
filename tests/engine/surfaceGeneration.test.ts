@@ -2,7 +2,7 @@
 // checked over many seeds, and the surface data table.
 
 import { describe, expect, it } from 'vitest';
-import { AVATAR, BLOCKS, ITEMS, SURFACE, WORLD, validateSurfaceData } from '../../src/data';
+import { BLOCKS, ITEMS, SURFACE, WORLD, validateSurfaceData } from '../../src/data';
 import type { Vec3 } from '../../src/data';
 import { blockAt, createRun, isRevealed, surfaceKindAt } from '../../src/engine';
 import type { GameState } from '../../src/engine';
@@ -137,8 +137,8 @@ describe('surface generation (issue #70 item 2)', () => {
   });
 
   it('shows coal at the start on every seed (owner, PR #72)', () => {
-    // 1,000 seeds: the coal survey's range. Some coal is among the top-layer
-    // blocks the miner sees from its start cell.
+    // 1,000 seeds. Some coal is among the top blocks the player sees at the
+    // start: the layer-0 blocks on open ground (design doc 3.2).
     for (let seed = 1; seed <= 1000; seed += 1) {
       const state =
         seed <= runs.length ? (runs[seed - 1] as GameState) : createRun(seed, 'none', 'standard');
@@ -156,27 +156,17 @@ describe('surface generation (issue #70 item 2)', () => {
     }
   }, 60000);
 
-  it('at the start the top layer is known only round the start, and never under a tree', () => {
-    // Owner, after PR #72: "only show what has been discovered". Daylight no
-    // longer reveals the whole top layer; the miner's light (daylight on the
-    // surface) and reach do, as far as the lamp's radius.
-    const start = WORLD.startPosition;
+  it('at the start every top block is known, except under a tree', () => {
+    // Owner, issue #82: "Whole surface". Design doc v0.2 section 3.4.
     for (const state of runs.slice(0, 20)) {
-      let known = 0;
       for (let y = 0; y < state.size.y; y += 1) {
         for (let x = 0; x < state.size.x; x += 1) {
-          if (!isRevealed(state, { x, y, z: 0 })) {
-            continue;
-          }
-          known += 1;
-          expect(kindAt(state, x, y)).not.toBe(KINDS.tree.code);
-          const steps = Math.abs(x - start.x) + Math.abs(y - start.y);
-          expect(steps).toBeLessThanOrEqual(AVATAR.lightRadiusWithOil);
+          const underTree = kindAt(state, x, y) === KINDS.tree.code;
+          expect(isRevealed(state, { x, y, z: 0 }), `(${x}, ${y})`).toBe(!underTree);
+          // Nothing below a top block is known.
+          expect(isRevealed(state, { x, y, z: 1 })).toBe(false);
         }
       }
-      // The start clearing at least, and far less than the whole layer.
-      expect(known).toBeGreaterThanOrEqual(9);
-      expect(known).toBeLessThan(40);
     }
   });
 });
