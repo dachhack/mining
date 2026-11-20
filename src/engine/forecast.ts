@@ -1,11 +1,14 @@
 // The two hazard parts of the end-shift forecast (0014 item 4).
 //
-// Empty until the tells and forecast task (M2-6, issue #56) fills it in.
-// `forecastShift` in shift.ts already calls both functions and adds the
-// upkeep part, so that task does not need to edit shift.ts.
+// The flows of water and lava are built (issue #99). The countdowns are empty
+// until their tasks fill them in. `forecastShift` in shift.ts calls both
+// functions and adds the upkeep part.
 
 import type { Vec3 } from '../data';
+import { stepFluids } from './cube/fluids';
+import { newCubePhase } from './cube/phase';
 import type { GameEvent } from './events';
+import { knownCube } from './known';
 import type { GameState } from './state';
 
 /**
@@ -48,14 +51,23 @@ export function forecastCountdowns(_state: GameState): CountdownForecast[] {
 }
 
 /**
- * Contract for M2-6: part 2 of the forecast, the flows.
+ * Part 2 of the forecast, the flows: what step (b) of the coming cube phase
+ * will do to the water and lava the player sees (design doc 6 and 11).
  *
- * - Run steps (b) and (c) of the cube phase (`stepFluids`, then `stepGas`) on
- *   `knownCube(state)`, the copy in which every unrevealed cell is plain rock
- *   with nothing in it, with a fresh `newCubePhase()`, and return the events
- *   they emit.
+ * - Runs `stepFluids` on `knownCube(state)`, the copy in which every
+ *   unrevealed cell is plain rock with nothing in it, with a fresh
+ *   `newCubePhase()`, and returns the events it emits: `fluidMoved` for each
+ *   unit that will move, `fluidRemoved`, `lavaPoured`, `stoneFormed`, and
+ *   what lava or water will destroy.
+ * - Everything the flow rule reads is seen (depths, and what stands on the
+ *   squares), so this is what will happen, unless a slump in step (a) changes
+ *   the pit first.
+ * - Gas (step (c), `stepGas`) joins with T11.
  * - Does not change `state`.
  */
-export function forecastFlows(_state: GameState): GameEvent[] {
-  return [];
+export function forecastFlows(state: GameState): GameEvent[] {
+  const copy = knownCube(state);
+  const events: GameEvent[] = [];
+  stepFluids(copy, events, newCubePhase());
+  return events;
 }

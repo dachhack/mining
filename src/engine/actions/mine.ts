@@ -9,13 +9,16 @@
 //
 // Mining the roof of an underground space collapses it (breach.ts, task T9).
 //
-// Not here yet, because their hazards are not built: a flooded square costs 1
-// AP more and a square under lava cannot be mined (task T10), a camp's
-// squares cannot be mined (T12), and mining takes a support away (T8).
+// Water and lava (design doc 4.2; owner question 91; task T10): a square
+// that water stands on costs 1 AP more, and a square with lava on it cannot
+// be mined at all.
+//
+// Not here yet, because their rules are not built: a camp's squares cannot be
+// mined (T12), and mining takes a support away (T8).
 
-import { BLOCKS, SURFACE } from '../../data';
+import { BLOCKS, HAZARDS, SURFACE } from '../../data';
 import type { MineAction } from '../actionTypes';
-import { collapseSpaceUnder } from '../breach';
+import { collapseSpaceUnder, contentsOn } from '../breach';
 import { markWorked } from '../crew';
 import type { GameEvent } from '../events';
 import { depthAt, mayMine } from '../heightmap';
@@ -31,7 +34,9 @@ export type MineRefusalReason =
   /** The square has no block left: it shows the bedrock floor. */
   | 'bottom'
   /** The level rule: at least one face neighbour is higher than the square. */
-  | 'neighbourHigher';
+  | 'neighbourHigher'
+  /** Lava stands on the square (design doc 4.2). */
+  | 'lava';
 
 /** The answer of `mineCheck`. */
 export interface MineCheck {
@@ -45,7 +50,10 @@ export interface MineCheck {
    * shows the player (design doc 4.2: "says which neighbours are too high").
    */
   higherNeighbours: HigherNeighbour[];
-  /** What the mine costs in AP; `null` when it is not allowed. */
+  /**
+   * What the mine costs in AP; `null` when it is not allowed. On a square
+   * that water stands on it includes `HAZARDS.water.floodedMineExtraAp`.
+   */
   ap: number | null;
 }
 
@@ -54,8 +62,12 @@ export interface MineCheck {
  * at the AP left: `legalActions` in index.ts removes what costs too much.
  *
  * Everything read here is something the player sees: the tree, the depths of
- * the square and its neighbours, and the top block (which is known whenever
- * no tree hides it). Nothing below a top block is read.
+ * the square and its neighbours, the top block (which is known whenever no
+ * tree hides it), and the water and lava standing on the square. Nothing
+ * below a top block is read.
+ *
+ * When more than one thing stops the mine, the reason given is the first of:
+ * a tree, no block left, lava, the level rule.
  *
  * Throws if (x, y) is not a square. Does not change `state`.
  */
@@ -67,6 +79,19 @@ export function mineCheck(state: GameState, x: number, y: number): MineCheck {
     return { allowed: false, refusal: 'tree', higherNeighbours: [], ap: null };
   }
   const level = mayMine(state, x, y);
+  if (level.refusal === 'bottom') {
+    return {
+      allowed: false,
+      refusal: 'bottom',
+      higherNeighbours: [],
+      ap: null,
+    };
+  }
+  // What stands on the square, in the open: the player sees it.
+  const contents = contentsOn(state, x, y);
+  if (contents.lava > 0) {
+    return { allowed: false, refusal: 'lava', higherNeighbours: [], ap: null };
+  }
   if (!level.allowed) {
     return {
       allowed: false,
@@ -81,13 +106,14 @@ export function mineCheck(state: GameState, x: number, y: number): MineCheck {
     // bedrock have none, and neither is ever a top block above the floor).
     throw new Error(`The top block of square (${x}, ${y}) has no mine cost`);
   }
-  return { allowed: true, refusal: null, higherNeighbours: [], ap: cost };
+  const floodedExtraAp = contents.water > 0 ? HAZARDS.water.floodedMineExtraAp : 0;
+  return { allowed: true, refusal: null, higherNeighbours: [], ap: cost + floodedExtraAp };
 }
 
 /**
  * Every `MineAction` the player could take now: one for each square
  * `mineCheck` allows, row by row (y, then x), with `ap` set to the top
- * block's mine cost from `BLOCKS`.
+ * block's mine cost from `BLOCKS`, plus 1 on a flooded square.
  *
  * - Does not change `state`. Lists actions as if AP were unlimited; the
  *   dispatcher in index.ts removes the ones that cost too much, which is what
@@ -116,6 +142,8 @@ export function legalMineActions(state: GameState): MineAction[] {
  *   level deeper.
  * - The square is a worked square until the end of the shift (design doc
  *   5.2): a hazard that reaches it in the coming cube phase hurts the crew.
+ * - Water on the square stays on it: the square is 1 deeper, so the water's
+ *   surface is 1 lower.
  * - Puts the yield into the stockpile (`itemGained`). The stockpile has no
  *   limit (design doc 4.1), so the yield always arrives.
  * - A stump on the square is gone for good: its surface cell becomes meadow,

@@ -284,10 +284,10 @@ describe('breaking into a pocket: the contents come out onto the mined square', 
     for (const x of [1, 3]) {
       state = act(state, { type: 'mine', x, y: 0 }).state;
     }
-    // Nothing flows yet (task T10): mining is not refused and costs no more.
+    // Water stands on the square: the mine costs 1 AP more (design doc 4.2).
     const before = state.ap;
     state = act(state, { type: 'mine', x: 2, y: 0 }).state;
-    expect(before - state.ap).toBe(BLOCKS.rubble.mineCost);
+    expect(before - state.ap).toBe(BLOCKS.rubble.mineCost + HAZARDS.water.floodedMineExtraAp);
     expect(depthAt(state, 2, 0)).toBe(2);
     expect(contentsOn(state, 2, 0).water).toBe(3);
   });

@@ -272,6 +272,8 @@ export type { KnownCell, KnownSquare } from './known';
 // What stands on a square in the open (water, lava, gas), and the hazard
 // tells a known block shows. Views read both through `knownSquare`.
 export type { SquareContents } from './breach';
+// True in the cube phase of a shift in which lava flows (design doc 6.4).
+export { isLavaStep } from './cube/fluids';
 export type { HazardTells } from './tells';
 // The mine action's own check, with the reason for a refusal: what a tap on
 // a square the rules forbid shows the player (design doc 4.2).

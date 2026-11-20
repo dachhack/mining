@@ -263,7 +263,13 @@ export interface CaveInData {
 
 export interface WaterData {
   unitsPerCell: number;
-  floodedMoveExtraAp: number;
+  /** Extra AP to mine a square that water stands on (design doc 4.2). */
+  floodedMineExtraAp: number;
+  /**
+   * Water and lava move from a square to a neighbour only when the
+   * neighbour's level is at least this many levels lower (design doc 6.3).
+   */
+  flowMinDrop: number;
   pumpUnitsPerShift: number;
   pumpReach: number;
 }
@@ -277,6 +283,10 @@ export interface LavaData {
   unitsPerCell: number;
   flowEveryShifts: number;
   sourcePocketCellsOver: number;
+  /** Units a lava source gives on every lava step (design doc 6.2). */
+  sourceUnitsPerStep: number;
+  /** Units of lava that always stay on a source square. */
+  sourceKeepsUnits: number;
 }
 
 export interface ForecastData {

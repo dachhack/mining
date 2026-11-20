@@ -13,7 +13,9 @@ import type { CubePhase } from './phase';
  * 2. vents act;
  * 3. every entry of `state.armed` goes off (armed unstable ore and placed
  *    explosives; items 15 and 17), and the list is emptied;
- * 4. ignition (item 14), repeated until nothing new explodes.
+ * 4. ignition (item 14), repeated until nothing new explodes. Lava ignites
+ *    gas: `lavaOn(state, x, y)` in standing.ts says whether lava stands on a
+ *    square, as step (b) has just left it.
  *
  * Changes `state` in place and appends to `events`. Uses no randomness.
  * Damage to the crew goes through cube/phase.ts (design doc 5.2):

@@ -22,9 +22,9 @@
 // directly above the new top. A cell stores a count 0 to 255; the data
 // validator checks that the largest pocket fits.
 //
-// WHAT IS NOT HERE. Nothing spreads, flows, burns or hurts the crew yet:
-// water and lava on squares are task T10, gas and ignition T11. Until then
-// what a breach puts on a square stays there.
+// WHAT IS NOT HERE. What a breach puts on a square spreads in the cube phase:
+// water and lava by cube/fluids.ts (task T10). Gas and ignition are T11;
+// until then gas stays where a breach put it.
 
 import { BLOCKS, HAZARDS } from '../data';
 import type { Vec3 } from '../data';

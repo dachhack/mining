@@ -377,7 +377,9 @@ export function validateData(data: GameData): string[] {
   if (hazards.lava.unitsPerCell !== 1) {
     problems.push(`hazards.lava.unitsPerCell must be 1, but is ${hazards.lava.unitsPerCell}`);
   }
-  requireWholeAtLeast(hazards.water.floodedMoveExtraAp, 0, 'hazards.water.floodedMoveExtraAp');
+  requireWholeAtLeast(hazards.water.floodedMineExtraAp, 0, 'hazards.water.floodedMineExtraAp');
+  // With a drop of 1, a unit of water would move back and forth for ever.
+  requireWholeAtLeast(hazards.water.flowMinDrop, 2, 'hazards.water.flowMinDrop');
   requireWholeAtLeast(hazards.water.pumpUnitsPerShift, 1, 'hazards.water.pumpUnitsPerShift');
   requireWholeAtLeast(hazards.water.pumpReach, 0, 'hazards.water.pumpReach');
   requireWholeAtLeast(hazards.gas.pocketUnitsPerCell, 1, 'hazards.gas.pocketUnitsPerCell');
@@ -387,6 +389,9 @@ export function validateData(data: GameData): string[] {
   requireWholeAtLeast(hazards.gas.ventReach, 0, 'hazards.gas.ventReach');
   requireWholeAtLeast(hazards.lava.flowEveryShifts, 1, 'hazards.lava.flowEveryShifts');
   requireWholeAtLeast(hazards.lava.sourcePocketCellsOver, 0, 'hazards.lava.sourcePocketCellsOver');
+  requireWholeAtLeast(hazards.lava.sourceUnitsPerStep, 1, 'hazards.lava.sourceUnitsPerStep');
+  // A cell with no lava is never a source (state.ts), so a source keeps some.
+  requireWholeAtLeast(hazards.lava.sourceKeepsUnits, 1, 'hazards.lava.sourceKeepsUnits');
   const unseen = Object.hasOwn(data.blocks, hazards.forecast.unseenBlock)
     ? data.blocks[hazards.forecast.unseenBlock]
     : undefined;

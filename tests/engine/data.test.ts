@@ -449,12 +449,20 @@ describe('M2 data (decision note 0014)', () => {
         tightCellSolidSides: 3,
         supportHoldSolidSides: 2,
       },
-      water: { unitsPerCell: 1, floodedMoveExtraAp: 1, pumpUnitsPerShift: 3, pumpReach: 2 },
+      water: {
+        unitsPerCell: 1,
+        floodedMineExtraAp: 1,
+        flowMinDrop: 2,
+        pumpUnitsPerShift: 3,
+        pumpReach: 2,
+      },
       gas: { pocketUnitsPerCell: 4, ventReach: 2 },
       lava: {
         unitsPerCell: 1,
         flowEveryShifts: 2,
         sourcePocketCellsOver: 8,
+        sourceUnitsPerStep: 1,
+        sourceKeepsUnits: 1,
       },
       forecast: { unseenBlock: 'stone' },
     });
