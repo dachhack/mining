@@ -270,7 +270,7 @@ describe('a tap', () => {
   it('once the run is over, or off the map, nothing is marked', () => {
     const state = cube([['##']]);
     expect(tapOutcome(state, 5, 5).marks).toEqual(NO_MARKS);
-    state.status = { kind: 'ended', outcome: 'salvage', cause: 'left' };
+    state.status = { kind: 'ended', outcome: 'salvage', cause: 'mineClosed' };
     const outcome = tapOutcome(state, 0, 0);
     expect(outcome).toEqual({ entry: null, lines: ['The run has ended.'], marks: NO_MARKS });
   });

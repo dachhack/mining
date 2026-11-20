@@ -131,7 +131,7 @@ export interface ResolvedChoice {
  *   see squares.ts.
  * - 1, 2, ... are the lines of the action list in order, and 0 ends the
  *   shift.
- * - A name ("craft-fuel", "leave", "end") is the line of the list that has
+ * - A name ("craft-fuel", "close-mine", "end") is the line of the list that has
  *   that name now. If there is none, the choice is refused: a name never
  *   stands for some other action.
  */

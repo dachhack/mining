@@ -84,13 +84,6 @@ export function validateData(data: GameData): string[] {
     );
   }
 
-  // --- Items ---
-  for (const [itemId, item] of Object.entries(data.items)) {
-    if (!Number.isFinite(item.weight) || item.weight < 0) {
-      problems.push(`item "${itemId}" has a negative or invalid weight (${item.weight})`);
-    }
-  }
-
   // --- Blocks ---
   const blockCodes = new Map<number, string>();
   for (const [blockId, block] of Object.entries(data.blocks)) {
@@ -295,12 +288,6 @@ export function validateData(data: GameData): string[] {
     problems.push('crew.damage.lavaOn must be at least crew.damage.lavaBeside');
   }
 
-  // --- Avatar ---
-  const avatar = data.avatar;
-  if (!Number.isFinite(avatar.carryCapacity) || avatar.carryCapacity < 0) {
-    problems.push(`avatar.carryCapacity is negative or invalid (${avatar.carryCapacity})`);
-  }
-
   // --- Tells ---
   const traces = data.tells.mineralTraces;
   requireWholeAtLeast(traces.distance, 1, 'tells.mineralTraces.distance');
@@ -384,7 +371,6 @@ export function validateData(data: GameData): string[] {
   // --- Camps and camp tools ---
   const camps = data.camps;
   requireKnownItem(camps.kitItem, 'camps.kitItem');
-  requireWholeAtLeast(camps.maxKitsCarried, 1, 'camps.maxKitsCarried');
   requireWholeAtLeast(camps.halfWidth, 0, 'camps.halfWidth');
   requireWholeAtLeast(camps.height, 1, 'camps.height');
   requireWholeAtLeast(camps.foundMinAp, 0, 'camps.foundMinAp');
@@ -420,18 +406,6 @@ export function validateData(data: GameData): string[] {
     const where = `loadout "${loadoutId}"`;
     requireWholeAtLeast(loadout.fuel, 0, `${where}: fuel`);
     checkStacks(loadout.items, `${where}: items`);
-    let weight = 0;
-    for (const stack of loadout.items) {
-      const item = Object.hasOwn(data.items, stack.item) ? data.items[stack.item] : undefined;
-      if (item !== undefined) {
-        weight += item.weight * stack.count;
-      }
-    }
-    if (weight > avatar.carryCapacity) {
-      problems.push(
-        `${where} weighs ${weight}, more than the carry capacity of ${avatar.carryCapacity}`,
-      );
-    }
   }
   if (!Object.hasOwn(data.loadouts, data.defaultLoadoutId)) {
     problems.push(`defaultLoadoutId names an unknown loadout "${data.defaultLoadoutId}"`);

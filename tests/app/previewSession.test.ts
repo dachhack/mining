@@ -49,7 +49,7 @@ const brokenStore: SaveStore = {
   },
 };
 
-/** Take the listed choice with this name (as the play tool names it): "end", "leave", a craft. */
+/** Take the listed choice with this name (as the play tool names it): "end", "close-mine", a craft. */
 function take(session: ReturnType<typeof startRun>, name: string): string {
   const view = buildView(session.state, { deepestDepth: session.deepestDepth });
   const choice = view.choices.find((c) => c.name === name);
@@ -173,6 +173,29 @@ describe('saving and resuming', () => {
     expect(loaded.session).toBeNull();
     expect(loaded.note).toContain('could not be resumed');
     expect(store.data.has(SAVE_KEY)).toBe(false);
+  });
+
+  it('a save from before "close the mine" (log format 2, with a leave) is dropped, with a note', () => {
+    // What a build from before issue #92 left on the phone: log format 2, on
+    // the same engine version, with the old `leave` action.
+    expect(LOG_FORMAT).toBe(3);
+    const store = memoryStore();
+    saveRun(store, startRun(7));
+    const log = JSON.parse(store.data.get(SAVE_KEY) ?? '{}') as Record<string, unknown>;
+    log['format'] = 2;
+    log['actions'] = [{ type: 'endShift' }, { type: 'leave', ap: 0 }];
+    store.data.set(SAVE_KEY, JSON.stringify(log));
+
+    const loaded = loadRun(store);
+    expect(loaded.session).toBeNull();
+    expect(loaded.note).toContain('could not be resumed');
+    expect(store.data.has(SAVE_KEY)).toBe(false);
+
+    // The same log relabelled as format 3 does not replay either: the engine
+    // has no `leave` action.
+    log['format'] = LOG_FORMAT;
+    store.data.set(SAVE_KEY, JSON.stringify(log));
+    expect(loadRun(store).session).toBeNull();
   });
 
   it('text that is not a play log at all is dropped too', () => {

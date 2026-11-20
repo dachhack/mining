@@ -1,11 +1,11 @@
 {
-  "description": "The pit policy on seed 11: digs a terraced pit round the middle of the map under the level rule, cutting the trees in its way, crafts fuel from the coal it finds, and leaves (salvage) when the fuel is about to run out.",
+  "description": "The pit policy on seed 11: digs a terraced pit round the middle of the map under the level rule, cutting the trees in its way, crafts fuel from the coal it finds, and closes the mine (salvage) when the fuel is about to run out.",
   "seed": 11,
   "contractId": "none",
   "loadoutId": "standard",
   "recordedWith": "pit",
-  "expectedStatus": "ended: salvage, left",
-  "expectedHash": "ba621ce2c24f9f52",
+  "expectedStatus": "ended: salvage, mineClosed",
+  "expectedHash": "83dbd97dd681f31a",
   "decisions": [
     "mine 16,16 ap 2",
     "mine 16,15 ap 1",
@@ -131,6 +131,6 @@
     "cutTree 16,11 ap 2",
     "mine 16,11 ap 1",
     "endShift",
-    "leave ap 0"
+    "closeMine ap 0"
   ]
 }

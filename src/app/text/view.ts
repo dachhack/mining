@@ -28,12 +28,12 @@ import {
   itemDef,
 } from '../../data';
 import {
-  inventoryEntries,
   isRunActive,
   knownSquare,
   legalActions,
   previewCubePhase,
   shiftsUntilRegrowth,
+  stockpileEntries,
 } from '../../engine';
 import type { GameState, KnownSquare } from '../../engine';
 import { choiceName, depthName, describeChoice, runEndText } from './describe';
@@ -64,7 +64,7 @@ export interface ChoiceView {
   /** What the player types: 1, 2, ... for a listed action, 0 for "end shift". */
   number: number;
   /**
-   * What the player may type instead of the number: "craft-fuel", "leave",
+   * What the player may type instead of the number: "craft-fuel", "close-mine",
    * "end". Unlike the number it means the same at every step (see
    * `choiceName` in describe.ts).
    */
@@ -236,7 +236,6 @@ function onTopNote(square: KnownSquare): string | null {
   if (top.crackTimer !== null) things.push(`cracked (falls in ${top.crackTimer + 1})`);
   const structure = structureName(top.structure);
   if (structure !== null) things.push(`a ${structure}`);
-  if (top.looseItems.length > 0) things.push('loose items');
   if (things.length === 0) {
     return null;
   }
@@ -253,12 +252,13 @@ function hudLines(state: GameState, options: ViewOptions): string[] {
 
   const deepest = `Deepest square so far: ${depthName(options.deepestDepth)}`;
 
-  const held = inventoryEntries(state);
-  const inventory =
+  // The stockpile has no limit (design doc 4.1), so there is no "x of y".
+  const held = stockpileEntries(state);
+  const stockpile =
     held.length === 0
-      ? 'You have: nothing'
-      : 'You have: ' + held.map((s) => `${s.count} ${itemDef(s.item).name}`).join(', ');
-  return [gauges, deepest, inventory];
+      ? 'Stockpile: nothing'
+      : 'Stockpile: ' + held.map((s) => `${s.count} ${itemDef(s.item).name}`).join(', ');
+  return [gauges, deepest, stockpile];
 }
 
 /**

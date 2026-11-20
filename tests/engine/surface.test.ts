@@ -10,8 +10,6 @@
 import { describe, expect, it } from 'vitest';
 import { BLOCKS, SURFACE } from '../../src/data';
 import {
-  carriedWeight,
-  carryCapacity,
   createRun,
   deserialise,
   endShift,
@@ -21,10 +19,11 @@ import {
   knownSquare,
   previewCubePhase,
   serialise,
+  shiftsUntilRegrowth,
   stumpAgeAt,
 } from '../../src/engine';
 import type { GameState } from '../../src/engine';
-import { addLooseItems, removeLooseItems } from '../../src/engine/state';
+import { setBlock } from '../../src/engine/state';
 import { act, buildState, findActions } from './helpers';
 
 const TIMBER = SURFACE.cutTree.yields[0]?.count ?? 0;
@@ -83,7 +82,7 @@ describe('cutting a tree (design doc 3.2 and 4.1)', () => {
     expect(hasTree(after, EAST)).toBe(false);
     expect(hasStump(after, EAST)).toBe(true);
     expect(stumpAgeAt(after, EAST)).toBe(0);
-    expect(after.inventory).toEqual({ timber: TIMBER });
+    expect(after.stockpile).toEqual({ timber: TIMBER });
     expect(after.ap).toBe(state.ap - SURFACE.cutTree.ap);
     expect(events).toEqual([
       { type: 'treeCut', pos: EAST },
@@ -93,12 +92,11 @@ describe('cutting a tree (design doc 3.2 and 4.1)', () => {
     expect(knownSquare(after, 2, 1).top?.block).toBe(BLOCKS.coalSeam.code);
   });
 
-  it('gives the timber even over the carry limit (decision note 0026)', () => {
-    const full = forestState({ inventory: { stone: 10 } });
-    expect(carriedWeight(full)).toBe(carryCapacity());
+  it('the timber goes into the stockpile, which has no limit (issue #92)', () => {
+    // Far past the old carry capacity (10 stone filled it).
+    const full = forestState({ stockpile: { stone: 500, timber: 300 } });
     const after = act(full, { type: 'cutTree', x: 2, y: 1 }).state;
-    expect(after.inventory).toEqual({ stone: 10, timber: TIMBER });
-    expect(after.looseItems).toEqual([]);
+    expect(after.stockpile).toEqual({ stone: 500, timber: 300 + TIMBER });
   });
 });
 
@@ -138,15 +136,42 @@ describe('regrowth (design doc 3.2)', () => {
     expect(previewCubePhase(state).regrowth).toEqual([]);
   });
 
-  it('waits while loose items lie on the stump', () => {
-    // Nothing leaves loose items today (decision note 0026); the rule is
-    // kept until task T4 removes them, so the pile is put there by hand.
-    let state = cutEastTree();
-    addLooseItems(state, EAST, 'timber', 1);
-    state = endShifts(state, N + 1);
+  it('rule 1: a stump whose ground was taken without a mine does not grow, and counts again from 0', () => {
+    // A mine turns a stump to meadow (the test above). A hazard that takes
+    // the layer-0 block (a slump, an explosion: tasks T8 and T11) does not,
+    // so the stump is still there with no ground under it. No hazard is
+    // built yet, so the block is taken by hand here (issue #88 item 3).
+    let state = endShifts(cutEastTree(), 3);
+    expect(stumpAgeAt(state, EAST)).toBe(3);
+    setBlock(state, UNDER_EAST, BLOCKS.air.code);
+
+    // With no ground the count goes back to 0 and stays there, however long.
+    expect(shiftsUntilRegrowth(state, EAST)).toBeNull();
+    state = endShift(state).state;
     expect(hasStump(state, EAST)).toBe(true);
-    expect(stumpAgeAt(state, EAST)).toBe(N);
-    removeLooseItems(state, EAST, 'timber', 1);
+    expect(stumpAgeAt(state, EAST)).toBe(0);
+    state = endShifts(state, N + 3);
+    expect(hasStump(state, EAST)).toBe(true);
+    expect(hasTree(state, EAST)).toBe(false);
+    expect(stumpAgeAt(state, EAST)).toBe(0);
+    expect(previewCubePhase(state).regrowth).toEqual([]);
+
+    // Ground again (rubble coming to rest, say; put there by hand): the
+    // count starts from 0, so the tree takes the full N shifts.
+    setBlock(state, UNDER_EAST, BLOCKS.rubble.code);
+    expect(shiftsUntilRegrowth(state, EAST)).toBe(N);
+    state = endShifts(state, N - 1);
+    expect(hasStump(state, EAST)).toBe(true);
+    expect(stumpAgeAt(state, EAST)).toBe(N - 1);
+    expect(hasTree(endShift(state).state, EAST)).toBe(true);
+  });
+
+  it('nothing holds a tree back once its count is full: there are no loose items (issue #92)', () => {
+    // Before issue #92 a pile of loose items on a stump made the tree wait.
+    // Nothing can lie on a stump now; a full stockpile does not matter.
+    const state = endShifts(cutEastTree(), N - 1);
+    state.stockpile = { timber: 500, stone: 500 };
+    expect(previewCubePhase(state).regrowth).toEqual([EAST]);
     expect(hasTree(endShift(state).state, EAST)).toBe(true);
   });
 

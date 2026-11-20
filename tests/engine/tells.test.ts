@@ -179,7 +179,7 @@ describe('what stays on the map (owner, questions 51 and 54)', () => {
     state = act(state, { type: 'mine', x: 2, y: 0 }).state;
     expect(showsMineralTraces(state, { x: 2, y: 0, z: 1 })).toBe(true);
     state = act(state, { type: 'mine', x: 1, y: 0 }).state; // the ore
-    expect(state.inventory['rawIronOre']).toBe(1);
+    expect(state.stockpile['rawIronOre']).toBe(1);
     expect(showsMineralTraces(state, { x: 2, y: 0, z: 1 })).toBe(true);
     // The far top block was never within 2 steps and still shows nothing.
     expect(showsMineralTraces(state, top(4))).toBe(false);

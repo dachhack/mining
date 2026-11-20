@@ -17,8 +17,8 @@ import type { CubePhase } from './phase';
  * Changes `state` in place and appends to `events`. Uses no randomness.
  * Damage to the crew goes through `recordDamage(state, phase, 'slump', ...)`
  * for the square a block slumps from and the square it comes to rest on
- * (design doc 5.2); structures, loose items and camps in a falling block's
- * way go through the helpers in destroy.ts.
+ * (design doc 5.2); structures and camps in a falling block's way go through
+ * the helpers in destroy.ts.
  */
 export function stepCaveIns(_state: GameState, _events: GameEvent[], _phase: CubePhase): void {
   // Nothing yet.

@@ -57,11 +57,11 @@ describe('golden runs', () => {
   // A hash only pins a rule if the run exercises it. The tests below fail if
   // a new recording no longer covers what its file is there for.
 
-  it('pit-seed-11.json digs a terraced pit, cuts trees, crafts fuel and leaves', () => {
+  it('pit-seed-11.json digs a terraced pit, cuts trees, crafts fuel and closes the mine', () => {
     const golden = loadGolden('pit-seed-11.json');
     expect(golden.decisions.some((decision) => decision.startsWith('cutTree'))).toBe(true);
     expect(golden.decisions.some((decision) => decision.startsWith('craft fuel'))).toBe(true);
-    expect(golden.decisions[golden.decisions.length - 1]).toMatch(/^leave/);
+    expect(golden.decisions[golden.decisions.length - 1]).toBe('closeMine ap 0');
 
     const state = replayFile('pit-seed-11.json');
     let deepest = 0;

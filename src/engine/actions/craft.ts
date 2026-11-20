@@ -7,7 +7,7 @@ import type { GameEvent } from '../events';
 import { addItem, countItem, removeItem } from '../state';
 import type { GameState } from '../state';
 
-/** True if the avatar carries every input of `recipe`. */
+/** True if the stockpile holds every input of `recipe`. */
 function hasInputs(state: GameState, recipe: RecipeDef): boolean {
   for (const input of recipe.inputs) {
     if (countItem(state, input.item) < input.count) {
@@ -20,13 +20,13 @@ function hasInputs(state: GameState, recipe: RecipeDef): boolean {
 /**
  * Every `CraftAction` the player could take now.
  *
- * - One action for each recipe in `FIELD_RECIPES` whose inputs the avatar
- *   carries (design doc 7.1), in `FIELD_RECIPES` order.
- * - The carry limit is not enforced (decision note 0026): with no miner
- *   there is no way to drop anything, and task T4 removes carrying.
+ * - One action for each recipe in `FIELD_RECIPES` whose inputs are in the
+ *   stockpile (design doc 7.1), in `FIELD_RECIPES` order.
+ * - The stockpile has no limit (design doc 4.1), so a craft is never refused
+ *   for want of room.
  * - `ap` is `ACTION_COSTS.craft`.
  * - Does not change `state`.
- * - Lists actions as if the avatar had unlimited AP; the dispatcher in
+ * - Lists actions as if there were unlimited AP; the dispatcher in
  *   index.ts removes the ones that cost more than the AP left.
  * - The order depends only on `FIELD_RECIPES`, so it is the same for any two
  *   states with the same hash.
@@ -46,8 +46,8 @@ export function legalCraftActions(state: GameState): CraftAction[] {
  * Carry out `action`, which the dispatcher has already checked is in the
  * legal list.
  *
- * - Removes the inputs, emits `crafted`, then adds the output: an item
- *   (`itemGained`) or an amount on the fuel gauge (`fuelChanged`, reason
+ * - Takes the inputs from the stockpile, emits `crafted`, then adds the
+ *   output: an item into the stockpile (`itemGained`) or an amount on the fuel gauge (`fuelChanged`, reason
  *   `crafted`).
  * - Changes `state` in place (it is the dispatcher's private copy) and
  *   appends what happened to `events`.

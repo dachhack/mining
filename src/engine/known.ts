@@ -2,7 +2,7 @@
 // (0014 item 4).
 //
 // "The player sees the current contents (water, gas, lava, cracks, timers,
-// structures, loose items) of every revealed cell, lit or not. The contents
+// structures) of every revealed cell. The contents
 // of unrevealed cells are never shown, and no legal action or its cost
 // depends on them."
 //
@@ -19,7 +19,7 @@
 //   depend on an unrevealed cell, by construction.
 
 import { BLOCKS, HAZARDS, NO_STRUCTURE, WORLD } from '../data';
-import type { BlockId, ItemStack, Vec3 } from '../data';
+import type { BlockId, Vec3 } from '../data';
 import { depthAt } from './heightmap';
 import {
   armedAt,
@@ -29,11 +29,9 @@ import {
   cloneState,
   crackTimerAt,
   gasAt,
-  inGrid,
   isLavaSource,
   isRevealed,
   lavaAt,
-  looseItemsAt,
   structureAt,
   waterAt,
 } from './state';
@@ -62,8 +60,6 @@ export interface KnownCell {
   structure: number;
   /** What is armed here (unstable ore, or a placed explosive), or `null`. */
   armed: ArmedKind | null;
-  /** Loose items lying here, sorted by item id. */
-  looseItems: ItemStack[];
 }
 
 /**
@@ -86,7 +82,6 @@ export function knownCell(state: GameState, pos: Vec3): KnownCell | null {
     crackTimer: crackTimerAt(state, pos),
     structure: structureAt(state, pos),
     armed: armedAt(state, pos),
-    looseItems: looseItemsAt(state, pos),
   };
 }
 
@@ -143,8 +138,7 @@ export function knownSquare(state: GameState, x: number, y: number): KnownSquare
 /**
  * A copy of `state` holding only what the player has seen: every unrevealed
  * cell is plain rock (`HAZARDS.forecast.unseenBlock`) with nothing in it: no
- * water, lava, gas, crack, structure, loose items or armed charge (0014 item
- * 4). Revealed cells, the gauges and the camps are as they are.
+ * water, lava, gas, crack, structure or armed charge (0014 item 4). Revealed cells, the gauges and the camps are as they are.
  *
  * The forecast runs steps (b) and (c) of the cube phase on this copy. Two
  * states that differ only in unrevealed cells give the same copy, apart from
@@ -172,11 +166,6 @@ export function knownCube(state: GameState): GameState {
     // only ever seen on a revealed block, so this is already 0.
     copy.tracesSeen[index] = 0;
   }
-  // Loose items lie in the grid or on the surface; the surface is always seen.
-  copy.looseItems = copy.looseItems.filter(
-    (loose) =>
-      !inGrid(copy.size, loose.pos) || copy.revealed[cellIndex(copy.size, loose.pos)] === 1,
-  );
   copy.armed = copy.armed.filter((charge) => copy.revealed[cellIndex(copy.size, charge.pos)] === 1);
   return copy;
 }

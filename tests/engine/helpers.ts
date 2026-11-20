@@ -28,7 +28,6 @@ import type {
   ArmedCharge,
   Camp,
   GameState,
-  LooseItems,
   RunStatus,
   Square,
   StepResult,
@@ -37,7 +36,6 @@ import {
   blankState,
   canonicalArmed,
   canonicalCamps,
-  canonicalLooseItems,
   cellIndex,
   setCrackTimer,
   setGas,
@@ -95,9 +93,8 @@ export interface BuildStateOptions {
   /** Default: 10, enough that tests which do not care never run out. */
   fuel?: number;
   shift?: number;
-  /** Item id -> count. Default: nothing carried. */
-  inventory?: Record<string, number>;
-  looseItems?: LooseItems[];
+  /** What the stockpile holds: item id -> count. Default: nothing. */
+  stockpile?: Record<string, number>;
   /** Cells with a support in them. */
   supports?: Vec3[];
   /** Any other structure, by its id in src/data/structures.ts. */
@@ -219,9 +216,7 @@ export function buildState(options: BuildStateOptions): GameState {
   state.ap = options.ap ?? SHIFT.apPerShift;
   state.fuel = options.fuel ?? 10;
   state.shift = options.shift ?? SHIFT.firstShiftNumber;
-  state.inventory = { ...(options.inventory ?? {}) };
-  // Merged and sorted, as the engine keeps the list.
-  state.looseItems = canonicalLooseItems(options.looseItems ?? []);
+  state.stockpile = { ...(options.stockpile ?? {}) };
   if (options.status !== undefined) {
     state.status = { ...options.status };
   }

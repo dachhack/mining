@@ -59,16 +59,16 @@ describe('simulate', () => {
     expect(total(report.aggregate.outcomes)).toBe(6);
     expect(total(report.aggregate.causes)).toBe(6);
     expect(Object.keys(report.aggregate.outcomes)).toEqual(['salvage', 'lost', 'unfinished']);
-    expect(Object.keys(report.aggregate.causes)).toEqual(['left', 'outOfFuel', 'shiftCap']);
+    expect(Object.keys(report.aggregate.causes)).toEqual(['mineClosed', 'outOfFuel', 'shiftCap']);
   });
 
   it('lists every recipe and every item, so unused ones show as 0', () => {
     const recipeIds = FIELD_RECIPES.map((recipe) => recipe.id);
     expect(Object.keys(report.aggregate.recipesUsed)).toEqual(recipeIds);
-    expect(Object.keys(report.aggregate.finalInventoryMean)).toEqual(Object.keys(ITEMS));
+    expect(Object.keys(report.aggregate.finalStockpileMean)).toEqual(Object.keys(ITEMS));
     for (const entry of report.runs) {
       expect(Object.keys(entry.recipesUsed)).toEqual(recipeIds);
-      expect(Object.keys(entry.finalInventory)).toEqual(Object.keys(ITEMS));
+      expect(Object.keys(entry.finalStockpile)).toEqual(Object.keys(ITEMS));
     }
   });
 
@@ -113,13 +113,13 @@ describe('playRun', () => {
   it('measures a pit run', () => {
     const metrics = pit11;
     expect(metrics.outcome).toBe('salvage');
-    expect(metrics.cause).toBe('left');
+    expect(metrics.cause).toBe('mineClosed');
     // The pit goes down by terraces: several levels, many more blocks.
     expect(metrics.deepestSquare).toBeGreaterThanOrEqual(4);
     expect(metrics.blocksMined).toBeGreaterThan(10 * metrics.deepestSquare);
     expect(metrics.shareOfCubeMined).toBeCloseTo(metrics.blocksMined / 32768, 10);
     expect(metrics.treesCut).toBeGreaterThan(0);
-    // It leaves with the fuel nearly gone, never having started a shift on 0.
+    // It closes the mine with the fuel nearly gone, never having started a shift on 0.
     expect(metrics.fuelAtEnd).toBe(1);
     expect(metrics.shiftsAtZeroFuel).toBe(0);
     expect(metrics.damageTaken).toBe(0);
@@ -182,7 +182,7 @@ describe('playRun', () => {
     expect(metrics.fuelAtEnd).toBe(0);
     expect(metrics.shiftsPlayed).toBe(25);
     expect(metrics.shiftsAtZeroFuel).toBe(1);
-    // The random policy never leaves, and hardly ever goes a second level down.
+    // The random policy never closes the mine, and hardly ever goes a second level down.
     expect(metrics.deepestSquare).toBeGreaterThanOrEqual(1);
   });
 

@@ -12,7 +12,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { BLOCKS, CREW, SHIFT, SURFACE, WORLD } from '../../src/data';
+import { ACTION_COSTS, BLOCKS, CREW, SHIFT, SURFACE, WORLD } from '../../src/data';
 import type { BlockId } from '../../src/data';
 import { ENGINE_VERSION, applyAction, createRun, endShift, hashState } from '../../src/engine';
 import type { GameState } from '../../src/engine';
@@ -214,7 +214,7 @@ describe('the top-down map', () => {
     expect(view.hud[0]).not.toContain('Lamp oil');
     expect(view.hud[0]).toContain(`Crew health ${CREW.startHealth}/${CREW.startHealth}`);
     expect(view.hud[1]).toBe('Deepest square so far: depth 3');
-    expect(view.hud[2]).toBe('You have: 2 Timber');
+    expect(view.hud[2]).toBe('Stockpile: 2 Timber');
   });
 });
 
@@ -229,7 +229,7 @@ describe('the action list', () => {
     // Hundreds of squares can be mined or cut; none of them is a line.
     expect(view.squares?.mines).toBeGreaterThan(100);
     expect(view.squares?.cuts).toBeGreaterThan(100);
-    expect(view.choices.map((choice) => choice.name)).toEqual(['leave', 'end']);
+    expect(view.choices.map((choice) => choice.name)).toEqual(['close-mine', 'end']);
     expect(view.choices.map((choice) => choice.number)).toEqual([1, 0]);
     const text = renderView(view);
     expect(text).toContain(ACTIONS_HEADING);
@@ -288,7 +288,7 @@ describe('mine and cut by name', () => {
     expect(parseSquareChoice('mine-3,4')).toEqual({ kind: 'mine', x: 3, y: 4 });
     expect(parseSquareChoice('cut 10,31')).toEqual({ kind: 'cut', x: 10, y: 31 });
     expect(parseSquareChoice('mine 3')).toBeNull();
-    expect(parseSquareChoice('leave')).toBeNull();
+    expect(parseSquareChoice('close-mine')).toBeNull();
   });
 
   it('splits a chain at its commas but keeps a square whole', () => {
@@ -433,7 +433,10 @@ describe('mine and cut by name', () => {
     expect(resolveChoice(state, 'e').entry).toBeNull();
     expect(resolveChoice(state, 'end').entry).toEqual({ type: 'endShift' });
     expect(resolveChoice(state, '0').entry).toEqual({ type: 'endShift' });
-    expect(resolveChoice(state, 'leave').entry).toEqual({ type: 'leave', ap: 0 });
+    expect(resolveChoice(state, 'close-mine').entry).toEqual({ type: 'closeMine', ap: 0 });
+    // The old name is gone, and half a name is not a name.
+    expect(resolveChoice(state, 'leave').entry).toBeNull();
+    expect(resolveChoice(state, 'close').entry).toBeNull();
   });
 });
 
@@ -587,11 +590,17 @@ describe('the play log', () => {
     expect(direct.output).toBe(viewText(again.state, again.deepestDepth));
     expect(again.deepestDepth).toBe(1);
 
-    // Leaving ends the run and writes the outcome, which --replay checks.
-    const left = runCli(['--log', path, '--do', 'leave']);
-    expect(left.output).toContain('=== RUN ENDED: you left the mine alive');
+    // Closing the mine ends the run and writes the outcome, which --replay
+    // checks.
+    const closed = runCli(['--log', path, '--do', 'close-mine']);
+    expect(closed.output).toContain('> Close the mine: ends the run alive');
+    expect(closed.output).toContain('=== RUN ENDED: you closed the mine: the run ended alive');
     const finished = loadLog(path);
+    expect(finished.actions[finished.actions.length - 1]).toEqual({ type: 'closeMine', ap: 0 });
     expect(finished.outcome?.outcome).toBe('salvage');
+    expect(finished.outcome?.cause).toBe('mineClosed');
+    // The outcome lists the stockpile: the starting timber and the cut tree's.
+    expect(finished.outcome?.stockpile).toContainEqual({ item: 'timber', count: 4 });
     expect(finished.outcome?.deepestDepth).toBe(1);
     expect(finished.outcome?.stateHash).toBe(hashState(replayLog(finished).state));
     const replay = runCli(['--replay', path]);
@@ -602,7 +611,7 @@ describe('the play log', () => {
 
   it('reports a replay that ends somewhere else', () => {
     const path = tempFile('run.json');
-    runCli(['--seed', '7', '--log', path, '--do', 'leave']);
+    runCli(['--seed', '7', '--log', path, '--do', 'close-mine']);
     const text = readFileSync(path, 'utf8');
     const log = JSON.parse(text) as { outcome: { stateHash: string } };
     log.outcome.stateHash = '0000000000000000';
@@ -676,11 +685,23 @@ describe('the help text', () => {
     expect(help).toContain(`Cut any tree (${SURFACE.cutTree.ap} AP) for 2 Timber`);
     expect(help).toContain('A tree hides the ground under it');
     expect(help).toContain('the roof of one');
-    expect(help).toContain('There is no\n    carry limit');
-    expect(help).toContain('"leave" is always on the list');
+    expect(help).toContain('goes straight into the stockpile');
+    expect(help).toContain('The stockpile has no limit');
+    expect(help).toContain('close-mine               close the mine (ends the run alive)');
+    expect(help).toContain(
+      `"close-mine" is always on the list and costs ${ACTION_COSTS.closeMine} AP`,
+    );
     expect(help).toContain('Hazards (pit walls that slump, water, lava, gas)');
     // Nothing of the miner is left in it.
-    for (const gone of ['mine-down', 'torch-here', '--radius', 'drop-all', 'You never fall']) {
+    for (const gone of [
+      'mine-down',
+      'torch-here',
+      '--radius',
+      'drop-all',
+      'You never fall',
+      'carry limit',
+      '"leave"',
+    ]) {
       expect(help).not.toContain(gone);
     }
   });

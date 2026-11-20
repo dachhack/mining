@@ -4,8 +4,8 @@
   "contractId": "none",
   "loadoutId": "standard",
   "recordedWith": "pit",
-  "expectedStatus": "ended: salvage, left",
-  "expectedHash": "38937b2c2bf2fdc6",
+  "expectedStatus": "ended: salvage, mineClosed",
+  "expectedHash": "f633139ff36dccfd",
   "decisions": [
     "mine 16,16 ap 2",
     "mine 16,15 ap 1",
@@ -271,6 +271,6 @@
     "cutTree 15,21 ap 2",
     "cutTree 17,21 ap 2",
     "endShift",
-    "leave ap 0"
+    "closeMine ap 0"
   ]
 }

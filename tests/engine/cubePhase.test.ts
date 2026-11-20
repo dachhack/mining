@@ -550,7 +550,7 @@ describe('worked squares (design doc 5.2)', () => {
   });
 
   it('crafting works no square', () => {
-    const state = fieldState({ inventory: { coal: 5, timber: 5 } });
+    const state = fieldState({ stockpile: { coal: 5, timber: 5 } });
     const craft = legalActions(state).find((action) => action.type === 'craft');
     if (craft === undefined) {
       throw new Error('Nothing can be crafted');

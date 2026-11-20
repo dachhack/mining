@@ -29,6 +29,14 @@ import { buildView, forecastLine, hazardsLine, renderEndedLines } from './text/v
 import type { ChoiceView, PlayerView } from './text/view';
 
 /**
+ * What the player is asked before the mine is closed. Closing the mine costs
+ * nothing and ends the run, so the phone asks first: a stray tap on the
+ * button must not end a run (issue #92).
+ */
+const CLOSE_MINE_QUESTION =
+  'Close the mine? This ends the run now, alive, with what is in the stockpile.';
+
+/**
  * The browser's `localStorage`, or `null` if it cannot be used. Merely
  * reading `window.localStorage` throws in some browsers when storage is
  * turned off, hence the try/catch.
@@ -210,9 +218,10 @@ export function mountPreview(root: HTMLElement): void {
         element('span', 'choice-meta', choiceMeta(choice)),
       );
       button.addEventListener('click', () => {
-        // Leaving ends the run: ask first, a mis-tap would lose it.
-        const leaving = choice.entry.type === 'leave';
-        if (leaving && !window.confirm('Leave the mine? This ends the run.')) {
+        // Closing the mine ends the run: ask first, so that a stray tap
+        // does not end it (issue #92).
+        const closing = choice.entry.type === 'closeMine';
+        if (closing && !window.confirm(CLOSE_MINE_QUESTION)) {
           return;
         }
         take(choice.entry, true);

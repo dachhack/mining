@@ -1,4 +1,4 @@
-// Camp actions: found, rest, stash, decommission (design doc 8; 0014 items
+// Camp actions: found, rest, decommission (design doc 8; 0014 items
 // 26 to 28). Camp recipes are crafted with the ordinary `craft` action
 // (actions/craft.ts).
 //
@@ -11,12 +11,13 @@ import type { GameEvent } from '../events';
 import type { GameState } from '../state';
 
 /**
- * Contract for M2-7: every `foundCamp`, `rest`, `stashPut`, `stashTake` and
- * `decommissionCamp` action the player could take now, in that order.
+ * Contract for M2-7: every `foundCamp`, `rest` and `decommissionCamp` action
+ * the player could take now, in that order. There is no stash: the stockpile
+ * has no limit (design doc 8).
  *
  * - Founding and resting cost all the AP left in the shift (at least
- *   `CAMPS.foundMinAp` / `CAMPS.restMinAp`), so their `ap` is `state.ap`; the
- *   others take theirs from `ACTION_COSTS`.
+ *   `CAMPS.foundMinAp` / `CAMPS.restMinAp`), so their `ap` is `state.ap`;
+ *   decommissioning takes its from `ACTION_COSTS`.
  * - Does not change `state`, and depends on revealed cells only (0014 item 3).
  */
 export function legalCampActions(_state: GameState): CampAction[] {

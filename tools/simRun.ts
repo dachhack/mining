@@ -12,7 +12,7 @@ import {
   createRun,
   endShift,
   hashState,
-  inventoryEntries,
+  stockpileEntries,
   isRunActive,
   legalActions,
   visibleMineralTraces,
@@ -40,7 +40,7 @@ export interface RunMetrics {
   /** 'salvage' or 'lost' as the engine reports them, or 'unfinished' at the shift cap. */
   outcome: string;
   /**
-   * 'left' or 'outOfFuel' as the engine reports them; 'shiftCap' for a
+   * 'mineClosed' or 'outOfFuel' as the engine reports them; 'shiftCap' for a
    * run stopped at `maxShifts`; or 'cutShort' for one stopped at
    * `maxDecisions` (which `npm run sim` never sets, so it never prints it).
    */
@@ -82,7 +82,7 @@ export interface RunMetrics {
   /** Shifts that began with 0 fuel, that is, fuel was 0 after the upkeep before them. */
   shiftsAtZeroFuel: number;
   /** Item id -> count carried at the end. Every item is listed, so absent ones show 0. */
-  finalInventory: Record<string, number>;
+  finalStockpile: Record<string, number>;
   /** `hashState` of the final state. */
   finalHash: string;
 }
@@ -296,9 +296,9 @@ export function playRun(options: PlayOptions): RunResult {
   const shiftsStarted = state.shift - SHIFT.firstShiftNumber + 1;
   const shiftsPlayed = hitShiftCap ? options.maxShifts : shiftsStarted;
 
-  const finalInventory = zeroCounts(Object.keys(ITEMS));
-  for (const entry of inventoryEntries(state)) {
-    finalInventory[entry.item] = entry.count;
+  const finalStockpile = zeroCounts(Object.keys(ITEMS));
+  for (const entry of stockpileEntries(state)) {
+    finalStockpile[entry.item] = entry.count;
   }
   // `cellIndex` of the last cell, plus 1, is the number of cells in the cube.
   const lastCell = { x: state.size.x - 1, y: state.size.y - 1, z: state.size.z - 1 };
@@ -326,7 +326,7 @@ export function playRun(options: PlayOptions): RunResult {
     healthAtEnd: state.crew.health,
     fuelAtEnd: state.fuel,
     shiftsAtZeroFuel,
-    finalInventory,
+    finalStockpile,
     finalHash: hashState(state),
   };
   return { metrics, decisions, finalState: state };
@@ -341,7 +341,7 @@ export interface AggregateMetrics {
   runs: number;
   /** Outcome -> number of runs. 'salvage', 'lost' and 'unfinished' are always listed. */
   outcomes: Record<string, number>;
-  /** Cause -> number of runs. 'left', 'outOfFuel' and 'shiftCap' are always listed. */
+  /** Cause -> number of runs. 'mineClosed', 'outOfFuel' and 'shiftCap' are always listed. */
   causes: Record<string, number>;
   shiftsPlayed: SpreadWithMedian;
   deepestSquare: SpreadWithMedian;
@@ -368,7 +368,7 @@ export interface AggregateMetrics {
   /** Runs with at least one shift at 0 fuel. */
   runsWithAShiftAtZeroFuel: number;
   /** Item id -> mean count carried at the end of a run. */
-  finalInventoryMean: Record<string, number>;
+  finalStockpileMean: Record<string, number>;
 }
 
 /** The whole document `npm run sim -- --json` prints. */
@@ -399,14 +399,14 @@ function combineSpreads(spreads: Spread[]): Spread {
 
 export function aggregate(runs: RunMetrics[]): AggregateMetrics {
   const outcomes = zeroCounts(['salvage', 'lost', 'unfinished']);
-  const causes = zeroCounts(['left', 'outOfFuel', 'shiftCap']);
+  const causes = zeroCounts(['mineClosed', 'outOfFuel', 'shiftCap']);
   const recipesUsed: Record<string, { crafts: number; runs: number }> = {};
   for (const recipe of FIELD_RECIPES) {
     recipesUsed[recipe.id] = { crafts: 0, runs: 0 };
   }
   const itemsCrafted = zeroCounts(FIELD_RECIPES.map((recipe) => recipeOutputId(recipe.id).id));
   const structuresPlaced = zeroCounts(Object.keys(STRUCTURES));
-  const inventoryTotals = zeroCounts(Object.keys(ITEMS));
+  const stockpileTotals = zeroCounts(Object.keys(ITEMS));
 
   for (const run of runs) {
     addCount(outcomes, run.outcome, 1);
@@ -423,14 +423,14 @@ export function aggregate(runs: RunMetrics[]): AggregateMetrics {
     for (const [id, count] of Object.entries(run.structuresPlaced)) {
       addCount(structuresPlaced, id, count);
     }
-    for (const [item, count] of Object.entries(run.finalInventory)) {
-      addCount(inventoryTotals, item, count);
+    for (const [item, count] of Object.entries(run.finalStockpile)) {
+      addCount(stockpileTotals, item, count);
     }
   }
 
-  const finalInventoryMean: Record<string, number> = {};
-  for (const [item, total] of Object.entries(inventoryTotals)) {
-    finalInventoryMean[item] = runs.length === 0 ? 0 : total / runs.length;
+  const finalStockpileMean: Record<string, number> = {};
+  for (const [item, total] of Object.entries(stockpileTotals)) {
+    finalStockpileMean[item] = runs.length === 0 ? 0 : total / runs.length;
   }
 
   return {
@@ -455,7 +455,7 @@ export function aggregate(runs: RunMetrics[]): AggregateMetrics {
     fuelAtEnd: spreadWithMedianOf(runs.map((run) => run.fuelAtEnd)),
     shiftsAtZeroFuel: spreadWithMedianOf(runs.map((run) => run.shiftsAtZeroFuel)),
     runsWithAShiftAtZeroFuel: runs.filter((run) => run.shiftsAtZeroFuel > 0).length,
-    finalInventoryMean,
+    finalStockpileMean,
   };
 }
 
@@ -544,7 +544,7 @@ export function formatSummary(report: SimReport): string {
     `structures placed:  ${countsLine(a.structuresPlaced)}`,
     `fuel at end:        ${spreadLine(a.fuelAtEnd, 1)}`,
     `shifts at 0 fuel:   ${spreadLine(a.shiftsAtZeroFuel, 2)}; runs with at least one: ${a.runsWithAShiftAtZeroFuel}`,
-    `final inventory (mean per run): ${Object.entries(a.finalInventoryMean)
+    `final stockpile (mean per run): ${Object.entries(a.finalStockpileMean)
       .map(([item, mean]) => `${item} ${fixed(mean, 2)}`)
       .join(', ')}`,
   ];

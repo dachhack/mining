@@ -96,8 +96,8 @@ export const CUBE_PHASE_STEPS: CubePhaseStep[] = [
 
 /**
  * The cube phase (design doc 4; 0014 items 1 and 2): hazards advance one step
- * in a fixed order. `endShift` in index.ts calls this first, then `settle`
- * (the one fall the phase may cause), then upkeep.
+ * in a fixed order. `endShift` in index.ts calls this first, then regrowth,
+ * then upkeep.
  *
  * Contract: changes `state` in place and appends to `events`. Nothing in the
  * cube phase uses the RNG (0014 item 1).

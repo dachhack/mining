@@ -1,10 +1,10 @@
-// Scenario tests for field crafting (design doc 7.1; 0005 item 18).
+// Scenario tests for field crafting (design doc 7.1). Materials come from
+// the stockpile and what is made goes into it (design doc 4.1).
 
 import { describe, expect, it } from 'vitest';
-import { ACTION_COSTS, AVATAR, FIELD_RECIPES } from '../../src/data';
+import { ACTION_COSTS, FIELD_RECIPES } from '../../src/data';
 import { applyAction } from '../../src/engine';
 import type { GameState } from '../../src/engine';
-import { carriedWeight } from '../../src/engine/inventory';
 import { act, buildState, findActions } from './helpers';
 import type { BuildStateOptions } from './helpers';
 
@@ -24,15 +24,14 @@ describe('the data these scenarios assume', () => {
   it('has the two field recipes of design doc 7.1, each 1 AP (no torch or lamp oil: issue #89)', () => {
     expect(FIELD_RECIPES.map((recipe) => recipe.id)).toEqual(['support', 'fuel']);
     expect(ACTION_COSTS.craft).toBe(1);
-    expect(AVATAR.carryCapacity).toBe(20);
   });
 });
 
 describe('crafting each recipe', () => {
   it('support: 1 timber and 1 stone become 1 support, for 1 AP', () => {
-    const state = surfaceState({ ap: 5, inventory: { timber: 1, stone: 2 } });
+    const state = surfaceState({ ap: 5, stockpile: { timber: 1, stone: 2 } });
     const { state: after, events } = act(state, { type: 'craft', recipe: 'support' });
-    expect(after.inventory).toEqual({ timber: 0, stone: 1, support: 1 });
+    expect(after.stockpile).toEqual({ timber: 0, stone: 1, support: 1 });
     expect(after.ap).toBe(4);
     expect(events).toEqual([
       { type: 'crafted', recipe: 'support' },
@@ -41,9 +40,9 @@ describe('crafting each recipe', () => {
   });
 
   it('fuel: 1 coal adds 3 to the fuel gauge, for 1 AP, and no item', () => {
-    const state = surfaceState({ ap: 5, fuel: 4, inventory: { coal: 2 } });
+    const state = surfaceState({ ap: 5, fuel: 4, stockpile: { coal: 2 } });
     const { state: after, events } = act(state, { type: 'craft', recipe: 'fuel' });
-    expect(after.inventory).toEqual({ coal: 1 });
+    expect(after.stockpile).toEqual({ coal: 1 });
     expect(after.fuel).toBe(7);
     expect(after.ap).toBe(4);
     expect(events).toEqual([
@@ -53,35 +52,35 @@ describe('crafting each recipe', () => {
   });
 
   it('does not change the state it was given', () => {
-    const state = surfaceState({ inventory: { coal: 1 } });
+    const state = surfaceState({ stockpile: { coal: 1 } });
     act(state, { type: 'craft', recipe: 'fuel' });
-    expect(state.inventory).toEqual({ coal: 1 });
+    expect(state.stockpile).toEqual({ coal: 1 });
     expect(state.fuel).toBe(10);
   });
 });
 
 describe('when a craft is legal', () => {
-  it('lists every recipe the avatar has the materials for, in recipe order', () => {
-    const state = surfaceState({ inventory: { timber: 1, stone: 1, coal: 1 } });
+  it('lists every recipe the stockpile has the materials for, in recipe order', () => {
+    const state = surfaceState({ stockpile: { timber: 1, stone: 1, coal: 1 } });
     expect(craftable(state)).toEqual(['support', 'fuel']);
   });
 
   it('refuses each recipe without its materials', () => {
-    expect(craftable(surfaceState({ inventory: {} }))).toEqual([]);
+    expect(craftable(surfaceState({ stockpile: {} }))).toEqual([]);
     // Timber only: no stone for a support.
-    expect(craftable(surfaceState({ inventory: { timber: 1 } }))).toEqual([]);
+    expect(craftable(surfaceState({ stockpile: { timber: 1 } }))).toEqual([]);
     // Coal only: fuel.
-    expect(craftable(surfaceState({ inventory: { coal: 1 } }))).toEqual(['fuel']);
+    expect(craftable(surfaceState({ stockpile: { coal: 1 } }))).toEqual(['fuel']);
     // Stone only: nothing.
-    expect(craftable(surfaceState({ inventory: { stone: 3 } }))).toEqual([]);
+    expect(craftable(surfaceState({ stockpile: { stone: 3 } }))).toEqual([]);
     // Timber and stone: no coal, so no fuel.
-    expect(craftable(surfaceState({ inventory: { timber: 1, stone: 1 } }))).toEqual(['support']);
+    expect(craftable(surfaceState({ stockpile: { timber: 1, stone: 1 } }))).toEqual(['support']);
     // A count of 0 is not "having" the item.
-    expect(craftable(surfaceState({ inventory: { timber: 0, coal: 0 } }))).toEqual([]);
+    expect(craftable(surfaceState({ stockpile: { timber: 0, coal: 0 } }))).toEqual([]);
   });
 
   it('refuses every recipe without the AP, and applyAction throws', () => {
-    const state = surfaceState({ ap: 0, inventory: { timber: 1, stone: 1, coal: 1 } });
+    const state = surfaceState({ ap: 0, stockpile: { timber: 1, stone: 1, coal: 1 } });
     expect(craftable(state)).toEqual([]);
     for (const recipe of FIELD_RECIPES) {
       expect(() =>
@@ -91,18 +90,22 @@ describe('when a craft is legal', () => {
   });
 
   it('applyAction throws for a recipe whose materials are missing', () => {
-    const state = surfaceState({ inventory: { timber: 1 } });
+    const state = surfaceState({ stockpile: { timber: 1 } });
     expect(() => applyAction(state, { type: 'craft', recipe: 'support', ap: 1 })).toThrow(
       'Not a legal action',
     );
   });
 
-  it('does not enforce the carry limit (decision note 0026)', () => {
-    // With no miner there is no way to drop anything, so a load over the
-    // limit must not stop the player crafting fuel. 10 stone (20) + 1 timber
-    // + 2 coal = 23, over the limit of 20.
-    const over = surfaceState({ inventory: { stone: 10, timber: 1, coal: 2 } });
-    expect(carriedWeight(over)).toBe(23);
-    expect(craftable(over)).toEqual(['support', 'fuel']);
+  it('the stockpile has no limit: a craft is never refused for want of room (issue #92)', () => {
+    // Far more than the old carry capacity of 20 (10 stone alone weighed 20).
+    const full = surfaceState({ stockpile: { stone: 500, timber: 300, coal: 200 } });
+    expect(craftable(full)).toEqual(['support', 'fuel']);
+    const { state: after, events } = act(full, { type: 'craft', recipe: 'support' });
+    // The support went into the stockpile; nothing was left lying anywhere.
+    expect(after.stockpile).toEqual({ stone: 499, timber: 299, coal: 200, support: 1 });
+    expect(events).toEqual([
+      { type: 'crafted', recipe: 'support' },
+      { type: 'itemGained', item: 'support', count: 1 },
+    ]);
   });
 });

@@ -2,13 +2,13 @@
 // state, check the action is legal, spend its AP, and collect the events.
 //
 // The real rule modules are still stubs, so no action is legal yet. To test
-// the dispatcher anyway, this file swaps four of them (leave, shift, gravity,
-// reveal) for small fakes:
+// the dispatcher anyway, this file swaps some of them (close the mine, shift,
+// reveal, tells) for small fakes:
 //
 // - `vi.mock(path, factory)` tells Vitest that, in this test file only,
 //   anything importing the module at `path` gets what `factory` returns
 //   instead. (Python readers: like `unittest.mock.patch` on a module.)
-// - The fake "leave" action costs 2 AP and deliberately scribbles on every
+// - The fake "close the mine" action costs 2 AP and deliberately scribbles on every
 //   part of the state it is given. If the dispatcher handed it the caller's
 //   state rather than a copy, the tests below would see the damage.
 // - Every fake appends its name to `calls`, so the tests can check the order
@@ -28,7 +28,7 @@ import {
 import type { Action, GameEvent, GameState, ShiftForecast } from '../../src/engine';
 import { act, buildState, findActions } from './helpers';
 
-const FAKE_LEAVE_COST = 2;
+const FAKE_CLOSE_COST = 2;
 
 // The fakes record the order they were called in here.
 const calls: string[] = [];
@@ -46,25 +46,18 @@ const FAKE_FORECAST: ShiftForecast = {
   regrowth: [],
 };
 
-vi.mock('../../src/engine/actions/leave', () => ({
-  legalLeaveActions: (): Action[] => [{ type: 'leave', ap: FAKE_LEAVE_COST }],
-  applyLeave: (state: GameState, _action: Action, events: GameEvent[]): void => {
-    calls.push('applyLeave');
+vi.mock('../../src/engine/actions/closeMine', () => ({
+  legalCloseMineActions: (): Action[] => [{ type: 'closeMine', ap: FAKE_CLOSE_COST }],
+  applyCloseMine: (state: GameState, _action: Action, events: GameEvent[]): void => {
+    calls.push('applyCloseMine');
     state.blocks.fill(0);
     state.revealed.fill(1);
     state.structures.fill(1);
     state.crew.health -= 1;
     state.fuel -= 3;
     state.rng.s += 1;
-    state.inventory['stone'] = 9;
-    state.looseItems.push({ pos: { x: 0, y: 0, z: 0 }, item: 'coal', count: 1 });
+    state.stockpile['stone'] = 9;
     events.push({ type: 'fuelChanged', delta: -3, fuel: state.fuel, reason: 'upkeep' });
-  },
-}));
-
-vi.mock('../../src/engine/gravity', () => ({
-  settle: (): void => {
-    calls.push('settle');
   },
 }));
 
@@ -104,7 +97,7 @@ vi.mock('../../src/engine/shift', () => ({
     calls.push('runUpkeep');
     state.fuel -= 1;
     state.shift += 1;
-    state.inventory['stone'] = 9;
+    state.stockpile['stone'] = 9;
     events.push({ type: 'shiftEnded', shift: state.shift - 1, nextShift: state.shift });
   },
   forecastShift: (): ShiftForecast => FAKE_FORECAST,
@@ -118,13 +111,13 @@ function startState(ap: number): GameState {
     ],
     ap,
     fuel: 10,
-    inventory: { timber: 1 },
+    stockpile: { timber: 1 },
     // The helper would call the (faked) reveal and so add to `calls`.
     revealTops: false,
   });
 }
 
-const LEAVE: Action = { type: 'leave', ap: FAKE_LEAVE_COST };
+const CLOSE_MINE: Action = { type: 'closeMine', ap: FAKE_CLOSE_COST };
 
 beforeEach(() => {
   calls.length = 0; // empty the list
@@ -137,12 +130,11 @@ describe('applyAction', () => {
     const before = hashState(state);
     const beforeBlocks = state.blocks.slice();
 
-    const result = applyAction(state, LEAVE);
+    const result = applyAction(state, CLOSE_MINE);
 
     expect(hashState(state)).toBe(before);
     expect(state.blocks).toEqual(beforeBlocks);
-    expect(state.inventory).toEqual({ timber: 1 });
-    expect(state.looseItems).toEqual([]);
+    expect(state.stockpile).toEqual({ timber: 1 });
     expect(state.ap).toBe(5);
 
     // The returned state is a different object and does carry the changes.
@@ -153,28 +145,28 @@ describe('applyAction', () => {
     expect(hashState(result.state)).not.toBe(before);
   });
 
-  it('applies the action, then gravity, then reveal, in that order (0006)', () => {
-    applyAction(startState(5), LEAVE);
-    expect(calls).toEqual(['applyLeave', 'settle', 'updateReveal', 'updateMineralTraces']);
+  it('applies the action, then reveal, in that order (0006)', () => {
+    applyAction(startState(5), CLOSE_MINE);
+    expect(calls).toEqual(['applyCloseMine', 'updateReveal', 'updateMineralTraces']);
   });
 
-  it('calls gravity and reveal after a mine as after anything else', () => {
+  it('calls reveal after a mine as after anything else', () => {
     // The mine module is the real one.
     act(startState(5), { type: 'mine', x: 1, y: 0 });
-    expect(calls).toEqual(['settle', 'updateReveal', 'updateMineralTraces']);
+    expect(calls).toEqual(['updateReveal', 'updateMineralTraces']);
   });
 
   it('spends the AP of the action and returns the events', () => {
     const state = startState(5);
-    const { state: after, events } = applyAction(state, LEAVE);
-    expect(after.ap).toBe(5 - FAKE_LEAVE_COST);
+    const { state: after, events } = applyAction(state, CLOSE_MINE);
+    expect(after.ap).toBe(5 - FAKE_CLOSE_COST);
     expect(events).toEqual([{ type: 'fuelChanged', delta: -3, fuel: 7, reason: 'upkeep' }]);
   });
 
   it('gives the same result when the same action is applied to the same state twice', () => {
     const state = startState(5);
-    const first = applyAction(state, LEAVE);
-    const second = applyAction(state, LEAVE);
+    const first = applyAction(state, CLOSE_MINE);
+    const second = applyAction(state, CLOSE_MINE);
     expect(hashState(second.state)).toBe(hashState(first.state));
     expect(second.events).toEqual(first.events);
   });
@@ -186,27 +178,27 @@ describe('applyAction', () => {
     const mine: Action = { type: 'mine', x: 5, y: 0, ap: 2 };
     expect(() => applyAction(state, mine)).toThrow('Not a legal action');
     // The right kind of action with a wrong field is not legal either.
-    expect(() => applyAction(state, { type: 'leave', ap: 0 })).toThrow('Not a legal action');
+    expect(() => applyAction(state, { type: 'closeMine', ap: 0 })).toThrow('Not a legal action');
     expect(calls).toEqual([]);
     expect(hashState(state)).toBe(before);
   });
 
   it('rejects an action that costs more AP than there is left', () => {
-    const state = startState(FAKE_LEAVE_COST - 1);
-    expect(findActions(state, { type: 'leave' })).toEqual([]);
-    expect(() => applyAction(state, LEAVE)).toThrow('Not a legal action');
+    const state = startState(FAKE_CLOSE_COST - 1);
+    expect(findActions(state, { type: 'closeMine' })).toEqual([]);
+    expect(() => applyAction(state, CLOSE_MINE)).toThrow('Not a legal action');
 
     // With exactly enough AP it is legal.
-    const enough = startState(FAKE_LEAVE_COST);
-    expect(findActions(enough, { type: 'leave' })).toEqual([LEAVE]);
-    expect(applyAction(enough, LEAVE).state.ap).toBe(0);
+    const enough = startState(FAKE_CLOSE_COST);
+    expect(findActions(enough, { type: 'closeMine' })).toEqual([CLOSE_MINE]);
+    expect(applyAction(enough, CLOSE_MINE).state.ap).toBe(0);
   });
 
   it('rejects every action once the run has ended', () => {
     const state = startState(5);
-    state.status = { kind: 'ended', outcome: 'salvage', cause: 'left' };
+    state.status = { kind: 'ended', outcome: 'salvage', cause: 'mineClosed' };
     expect(legalActions(state)).toEqual([]);
-    expect(() => applyAction(state, LEAVE)).toThrow('The run has ended');
+    expect(() => applyAction(state, CLOSE_MINE)).toThrow('The run has ended');
     expect(calls).toEqual([]);
   });
 });
@@ -215,28 +207,22 @@ describe('legalActions', () => {
   it('returns the actions of the rule modules without changing the state', () => {
     const state = startState(5);
     const before = hashState(state);
-    expect(findActions(state, { type: 'leave' })).toEqual([LEAVE]);
+    expect(findActions(state, { type: 'closeMine' })).toEqual([CLOSE_MINE]);
     expect(hashState(state)).toBe(before);
   });
 });
 
 describe('endShift', () => {
-  it('runs the cube phase, gravity, upkeep, then reveal, in that order (0006)', () => {
+  it('runs the cube phase, upkeep, then reveal, in that order (0006)', () => {
     endShift(startState(5));
-    expect(calls).toEqual([
-      'runCubePhase',
-      'settle',
-      'runUpkeep',
-      'updateReveal',
-      'updateMineralTraces',
-    ]);
+    expect(calls).toEqual(['runCubePhase', 'runUpkeep', 'updateReveal', 'updateMineralTraces']);
   });
 
   it('skips upkeep when the cube phase ends the run', () => {
     cubePhaseEndsRun = true;
     const state = startState(5);
     const { state: after, events } = endShift(state);
-    expect(calls).toEqual(['runCubePhase', 'settle', 'updateReveal', 'updateMineralTraces']);
+    expect(calls).toEqual(['runCubePhase', 'updateReveal', 'updateMineralTraces']);
     expect(after.status).toEqual({ kind: 'ended', outcome: 'lost', cause: 'buried' });
     // No fuel taken and no new shift: the fake upkeep never ran.
     expect(after.fuel).toBe(state.fuel);
@@ -252,7 +238,7 @@ describe('endShift', () => {
 
     expect(hashState(state)).toBe(before);
     expect(state.fuel).toBe(10);
-    expect(state.inventory).toEqual({ timber: 1 });
+    expect(state.stockpile).toEqual({ timber: 1 });
 
     expect(after).not.toBe(state);
     expect(after.fuel).toBe(9);
@@ -294,9 +280,9 @@ describe('createRun', () => {
 describe('the act and findActions test helpers', () => {
   it('find a legal action from a partial description and apply it', () => {
     const state = startState(5);
-    expect(findActions(state, { type: 'leave' })).toEqual([LEAVE]);
+    expect(findActions(state, { type: 'closeMine' })).toEqual([CLOSE_MINE]);
     expect(findActions(state, { type: 'mine', x: 9, y: 9 })).toEqual([]);
-    expect(act(state, { type: 'leave' }).state.ap).toBe(5 - FAKE_LEAVE_COST);
+    expect(act(state, { type: 'closeMine' }).state.ap).toBe(5 - FAKE_CLOSE_COST);
     expect(() => act(state, { type: 'cutTree' })).toThrow('found 0');
     // Every square of the 2 x 2 cube can be mined: too many to pick one.
     expect(() => act(state, { type: 'mine' })).toThrow('found 4');

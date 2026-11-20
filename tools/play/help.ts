@@ -55,7 +55,7 @@ CHOICES
   Everything else you may do is a line of the action list, with a number and a name. --do and
   the prompt take either:
     craft-fuel, craft-support, ...     craft; the list shows each name
-    leave                    leave the mine (ends the run alive)
+    close-mine               close the mine (ends the run alive)
     end (or 0)               end the shift
   - A NAME means the same at every step. In a chain, use names.
   - A NUMBER is the line's place in the list, which changes as you gain and use materials. In a
@@ -66,7 +66,7 @@ CHOICES
 READING A VIEW
   After you act, the view opens with one line starting ">" for each choice taken: what you did
   and what came of it (what you got, what the square shows now). Read them; nothing else
-  reports it. Then come your gauges and what you have.
+  reports it. Then come your gauges and the stockpile: everything you have.
   The map is the whole surface seen from above: x grows to the east (right), y grows to the
   south (down the page). The two lines over it give each column's x (tens over ones); each row
   starts with its y. Every square is two characters:
@@ -86,7 +86,7 @@ THE GAME
   You look down on a cube of rock ${WORLD.size.x} squares by ${WORLD.size.y} and ${WORLD.size.z} blocks deep (x 0 to ${lastX}, y 0 to ${lastY}),
   and mine it from the top: you choose a square and its top block is taken. There is no miner
   on the map and nothing walks. Collect what the rock gives. The run ends alive only when you
-  choose to leave. It is lost if you run out of fuel, or if crew health reaches 0.
+  choose to close the mine. It is lost if you run out of fuel, or if crew health reaches 0.
 
   Shifts and action points (AP)
   - Time passes in shifts. Each shift you get ${SHIFT.apPerShift} AP. Each action costs AP; one you cannot afford
@@ -143,9 +143,11 @@ THE GAME
     notice are always from ore still in the rock: if you notice some just after mining ore,
     other ore is near. Coal and timber-root give no traces.
 
-  What you have
-  - Everything you mine, cut or craft is yours at once, wherever it came from. There is no
-    carry limit in this version of the game, and nothing is picked up or dropped.
+  The stockpile
+  - Everything you mine, cut or craft goes straight into the stockpile, wherever on the map it
+    came from. The "Stockpile:" line under the gauges lists it. The stockpile has no limit:
+    nothing is carried, picked up or dropped, and nothing weighs anything.
+  - Crafting takes its materials from the stockpile.
 
   Crafting (${ACTION_COSTS.craft} AP each)
 ${recipes}
@@ -160,9 +162,10 @@ ${recipes}
     the crew.
   - At 0 crew health the run is lost.
 
-  Leaving
-  - "leave" is always on the list and costs nothing. It ends the run alive, with what you have
-    gathered (the game calls this a "salvage" run). There is no other way to finish alive.
+  Closing the mine
+  - "close-mine" is always on the list and costs ${ACTION_COSTS.closeMine} AP. It ends the run at once, alive, with
+    what is in the stockpile (the game calls this a "salvage" run). There is no other way to
+    finish alive, and a closed mine cannot be opened again.
 
   Not in this version of the game
   - Hazards (pit walls that slump, water, lava, gas), supports that hold a wall, camps and

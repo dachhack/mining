@@ -10,7 +10,7 @@ import type { GameState } from '../state';
 /**
  * Contract for M2-3: every `PlaceSupportAction` the player could take now.
  *
- * - One action for each cell a support may go in, if the avatar carries one:
+ * - One action for each cell a support may go in, if the stockpile holds one:
  *   the avatar's own cell or an open face neighbour on its level, inside the
  *   grid, holding no structure (0014 item 6).
  * - `ap` is `ACTION_COSTS.placeSupport`. Lists actions as if AP were

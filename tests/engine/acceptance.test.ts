@@ -92,7 +92,7 @@ function play(policyName: string, seed: number, maxDecisions: number): PlayResul
   return { final: state, deepestSquare, lowestFuel, events, shiftsEnded };
 }
 
-describe('acceptance: dig a terraced pit and leave', () => {
+describe('acceptance: dig a terraced pit and close the mine', () => {
   // The run is played in `beforeAll`, not while the file is loaded, so that if
   // the policy or the engine throws, the failure is reported under this name.
   let result: PlayResult;
@@ -127,13 +127,13 @@ describe('acceptance: dig a terraced pit and leave', () => {
     expect(result.lowestFuel).toBeGreaterThan(0);
   });
 
-  it('leaves alive, as salvage', () => {
-    expect(result.final.status).toEqual({ kind: 'ended', outcome: 'salvage', cause: 'left' });
-    // The last thing that happened is the run ending by leaving.
+  it('closes the mine alive, as salvage', () => {
+    expect(result.final.status).toEqual({ kind: 'ended', outcome: 'salvage', cause: 'mineClosed' });
+    // The last thing that happened is the run ending by closing the mine.
     expect(result.events[result.events.length - 1]).toEqual({
       type: 'runEnded',
       outcome: 'salvage',
-      cause: 'left',
+      cause: 'mineClosed',
     });
   });
 });

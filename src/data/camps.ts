@@ -6,8 +6,6 @@ import type { CampData, CampToolData } from './types';
 // which cells belong to a camp when a hazard destroys one.
 export const CAMPS: CampData = {
   kitItem: 'campKit',
-  // "The avatar can carry only one kit" (design doc 8).
-  maxKitsCarried: 1,
   // A camp is 3 x 3 cells and 2 high (design doc 8): the founding cell, this
   // many cells to each side of it, and `height` layers counting its own
   // upwards (0014 item 26).

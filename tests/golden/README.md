@@ -4,12 +4,12 @@ Recorded runs: seed + list of decisions → expected state hash. `golden.test.ts
 
 ## The files
 
-| File                            | What it is                                                                                                                                                                           | Decisions | Ends                   | Hash               |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- | ---------------------- | ------------------ |
-| `pit-seed-11.json`              | The pit policy: digs a terraced pit round the middle of the map under the level rule, cuts the trees in its way, crafts fuel from coal, and leaves when the fuel is about to run out | 125       | salvage, left          | `ba621ce2c24f9f52` |
-| `pit-seed-31-traces.json`       | The pit policy on a seed where the pit gets deep enough for top blocks to lie near ore: mineral traces are seen, and stay on the map                                                 | 265       | salvage, left          | `38937b2c2bf2fdc6` |
-| `random-seed-9-forest.json`     | Random legal actions, never leaving, until the fuel runs out. It cuts 35 trees: some grow back, and none on a stump whose square was mined                                           | 104       | lost, out of fuel      | `e84672777f336ca0` |
-| `random-seed-27-cut-short.json` | Random legal actions, stopped after 60 decisions with the run still going                                                                                                            | 60        | still going (`active`) | `5531434bd4c49e24` |
+| File                            | What it is                                                                                                                                                                                    | Decisions | Ends                   | Hash               |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ---------------------- | ------------------ |
+| `pit-seed-11.json`              | The pit policy: digs a terraced pit round the middle of the map under the level rule, cuts the trees in its way, crafts fuel from coal, and closes the mine when the fuel is about to run out | 125       | salvage, mine closed   | `83dbd97dd681f31a` |
+| `pit-seed-31-traces.json`       | The pit policy on a seed where the pit gets deep enough for top blocks to lie near ore: mineral traces are seen, and stay on the map                                                          | 265       | salvage, mine closed   | `f633139ff36dccfd` |
+| `random-seed-9-forest.json`     | Random legal actions, never closing the mine, until the fuel runs out. It cuts 35 trees: some grow back, and none on a stump whose square was mined                                           | 104       | lost, out of fuel      | `6ff3d1003545a007` |
+| `random-seed-27-cut-short.json` | Random legal actions, stopped after 60 decisions with the run still going                                                                                                                     | 60        | still going (`active`) | `dd51b3af87ef7461` |
 
 Each file holds:
 
@@ -51,5 +51,7 @@ If the rules, the data in `src/data`, cube generation, the RNG, `serialise` or t
 All the files were replaced for issue #86 (mine by square; engine 0.4.0; decision note 0025): there is no miner, so no recorded move replays, a mine names a square and not a cell, and the `staircase` and `wander` policies that recorded the old runs are gone. The new set is recorded with the `pit` and `random` policies. All four were re-hashed for issue #89 (light removed; decision note 0027): the state no longer holds `lampOil`, so every hash changed. Every recorded decision was still legal, so the decisions and the endings are the same. Earlier re-recordings (issues #75 and #80) are in the git history of this file.
 
 All four were re-hashed for issue #90 (crew health; decision note 0028): the state's shape changed (`crew` for `avatar`, no air, and the new `worked` squares), so every hash changed. The outcome id `death` is now `lost` (design doc 9.4), which is in the status of `random-seed-9-forest`. Every recorded decision is still legal and every run ends the way it did.
+
+All four were recorded again for issue #92 (carrying removed, "close the mine"; decision note 0029). Two things changed. The action `leave` is now `closeMine`, so the last decision of the two pit runs (`leave ap 0`) was no longer legal; a new recording gives `closeMine ap 0` there and the same 124 and 264 decisions before it. And the state's shape changed (`stockpile` for `inventory`, no `looseItems`, no camp `stash`), so every hash changed. The two random runs hold the same decisions as before, and every run ends as it did (the cause `left` is now `mineClosed`).
 
 Either way: update the table above, and say in the PR description which hashes changed and why (`CLAUDE.md`, working agreement).

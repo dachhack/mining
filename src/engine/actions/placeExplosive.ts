@@ -10,7 +10,7 @@ import type { GameState } from '../state';
 /**
  * Contract for M2-5: every `PlaceExplosiveAction` the player could take now.
  *
- * - One action for each cell an explosive may go in, if the avatar carries
+ * - One action for each cell an explosive may go in, if the stockpile holds
  *   one: its own cell or an open face neighbour, inside the grid, holding no
  *   structure (0014 item 15).
  * - `ap` is `ACTION_COSTS.placeExplosive`. Lists actions as if AP were

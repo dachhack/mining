@@ -12,7 +12,7 @@ async function startRun(page: Page, seed: number): Promise<void> {
   await expect(page.getByTestId('seed')).toHaveText(`Seed ${seed}`);
 }
 
-/** Unfold the list of other choices (crafting, leaving) under the map. */
+/** Unfold the list of other choices (crafting, closing the mine) under the map. */
 async function openOtherActions(page: Page): Promise<void> {
   await page.getByText(/^Other actions/).click();
 }
@@ -30,7 +30,7 @@ test('a run on a fixed seed is played with the buttons under the map', async ({ 
   await startRun(page, 7);
   const gauges = page.getByTestId('gauges');
   await expect(gauges).toContainText('Shift 1 | AP 5/5 | Fuel 24');
-  await expect(gauges).toContainText('You have: 2 Timber');
+  await expect(gauges).toContainText('Stockpile: 2 Timber');
   await expect(page.getByTestId('forecast')).toContainText('If you end the shift now:');
 
   await page.getByTestId('end-shift').click();
@@ -38,12 +38,33 @@ test('a run on a fixed seed is played with the buttons under the map', async ({ 
   await expect(gauges).toContainText('Shift 2 | AP 5/5 | Fuel 23');
   await expect(page.getByTestId('outcome')).toContainText('> End the shift.');
 
-  // Leaving asks first, then ends the run.
+  // Closing the mine asks first (issue #92). Answering "Cancel" changes
+  // nothing: a stray tap on the button does not end the run.
   await openOtherActions(page);
+  const closeMine = page.locator('button[data-choice="close-mine"]');
+  await expect(closeMine).toContainText('Close the mine');
+  let question = '';
+  page.once('dialog', (dialog) => {
+    question = dialog.message();
+    void dialog.dismiss();
+  });
+  await closeMine.click();
+  expect(question).toContain('Close the mine? This ends the run');
+  await expect(page.getByTestId('end-shift')).toBeVisible();
+  await expect(gauges).toContainText('Shift 2 | AP 5/5 | Fuel 23');
+  await expect(page.getByTestId('ended')).not.toContainText('closed the mine');
+
+  // Answering "OK" ends the run, alive.
   page.once('dialog', (dialog) => void dialog.accept());
-  await page.locator('button[data-choice="leave"]').click();
-  await expect(page.getByTestId('ended')).toContainText('left the mine alive');
+  await closeMine.click();
+  await expect(page.getByTestId('ended')).toContainText('you closed the mine');
   await expect(page.getByTestId('end-shift')).toBeHidden();
+
+  // The cancelled tap left nothing in the saved run: it holds the end of
+  // the shift and one "close the mine".
+  const saved = await page.evaluate(() => window.localStorage.getItem('mining-game.preview.run'));
+  const actions = (JSON.parse(saved ?? '{}') as { actions: { type: string }[] }).actions;
+  expect(actions.map((action) => action.type)).toEqual(['endShift', 'closeMine']);
 });
 
 test('the run is saved after each choice and resumed on reload', async ({ page }) => {
