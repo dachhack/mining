@@ -115,7 +115,7 @@ test('a tap on a tree cuts it: timber goes up and the ground shows', async ({ pa
 
   await tapSquare(page, canvas, 19, 15);
   await expect(gauges).toContainText('AP 3/5');
-  await expect(gauges).toContainText('Stockpile: 4 Timber');
+  await expect(gauges).toContainText('Stockpile: 1 Camp kit, 4 Timber');
   await expect(page.getByTestId('outcome')).toContainText('cut down the tree');
   await expect(page.getByTestId('outcome')).toContainText('The top block there is now');
   await expect(page.getByTestId('map-legend')).toContainText('stump');

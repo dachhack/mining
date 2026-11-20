@@ -20,10 +20,14 @@
 //   steepest pit the level rule allows and deals with nothing. Its walls
 //   crack and slump, and the crew is hurt when it works where they fall. It
 //   is here so that the simulator and the golden runs exercise the slump rule.
+// - `camp`: the greedy policy with a camp (issue #100): it founds a camp near
+//   the middle with its starting kit, and rests there when the crew is hurt.
+//   It is here so that the simulator and the golden runs exercise camps: the
+//   founding, the cheaper mining, the upkeep and the rest.
 // None is how a person plays. Task T15 adds a terracing policy and a depth
 // survey.
 
-import { BLOCKS, SHIFT } from '../src/data';
+import { BLOCKS, CAMPS, CREW, SHIFT } from '../src/data';
 import {
   actionKey,
   countItem,
@@ -49,7 +53,7 @@ export interface Policy {
 }
 
 /** The names `makePolicy` accepts. */
-export const POLICY_NAMES = ['random', 'pit', 'greedy'];
+export const POLICY_NAMES = ['random', 'pit', 'greedy', 'camp'];
 
 /**
  * A short, readable form of a decision, used in logs and golden files:
@@ -116,6 +120,17 @@ export const PIT_POLICY = {
   fetchCoalBelow: 12,
   /** With this much fuel or less and no way to make more, the policy closes the mine. */
   closeMineAtOrBelow: 1,
+};
+
+/** The camp policy's own numbers: how this scripted player behaves, not rules of the game. */
+export const CAMP_POLICY = {
+  /** With this much crew health or less, the crew rests at the camp. */
+  restAtOrBelow: CREW.startHealth - 4,
+  /**
+   * The camp's centre is at least this many steps from the centre of the
+   * map, so that the camp does not sit on the spot where the pit goes down.
+   */
+  minStepsFromCentre: 3,
 };
 
 /** A square the pit policy may work on next: a legal mine or a legal cut. */
@@ -214,8 +229,17 @@ function bestSafeCandidate(
  * `heedSlumps` false makes the `greedy` policy: rule 3 is skipped and every
  * legal square counts as safe, so it digs the plain cone of 1-level steps and
  * lets its walls slump (design doc 6.1).
+ *
+ * `useCamp` true adds two rules between rules 2 and 3 (design doc 8):
+ * - 2a. Crew health is at or below `CAMP_POLICY.restAtOrBelow` and a rest is
+ *   legal: rest at the first camp on the list.
+ * - 2b. There is a camp kit and a camp can be founded: found it on the legal
+ *   site nearest the centre of the map that is at least
+ *   `CAMP_POLICY.minStepsFromCentre` steps from it (the first such site in
+ *   row order among equally near ones). This takes the rest of the shift.
+ * With `heedSlumps` false as well, this is the `camp` policy.
  */
-export function makePitPolicy(heedSlumps = true): Policy {
+export function makePitPolicy(heedSlumps = true, useCamp = false): Policy {
   function decide(state: GameState): Decision {
     const legal = legalActions(state);
     const centreX = Math.floor(state.size.x / 2);
@@ -235,6 +259,34 @@ export function makePitPolicy(heedSlumps = true): Policy {
       const closeMine = legal.find((action) => action.type === 'closeMine');
       if (closeMine !== undefined) {
         return closeMine;
+      }
+    }
+
+    if (useCamp) {
+      // 2a. The crew is hurt: rest at a camp, if one stands and AP are left.
+      if (state.crew.health <= CAMP_POLICY.restAtOrBelow) {
+        const rest = legal.find((action) => action.type === 'rest');
+        if (rest !== undefined) {
+          return rest;
+        }
+      }
+      // 2b. A kit in hand: found the camp near the middle, but not on it.
+      if (countItem(state, CAMPS.kitItem) > 0) {
+        let bestSite: Action | undefined;
+        let bestDistance = Infinity;
+        for (const action of legal) {
+          if (action.type !== 'foundCamp') {
+            continue;
+          }
+          const distance = Math.abs(action.x - centreX) + Math.abs(action.y - centreY);
+          if (distance >= CAMP_POLICY.minStepsFromCentre && distance < bestDistance) {
+            bestSite = action;
+            bestDistance = distance;
+          }
+        }
+        if (bestSite !== undefined) {
+          return bestSite;
+        }
       }
     }
 
@@ -318,7 +370,11 @@ export function makePitPolicy(heedSlumps = true): Policy {
     return 'endShift';
   }
 
-  return { name: heedSlumps ? 'pit' : 'greedy', decide };
+  let name = heedSlumps ? 'pit' : 'greedy';
+  if (useCamp) {
+    name = heedSlumps ? 'pit with a camp' : 'camp';
+  }
+  return { name, decide };
 }
 
 /**
@@ -334,6 +390,9 @@ export function makePolicy(name: string, seed: number): Policy {
   }
   if (name === 'greedy') {
     return makePitPolicy(false);
+  }
+  if (name === 'camp') {
+    return makePitPolicy(false, true);
   }
   throw new Error(`Unknown policy "${name}"; the policies are ${POLICY_NAMES.join(', ')}`);
 }

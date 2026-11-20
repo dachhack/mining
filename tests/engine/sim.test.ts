@@ -195,7 +195,7 @@ describe('playRun', () => {
   });
 
   it('knows each policy name, and refuses any other', () => {
-    expect(POLICY_NAMES).toEqual(['random', 'pit', 'greedy']);
+    expect(POLICY_NAMES).toEqual(['random', 'pit', 'greedy', 'camp']);
     for (const name of POLICY_NAMES) {
       expect(makePolicy(name, 1).name).toBe(name);
     }
