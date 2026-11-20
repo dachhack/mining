@@ -7,7 +7,8 @@ export type LoadoutId = 'standard';
 export const LOADOUTS: Record<LoadoutId, LoadoutDef> = {
   standard: {
     name: 'Standard',
-    fuel: 24,
+    // 72 since the depth survey (owner, issue #108, candidate C); it was 24.
+    fuel: 72,
     // The 6 ladders are gone with ladders themselves (owner, issue #80).
     items: [
       { item: 'timber', count: 2 },

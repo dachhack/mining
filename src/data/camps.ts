@@ -14,7 +14,10 @@ export const CAMPS: CampData = {
   // Each active camp burns `upkeepFuel` every `upkeepEveryShifts` shifts,
   // counted from the shift it was founded (design doc 4).
   upkeepFuel: 1,
-  upkeepEveryShifts: 4,
+  // Every 8 shifts and a reach of 8 steps since the depth survey (owner, issue
+  // #108: "make camps worth founding"); both were 4, and a camp cost more
+  // fuel than its cheaper mining saved (docs/surveys/depth-survey.md, table 10).
+  upkeepEveryShifts: 8,
   // Mining near a camp is cheaper (owner, question 90). A mine costs
   // `mineDiscountAp` less, but never less than `mineMinAp`, when the square is
   // within `mineDiscountSteps` steps of a camp square (a step is to a face
@@ -22,7 +25,7 @@ export const CAMPS: CampData = {
   // deeper than the camp.
   mineDiscountAp: 1,
   mineMinAp: 1,
-  mineDiscountSteps: 4,
+  mineDiscountSteps: 8,
   mineDiscountMaxDeeper: 4,
 };
 

@@ -28,8 +28,9 @@ import type { GenerationData } from './types';
 //   its band, replaces plain rock only (never ore), never reaches layer 0,
 //   and is sealed: rock on every side, never touching another space. A
 //   cavern is empty. Each cell of a pocket holds the units in hazards.ts
-//   (water 1, lava 1, gas 4). The full-size cube has 8,192 cells in the upper
-//   band and 12,288 in each of the other two; the counts in the comments
+//   (water 1, lava 1, gas 4). The full-size cube has 4,096 cells in the upper
+//   band (layers 0-3), 8,192 in the middle band (4-11) and 20,480 in the deep
+//   band (12-31); the counts in the comments
 //   below are for that cube.
 //
 // A lava pocket of more than `HAZARDS.lava.sourcePocketCellsOver` (8) cells
@@ -50,7 +51,7 @@ export const GENERATION: GenerationData = {
         { block: 'timberRoot', veinsPer1000Cells: 6, minSize: 2, maxSize: 5 },
       ],
       spaces: [
-        // "Small caverns": 12 of them, about 0.5% of the band.
+        // "Small caverns": 6 of them, about 0.5% of the band.
         { kind: 'cavern', spacesPer1000Cells: 1.5, minSize: 2, maxSize: 5 },
       ],
     },
@@ -61,17 +62,20 @@ export const GENERATION: GenerationData = {
         { block: 'hardRock', weightAtTop: 20, weightAtBottom: 70 },
       ],
       veins: [
-        // About 2.4% of the band.
-        { block: 'ironOre', veinsPer1000Cells: 4, minSize: 3, maxSize: 9 },
-        // About 1.8% of the band.
-        { block: 'copperOre', veinsPer1000Cells: 3, minSize: 4, maxSize: 8 },
+        // About 7% of the band: three times the first default (owner, issue
+        // #108: candidate C of the depth survey).
+        { block: 'ironOre', veinsPer1000Cells: 12, minSize: 3, maxSize: 9 },
+        // About 5.4% of the band: three times the first default, as iron.
+        { block: 'copperOre', veinsPer1000Cells: 9, minSize: 4, maxSize: 8 },
       ],
       spaces: [
-        // 10 water pockets of 3 to 10 units each.
-        { kind: 'water', spacesPer1000Cells: 0.8, minSize: 3, maxSize: 10 },
-        // 7 gas pockets of 8 to 24 units each (4 units a cell).
-        { kind: 'gas', spacesPer1000Cells: 0.6, minSize: 2, maxSize: 6 },
-        // 7 caverns.
+        // 39 water pockets of 3 to 10 units each: six times the first default
+        // (owner, issue #108: candidate C of the depth survey).
+        { kind: 'water', spacesPer1000Cells: 4.8, minSize: 3, maxSize: 10 },
+        // 29 gas pockets of 8 to 24 units each (4 units a cell): six times
+        // the first default, as water.
+        { kind: 'gas', spacesPer1000Cells: 3.6, minSize: 2, maxSize: 6 },
+        // 5 caverns.
         { kind: 'cavern', spacesPer1000Cells: 0.6, minSize: 4, maxSize: 12 },
       ],
     },
@@ -89,9 +93,9 @@ export const GENERATION: GenerationData = {
         { block: 'unstableOre', veinsPer1000Cells: 1.5, minSize: 2, maxSize: 4 },
       ],
       spaces: [
-        // 10 lava pockets; those of 9 cells or more are sources.
+        // 16 lava pockets; those of 9 cells or more are sources.
         { kind: 'lava', spacesPer1000Cells: 0.8, minSize: 4, maxSize: 12 },
-        // "Large caverns": 5 of them.
+        // "Large caverns": 8 of them.
         { kind: 'cavern', spacesPer1000Cells: 0.4, minSize: 10, maxSize: 30 },
       ],
     },
