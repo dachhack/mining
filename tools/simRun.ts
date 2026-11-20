@@ -14,12 +14,14 @@ import {
   hashState,
   stockpileEntries,
   isRunActive,
+  knownSquare,
   legalActions,
   visibleMineralTraces,
 } from '../src/engine';
-import type { GameEvent, GameState } from '../src/engine';
+import type { GameEvent, GameState, StepResult } from '../src/engine';
+import { withExtraItems } from './simKit';
 import { decisionKey } from './policies';
-import type { Policy } from './policies';
+import type { Decision, Policy } from './policies';
 
 /** Mean, smallest and largest of a list of numbers. All 0 for an empty list. */
 export interface Spread {
@@ -79,14 +81,56 @@ export interface RunMetrics {
   /** Structure id -> number placed. */
   structuresPlaced: Record<string, number>;
   damageTaken: number;
+  /** Damage cause -> health lost to it. Every cause is listed, so absent ones show 0. */
+  damageByCause: Record<string, number>;
   healthAtEnd: number;
   fuelAtEnd: number;
   /** Shifts that began with 0 fuel, that is, fuel was 0 after the upkeep before them. */
   shiftsAtZeroFuel: number;
   /** Item id -> count carried at the end. Every item is listed, so absent ones show 0. */
   finalStockpile: Record<string, number>;
+  /** Were mineral traces seen at any time in the run? */
+  tracesSeen: boolean;
+  /** The hazards the run met (design doc 6). See `HazardsMet`. */
+  hazards: HazardsMet;
+  /** The hazard tells the player was shown on a top block (design doc 3.7). */
+  tellsSeen: TellsSeen;
   /** `hashState` of the final state. */
   finalHash: string;
+}
+
+/**
+ * The hazards one run met, counted from the engine's events. A run "met" a
+ * hazard when the number is above 0.
+ */
+export interface HazardsMet {
+  /** Blocks that cracked: the warning that a square will slump (design doc 6.1). */
+  blocksCracked: number;
+  /** Blocks that slumped. */
+  blocksSlumped: number;
+  /** Empty caverns a mine, a slump or a blast broke into (design doc 6.2). */
+  cavernsBroken: number;
+  /** Water pockets broken into, and the units of water they released. */
+  waterPocketsBroken: number;
+  waterReleased: number;
+  /** Lava pockets broken into, and the units of lava they released. */
+  lavaPocketsBroken: number;
+  lavaReleased: number;
+  /** Gas pockets broken into, and the units of gas they released. */
+  gasPocketsBroken: number;
+  gasReleased: number;
+  /** Unstable ore blocks that became a top block, and so were seen (design doc 6.6). */
+  unstableOreSeen: number;
+  /** Explosions of any kind: a placed charge, unstable ore, gas. */
+  explosions: number;
+}
+
+/** Which hazard tells the player was shown at least once (design doc 3.7). */
+export interface TellsSeen {
+  dampStone: boolean;
+  pittedRock: boolean;
+  warmGlow: boolean;
+  hairlineGlow: boolean;
 }
 
 export interface RunResult {
@@ -108,7 +152,24 @@ export interface PlayOptions {
    * used to cut a run short on purpose (tests, golden runs).
    */
   maxDecisions?: number;
+  // `| undefined` below lets a caller pass `undefined` for "none" as well as
+  // leaving the field out.
+  /**
+   * Items put in the stockpile before the first decision, on top of the
+   * loadout: item id -> count. Optional, and only for the simulator: see
+   * tools/simKit.ts for why it exists.
+   */
+  extraItems?: Record<string, number> | undefined;
+  /**
+   * Called after every decision with the state before it, the decision, and
+   * what the engine answered. Optional; the acceptance check uses it to look
+   * for broken rules (tools/invariants.ts).
+   */
+  onStep?: ((before: GameState, decision: Decision, result: StepResult) => void) | undefined;
 }
+
+/** Every kind of hazard that hurts the crew (`DamageCause` in src/engine/events.ts). */
+const DAMAGE_CAUSES = ['slump', 'water', 'lava', 'gas', 'gasExplosion', 'explosion'];
 
 /** Decisions per shift beyond which a run is taken to be looping, and stopped with an error. */
 const RUNAWAY_DECISIONS_PER_SHIFT = 1000;
@@ -199,6 +260,9 @@ function structureIdByCode(code: number): string {
  */
 export function playRun(options: PlayOptions): RunResult {
   let state = createRun(options.seed, options.contractId, options.loadoutId);
+  if (options.extraItems !== undefined) {
+    state = withExtraItems(state, options.extraItems);
+  }
   const policy = options.policy;
   const decisions: string[] = [];
 
@@ -213,7 +277,43 @@ export function playRun(options: PlayOptions): RunResult {
   // `createRun` gives no events, so look once at what the start shows. After
   // that the `mineralTracesSeen` events say when traces are first seen.
   let tracesSeenBeforeFirstOre = visibleMineralTraces(state).length > 0;
+  let tracesSeen = tracesSeenBeforeFirstOre;
   let damageTaken = 0;
+  const damageByCause = zeroCounts(DAMAGE_CAUSES);
+  const hazards: HazardsMet = {
+    blocksCracked: 0,
+    blocksSlumped: 0,
+    cavernsBroken: 0,
+    waterPocketsBroken: 0,
+    waterReleased: 0,
+    lavaPocketsBroken: 0,
+    lavaReleased: 0,
+    gasPocketsBroken: 0,
+    gasReleased: 0,
+    unstableOreSeen: 0,
+    explosions: 0,
+  };
+  const tellsSeen: TellsSeen = {
+    dampStone: false,
+    pittedRock: false,
+    warmGlow: false,
+    hairlineGlow: false,
+  };
+
+  /** Note the hazard tells the top block of square (x, y) shows now. */
+  function noteTells(x: number, y: number): void {
+    const tells = knownSquare(state, x, y).tells;
+    tellsSeen.dampStone = tellsSeen.dampStone || tells.dampStone;
+    tellsSeen.pittedRock = tellsSeen.pittedRock || tells.pittedRock;
+    tellsSeen.warmGlow = tellsSeen.warmGlow || tells.warmGlow;
+    tellsSeen.hairlineGlow = tellsSeen.hairlineGlow || tells.hairlineGlow;
+  }
+  // What the start shows: every square's top block that no tree hides.
+  for (let y = 0; y < state.size.y; y += 1) {
+    for (let x = 0; x < state.size.x; x += 1) {
+      noteTells(x, y);
+    }
+  }
   let actionsTaken = 0;
   let shiftsAtZeroFuel = 0;
   let deepestSquare = 0;
@@ -238,10 +338,36 @@ export function playRun(options: PlayOptions): RunResult {
         if (oreBlocksMined === 0) {
           tracesSeenBeforeFirstOre = true;
         }
+        tracesSeen = true;
       } else if (event.type === 'treeCut') {
         treesCut += 1;
       } else if (event.type === 'spaceCollapsed') {
         spacesBrokenInto += 1;
+        if (event.water > 0) {
+          hazards.waterPocketsBroken += 1;
+          hazards.waterReleased += event.water;
+        }
+        if (event.lava > 0) {
+          hazards.lavaPocketsBroken += 1;
+          hazards.lavaReleased += event.lava;
+        }
+        if (event.gas > 0) {
+          hazards.gasPocketsBroken += 1;
+          hazards.gasReleased += event.gas;
+        }
+        if (event.water === 0 && event.lava === 0 && event.gas === 0) {
+          hazards.cavernsBroken += 1;
+        }
+      } else if (event.type === 'blockCracked') {
+        hazards.blocksCracked += 1;
+      } else if (event.type === 'blockFell') {
+        hazards.blocksSlumped += 1;
+      } else if (event.type === 'exploded') {
+        hazards.explosions += 1;
+      } else if (event.type === 'blockRevealed') {
+        if (event.block === BLOCKS.unstableOre.code) {
+          hazards.unstableOreSeen += 1;
+        }
       } else if (event.type === 'crafted') {
         addCount(recipesUsed, event.recipe, 1);
         const output = recipeOutputId(event.recipe);
@@ -250,6 +376,14 @@ export function playRun(options: PlayOptions): RunResult {
         addCount(structuresPlaced, structureIdByCode(event.structure), 1);
       } else if (event.type === 'damageTaken') {
         damageTaken += event.amount;
+        addCount(damageByCause, event.cause, event.amount);
+      }
+    }
+    // A newly shown block may show a hazard tell. This runs after the step,
+    // so `state` is already the state the events led to.
+    for (const event of events) {
+      if (event.type === 'blockRevealed') {
+        noteTells(event.pos.x, event.pos.y);
       }
     }
   }
@@ -278,18 +412,19 @@ export function playRun(options: PlayOptions): RunResult {
 
     const decision = policy.decide(state);
     decisions.push(decisionKey(decision));
+    const before = state;
+    const result = decision === 'endShift' ? endShift(state) : applyAction(state, decision);
+    state = result.state;
+    record(result.events);
+    if (options.onStep !== undefined) {
+      options.onStep(before, decision, result);
+    }
     if (decision === 'endShift') {
-      const result = endShift(state);
-      state = result.state;
-      record(result.events);
       atPhaseStart = true;
       if (isRunActive(state) && state.fuel === 0) {
         shiftsAtZeroFuel += 1;
       }
     } else {
-      const result = applyAction(state, decision);
-      state = result.state;
-      record(result.events);
       actionsTaken += 1;
     }
   }
@@ -333,10 +468,14 @@ export function playRun(options: PlayOptions): RunResult {
     itemsCrafted,
     structuresPlaced,
     damageTaken,
+    damageByCause,
     healthAtEnd: state.crew.health,
     fuelAtEnd: state.fuel,
     shiftsAtZeroFuel,
     finalStockpile,
+    tracesSeen,
+    hazards,
+    tellsSeen,
     finalHash: hashState(state),
   };
   return { metrics, decisions, finalState: state };
@@ -351,7 +490,7 @@ export interface AggregateMetrics {
   runs: number;
   /** Outcome -> number of runs. 'salvage', 'lost' and 'unfinished' are always listed. */
   outcomes: Record<string, number>;
-  /** Cause -> number of runs. 'mineClosed', 'outOfFuel' and 'shiftCap' are always listed. */
+  /** Cause -> number of runs. Every cause in `RUN_END_CAUSES` is always listed. */
   causes: Record<string, number>;
   shiftsPlayed: SpreadWithMedian;
   deepestSquare: SpreadWithMedian;
@@ -398,6 +537,20 @@ export interface SimReport {
   runs: RunMetrics[];
 }
 
+/**
+ * Every way a run can end, in the order the reports list them: the engine's
+ * `RunEndCause`s (design doc 5.3), then the simulator's own 'shiftCap'.
+ */
+export const RUN_END_CAUSES = [
+  'mineClosed',
+  'outOfFuel',
+  'buried',
+  'drowned',
+  'burned',
+  'poisoned',
+  'shiftCap',
+];
+
 function combineSpreads(spreads: Spread[]): Spread {
   if (spreads.length === 0) {
     return { mean: 0, min: 0, max: 0 };
@@ -411,7 +564,7 @@ function combineSpreads(spreads: Spread[]): Spread {
 
 export function aggregate(runs: RunMetrics[]): AggregateMetrics {
   const outcomes = zeroCounts(['salvage', 'lost', 'unfinished']);
-  const causes = zeroCounts(['mineClosed', 'outOfFuel', 'shiftCap']);
+  const causes = zeroCounts(RUN_END_CAUSES);
   const recipesUsed: Record<string, { crafts: number; runs: number }> = {};
   for (const recipe of FIELD_RECIPES) {
     recipesUsed[recipe.id] = { crafts: 0, runs: 0 };
@@ -481,6 +634,8 @@ export interface SimOptions {
   loadoutId: string;
   /** Makes the policy for one run from its seed. */
   makePolicy: (name: string, seed: number) => Policy;
+  /** The sim-only starting kit (tools/simKit.ts), or `undefined` for none. */
+  extraItems?: Record<string, number> | undefined;
 }
 
 /**
@@ -497,6 +652,7 @@ export function simulate(options: SimOptions): SimReport {
       loadoutId: options.loadoutId,
       policy: options.makePolicy(options.policyName, seed),
       maxShifts: options.maxShifts,
+      extraItems: options.extraItems,
     });
     runs.push(result.metrics);
   }
@@ -582,6 +738,12 @@ export interface GoldenRun {
   expectedStatus: string;
   /** `hashState` of the state after the last decision. */
   expectedHash: string;
+  /**
+   * Items the run started with on top of its loadout: the sim-only tool kit
+   * (tools/simKit.ts). Left out of the file for a run that had none, which
+   * is every run but the ones recorded with `--kit`.
+   */
+  extraItems?: Record<string, number>;
   /** Every decision in order: 'endShift', or the engine's `actionKey` of an action. */
   decisions: string[];
 }
@@ -618,12 +780,21 @@ export function applyDecisions(state: GameState, decisions: string[]): GameState
   return current;
 }
 
-/** Start a run and apply a recorded list of decisions to it; see `applyDecisions`. */
+/**
+ * Start a run and apply a recorded list of decisions to it; see
+ * `applyDecisions`. `extraItems` is the sim-only starting kit, if the run
+ * was played with one (tools/simKit.ts).
+ */
 export function replayDecisions(
   seed: number,
   contractId: string,
   loadoutId: string,
   decisions: string[],
+  extraItems?: Record<string, number>,
 ): GameState {
-  return applyDecisions(createRun(seed, contractId, loadoutId), decisions);
+  let start = createRun(seed, contractId, loadoutId);
+  if (extraItems !== undefined) {
+    start = withExtraItems(start, extraItems);
+  }
+  return applyDecisions(start, decisions);
 }

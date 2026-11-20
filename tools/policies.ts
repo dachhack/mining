@@ -8,9 +8,9 @@
 //
 // The policies (issue #86; the walking policies `staircase`, `wander` and
 // `coal` went with the miner):
-// - `random`: every legal action except closing the mine, and "end the
-//   shift", are equally likely. It never closes the mine; see
-//   `makeRandomPolicy` for why.
+// - `random`: picks a kind of action at random (mine, cut, craft, place a
+//   support, found a camp, ..., or "end the shift"), then one legal action
+//   of that kind. It never closes the mine; see `makeRandomPolicy` for why.
 // - `pit`: digs a terraced pit round the middle of the map, cutting the trees
 //   in its way, and keeps itself in fuel from the coal it finds. It closes
 //   the mine when the fuel is about to run out. Since pit walls slump (issue
@@ -24,8 +24,12 @@
 //   the middle with its starting kit, and rests there when the crew is hurt.
 //   It is here so that the simulator and the golden runs exercise camps: the
 //   founding, the cheaper mining, the upkeep and the rest.
-// None is how a person plays. Task T15 adds a terracing policy and a depth
-// survey.
+// - `terrace`: digs as a careful player would (issue #108): a planned pit in
+//   a corner, layer by layer, its walls held by supports. It is in
+//   tools/terracePolicy.ts. `terrace:8` plans a pit 8 deep, and
+//   `terrace:8:camp` also founds a camp beside it.
+// The first four are not how a person plays; they are here to exercise the
+// rules. `terrace` is the nearest to a careful player.
 
 import { BLOCKS, CAMPS, CREW, SHIFT } from '../src/data';
 import {
@@ -41,6 +45,7 @@ import {
   unstableSquares,
 } from '../src/engine';
 import type { Action, CutTreeAction, DepthMap, GameState, MineAction } from '../src/engine';
+import { makeTerracePolicy } from './terracePolicy';
 
 /** What a policy chooses: a legal action, or the string 'endShift'. */
 export type Decision = Action | 'endShift';
@@ -55,7 +60,12 @@ export interface Policy {
 }
 
 /** The names `makePolicy` accepts. */
-export const POLICY_NAMES = ['random', 'pit', 'greedy', 'camp'];
+export const POLICY_NAMES = ['random', 'pit', 'greedy', 'camp', 'terrace'];
+
+/** True if `makePolicy` accepts this name: one of `POLICY_NAMES`, 'terrace:N' or 'terrace:N:camp'. */
+export function isPolicyName(name: string): boolean {
+  return POLICY_NAMES.includes(name) || /^terrace:\d+(:camp)?$/.test(name);
+}
 
 /**
  * A short, readable form of a decision, used in logs and golden files:
@@ -70,16 +80,27 @@ export function decisionKey(decision: Decision): string {
 // ---------------------------------------------------------------------------
 
 /**
- * A policy that picks uniformly among the legal actions other than `closeMine`,
- * and "end the shift".
+ * A policy that plays at random, and uses every kind of action it is offered.
  *
- * Why it never closes the mine: closing is legal at any time (issue #92). With
- * action points left there are over a thousand legal actions (a mine or a cut
- * for almost every square), so closing would hardly ever be picked; with none
- * left, closing is the ONLY legal action, and a policy that could pick it
- * would close the mine half the time at the end of its first shift. Such
- * runs say nothing. So `random` plays until the fuel runs out or the shift cap, as the
- * old `wander` policy did. (The `pit` policy does close the mine.)
+ * Each time it is asked it first picks a KIND of thing to do, every kind
+ * equally likely: one of the action types that has a legal action now (mine,
+ * cut a tree, craft, place a support, found a camp, ...), or "end the shift".
+ * Then it picks one legal action of that kind, each equally likely.
+ *
+ * Why by kind first (issue #108): there is a legal mine or cut for almost
+ * every square, over a thousand in all, against a handful of crafts and
+ * placings. A policy that picked evenly among all legal actions hardly ever
+ * crafted, placed or founded anything, so its runs exercised little but
+ * mining. Picking the kind first gives every rule its share.
+ *
+ * Why it never closes the mine: closing is legal at any time (issue #92), so
+ * a policy that could pick it would end most runs in their first shift. Such
+ * runs say nothing. So `random` plays until the fuel runs out, the crew is
+ * lost, or the shift cap. (The `pit` and `terrace` policies do close the mine.)
+ *
+ * The camp-made tools (pump, vent, sealant, scanner, explosive) need items
+ * the standard loadout does not carry: `npm run sim -- --kit` hands them out
+ * (tools/simKit.ts), and then this policy uses them too.
  *
  * `seed` seeds the policy's own random numbers. It is mixed with a constant
  * so that a run whose cube came from seed N does not pick its actions with
@@ -93,11 +114,29 @@ export function makeRandomPolicy(seed: number): Policy {
   return {
     name: 'random',
     decide: (state: GameState): Decision => {
-      const choices = legalActions(state).filter((action) => action.type !== 'closeMine');
+      // The legal actions, grouped by type. `Map` is TypeScript's dict; it
+      // keeps its keys in the order they were first added, and
+      // `legalActions` lists actions in an order that depends only on the
+      // state, so the groups are in the same order on every replay.
+      const byType = new Map<string, Action[]>();
+      for (const action of legalActions(state)) {
+        if (action.type === 'closeMine') {
+          continue;
+        }
+        const group = byType.get(action.type);
+        if (group === undefined) {
+          byType.set(action.type, [action]);
+        } else {
+          group.push(action);
+        }
+      }
+      const groups = [...byType.values()];
       // One extra slot, the last, stands for "end the shift".
-      const pick = nextInt(rng, choices.length + 1);
-      const action = choices[pick];
-      return action === undefined ? 'endShift' : action;
+      const group = groups[nextInt(rng, groups.length + 1)];
+      if (group === undefined) {
+        return 'endShift';
+      }
+      return group[nextInt(rng, group.length)] as Action;
     },
   };
 }
@@ -391,6 +430,9 @@ export function makePitPolicy(heedSlumps = true, useCamp = false): Policy {
 /**
  * The policy with this name, for a run with this seed. Throws on an unknown
  * name. Only the random policy uses the seed.
+ *
+ * Besides the names in `POLICY_NAMES` it takes 'terrace:N' and
+ * 'terrace:N:camp' (see `isPolicyName`).
  */
 export function makePolicy(name: string, seed: number): Policy {
   if (name === 'random') {
@@ -404,6 +446,18 @@ export function makePolicy(name: string, seed: number): Policy {
   }
   if (name === 'camp') {
     return makePitPolicy(false, true);
+  }
+  if (name === 'terrace') {
+    return makeTerracePolicy();
+  }
+  // 'terrace:8' or 'terrace:8:camp': a terracing policy with its own target
+  // depth, and with a camp. The depth survey uses these.
+  const parts = name.split(':');
+  if (parts[0] === 'terrace' && /^\d+$/.test(parts[1] ?? '')) {
+    const useCamp = parts[2] === 'camp';
+    if (parts.length === 2 || (parts.length === 3 && useCamp)) {
+      return makeTerracePolicy({ targetDepth: Number(parts[1]), useCamp });
+    }
   }
   throw new Error(`Unknown policy "${name}"; the policies are ${POLICY_NAMES.join(', ')}`);
 }

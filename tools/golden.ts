@@ -6,10 +6,11 @@
 //       Replay every tests/golden/*.json and rewrite its expected hash and
 //       status. Use after a deliberate rule change, when the recorded
 //       decisions are all still legal.
-//   npm run golden -- --record NAME --seed N --policy P [--max-decisions N] [--description TEXT]
+//   npm run golden -- --record NAME --seed N --policy P [--max-decisions N] [--kit] [--description TEXT]
 //       Play a new run with a policy (see tools/policies.ts) and write it to
 //       tests/golden/NAME.json, replacing any file of that name.
 //       --max-decisions cuts the run short, leaving it unfinished.
+//       --kit starts the run with the sim-only tool kit (tools/simKit.ts).
 //   npm run golden -- --record-all
 //       Record every run in `STANDARD_RUNS` below again: the whole set in
 //       tests/golden. Use when a rule change makes recorded decisions illegal.
@@ -19,7 +20,8 @@ import path from 'node:path';
 import * as prettier from 'prettier';
 import { CONTRACT_IDS, DEFAULT_LOADOUT_ID, GAME_DATA, validateData } from '../src/data';
 import { hashState } from '../src/engine';
-import { POLICY_NAMES, makePolicy } from './policies';
+import { POLICY_NAMES, isPolicyName, makePolicy } from './policies';
+import { TOOL_KIT } from './simKit';
 import { playRun, replayDecisions, statusText } from './simRun';
 import type { GoldenRun } from './simRun';
 
@@ -34,6 +36,8 @@ interface RecordSpec {
   policyName: string;
   /** Cut the run short after this many decisions; `undefined` plays it to its end. */
   maxDecisions: number | undefined;
+  /** Start the run with the sim-only tool kit (tools/simKit.ts). */
+  kit: boolean;
   /** A sentence about the run; '' for a plain default. */
   description: string;
 }
@@ -49,6 +53,7 @@ const STANDARD_RUNS: RecordSpec[] = [
     seed: 11,
     policyName: 'pit',
     maxDecisions: undefined,
+    kit: false,
     description:
       'The pit policy on seed 11: digs a terraced pit round the middle of the map under the level rule, with the level benches that keep its walls from slumping, cutting the trees in its way, crafts fuel from the coal it finds, and closes the mine (salvage) when the fuel is about to run out.',
   },
@@ -57,6 +62,7 @@ const STANDARD_RUNS: RecordSpec[] = [
     seed: 4,
     policyName: 'pit',
     maxDecisions: undefined,
+    kit: false,
     description:
       'The pit policy on a seed where a square turns out unstable that it cannot mine down: it crafts a support and places it on the cracked square, which then never slumps.',
   },
@@ -65,6 +71,7 @@ const STANDARD_RUNS: RecordSpec[] = [
     seed: 11,
     policyName: 'greedy',
     maxDecisions: undefined,
+    kit: false,
     description:
       'The greedy policy: the steepest pit the level rule allows, with no heed for slumps. Its walls crack, count down and slump into the pit, cascades follow, and the crew is hurt where it works until it is buried.',
   },
@@ -73,6 +80,7 @@ const STANDARD_RUNS: RecordSpec[] = [
     seed: 24,
     policyName: 'pit',
     maxDecisions: undefined,
+    kit: false,
     description:
       'The pit policy on a seed where its pit breaks into two caverns: each collapses to rubble at once and the square drops exactly 1 level, so the level rule holds (design doc 6.2).',
   },
@@ -81,6 +89,7 @@ const STANDARD_RUNS: RecordSpec[] = [
     seed: 10,
     policyName: 'camp',
     maxDecisions: undefined,
+    kit: false,
     description:
       'The camp policy (the greedy digger with a camp): it founds a camp near the middle with its starting kit, mines more cheaply near it, pays its upkeep, and rests there each time a slump has hurt the crew. It lives to close the mine.',
   },
@@ -89,23 +98,53 @@ const STANDARD_RUNS: RecordSpec[] = [
     seed: 25,
     policyName: 'camp',
     maxDecisions: undefined,
+    kit: false,
     description:
       'The camp policy on a seed where the pit reaches the camp: the crew rests there twice, then a slump destroys the camp, there is nowhere left to rest, and the crew is buried.',
   },
   {
-    name: 'random-seed-9-forest',
-    seed: 9,
+    name: 'random-seed-22-forest',
+    seed: 22,
     policyName: 'random',
     maxDecisions: undefined,
+    kit: false,
     description:
-      'Random legal actions (never closing the mine) until the fuel runs out. About half its actions cut trees; some stumps are mined (and never regrow) and some grow a tree again.',
+      'The random policy (a kind of action at random, then one legal action of that kind; never closing the mine) until the fuel runs out. It cuts trees; some stumps are mined (and never regrow) and some grow a tree again.',
   },
   {
     name: 'random-seed-27-cut-short',
     seed: 27,
     policyName: 'random',
     maxDecisions: 60,
-    description: 'Random legal actions, stopped after 60 decisions with the run still going.',
+    kit: false,
+    description: 'The random policy, stopped after 60 decisions with the run still going.',
+  },
+  {
+    name: 'terrace-seed-4',
+    seed: 4,
+    policyName: 'terrace',
+    maxDecisions: undefined,
+    kit: false,
+    description:
+      'The terracing policy on seed 4: plans a pit 6 deep in a corner, digs it layer by layer, makes supports and places them on the wall squares before their cracks fall, takes the coal it sees, and closes the mine when the pit is finished. Nothing slumps and the crew is never hurt.',
+  },
+  {
+    name: 'terrace-8-seed-8-traces',
+    seed: 8,
+    policyName: 'terrace:8',
+    maxDecisions: undefined,
+    kit: false,
+    description:
+      'The terracing policy with a pit planned 8 deep, on a seed where it finishes: its corner square reaches the first layer of the middle band, it breaks into a cavern on the way, and it sees mineral traces, the only sign of the middle band any scripted run meets with the standard loadout.',
+  },
+  {
+    name: 'random-kit-seed-27-blast',
+    seed: 27,
+    policyName: 'random',
+    maxDecisions: undefined,
+    kit: true,
+    description:
+      'The random policy with the sim-only tool kit: it places explosives, pumps and vents, seals squares and scans, founds and takes down camps, and is hurt by one of its own blasts. No run with the standard loadout gets the items for these, so this is the golden run that pins them on a generated cube.',
   },
 ];
 
@@ -114,7 +153,7 @@ function fail(message: string): never {
   console.error(
     'Usage: npm run golden -- --rehash\n' +
       '       npm run golden -- --record-all\n' +
-      `       npm run golden -- --record NAME --seed N --policy ${POLICY_NAMES.join('|')} [--max-decisions N] [--description TEXT]`,
+      `       npm run golden -- --record NAME --seed N --policy ${POLICY_NAMES.join('|')} [--max-decisions N] [--kit] [--description TEXT]`,
   );
   process.exit(1);
 }
@@ -147,6 +186,7 @@ async function rehashAll(): Promise<void> {
       golden.contractId,
       golden.loadoutId,
       golden.decisions,
+      golden.extraItems,
     );
     const hash = hashState(state);
     const status = statusText(state);
@@ -168,10 +208,15 @@ function parseRecordArgs(args: string[]): RecordSpec {
     seed: 1,
     policyName: '',
     maxDecisions: undefined,
+    kit: false,
     description: '',
   };
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
+    if (arg === '--kit') {
+      spec.kit = true; // the one argument with no value after it
+      continue;
+    }
     i += 1;
     const value = args[i];
     if (arg === '--record') {
@@ -196,8 +241,8 @@ async function record(spec: RecordSpec): Promise<void> {
   if (!/^[a-z0-9-]+$/.test(spec.name)) {
     fail('--record needs a name of lower-case letters, digits and hyphens');
   }
-  if (!POLICY_NAMES.includes(spec.policyName)) {
-    fail(`--policy must be one of ${POLICY_NAMES.join(', ')}`);
+  if (!isPolicyName(spec.policyName)) {
+    fail(`--policy must be one of ${POLICY_NAMES.join(', ')}, or terrace:N`);
   }
   const contractId = CONTRACT_IDS[0];
   if (contractId === undefined) {
@@ -210,6 +255,7 @@ async function record(spec: RecordSpec): Promise<void> {
     loadoutId: DEFAULT_LOADOUT_ID,
     policy: makePolicy(spec.policyName, spec.seed),
     maxShifts: RECORD_MAX_SHIFTS,
+    extraItems: spec.kit ? TOOL_KIT : undefined,
   };
   // With our compiler settings an optional field must be left out, not set to
   // `undefined`, so it is added only when given.
@@ -228,6 +274,8 @@ async function record(spec: RecordSpec): Promise<void> {
     recordedWith: spec.policyName,
     expectedStatus: statusText(result.finalState),
     expectedHash: result.metrics.finalHash,
+    // `...` with a condition: the field is added only for a run with the kit.
+    ...(spec.kit ? { extraItems: TOOL_KIT } : {}),
     decisions: result.decisions,
   };
   const file = path.join(GOLDEN_DIR, `${spec.name}.json`);

@@ -54,10 +54,10 @@ describe('determinism', () => {
   });
 
   it('the same seed and decisions give the same hash, run twice in one process', () => {
-    // A random run lasts about 100 decisions (24 fuel, and it hardly ever
+    // A random run lasts 55 to 75 decisions (24 fuel, and it hardly ever
     // crafts more); a pit run goes on longer.
     const runs = [
-      { policyName: 'random', seed: 15, maxDecisions: 80 },
+      { policyName: 'random', seed: 15, maxDecisions: 50 },
       { policyName: 'pit', seed: 49, maxDecisions: 120 },
     ];
     for (const run of runs) {
@@ -71,16 +71,16 @@ describe('determinism', () => {
   });
 
   it('a policy with the same seed makes the same decisions again', () => {
-    expect(recordedRun('random', 7, 80)).toEqual(recordedRun('random', 7, 80));
+    expect(recordedRun('random', 7, 50)).toEqual(recordedRun('random', 7, 50));
     expect(recordedRun('pit', 7, 80)).toEqual(recordedRun('pit', 7, 80));
   });
 
   it('a run saved and loaded part-way, then continued, ends in the same hash', () => {
     const seed = 9;
-    // The whole run, to its end (out of fuel, about a hundred decisions).
+    // The whole run, to its end (out of fuel, about sixty decisions).
     const recorded = recordedRun('random', seed, 100000);
     const total = recorded.decisions.length;
-    expect(total).toBeGreaterThan(60);
+    expect(total).toBeGreaterThan(40);
     const start = createRun(seed, CONTRACT, DEFAULT_LOADOUT_ID);
     expect(isRunActive(applyDecisions(start, recorded.decisions))).toBe(false);
 
