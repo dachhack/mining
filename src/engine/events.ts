@@ -13,7 +13,7 @@
 import type { Vec3 } from '../data';
 
 /** How a run ended, as in the outcome table of design doc 9.4. */
-export type RunOutcome = 'fullSuccess' | 'partial' | 'salvage' | 'death';
+export type RunOutcome = 'fullSuccess' | 'partial' | 'salvage' | 'lost';
 
 /**
  * Why a run ended (design doc v0.2 section 5.3): the player left (salvage),

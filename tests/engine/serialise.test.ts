@@ -145,9 +145,9 @@ describe('serialise and deserialise', () => {
 
   it('round-trips an ended run', () => {
     const state = busyState();
-    state.status = { kind: 'ended', outcome: 'death', cause: 'outOfFuel' };
+    state.status = { kind: 'ended', outcome: 'lost', cause: 'outOfFuel' };
     const loaded = throughJson(state);
-    expect(loaded.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'outOfFuel' });
+    expect(loaded.status).toEqual({ kind: 'ended', outcome: 'lost', cause: 'outOfFuel' });
     expect(hashState(loaded)).toBe(hashState(state));
   });
 

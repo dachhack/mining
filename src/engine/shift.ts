@@ -151,7 +151,7 @@ function computeUpkeep(state: GameState): UpkeepForecast {
  * calls this after the cube phase, if the run is still going.
  *
  * In this order, with every number from `SHIFT`:
- * 1. If fuel is 0, end the run: `endRun(state, 'death', 'outOfFuel', events)`,
+ * 1. If fuel is 0, end the run: `endRun(state, 'lost', 'outOfFuel', events)`,
  *    and stop. The shift number and `state.ap` are left as they were. So a
  *    player may finish a shift on 0 fuel and survive only by crafting fuel
  *    before the next upkeep.
@@ -168,7 +168,7 @@ export function runUpkeep(state: GameState, events: GameEvent[]): void {
 
   // 1. Out of fuel: the run ends here.
   if (upkeep.runEnds !== null) {
-    endRun(state, 'death', upkeep.runEnds, events);
+    endRun(state, 'lost', upkeep.runEnds, events);
     return;
   }
 

@@ -37,7 +37,7 @@ export interface SpreadWithMedian extends Spread {
 export interface RunMetrics {
   seed: number;
   policy: string;
-  /** 'salvage' or 'death' as the engine reports them, or 'unfinished' at the shift cap. */
+  /** 'salvage' or 'lost' as the engine reports them, or 'unfinished' at the shift cap. */
   outcome: string;
   /**
    * 'left' or 'outOfFuel' as the engine reports them; 'shiftCap' for a
@@ -339,7 +339,7 @@ export function playRun(options: PlayOptions): RunResult {
 /** The numbers for a set of runs taken together. */
 export interface AggregateMetrics {
   runs: number;
-  /** Outcome -> number of runs. 'salvage', 'death' and 'unfinished' are always listed. */
+  /** Outcome -> number of runs. 'salvage', 'lost' and 'unfinished' are always listed. */
   outcomes: Record<string, number>;
   /** Cause -> number of runs. 'left', 'outOfFuel' and 'shiftCap' are always listed. */
   causes: Record<string, number>;
@@ -398,7 +398,7 @@ function combineSpreads(spreads: Spread[]): Spread {
 }
 
 export function aggregate(runs: RunMetrics[]): AggregateMetrics {
-  const outcomes = zeroCounts(['salvage', 'death', 'unfinished']);
+  const outcomes = zeroCounts(['salvage', 'lost', 'unfinished']);
   const causes = zeroCounts(['left', 'outOfFuel', 'shiftCap']);
   const recipesUsed: Record<string, { crafts: number; runs: number }> = {};
   for (const recipe of FIELD_RECIPES) {

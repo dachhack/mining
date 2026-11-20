@@ -426,12 +426,12 @@ describe('step (e) applies the recorded damage (design doc 5.2 and 5.3)', () => 
       { amount: 6, cause: 'explosion' },
       { amount: 1, cause: 'gas' },
     ]);
-    expect(state.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'burned' });
+    expect(state.status).toEqual({ kind: 'ended', outcome: 'lost', cause: 'burned' });
     expect(events).toEqual([
       { type: 'damageTaken', amount: 3, cause: 'slump', health: 3 },
       // Never more than the health that is left.
       { type: 'damageTaken', amount: 3, cause: 'explosion', health: 0 },
-      { type: 'runEnded', outcome: 'death', cause: 'burned' },
+      { type: 'runEnded', outcome: 'lost', cause: 'burned' },
     ]);
     expect(state.crew.health).toBe(0);
   });
@@ -446,14 +446,14 @@ describe('step (e) applies the recorded damage (design doc 5.2 and 5.3)', () => 
         { amount: 3, cause: 'slump' },
       ],
     );
-    expect(state.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'buried' });
+    expect(state.status).toEqual({ kind: 'ended', outcome: 'lost', cause: 'buried' });
   });
 
   it('the run is lost at health 0: damage equal to the health left ends it', () => {
     const state = fieldState({ health: 3 });
     applyRecordedDamage(state, [], [{ amount: 3, cause: 'slump' }]);
     expect(state.crew.health).toBe(0);
-    expect(state.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'buried' });
+    expect(state.status).toEqual({ kind: 'ended', outcome: 'lost', cause: 'buried' });
 
     const alive = fieldState({ health: 4 });
     applyRecordedDamage(alive, [], [{ amount: 3, cause: 'slump' }]);
@@ -490,7 +490,7 @@ describe('step (e) applies the recorded damage (design doc 5.2 and 5.3)', () => 
       },
       () => {
         const { state: after, events } = endShift(state);
-        expect(after.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'buried' });
+        expect(after.status).toEqual({ kind: 'ended', outcome: 'lost', cause: 'buried' });
         expect(events.map((event) => event.type)).toEqual(['damageTaken', 'runEnded']);
         expect([after.fuel, after.shift]).toEqual([5, 4]);
       },
@@ -620,7 +620,7 @@ describe('worked squares (design doc 5.2)', () => {
       () => {
         const after = endShift(state).state;
         expect(seenInStepD).toEqual([MIDDLE]);
-        expect(after.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'buried' });
+        expect(after.status).toEqual({ kind: 'ended', outcome: 'lost', cause: 'buried' });
         expect(workedSquares(after)).toEqual([]);
       },
     );
@@ -656,7 +656,7 @@ describe('rest (only for a crew alive after damage)', () => {
     recordDamage(dying, phase, 'slump', 3, MIDDLE.x, MIDDLE.y);
     stepCrewEffects(dying, [], phase);
     expect(dying.crew.resting).toBe(false);
-    expect(dying.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'buried' });
+    expect(dying.status).toEqual({ kind: 'ended', outcome: 'lost', cause: 'buried' });
   });
 });
 

@@ -66,7 +66,7 @@ export function applyRecordedDamage(
       });
     }
     if (state.crew.health <= 0) {
-      endRun(state, 'death', LOSS_BY_DAMAGE[entry.cause], events);
+      endRun(state, 'lost', LOSS_BY_DAMAGE[entry.cause], events);
     }
   }
 }

@@ -22,14 +22,14 @@ After T2 the state still held `avatar: { health, air, resting }`, damage was rec
 
 1. **The kinds are the rows of the table in 5.2.** So lava on a square and lava beside it are one kind (5, not 6), and a gas explosion is a different kind from the explosion of a charge or unstable ore: both in one shift deal 3 + 6. The doc's own example ("a slump and a gas explosion deal 6") fits.
 2. **"Beside" is the four face neighbours**, as for the level rule; diagonals do not count.
-3. **The outcome id stays `death`.** The design doc says a run is "lost"; the engine's `RunOutcome` has said `death` since M1 and the tools, logs and golden files read it. Only the causes are renamed here; the views say "the run is lost".
+3. **The outcome id is `lost`, not `death`** (coordinator, on PR #93). Design doc 9.4 names the outcome "Lost", and nobody dies in the top-down model. `RunOutcome` is `'fullSuccess' | 'partial' | 'salvage' | 'lost'`; the simulator's report and its JSON count `lost` runs, and the playtest report template says `lost (<cause>)`.
 4. **The player is not yet shown which squares are worked.** The engine exports `isWorked` and `workedSquares` (they are the player's own actions, so nothing hidden leaks), and the play tool's rules text explains the rule. Marking them on the maps is left to T14 with the other hazard marks (owner question 95).
 
 ### Tools
 
 - **Play tool and phone preview.** The gauge reads "Crew health 10/10" (the preview shows the same HUD lines). The end-of-run summary and the damage sentence name the crew; the four loss causes have their own wording. `npm run play -- --help` has a "Crew health" paragraph.
 - **Simulator.** `healthAtEnd` now reads crew health. Nothing hurts the crew until T8, so it is always 10.
-- **Golden runs** are re-hashed, not re-recorded: every recorded decision is still legal, and only the shape of the state changed. See `tests/golden/README.md`.
+- **Golden runs** are re-hashed, not re-recorded: every recorded decision is still legal; the shape of the state changed, and a lost run's status now says `lost`. See `tests/golden/README.md`.
 
 ## Consequences
 
