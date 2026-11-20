@@ -41,8 +41,8 @@ import type { Square } from '../heightmap';
 import { lavaOn, setLavaOn, setWaterOn } from '../standing';
 import {
   blockAt,
+  buryTopBlock,
   cellIndex,
-  clearCrack,
   countItem,
   inGrid,
   isRevealed,
@@ -296,11 +296,10 @@ function applySeal(state: GameState, action: SealAction, events: GameEvent[]): v
     events.push({ type: 'gasRemoved', pos: { ...cell }, units: contents.gas, reason: 'sealed' });
   }
 
-  // A crack belongs to a top block, and the old top is one no longer.
+  // A crack belongs to a top block, and the old top is one no longer. Armed
+  // unstable ore under the sealed rock is smothered: it is disarmed now.
   const oldTop: Vec3 = { x, y, z: depth };
-  if (inGrid(state.size, oldTop)) {
-    clearCrack(state, oldTop);
-  }
+  buryTopBlock(state, oldTop);
   // `as BlockId`: `validateData` checks that the id names a block.
   setBlock(state, cell, BLOCKS[CAMP_TOOLS.sealedBlock as BlockId].code);
   events.push({ type: 'cellSealed', pos: { ...cell } });

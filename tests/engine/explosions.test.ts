@@ -26,7 +26,9 @@ import {
   workedSquares,
 } from '../../src/engine';
 import type { GameEvent, GameState } from '../../src/engine';
+import { stepFluids } from '../../src/engine/cube/fluids';
 import { stepGas } from '../../src/engine/cube/gas';
+import { stepSlumps } from '../../src/engine/cube/slumps';
 import { newCubePhase } from '../../src/engine/cube/phase';
 import type { CubePhase } from '../../src/engine/cube/phase';
 import { createRng, nextInt } from '../../src/engine/rng';
@@ -493,10 +495,10 @@ describe('explosions and the camp-made tools (issues #103 and #104)', () => {
       ['#U'],
     );
     const sealed = act(state, { type: 'seal', x: 1, y: 0 }).state;
-    // The sealed rock is the top now; the ore lies under it, still armed
-    // until the shift ends.
+    // The sealed rock is the top now; the ore lies under it, and is disarmed
+    // at that moment: `state.armed` never holds buried ore.
     expect(blockAt(sealed, { x: 1, y: 0, z: 0 })).toBe(BLOCKS.sealed.code);
-    expect(sealed.armed).toHaveLength(1);
+    expect(sealed.armed).toEqual([]);
 
     const step = endShift(sealed);
     expect(ofType(step.events, 'exploded')).toEqual([]);
@@ -906,8 +908,10 @@ describe('armed unstable ore goes off when the shift ends (design doc 6.6)', () 
     expect(depthText(state)).toEqual(['1211']);
   });
 
-  it('ore that rubble has buried since it was armed is smothered: it does not go off', () => {
-    // The armed ore lies one layer under a rubble top block.
+  it('a guard: step (c) itself never sets off armed ore that is not a top block', () => {
+    // The armed ore lies one layer under a rubble top block. The engine
+    // disarms ore at the moment it is buried, so this state cannot arise in
+    // play; step (c) checks all the same.
     const state = buildState({
       layers: [['#R'], ['#U'], ['##']],
       armed: [{ pos: { x: 1, y: 0, z: 1 }, kind: 'unstableOre' }],
@@ -916,6 +920,45 @@ describe('armed unstable ore goes off when the shift ends (design doc 6.6)', () 
     expect(events).toEqual([]);
     expect(state.armed).toEqual([]);
     expect(blockAt(state, { x: 1, y: 0, z: 1 })).toBe(BLOCKS.unstableOre.code);
+  });
+
+  it('rubble that slumps onto armed ore disarms it at that moment', () => {
+    // Dirt at ground level beside a hole 2 deep, cracked and due; the hole's
+    // top block is armed ore. Step (a) drops the dirt onto the ore.
+    const state = pit(
+      ['02'],
+      {
+        cracks: [{ pos: { x: 0, y: 0, z: 0 }, timer: 0 }],
+        armed: [{ pos: { x: 1, y: 0, z: 2 }, kind: 'unstableOre' }],
+      },
+      ['dU'],
+    );
+    const slumped: GameEvent[] = [];
+    stepSlumps(state, slumped, newCubePhase());
+    expect(ofType(slumped, 'blockFell')).toHaveLength(1);
+    expect(state.armed).toEqual([]);
+    expect(blockAt(state, { x: 1, y: 0, z: 2 })).toBe(BLOCKS.unstableOre.code);
+    // And through a whole end of shift nothing goes off.
+    const whole = pit(
+      ['02'],
+      {
+        cracks: [{ pos: { x: 0, y: 0, z: 0 }, timer: 0 }],
+        armed: [{ pos: { x: 1, y: 0, z: 2 }, kind: 'unstableOre' }],
+      },
+      ['dU'],
+    );
+    expect(ofType(endShift(whole).events, 'exploded')).toEqual([]);
+  });
+
+  it('stone that forms on armed ore disarms it', () => {
+    const state = pit(['2'], { armed: [{ pos: { x: 0, y: 0, z: 2 }, kind: 'unstableOre' }] }, [
+      'U',
+    ]);
+    setWaterOn(state, 0, 0, 1);
+    setLavaOn(state, 0, 0, 1, false);
+    stepFluids(state, [], newCubePhase());
+    expect(depthAt(state, 0, 0)).toBe(1);
+    expect(state.armed).toEqual([]);
   });
 
   it('ore in the blast of a charge is destroyed as a block: it does not go off', () => {
