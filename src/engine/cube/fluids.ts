@@ -13,13 +13,15 @@ import type { CubePhase } from './phase';
  * 2. lava flows by the same rules, in the cube phase of even-numbered shifts
  *    only (item 16);
  * 3. every water cell beside a lava cell, and that lava cell, become stone;
- * 4. lava's damage to the avatar (in its cell, or beside it) is recorded
- *    with `recordDamage(phase, ...)`, from where the lava is at the end of
- *    this step (decision note 0015).
+ * 4. damage to the crew (design doc 5.2): `recordDamage(state, phase,
+ *    'water', ...)` for each square water enters; for lava, from where it is
+ *    at the end of this step (decision note 0015), `recordDamage` with
+ *    `CREW.damage.lavaOn` and `recordDamageBeside` with
+ *    `CREW.damage.lavaBeside` for each square it stands on.
  *
  * Changes `state` in place and appends to `events`. Uses no randomness.
  * What a fluid destroys on entering a cell goes through the helpers in
- * destroy.ts. Never moves the avatar (0014 item 2).
+ * destroy.ts.
  *
  * The forecast runs this step on a copy of the cube (0014 item 4), so it must
  * read nothing but `state`.

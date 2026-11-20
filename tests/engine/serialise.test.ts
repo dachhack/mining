@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createRun, deserialise, hashState, serialise } from '../../src/engine';
+import { createRun, deserialise, hashState, serialise, workedSquares } from '../../src/engine';
 import { STRUCTURES } from '../../src/data';
 import type { ArmedCharge, Camp, GameState } from '../../src/engine';
 import { hashString } from '../../src/engine/hash';
@@ -40,7 +40,7 @@ function busyState(): GameState {
     supports: [{ x: 1, y: 1, z: 0 }],
     seed: 4242,
     // Every field the M2 skeleton added (issue #50), each with something in it.
-    air: 6,
+    worked: [{ x: 2, y: 1 }],
     water: [{ x: 0, y: 2, z: 0 }],
     lava: [{ x: 1, y: 2, z: 1 }],
     lavaSources: [{ x: 2, y: 2, z: 1 }],
@@ -60,7 +60,7 @@ function busyState(): GameState {
       { pos: { x: 1, y: 1, z: 0 }, foundedShift: 3, stash: {} },
     ],
   });
-  state.avatar.resting = true;
+  state.crew.resting = true;
   state.revealed[0] = 1;
   state.revealed[4] = 1;
   nextUint32(state.rng); // so the RNG is no longer at its seed
@@ -99,8 +99,8 @@ describe('serialise and deserialise', () => {
 
   it('round-trips every field the M2 skeleton added', () => {
     const loaded = throughJson(busyState());
-    expect(loaded.avatar.air).toBe(6);
-    expect(loaded.avatar.resting).toBe(true);
+    expect(workedSquares(loaded)).toEqual([{ x: 2, y: 1 }]);
+    expect(loaded.crew.resting).toBe(true);
     expect(waterAt(loaded, { x: 0, y: 2, z: 0 })).toBe(1);
     expect(lavaAt(loaded, { x: 1, y: 2, z: 1 })).toBe(1);
     expect(isLavaSource(loaded, { x: 1, y: 2, z: 1 })).toBe(false);
@@ -145,9 +145,9 @@ describe('serialise and deserialise', () => {
 
   it('round-trips an ended run', () => {
     const state = busyState();
-    state.status = { kind: 'ended', outcome: 'death', cause: 'outOfFuel' };
+    state.status = { kind: 'ended', outcome: 'lost', cause: 'outOfFuel' };
     const loaded = throughJson(state);
-    expect(loaded.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'outOfFuel' });
+    expect(loaded.status).toEqual({ kind: 'ended', outcome: 'lost', cause: 'outOfFuel' });
     expect(hashState(loaded)).toBe(hashState(state));
   });
 
@@ -192,10 +192,10 @@ describe('serialise and deserialise', () => {
 
   it('refuses a save from before the M2 skeleton with a clear error', () => {
     // State version 3 was the last M1 shape (decision note 0012).
-    expect(STATE_VERSION).toBe(8);
+    expect(STATE_VERSION).toBe(9);
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 3 })).toThrow(
-      'Saved state has version 3; this build reads version 8',
+      'Saved state has version 3; this build reads version 9',
     );
   });
 
@@ -203,7 +203,7 @@ describe('serialise and deserialise', () => {
     // State version 4 was the M2 skeleton's shape, with no surface arrays.
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 4 })).toThrow(
-      'Saved state has version 4; this build reads version 8',
+      'Saved state has version 4; this build reads version 9',
     );
   });
 
@@ -211,7 +211,7 @@ describe('serialise and deserialise', () => {
     // State version 5 could hold a ladder (structure code 1, item 'ladder').
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 5 })).toThrow(
-      'Saved state has version 5; this build reads version 8',
+      'Saved state has version 5; this build reads version 9',
     );
   });
 
@@ -219,7 +219,7 @@ describe('serialise and deserialise', () => {
     // State version 7 held `lampOil`, and could hold a torch or a safety lamp.
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 7 })).toThrow(
-      'Saved state has version 7; this build reads version 8',
+      'Saved state has version 7; this build reads version 9',
     );
   });
 
@@ -228,7 +228,15 @@ describe('serialise and deserialise', () => {
     // followed the light rule.
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 6 })).toThrow(
-      'Saved state has version 6; this build reads version 8',
+      'Saved state has version 6; this build reads version 9',
+    );
+  });
+
+  it('refuses a save from before crew health with a clear error (issue #90)', () => {
+    // State version 8 held `avatar` (health and air) and no worked squares.
+    const saved = serialise(busyState());
+    expect(() => deserialise({ ...saved, version: 8 })).toThrow(
+      'Saved state has version 8; this build reads version 9',
     );
   });
 });
@@ -262,9 +270,9 @@ describe('hashState', () => {
       "a stump's age": (s) => (s.stumpAge[1] = 3),
       rng: (s) => nextUint32(s.rng),
       seed: (s) => (s.seed += 1),
-      health: (s) => (s.avatar.health -= 1),
-      air: (s) => (s.avatar.air -= 1),
-      resting: (s) => (s.avatar.resting = false),
+      health: (s) => (s.crew.health -= 1),
+      'a worked square': (s) => (s.worked[0] = 1),
+      resting: (s) => (s.crew.resting = false),
       'an armed charge gone': (s) => s.armed.pop(),
       'an armed charge of another kind': (s) => {
         (s.armed[0] as ArmedCharge).kind = 'unstableOre';

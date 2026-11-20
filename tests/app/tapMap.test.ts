@@ -56,7 +56,7 @@ function cube(layers: string[][], trees: [number, number][] = [], ap = 100): Gam
   }
   state.ap = ap;
   state.fuel = 10;
-  state.avatar.health = 10;
+  state.crew.health = 10;
   state.shift = SHIFT.firstShiftNumber;
   updateReveal(state, []);
   updateMineralTraces(state, []);

@@ -25,7 +25,9 @@ export function legalPlaceExplosiveActions(_state: GameState): PlaceExplosiveAct
  * Contract for M2-5: carry out `action`: use up one explosive, put the
  * explosive structure in the cell, call `armCharge(state, target,
  * 'explosive')` so that it goes off in step (c) of the coming cube phase,
- * and emit `structurePlaced`. Does not spend the AP; the dispatcher has.
+ * and emit `structurePlaced`. The square is NOT marked worked: the crew
+ * withdraws before a charge goes off (design doc 5.2). Does not spend the AP;
+ * the dispatcher has.
  */
 export function applyPlaceExplosive(
   _state: GameState,

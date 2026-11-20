@@ -12,7 +12,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { AVATAR, BLOCKS, HAZARDS, SHIFT, SURFACE, WORLD } from '../../src/data';
+import { BLOCKS, CREW, SHIFT, SURFACE, WORLD } from '../../src/data';
 import type { BlockId } from '../../src/data';
 import { ENGINE_VERSION, applyAction, createRun, endShift, hashState } from '../../src/engine';
 import type { GameState } from '../../src/engine';
@@ -74,8 +74,7 @@ function makeState(layers: string[][], trees: string[] = []): GameState {
   state.shift = SHIFT.firstShiftNumber;
   state.ap = SHIFT.apPerShift;
   state.fuel = 10;
-  state.avatar.health = AVATAR.startHealth;
-  state.avatar.air = HAZARDS.air.max; // still in the state until task T5
+  state.crew.health = CREW.startHealth;
   updateReveal(state, []);
   updateMineralTraces(state, []);
   return state;
@@ -213,7 +212,7 @@ describe('the top-down map', () => {
     expect(view.hud[0]).toContain(`AP ${SHIFT.apPerShift}/${SHIFT.apPerShift}`);
     expect(view.hud[0]).toContain(`Fuel ${state.fuel}`);
     expect(view.hud[0]).not.toContain('Lamp oil');
-    expect(view.hud[0]).toContain(`Health ${AVATAR.startHealth}/${AVATAR.startHealth}`);
+    expect(view.hud[0]).toContain(`Crew health ${CREW.startHealth}/${CREW.startHealth}`);
     expect(view.hud[1]).toBe('Deepest square so far: depth 3');
     expect(view.hud[2]).toBe('You have: 2 Timber');
   });

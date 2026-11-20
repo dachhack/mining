@@ -53,7 +53,7 @@ vi.mock('../../src/engine/actions/leave', () => ({
     state.blocks.fill(0);
     state.revealed.fill(1);
     state.structures.fill(1);
-    state.avatar.health -= 1;
+    state.crew.health -= 1;
     state.fuel -= 3;
     state.rng.s += 1;
     state.inventory['stone'] = 9;
@@ -96,8 +96,8 @@ vi.mock('../../src/engine/shift', () => ({
     calls.push('runCubePhase');
     state.blocks.fill(0);
     if (cubePhaseEndsRun) {
-      state.status = { kind: 'ended', outcome: 'death', cause: 'crushed' };
-      events.push({ type: 'runEnded', outcome: 'death', cause: 'crushed' });
+      state.status = { kind: 'ended', outcome: 'lost', cause: 'buried' };
+      events.push({ type: 'runEnded', outcome: 'lost', cause: 'buried' });
     }
   },
   runUpkeep: (state: GameState, events: GameEvent[]): void => {
@@ -149,7 +149,7 @@ describe('applyAction', () => {
     expect(result.state).not.toBe(state);
     expect(result.state.blocks).not.toBe(state.blocks);
     expect(result.state.fuel).toBe(7);
-    expect(result.state.avatar.health).toBe(state.avatar.health - 1);
+    expect(result.state.crew.health).toBe(state.crew.health - 1);
     expect(hashState(result.state)).not.toBe(before);
   });
 
@@ -237,11 +237,11 @@ describe('endShift', () => {
     const state = startState(5);
     const { state: after, events } = endShift(state);
     expect(calls).toEqual(['runCubePhase', 'settle', 'updateReveal', 'updateMineralTraces']);
-    expect(after.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'crushed' });
+    expect(after.status).toEqual({ kind: 'ended', outcome: 'lost', cause: 'buried' });
     // No fuel taken and no new shift: the fake upkeep never ran.
     expect(after.fuel).toBe(state.fuel);
     expect(after.shift).toBe(state.shift);
-    expect(events).toEqual([{ type: 'runEnded', outcome: 'death', cause: 'crushed' }]);
+    expect(events).toEqual([{ type: 'runEnded', outcome: 'lost', cause: 'buried' }]);
   });
 
   it('works on a copy of the state', () => {
@@ -262,7 +262,7 @@ describe('endShift', () => {
 
   it('refuses to end a shift once the run has ended', () => {
     const state = startState(5);
-    state.status = { kind: 'ended', outcome: 'death', cause: 'outOfFuel' };
+    state.status = { kind: 'ended', outcome: 'lost', cause: 'outOfFuel' };
     expect(() => endShift(state)).toThrow('The run has ended');
     expect(calls).toEqual([]);
   });
@@ -278,7 +278,7 @@ describe('previewCubePhase', () => {
 
   it('refuses once the run has ended, as endShift does', () => {
     const state = startState(5);
-    state.status = { kind: 'ended', outcome: 'death', cause: 'crushed' };
+    state.status = { kind: 'ended', outcome: 'lost', cause: 'buried' };
     expect(() => previewCubePhase(state)).toThrow('The run has ended');
   });
 });

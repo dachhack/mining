@@ -283,9 +283,20 @@ export function validateData(data: GameData): string[] {
     }
   }
 
+  // --- Crew ---
+  const crew = data.crew;
+  requireWholeAtLeast(crew.startHealth, 1, 'crew.startHealth');
+  // `Object.entries` gives (name, value) pairs, like `dict.items()` in Python.
+  for (const [name, amount] of Object.entries(crew.damage)) {
+    requireWholeAtLeast(amount as number, 0, `crew.damage.${name}`);
+  }
+  // "Lava 5 on / 1 beside": standing in it is never the lesser of the two.
+  if (crew.damage.lavaOn < crew.damage.lavaBeside) {
+    problems.push('crew.damage.lavaOn must be at least crew.damage.lavaBeside');
+  }
+
   // --- Avatar ---
   const avatar = data.avatar;
-  requireWholeAtLeast(avatar.startHealth, 1, 'avatar.startHealth');
   if (!Number.isFinite(avatar.carryCapacity) || avatar.carryCapacity < 0) {
     problems.push(`avatar.carryCapacity is negative or invalid (${avatar.carryCapacity})`);
   }
@@ -334,7 +345,6 @@ export function validateData(data: GameData): string[] {
   if (hazards.caveIn.crackTimer + 1 > MAX_CODE) {
     problems.push(`hazards.caveIn.crackTimer must be less than ${MAX_CODE}`);
   }
-  requireWholeAtLeast(hazards.caveIn.rockfallDamage, 0, 'hazards.caveIn.rockfallDamage');
   requireWholeAtLeast(hazards.caveIn.supportLiningReach, 0, 'hazards.caveIn.supportLiningReach');
   for (const [name, sides] of [
     ['tightCellSolidSides', hazards.caveIn.tightCellSolidSides],
@@ -360,13 +370,8 @@ export function validateData(data: GameData): string[] {
     problems.push(`hazards.gas.pocketUnitsPerCell must be at most ${MAX_CODE}`);
   }
   requireWholeAtLeast(hazards.gas.ventReach, 0, 'hazards.gas.ventReach');
-  requireWholeAtLeast(hazards.explosion.damage, 0, 'hazards.explosion.damage');
   requireWholeAtLeast(hazards.lava.flowEveryShifts, 1, 'hazards.lava.flowEveryShifts');
   requireWholeAtLeast(hazards.lava.sourcePocketCellsOver, 0, 'hazards.lava.sourcePocketCellsOver');
-  requireWholeAtLeast(hazards.lava.damageInCell, 0, 'hazards.lava.damageInCell');
-  requireWholeAtLeast(hazards.lava.damageBeside, 0, 'hazards.lava.damageBeside');
-  requireWholeAtLeast(hazards.air.max, 1, 'hazards.air.max');
-  requireWholeAtLeast(hazards.air.lossPerShift, 0, 'hazards.air.lossPerShift');
   const unseen = Object.hasOwn(data.blocks, hazards.forecast.unseenBlock)
     ? data.blocks[hazards.forecast.unseenBlock]
     : undefined;
@@ -386,7 +391,6 @@ export function validateData(data: GameData): string[] {
   requireWholeAtLeast(camps.restMinAp, 0, 'camps.restMinAp');
   requireWholeAtLeast(camps.upkeepFuel, 0, 'camps.upkeepFuel');
   requireWholeAtLeast(camps.upkeepEveryShifts, 1, 'camps.upkeepEveryShifts');
-  requireWholeAtLeast(camps.airLineMaxBadStretch, 0, 'camps.airLineMaxBadStretch');
   const campTools = data.campTools;
   requireKnownItem(campTools.drillItem, 'campTools.drillItem');
   requireKnownItem(campTools.sealantItem, 'campTools.sealantItem');

@@ -21,7 +21,7 @@ import type { ArmedCharge, Camp, GameState, LooseItems, RunStatus } from './stat
 
 /**
  * A GameState with nothing in it that JSON cannot hold. The nine cube arrays
- * and the two surface arrays are run-length encoded: `[value, runLength, value, runLength, ...]`. A cube
+ * and the three per-square arrays are run-length encoded: `[value, runLength, value, runLength, ...]`. A cube
  * that is all stone becomes just `[2, 32768]`.
  */
 export interface SerialisedState {
@@ -43,7 +43,9 @@ export interface SerialisedState {
   /** One entry per surface cell (issue #70), run-length encoded like the cube arrays. */
   surface: number[];
   stumpAge: number[];
-  avatar: { health: number; air: number; resting: boolean };
+  /** The worked squares (issue #90), one entry per square, run-length encoded. */
+  worked: number[];
+  crew: { health: number; resting: boolean };
   ap: number;
   fuel: number;
   shift: number;
@@ -136,10 +138,10 @@ export function serialise(state: GameState): SerialisedState {
     tracesSeen: runLengthEncode(state.tracesSeen),
     surface: runLengthEncode(state.surface),
     stumpAge: runLengthEncode(state.stumpAge),
-    avatar: {
-      health: state.avatar.health,
-      air: state.avatar.air,
-      resting: state.avatar.resting,
+    worked: runLengthEncode(state.worked),
+    crew: {
+      health: state.crew.health,
+      resting: state.crew.resting,
     },
     ap: state.ap,
     fuel: state.fuel,
@@ -209,10 +211,10 @@ export function deserialise(saved: SerialisedState): GameState {
     tracesSeen: runLengthDecode(saved.tracesSeen, cells, 'tracesSeen'),
     surface: runLengthDecode(saved.surface, size.x * size.y, 'surface'),
     stumpAge: runLengthDecode(saved.stumpAge, size.x * size.y, 'stumpAge'),
-    avatar: {
-      health: saved.avatar.health,
-      air: saved.avatar.air,
-      resting: saved.avatar.resting,
+    worked: runLengthDecode(saved.worked, size.x * size.y, 'worked'),
+    crew: {
+      health: saved.crew.health,
+      resting: saved.crew.resting,
     },
     ap: saved.ap,
     fuel: saved.fuel,

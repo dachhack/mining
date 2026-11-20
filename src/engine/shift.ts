@@ -2,8 +2,8 @@
 
 import { SHIFT } from '../data';
 import type { Vec3 } from '../data';
-import { stepAvatarEffects } from './cube/avatarEffects';
 import { stepCaveIns } from './cube/caveIns';
+import { stepCrewEffects } from './cube/crewEffects';
 import { stepFluids } from './cube/fluids';
 import { stepGas } from './cube/gas';
 import { newCubePhase } from './cube/phase';
@@ -73,11 +73,11 @@ export interface ShiftForecast {
 //   (b) cube/fluids.ts         water, then lava, then water beside lava
 //   (c) cube/gas.ts            gas spreads, vents, charges go off, ignition
 //   (d) cube/timers.ts         crack timers tick
-//   (e) cube/avatarEffects.ts  recorded damage, air, rest
+//   (e) cube/crewEffects.ts    recorded damage, rest, worked squares cleared
 //
-// During (a) to (d) the avatar does not move and is not hurt: damage is
-// recorded in the phase's notes (`recordDamage` in cube/phase.ts) and applied
-// in (e), in the order it happened (0014 item 2).
+// During (a) to (d) the crew is not hurt: damage is recorded in the phase's
+// notes (`recordDamage` in cube/phase.ts) when a hazard reaches a worked
+// square, and applied in (e), in the order it was met (design doc 5.2).
 
 /** One step of the cube phase: a name (for logs and tests) and what it does. */
 export interface CubePhaseStep {
@@ -91,7 +91,7 @@ export const CUBE_PHASE_STEPS: CubePhaseStep[] = [
   { name: 'fluids', run: stepFluids },
   { name: 'gas', run: stepGas },
   { name: 'timers', run: stepTimers },
-  { name: 'avatarEffects', run: stepAvatarEffects },
+  { name: 'crewEffects', run: stepCrewEffects },
 ];
 
 /**
@@ -151,7 +151,7 @@ function computeUpkeep(state: GameState): UpkeepForecast {
  * calls this after the cube phase, if the run is still going.
  *
  * In this order, with every number from `SHIFT`:
- * 1. If fuel is 0, end the run: `endRun(state, 'death', 'outOfFuel', events)`,
+ * 1. If fuel is 0, end the run: `endRun(state, 'lost', 'outOfFuel', events)`,
  *    and stop. The shift number and `state.ap` are left as they were. So a
  *    player may finish a shift on 0 fuel and survive only by crafting fuel
  *    before the next upkeep.
@@ -168,7 +168,7 @@ export function runUpkeep(state: GameState, events: GameEvent[]): void {
 
   // 1. Out of fuel: the run ends here.
   if (upkeep.runEnds !== null) {
-    endRun(state, 'death', upkeep.runEnds, events);
+    endRun(state, 'lost', upkeep.runEnds, events);
     return;
   }
 

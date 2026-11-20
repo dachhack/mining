@@ -26,7 +26,7 @@
 //     },
 //     "aggregate": {                all runs together
 //       "runs": 1000,
-//       "outcomes": { "salvage": n, "death": n, "unfinished": n },
+//       "outcomes": { "salvage": n, "lost": n, "unfinished": n },
 //       "causes":   { "left": n, "outOfFuel": n, "shiftCap": n },
 //       "shiftsPlayed":     spread+,
 //       "deepestSquare":    spread+,   levels down of the deepest square; 0 is
@@ -55,7 +55,7 @@
 //     "runs": [                     one entry per run, in seed order
 //       {
 //         "seed": 123, "policy": "random",
-//         "outcome": "salvage" | "death" | "unfinished",
+//         "outcome": "salvage" | "lost" | "unfinished",
 //         "cause": "left" | "outOfFuel" | "shiftCap",
 //         "shiftsPlayed": n,        shifts started, counting the one the run ended in
 //         "actionsTaken": n,        not counting ends of shift

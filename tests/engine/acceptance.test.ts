@@ -150,7 +150,7 @@ describe('the policies on other seeds', () => {
   it('random: takes only legal actions and keeps the level rule to the end of its fuel', () => {
     for (const seed of [2, 3]) {
       const result = play('random', seed, Infinity);
-      expect(result.final.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'outOfFuel' });
+      expect(result.final.status).toEqual({ kind: 'ended', outcome: 'lost', cause: 'outOfFuel' });
       expect(result.events.some((event) => event.type === 'blockMined')).toBe(true);
     }
   });

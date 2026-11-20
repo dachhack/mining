@@ -13,6 +13,7 @@
 
 import { BLOCKS, SURFACE } from '../../data';
 import type { MineAction } from '../actionTypes';
+import { markWorked } from '../crew';
 import type { GameEvent } from '../events';
 import { depthAt, mayMine } from '../heightmap';
 import type { HigherNeighbour } from '../heightmap';
@@ -110,6 +111,8 @@ export function legalMineActions(state: GameState): MineAction[] {
  *
  * - Opens the square's top cell and emits `blockMined`. The square is now 1
  *   level deeper.
+ * - The square is a worked square until the end of the shift (design doc
+ *   5.2): a hazard that reaches it in the coming cube phase hurts the crew.
  * - Gives the yield (`itemGained`). The carry limit is not enforced while
  *   there is no way to pick up or drop (decision note 0026); task T4 removes
  *   carrying.
@@ -133,6 +136,7 @@ export function applyMine(state: GameState, action: MineAction, events: GameEven
 
   setBlock(state, target, BLOCKS.air.code);
   events.push({ type: 'blockMined', pos: { ...target }, block: minedCode });
+  markWorked(state, x, y);
 
   for (const stack of yields) {
     addItem(state, stack.item, stack.count);

@@ -21,9 +21,6 @@ export const CAMPS: CampData = {
   // counted from the shift it was founded (design doc 4; 0014 item 28).
   upkeepFuel: 1,
   upkeepEveryShifts: 4,
-  // The longest flooded or gassy stretch an air line may cross, with a vent
-  // at each end (0014 item 29).
-  airLineMaxBadStretch: 8,
 };
 
 // Camp-made tools whose numbers are not a hazard's (0014 item 31; design doc

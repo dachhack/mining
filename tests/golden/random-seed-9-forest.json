@@ -4,8 +4,8 @@
   "contractId": "none",
   "loadoutId": "standard",
   "recordedWith": "random",
-  "expectedStatus": "ended: death, outOfFuel",
-  "expectedHash": "62a06f8302fce2e8",
+  "expectedStatus": "ended: lost, outOfFuel",
+  "expectedHash": "e84672777f336ca0",
   "decisions": [
     "cutTree 7,27 ap 2",
     "cutTree 30,8 ap 2",

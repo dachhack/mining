@@ -31,7 +31,7 @@ export function hashString(text: string): string {
 /**
  * The hash of a state: 16 hex digits. Two states that serialise to the same
  * JSON have the same hash; any difference in the cube (blocks, water, lava,
- * gas, cracks, structures), the avatar, the gauges, the inventory, the loose
+ * gas, cracks, structures), the crew and its worked squares, the gauges, the inventory, the loose
  * items, the armed charges, the camps, the RNG or the run status changes it.
  */
 export function hashState(state: GameState): string {
