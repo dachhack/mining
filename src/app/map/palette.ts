@@ -164,6 +164,8 @@ export const MARK_COLOURS = {
   tellOutline: 'rgba(0, 0, 0, 0.75)',
   /** The corners of a square the crew worked this shift. */
   worked: '#ffffff',
+  /** The frame of a worked square where the crew will be hurt when the shift ends. */
+  crewHurt: '#ff3b30',
   /** "Water flows here": a drop. "Lava flows here": a flame with a yellow heart. */
   waterComing: '#3b9bff',
   waterComingEdge: '#ffffff',

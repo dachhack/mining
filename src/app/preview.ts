@@ -214,6 +214,13 @@ export function mountPreview(root: HTMLElement): void {
   const endShiftButton = element('button', 'end-shift', 'End shift');
   endShiftButton.type = 'button';
   endShiftButton.dataset['testid'] = 'end-shift';
+  // The warning shown over the button when ending the shift would or may
+  // lose the run (the engine's forecast; issue #112). The first tap on End
+  // shift then only shows it; a second tap ends the shift.
+  const endShiftWarning = element('section', 'end-shift-warning');
+  endShiftWarning.dataset['testid'] = 'end-shift-warning';
+  endShiftWarning.setAttribute('role', 'alert');
+  endShiftWarning.hidden = true;
   // The other listed choices, folded away: the map covers mining and
   // cutting, and this list has crafting and leaving.
   const allActions = element('details', 'all-actions');
@@ -234,6 +241,7 @@ export function mountPreview(root: HTMLElement): void {
     tapMap.element,
     toolBar,
     outcome,
+    endShiftWarning,
     endShiftButton,
     forecast,
     hazards,
@@ -266,6 +274,10 @@ export function mountPreview(root: HTMLElement): void {
   // waiting for its second tap (`null` when none is).
   let tool: MapTool = 'dig';
   let pending: MapSquare | null = null;
+  // The warning of a lost run, as last drawn (`null` when there is none),
+  // and whether End shift has been tapped once and waits for the second tap.
+  let lostWarning: string | null = null;
+  let endShiftAsked = false;
   note.textContent = loaded.note ?? '';
   note.hidden = loaded.note === null;
   if (loaded.session === null) {
@@ -384,6 +396,28 @@ export function mountPreview(root: HTMLElement): void {
 
     // End shift has its own button; it is hidden once the run is over.
     endShiftButton.hidden = view.ended !== null;
+    // If the run would or may be lost, the button says so and turns red;
+    // after the first tap the full warning stands over it.
+    lostWarning = view.crewLostWarning;
+    if (lostWarning === null) {
+      endShiftAsked = false;
+    }
+    endShiftButton.classList.toggle('danger', lostWarning !== null);
+    if (lostWarning === null) {
+      endShiftButton.textContent = 'End shift';
+    } else if (endShiftAsked) {
+      endShiftButton.textContent = 'Tap again to end the shift anyway';
+    } else {
+      endShiftButton.textContent = lostWarning.startsWith('THE RUN WILL')
+        ? 'End shift (THE RUN WILL BE LOST)'
+        : 'End shift (the run may be lost)';
+    }
+    endShiftWarning.hidden = !(endShiftAsked && lostWarning !== null);
+    endShiftWarning.textContent =
+      lostWarning === null
+        ? ''
+        : `${lostWarning} The red frames on the map show where the crew will be hurt (dashed: may be hurt); ` +
+          'the list below says by what. Tap End shift again to end it anyway, or do something else.';
 
     // One button per other choice on the list, in the list's order.
     const others = view.choices.filter((choice) => choice.entry.type !== 'endShift');
@@ -453,6 +487,7 @@ export function mountPreview(root: HTMLElement): void {
     }
     // A second tap in a row on the same square confirms a risky mine, and
     // takes a pump, a vent or a scan whose range the first tap showed.
+    endShiftAsked = false; // a tap on the map is "something else"
     const confirmed = pending !== null && pending.x === x && pending.y === y;
     const outcome = tapOutcome(session.state, x, y, tool, confirmed);
     if (outcome.entry !== null) {
@@ -476,6 +511,7 @@ export function mountPreview(root: HTMLElement): void {
     }
     marks = NO_MARKS;
     pending = null;
+    endShiftAsked = false;
     try {
       lastLines = takeTurnLines(session, entry, 'phone');
     } catch (error) {
@@ -522,6 +558,7 @@ export function mountPreview(root: HTMLElement): void {
     marks = NO_MARKS;
     tool = 'dig';
     pending = null;
+    endShiftAsked = false;
     saveRun(store, session);
     note.textContent = message;
     note.hidden = false;
@@ -546,11 +583,19 @@ export function mountPreview(root: HTMLElement): void {
       tool = tool === name ? 'dig' : name;
       marks = NO_MARKS;
       pending = null;
+      endShiftAsked = false;
       draw(false);
     });
   }
 
   endShiftButton.addEventListener('click', () => {
+    // A shift that would or may lose the run needs a second tap (issue #112).
+    if (lostWarning !== null && !endShiftAsked) {
+      endShiftAsked = true;
+      draw(false);
+      endShiftWarning.scrollIntoView({ block: 'nearest' });
+      return;
+    }
     take({ type: 'endShift' }, false);
   });
 

@@ -40,6 +40,16 @@ const FAKE_FORECAST: ShiftForecast = {
   slumps: [],
   flows: [],
   gas: [],
+  crew: {
+    damage: [],
+    total: 0,
+    totalAtLeast: 0,
+    exact: true,
+    health: 10,
+    healthAfter: 10,
+    runLost: 'no',
+    lossCause: null,
+  },
   upkeep: {
     fuelConsumed: 1,
     campFuelConsumed: 0,

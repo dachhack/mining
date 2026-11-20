@@ -232,6 +232,23 @@ button.small {
   font-weight: bold;
 }
 
+/* Ending the shift would or may lose the run (issue #112). */
+.end-shift.danger {
+  background: #b3261e;
+  border: 2px solid #ffb4ab;
+  color: #ffffff;
+}
+
+.end-shift-warning {
+  margin: 8px 0 0;
+  padding: 10px;
+  border: 2px solid #ff3b30;
+  background: #3a0f0c;
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: bold;
+}
+
 .actions-heading {
   font-size: 1rem;
   margin: 12px 0 6px;
