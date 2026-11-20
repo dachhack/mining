@@ -5,7 +5,7 @@
 //
 // This file is also the dispatcher: it owns what is common to every action
 // (copying the state, checking legality, spending AP, then reveal) and hands the rest to one module per rule. The modules of the M2
-// actions (supports, explosives, camp tools, camps) are stubs until
+// actions (explosives, camp tools, camps) are stubs until
 // their tasks fill them in; each stub's doc comment is its contract
 // (decision note 0015).
 
@@ -212,8 +212,8 @@ export function endShift(state: GameState): StepResult {
 
 /**
  * What ending the shift now would do, for the end-shift preview (0014 item
- * 4): the countdowns and flows the player can work out from what it sees
- * (both empty until M2-6), and upkeep's effect on fuel. Does not
+ * 4): the cracks and their countdowns, what will slump and crack, the flows
+ * (empty until T10 and T11), and upkeep's effect on fuel. Does not
  * change `state`. Throws if the run has already ended, as `endShift` does.
  */
 export function previewCubePhase(state: GameState): ShiftForecast {
@@ -269,6 +269,14 @@ export type { KnownCell, KnownSquare } from './known';
 // a square the rules forbid shows the player (design doc 4.2).
 export { mineCheck } from './actions/mine';
 export type { MineCheck, MineRefusalReason } from './actions/mine';
+// The same for placing a support on a square (design doc 6.1; issue #94).
+export { supportCheck } from './actions/placeSupport';
+export type { SupportCheck, SupportRefusalReason } from './actions/placeSupport';
+// Pit walls slump (design doc 6.1): is a square unstable, and which squares
+// would a mine make unstable? These read only what the player sees (depths,
+// trees, supports, seen top blocks), so a view may call them freely.
+export { slumpCheck, unstableAfterMine, unstableSquares } from './slump';
+export type { SlumpCheck, SlumpHold, SlumpReason, UnstableSquare } from './slump';
 export type { CountdownForecast } from './forecast';
 export type { ShiftForecast, UpkeepForecast } from './shift';
 export {
@@ -307,8 +315,19 @@ export { shiftsUntilRegrowth } from './surface/regrowth';
 // The cube seen from above (design doc v0.2 section 3.1; issue #84): a
 // square's depth, its top block, and the level rule. `topBlockAt` reads the
 // true cube, under a tree too: a view must use `knownSquare` instead.
-export { depthAt, isSquare, mayMine, topBlockAt, SQUARE_STEPS } from './heightmap';
+export {
+  depthAt,
+  fallOf,
+  footOf,
+  isSquare,
+  mayMine,
+  slidePath,
+  structureOnSquare,
+  topBlockAt,
+  SQUARE_STEPS,
+} from './heightmap';
 export type {
+  DepthMap,
   HigherNeighbour,
   Square,
   MayMineResult,

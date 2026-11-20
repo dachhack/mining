@@ -142,6 +142,11 @@ export const MARK_COLOURS = {
   selected: '#ffe14d',
   /** The outline of a neighbour that is too high for the level rule. */
   tooHigh: '#ff4a3a',
+  /** The outline of a square a mine would make unstable. */
+  unstable: '#ff9a2e',
+  /** A crack on a top block, and the countdown beside it. */
+  crack: '#ff5a3c',
+  crackOutline: 'rgba(0, 0, 0, 0.8)',
   /** The shadow a higher neighbour casts on a lower square. */
   wallShadow: 'rgba(0, 0, 0, 0.5)',
   depthNumber: '#ffffff',

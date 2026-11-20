@@ -21,18 +21,19 @@ export type BlockId =
   | 'rubble'
   | 'sealed';
 
-// Design doc 3.2. Every block in that table is defined here, including the
+// Design doc 3.5. Every block in that table is defined here, including the
 // ones M1 does not generate yet (unstable ore, relic, keystone).
 //
 // `code` is what the cube's typed array stores. Codes are part of the save
 // format: do not renumber them, only add new ones.
 //
-// `span` and `shaftLimit` are the cave-in numbers of each material (design
-// doc 6.1; decision note 0014 items 5 and 10):
-// - span: dirt and rubble 0, hard rock 3, every other block 2;
-// - shaftLimit: dirt and rubble 3, hard rock 8, every other block 5.
-// Open space and bedrock have neither (`null`): bedrock never falls and is
-// ignored when a shaft's limit is worked out.
+// `slumpLimit` is how far a pit wall of each material may fall before it
+// slumps (design doc 3.5 and 6.1; owner question 81): a square is "tall", and
+// so unstable, when its fall is MORE than the slump limit of its top block.
+// - dirt and rubble 1: weak, they slump at the top of any slope that falls 2;
+// - hard rock and crystal 3;
+// - every other block 2.
+// Open space and bedrock have none (`null`): bedrock never slumps.
 export const BLOCKS: Record<BlockId, BlockDef> = {
   // Open space. Not in the table in 3.2, but the cube needs a value for it.
   air: {
@@ -42,8 +43,7 @@ export const BLOCKS: Record<BlockId, BlockDef> = {
     mineCost: null,
     mineCostWithDrill: null,
     yields: [],
-    span: null,
-    shaftLimit: null,
+    slumpLimit: null,
   },
   dirt: {
     code: 1,
@@ -52,8 +52,7 @@ export const BLOCKS: Record<BlockId, BlockDef> = {
     mineCost: 1,
     mineCostWithDrill: null,
     yields: [],
-    span: 0,
-    shaftLimit: 3,
+    slumpLimit: 1,
   },
   stone: {
     code: 2,
@@ -62,8 +61,7 @@ export const BLOCKS: Record<BlockId, BlockDef> = {
     mineCost: 2,
     mineCostWithDrill: null,
     yields: [{ item: 'stone', count: 1 }],
-    span: 2,
-    shaftLimit: 5,
+    slumpLimit: 2,
   },
   hardRock: {
     code: 3,
@@ -72,8 +70,7 @@ export const BLOCKS: Record<BlockId, BlockDef> = {
     mineCost: 3,
     mineCostWithDrill: 2,
     yields: [{ item: 'stone', count: 1 }],
-    span: 3,
-    shaftLimit: 8,
+    slumpLimit: 3,
   },
   coalSeam: {
     code: 4,
@@ -82,8 +79,7 @@ export const BLOCKS: Record<BlockId, BlockDef> = {
     mineCost: 2,
     mineCostWithDrill: null,
     yields: [{ item: 'coal', count: 1 }],
-    span: 2,
-    shaftLimit: 5,
+    slumpLimit: 2,
   },
   timberRoot: {
     code: 5,
@@ -92,8 +88,7 @@ export const BLOCKS: Record<BlockId, BlockDef> = {
     mineCost: 1,
     mineCostWithDrill: null,
     yields: [{ item: 'timber', count: 1 }],
-    span: 2,
-    shaftLimit: 5,
+    slumpLimit: 2,
   },
   ironOre: {
     code: 6,
@@ -102,8 +97,7 @@ export const BLOCKS: Record<BlockId, BlockDef> = {
     mineCost: 2,
     mineCostWithDrill: null,
     yields: [{ item: 'rawIronOre', count: 1 }],
-    span: 2,
-    shaftLimit: 5,
+    slumpLimit: 2,
   },
   copperOre: {
     code: 7,
@@ -112,8 +106,7 @@ export const BLOCKS: Record<BlockId, BlockDef> = {
     mineCost: 2,
     mineCostWithDrill: null,
     yields: [{ item: 'rawCopperOre', count: 1 }],
-    span: 2,
-    shaftLimit: 5,
+    slumpLimit: 2,
   },
   crystal: {
     code: 8,
@@ -122,8 +115,7 @@ export const BLOCKS: Record<BlockId, BlockDef> = {
     mineCost: 3,
     mineCostWithDrill: null,
     yields: [{ item: 'crystal', count: 1 }],
-    span: 2,
-    shaftLimit: 5,
+    slumpLimit: 3,
   },
   unstableOre: {
     code: 9,
@@ -132,8 +124,7 @@ export const BLOCKS: Record<BlockId, BlockDef> = {
     mineCost: 2,
     mineCostWithDrill: null,
     yields: [{ item: 'rareOre', count: 1 }],
-    span: 2,
-    shaftLimit: 5,
+    slumpLimit: 2,
   },
   relic: {
     code: 10,
@@ -142,8 +133,7 @@ export const BLOCKS: Record<BlockId, BlockDef> = {
     mineCost: 2,
     mineCostWithDrill: null,
     yields: [{ item: 'relic', count: 1 }],
-    span: 2,
-    shaftLimit: 5,
+    slumpLimit: 2,
   },
   keystone: {
     code: 11,
@@ -152,8 +142,7 @@ export const BLOCKS: Record<BlockId, BlockDef> = {
     mineCost: 2,
     mineCostWithDrill: null,
     yields: [{ item: 'keystone', count: 1 }],
-    span: 2,
-    shaftLimit: 5,
+    slumpLimit: 2,
   },
   // Never stored in the cube: it is the implied wall outside it (0005 item 1).
   bedrock: {
@@ -163,8 +152,7 @@ export const BLOCKS: Record<BlockId, BlockDef> = {
     mineCost: null,
     mineCostWithDrill: null,
     yields: [],
-    span: null,
-    shaftLimit: null,
+    slumpLimit: null,
   },
   // What a fallen block becomes where it comes to rest (0014 item 8).
   rubble: {
@@ -174,8 +162,7 @@ export const BLOCKS: Record<BlockId, BlockDef> = {
     mineCost: 1,
     mineCostWithDrill: null,
     yields: [],
-    span: 0,
-    shaftLimit: 3,
+    slumpLimit: 1,
   },
   // What sealant turns an open cell into (0014 item 12).
   sealed: {
@@ -185,7 +172,6 @@ export const BLOCKS: Record<BlockId, BlockDef> = {
     mineCost: 2,
     mineCostWithDrill: null,
     yields: [],
-    span: 2,
-    shaftLimit: 5,
+    slumpLimit: 2,
   },
 };

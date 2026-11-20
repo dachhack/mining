@@ -371,47 +371,29 @@ describe('data lookups', () => {
 // 0014, checked against the note so that a typo in src/data shows here, and
 // the validator's checks on them.
 describe('M2 data (decision note 0014)', () => {
-  it('gives every block that can be dug its span and shaft limit (items 5 and 10)', () => {
-    const spans: Record<string, number | null> = {};
+  it('gives every block that can be dug its slump limit (design doc 3.5)', () => {
     const limits: Record<string, number | null> = {};
     for (const [blockId, block] of Object.entries(GAME_DATA.blocks)) {
-      spans[blockId] = block.span;
-      limits[blockId] = block.shaftLimit;
+      limits[blockId] = block.slumpLimit;
     }
-    // Item 5: dirt and rubble 0, hard rock 3, every other block 2.
-    // Item 10: dirt and rubble 3, hard rock 8, every other block 5.
-    const others = [
-      'stone',
-      'coalSeam',
-      'timberRoot',
-      'ironOre',
-      'copperOre',
-      'crystal',
-      'unstableOre',
-      'relic',
-      'keystone',
-      'sealed',
-    ];
-    const expectedSpans: Record<string, number | null> = {
+    // Dirt and rubble 1, hard rock and crystal 3, every other block 2.
+    expect(limits).toEqual({
       air: null,
       bedrock: null,
-      dirt: 0,
-      rubble: 0,
+      dirt: 1,
+      rubble: 1,
       hardRock: 3,
-    };
-    const expectedLimits: Record<string, number | null> = {
-      air: null,
-      bedrock: null,
-      dirt: 3,
-      rubble: 3,
-      hardRock: 8,
-    };
-    for (const blockId of others) {
-      expectedSpans[blockId] = 2;
-      expectedLimits[blockId] = 5;
-    }
-    expect(spans).toEqual(expectedSpans);
-    expect(limits).toEqual(expectedLimits);
+      crystal: 3,
+      stone: 2,
+      coalSeam: 2,
+      timberRoot: 2,
+      ironOre: 2,
+      copperOre: 2,
+      unstableOre: 2,
+      relic: 2,
+      keystone: 2,
+      sealed: 2,
+    });
   });
 
   it('has rubble and sealed rock as the note describes them (items 8 and 12)', () => {
@@ -426,12 +408,7 @@ describe('M2 data (decision note 0014)', () => {
 
   it('has the hazard numbers of the note', () => {
     expect(GAME_DATA.hazards).toEqual({
-      caveIn: {
-        crackTimer: 2,
-        supportLiningReach: 2,
-        tightCellSolidSides: 3,
-        supportHoldSolidSides: 2,
-      },
+      slump: { crackCountdown: 2, steepStep: 2 },
       water: { unitsPerCell: 1, floodedMoveExtraAp: 1, pumpUnitsPerShift: 3, pumpReach: 2 },
       gas: { pocketUnitsPerCell: 4, ventReach: 2 },
       lava: {
@@ -517,18 +494,19 @@ describe('M2 data (decision note 0014)', () => {
     });
   });
 
-  it('reports a diggable block with no span or shaft limit, and bedrock with one', () => {
+  it('reports a diggable block with no slump limit or one below 1, and bedrock with one', () => {
     const problems = problemsAfter((data) => {
-      entry(data.blocks, 'stone').span = null;
-      entry(data.blocks, 'dirt').shaftLimit = 0;
-      entry(data.blocks, 'bedrock').span = 2;
+      entry(data.blocks, 'stone').slumpLimit = null;
+      // 0 would let a block "slump" down a 1-level step without moving down.
+      entry(data.blocks, 'dirt').slumpLimit = 0;
+      entry(data.blocks, 'bedrock').slumpLimit = 2;
     });
     expect(problems).toHaveLength(3);
-    expect(problems.some((p) => p.includes('block "stone"') && p.includes('needs a span'))).toBe(
-      true,
-    );
-    expect(problems.some((p) => p.includes('block "dirt": shaft limit'))).toBe(true);
-    expect(problems.some((p) => p.includes('block "bedrock" never falls'))).toBe(true);
+    expect(
+      problems.some((p) => p.includes('block "stone"') && p.includes('needs a slump limit')),
+    ).toBe(true);
+    expect(problems.some((p) => p.includes('block "dirt": slump limit'))).toBe(true);
+    expect(problems.some((p) => p.includes('block "bedrock" never slumps'))).toBe(true);
   });
 
   it('reports a missing rubble block, or sealed rock with a yield', () => {
@@ -587,8 +565,8 @@ describe('M2 data (decision note 0014)', () => {
 
   it('reports bad hazard numbers', () => {
     const problems = problemsAfter((data) => {
-      data.hazards.caveIn.crackTimer = -1;
-      data.hazards.caveIn.tightCellSolidSides = 5;
+      data.hazards.slump.crackCountdown = 0;
+      data.hazards.slump.steepStep = 1;
       data.hazards.water.unitsPerCell = 2;
       data.hazards.gas.pocketUnitsPerCell = 300;
       data.hazards.lava.flowEveryShifts = 0;
@@ -597,8 +575,8 @@ describe('M2 data (decision note 0014)', () => {
     });
     expect(problems).toHaveLength(7);
     for (const part of [
-      'hazards.caveIn.crackTimer',
-      'hazards.caveIn.tightCellSolidSides',
+      'hazards.slump.crackCountdown',
+      'hazards.slump.steepStep',
       'hazards.water.unitsPerCell',
       'hazards.gas.pocketUnitsPerCell',
       'hazards.lava.flowEveryShifts',

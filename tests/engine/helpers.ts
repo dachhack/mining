@@ -295,3 +295,66 @@ export function act(state: GameState, wanted: object): StepResult {
   }
   return applyAction(state, found[0] as Action);
 }
+
+/**
+ * The `layers` of a pit drawn from above, for `buildState`: say how deep each
+ * square is and what its column is made of, instead of drawing every layer.
+ *
+ *   buildState({ layers: terrainLayers(['012'], ['dd#']) })
+ *
+ * is a row of three squares at depths 0, 1 and 2; the first two columns are
+ * dirt and the third is stone.
+ *
+ * - `depths`: one string per row (y = 0 first), one digit per square.
+ * - `materials`: the same shape, one `BLOCK_CHARS` character per square: what
+ *   every block of that column is. Default: stone everywhere.
+ * - `layerCount`: how many layers the cube has. Default: the deepest square
+ *   plus 2, so every square has a block left.
+ */
+export function terrainLayers(
+  depths: string[],
+  materials?: string[],
+  layerCount?: number,
+): string[][] {
+  let deepest = 0;
+  for (const row of depths) {
+    for (const char of row) {
+      deepest = Math.max(deepest, Number(char));
+    }
+  }
+  const count = layerCount ?? deepest + 2;
+  const layers: string[][] = [];
+  for (let z = 0; z < count; z += 1) {
+    const layer: string[] = [];
+    depths.forEach((row, y) => {
+      let text = '';
+      for (let x = 0; x < row.length; x += 1) {
+        const material = materials?.[y]?.charAt(x) ?? '#';
+        text += z < Number(row.charAt(x)) ? '.' : material;
+      }
+      layer.push(text);
+    });
+    layers.push(layer);
+  }
+  return layers;
+}
+
+/** Every square's depth, drawn like the `depths` of `terrainLayers` (depths above 9 show as "+"). */
+export function depthText(state: GameState): string[] {
+  const rows: string[] = [];
+  for (let y = 0; y < state.size.y; y += 1) {
+    let row = '';
+    for (let x = 0; x < state.size.x; x += 1) {
+      let depth = 0;
+      while (
+        depth < state.size.z &&
+        state.blocks[cellIndex(state.size, { x, y, z: depth })] === 0
+      ) {
+        depth += 1;
+      }
+      row += depth > 9 ? '+' : String(depth);
+    }
+    rows.push(row);
+  }
+  return rows;
+}

@@ -92,10 +92,14 @@ function describeAction(state: GameState, action: Action): string {
     }
     case 'closeMine':
       return 'Close the mine: ends the run alive, with what is in the stockpile';
-    // The M2 actions. The engine offers none of them yet (their modules are
-    // stubs; decision note 0015), so these plain lines are never shown. The
-    // play-tool task for the hazards (T14) gives each its wording.
     case 'placeSupport':
+      return (
+        `Place a support on ${squareText(action.x, action.y)}: ` +
+        'it holds that square against slumping, and is lost if the square is mined'
+      );
+    // The other M2 actions. The engine offers none of them yet (their modules
+    // are stubs; decision note 0015), so these plain lines are never shown.
+    // The play-tool task for the hazards (T14) gives each its wording.
     case 'placeExplosive':
     case 'placePump':
     case 'placeVent':
@@ -123,6 +127,7 @@ function idInLowerCase(id: string): string {
  * The names:
  * - "mine 3,4": mine the top block of the square x 3, y 4;
  * - "cut 3,4": cut the tree on that square;
+ * - "support 3,4": place a support on that square;
  * - craft-fuel, craft-support, ...: "craft-" and the recipe;
  * - close-mine, and end for "end the shift".
  */
@@ -138,8 +143,9 @@ export function choiceName(entry: LogEntry): string {
       return `craft-${idInLowerCase(entry.recipe)}`;
     case 'closeMine':
       return 'close-mine';
-    // The M2 actions: never offered yet (see `describeAction`).
     case 'placeSupport':
+      return `support ${entry.x},${entry.y}`;
+    // The other M2 actions: never offered yet (see `describeAction`).
     case 'placeExplosive':
     case 'placePump':
     case 'placeVent':
@@ -193,6 +199,55 @@ const DAMAGE_CAUSES: Record<string, string> = {
   gasExplosion: 'a gas explosion',
   explosion: 'an explosion',
 };
+
+/**
+ * How a structure was lost, in words. The keys are the engine's
+ * `DestructionCause`; a cause not listed reads "was destroyed".
+ */
+const DESTRUCTION_CAUSES: Record<string, string> = {
+  rockfall: 'was buried or carried off by a slump and is lost',
+  mined: 'went with the block and is lost',
+};
+
+/** "it falls at the end of this shift" / "... of the next shift" / "... in 3 shifts". */
+export function crackFallsText(shown: number): string {
+  if (shown <= 1) {
+    return 'it falls at the end of this shift';
+  }
+  if (shown === 2) {
+    return 'it falls at the end of the next shift';
+  }
+  return `it falls at the end of the shift ${shown - 1} shifts from now`;
+}
+
+/**
+ * What the coming cube phase will do to the pit walls, as sentences for the
+ * "If you end the shift now" line. `slumps` is `ShiftForecast.slumps`: the
+ * events step (a) would emit. Empty when nothing will slump or crack.
+ */
+export function describeForecastSlumps(slumps: GameEvent[]): string[] {
+  const falls: string[] = [];
+  const cracks: string[] = [];
+  for (const event of slumps) {
+    if (event.type === 'blockFell') {
+      falls.push(
+        `${squareText(event.from.x, event.from.y)} onto ${squareText(event.to.x, event.to.y)}`,
+      );
+    } else if (event.type === 'blockCracked') {
+      cracks.push(squareText(event.pos.x, event.pos.y));
+    }
+  }
+  const sentences: string[] = [];
+  if (falls.length > 0) {
+    sentences.push(`THE PIT WALL SLUMPS: ${falls.join('; ')}.`);
+  }
+  if (cracks.length > 0) {
+    sentences.push(
+      `New cracks (unstable squares): ${cracks.join(', ')}; each falls at the end of the shift after next unless it is supported or made stable.`,
+    );
+  }
+  return sentences;
+}
 
 /**
  * What the player now sees on top of the square (x, y) of `after`, as a
@@ -253,6 +308,26 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
         break;
       case 'structurePlaced':
         lines.push(`Placed a ${structureNameByCode(event.structure)}.`);
+        break;
+      case 'structureDestroyed':
+        lines.push(
+          `The ${structureNameByCode(event.structure)} on ${squareText(event.pos.x, event.pos.y)} ` +
+            `${DESTRUCTION_CAUSES[event.cause] ?? 'was destroyed'}.`,
+        );
+        break;
+      case 'blockCracked':
+        // `timer + 1` is the number shown on the block: 1 means "this shift".
+        lines.push(
+          `${squareText(event.pos.x, event.pos.y)} is cracked (${blockDefByCode(event.block).name}): ` +
+            `${crackFallsText(event.timer + 1)}, unless it is made stable or supported first.`,
+        );
+        break;
+      case 'blockFell':
+        lines.push(
+          `The pit wall slumped: the ${blockDefByCode(event.block).name} on ` +
+            `${squareText(event.from.x, event.from.y)} slid down onto ` +
+            `${squareText(event.to.x, event.to.y)} and lies there as rubble.`,
+        );
         break;
       case 'crafted':
         lines.push(`Crafted ${findRecipe(event.recipe)?.name ?? event.recipe}.`);

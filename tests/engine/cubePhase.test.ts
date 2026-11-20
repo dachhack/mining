@@ -23,7 +23,7 @@ import {
 } from '../../src/engine';
 import type { DamageCause, GameEvent, GameState, SerialisedState, Square } from '../../src/engine';
 import { isBesideWorked, markWorked } from '../../src/engine/crew';
-import { stepCaveIns } from '../../src/engine/cube/caveIns';
+import { stepSlumps } from '../../src/engine/cube/slumps';
 import { applyRecordedDamage, stepCrewEffects } from '../../src/engine/cube/crewEffects';
 import { stepFluids } from '../../src/engine/cube/fluids';
 import { stepGas } from '../../src/engine/cube/gas';
@@ -92,7 +92,7 @@ function withSteps(standIns: Record<string, StepFunction>, body: () => void): vo
   }
 }
 
-const STEP_NAMES = ['caveIns', 'fluids', 'gas', 'timers', 'crewEffects'];
+const STEP_NAMES = ['slumps', 'fluids', 'gas', 'timers', 'crewEffects'];
 
 describe('the order of the cube phase (0014 item 1)', () => {
   it('has the five steps (a) to (e), in that order', () => {
@@ -101,7 +101,7 @@ describe('the order of the cube phase (0014 item 1)', () => {
 
   it('runs the function of each step under its name', () => {
     expect(CUBE_PHASE_STEPS.map((step) => step.run)).toEqual([
-      stepCaveIns,
+      stepSlumps,
       stepFluids,
       stepGas,
       stepTimers,
@@ -262,7 +262,7 @@ describe('recordDamage: only a worked square is hurt (design doc 5.2)', () => {
     let healthDuringStepD = -1;
     withSteps(
       {
-        caveIns: (current, _events, phase) => {
+        slumps: (current, _events, phase) => {
           recordDamage(current, phase, 'slump', 3, MIDDLE.x, MIDDLE.y);
         },
         timers: (current) => {
@@ -336,7 +336,7 @@ describe('each kind of hazard hurts at most once per shift (design doc 5.2)', ()
     });
     withSteps(
       {
-        caveIns: (current, _events, phase) => {
+        slumps: (current, _events, phase) => {
           recordDamage(current, phase, 'slump', CREW.damage.slump, MIDDLE.x, MIDDLE.y);
           recordDamage(current, phase, 'slump', CREW.damage.slump, 0, 0);
         },
@@ -355,7 +355,7 @@ describe('each kind of hazard hurts at most once per shift (design doc 5.2)', ()
     const state = fieldState({ health: 10, worked: [MIDDLE] });
     withSteps(
       {
-        caveIns: (current, _events, phase) => {
+        slumps: (current, _events, phase) => {
           recordDamage(current, phase, 'slump', CREW.damage.slump, MIDDLE.x, MIDDLE.y);
         },
         gas: (current, _events, phase) => {
@@ -392,7 +392,7 @@ describe('each kind of hazard hurts at most once per shift (design doc 5.2)', ()
       markWorked(current, MIDDLE.x, MIDDLE.y);
       recordDamage(current, phase, 'slump', 3, MIDDLE.x, MIDDLE.y);
     };
-    withSteps({ caveIns: slump }, () => {
+    withSteps({ slumps: slump }, () => {
       const first = endShift(fieldState({ health: 10 })).state;
       expect(first.crew.health).toBe(7);
       expect(endShift(first).state.crew.health).toBe(4);
@@ -484,7 +484,7 @@ describe('step (e) applies the recorded damage (design doc 5.2 and 5.3)', () => 
     const state = fieldState({ health: 3, fuel: 5, shift: 4, worked: [MIDDLE] });
     withSteps(
       {
-        caveIns: (current, _events, phase) => {
+        slumps: (current, _events, phase) => {
           recordDamage(current, phase, 'slump', 3, MIDDLE.x, MIDDLE.y);
         },
       },
@@ -501,7 +501,7 @@ describe('step (e) applies the recorded damage (design doc 5.2 and 5.3)', () => 
     const state = fieldState({ health: 10, fuel: 5, worked: [MIDDLE] });
     withSteps(
       {
-        caveIns: (current, _events, phase) => {
+        slumps: (current, _events, phase) => {
           recordDamage(current, phase, 'slump', 3, MIDDLE.x, MIDDLE.y);
         },
         timers: (current) => {
@@ -593,7 +593,7 @@ describe('worked squares (design doc 5.2)', () => {
     const next = endShift(mined).state;
     withSteps(
       {
-        caveIns: (current, _events, phase) => {
+        slumps: (current, _events, phase) => {
           recordDamage(current, phase, 'slump', 3, MIDDLE.x, MIDDLE.y);
         },
       },
@@ -610,7 +610,7 @@ describe('worked squares (design doc 5.2)', () => {
     let seenInStepD: Square[] = [];
     withSteps(
       {
-        caveIns: (current, _events, phase) => {
+        slumps: (current, _events, phase) => {
           recordDamage(current, phase, 'slump', 3, MIDDLE.x, MIDDLE.y);
         },
         timers: (current) => {

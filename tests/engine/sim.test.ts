@@ -114,8 +114,9 @@ describe('playRun', () => {
     const metrics = pit11;
     expect(metrics.outcome).toBe('salvage');
     expect(metrics.cause).toBe('mineClosed');
-    // The pit goes down by terraces: several levels, many more blocks.
-    expect(metrics.deepestSquare).toBeGreaterThanOrEqual(4);
+    // The pit goes down by terraces: several levels, many more blocks. Its
+    // level benches (so that no wall slumps: issue #94) keep it shallow.
+    expect(metrics.deepestSquare).toBeGreaterThanOrEqual(3);
     expect(metrics.blocksMined).toBeGreaterThan(10 * metrics.deepestSquare);
     expect(metrics.shareOfCubeMined).toBeCloseTo(metrics.blocksMined / 32768, 10);
     expect(metrics.treesCut).toBeGreaterThan(0);
@@ -139,9 +140,13 @@ describe('playRun', () => {
     // Seed 11: the pit stays too far above the ore to show any traces.
     expect(pit11.oreBlocksMined).toBe(0);
     expect(pit11.tracesSeenBeforeFirstOre).toBe(false);
-    // Seed 31: traces seen, though the pit mined no ore.
+    // Seed 31 saw traces before pit walls slumped (issue #94). Now the pit's
+    // level benches keep it to 3 to 5 levels, too far above the ore (layer 8
+    // and below) on every seed tried (1 to 300). So no scripted run reaches
+    // the "true" answer today; task T15's terracing policy should, and this
+    // line is where to check it.
     expect(pit31.oreBlocksMined).toBe(0);
-    expect(pit31.tracesSeenBeforeFirstOre).toBe(true);
+    expect(pit31.tracesSeenBeforeFirstOre).toBe(false);
     // A run stopped before its first decision has seen only the top layer,
     // which is too far above the ore to show any traces.
     expect(run('pit', 31, 0).tracesSeenBeforeFirstOre).toBe(false);
@@ -154,7 +159,8 @@ describe('playRun', () => {
     expect(a.runsWithTracesSeenBeforeFirstOre).toBe(
       report.runs.filter((entry) => entry.tracesSeenBeforeFirstOre).length,
     );
-    expect(a.runsWithTracesSeenBeforeFirstOre).toBeGreaterThan(0);
+    // No pit run sees traces since issue #94 (see the test above).
+    expect(a.runsWithTracesSeenBeforeFirstOre).toBe(0);
     expect(a.runsThatMinedOre).toBe(report.runs.filter((entry) => entry.oreBlocksMined > 0).length);
     expect(a.runsThatMinedOreAfterSeeingTraces).toBeLessThanOrEqual(a.runsThatMinedOre);
   });
@@ -187,7 +193,7 @@ describe('playRun', () => {
   });
 
   it('knows each policy name, and refuses any other', () => {
-    expect(POLICY_NAMES).toEqual(['random', 'pit']);
+    expect(POLICY_NAMES).toEqual(['random', 'pit', 'greedy']);
     for (const name of POLICY_NAMES) {
       expect(makePolicy(name, 1).name).toBe(name);
     }

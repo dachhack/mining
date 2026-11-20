@@ -46,6 +46,11 @@ export interface Tile {
   traced: boolean;
   structure: StructureMark | null;
   /**
+   * The countdown of a crack on the top block (design doc 6.1): 1 means it
+   * falls when this shift ends. `null` for no crack.
+   */
+  crack: number | null;
+  /**
    * What is on the surface of a square at ground level: a tree (it hides the
    * block), or a stump, a path, a meadow or an outcrop (drawn faintly over
    * the block). `null` once the square has been dug.
@@ -120,6 +125,7 @@ export function buildTile(state: GameState, x: number, y: number): Tile {
       block: null,
       traced: false,
       structure: null,
+      crack: null,
       surface: 'tree',
       higher,
     };
@@ -136,6 +142,7 @@ export function buildTile(state: GameState, x: number, y: number): Tile {
       block: null,
       traced: false,
       structure: null,
+      crack: null,
       surface: null,
       higher,
     };
@@ -148,6 +155,7 @@ export function buildTile(state: GameState, x: number, y: number): Tile {
     block: BLOCK_ID_BY_CODE.get(square.top.block) ?? null,
     traced: square.traces,
     structure: structureMark(square.top.structure),
+    crack: square.top.crackTimer === null ? null : square.top.crackTimer + 1,
     surface,
     higher,
   };

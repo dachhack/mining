@@ -16,7 +16,11 @@ import type { RngState } from './rng';
 
 /**
  * Bumped whenever the shape of GameState changes, so old saves can be told
- * apart. 10: carrying is gone (issue #92): `inventory` is now `stockpile`,
+ * apart. 11: pit walls slump (issue #94): a structure on a square is stored
+ * in the cell of the square's top block, and a crack belongs to a top block
+ * and counts down by the slump rule; a version-10 save could hold either
+ * somewhere else.
+ * 10: carrying is gone (issue #92): `inventory` is now `stockpile`,
  * and `looseItems` and each camp's `stash` are removed. A version-9 save has
  * the old fields, so it is not read.
  * 9: the avatar is gone (issue #90, crew health): `crew` replaces
@@ -25,7 +29,7 @@ import type { RngState } from './rng';
  * it, and may hold torches or safety lamps.
  * 7: the avatar has no position (issue #86, mine by square).
  */
-export const STATE_VERSION = 10;
+export const STATE_VERSION = 11;
 
 /** Whether the run is still going, and if not, how it ended. */
 export type RunStatus =
@@ -98,13 +102,19 @@ export interface GameState {
   /** Units of gas in each cell (0014 item 13). Read it with `gasAt`. */
   gas: Uint8Array;
   /**
-   * Cracks. 0 means the block is not cracked; any other value is the block's
-   * stored crack timer plus 1, which is also the number the player is shown
-   * (0014 item 7). Use `crackTimerAt`, `setCrackTimer` and `clearCrack`, which
-   * hide the "plus 1". Whether a countdown is running is never stored.
+   * Cracks (design doc 6.1). 0 means the block is not cracked; any other
+   * value is the countdown the player is shown on the block (1 = it falls in
+   * the coming cube phase), which is the stored crack timer plus 1. Only a
+   * square's top block is ever cracked. Use `crackTimerAt`, `setCrackTimer`
+   * and `clearCrack`, which hide the "plus 1". Whether a countdown is running
+   * is never stored: it runs while the square is unstable (slump.ts).
    */
   cracks: Uint8Array;
-  /** Structure code of each cell (see src/data/structures.ts). 0 is none. */
+  /**
+   * Structure code of each cell (see src/data/structures.ts). 0 is none. A
+   * structure on a square is stored in the cell of the square's top block:
+   * read it with `structureOnSquare` (heightmap.ts).
+   */
   structures: Uint8Array;
   /**
    * 1 if the player has seen mineral traces on the cell's block, otherwise 0

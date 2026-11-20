@@ -57,17 +57,12 @@ export interface BlockDef {
   /** Items the block gives when mined. Empty for none. */
   yields: ItemStack[];
   /**
-   * How many steps along its own layer the block can hang from a block that
-   * rests on something (design doc 6.1; 0014 item 5). `null` for open space
-   * and bedrock, which never fall.
+   * The slump limit (design doc 3.5 and 6.1): a square whose top block this
+   * is slumps when its fall (how much deeper the foot of its slide path is)
+   * is more than this. At least 1. `null` for open space and bedrock, which
+   * never slump.
    */
-  span: number | null;
-  /**
-   * How long an unlined vertical run of tight cells may be when this block is
-   * the weakest in its walls (0014 item 10). `null` for open space and
-   * bedrock, which are ignored.
-   */
-  shaftLimit: number | null;
+  slumpLimit: number | null;
 }
 
 /**
@@ -230,12 +225,12 @@ export interface TellsData {
   hazards: HazardTellsDef;
 }
 
-/** Cave-in numbers that are not per material (0014 items 6 to 10). See hazards.ts. */
-export interface CaveInData {
-  crackTimer: number;
-  supportLiningReach: number;
-  tightCellSolidSides: number;
-  supportHoldSolidSides: number;
+/** Wall-slump numbers that are not per material (design doc 6.1). See hazards.ts. */
+export interface SlumpData {
+  /** The number a fresh crack shows: how many cube phases until the block falls. */
+  crackCountdown: number;
+  /** A square this many levels (or more) above a face neighbour is "steep". */
+  steepStep: number;
 }
 
 export interface WaterData {
@@ -263,7 +258,7 @@ export interface ForecastData {
 
 /** Every hazard number (design doc 6; decision note 0014). See hazards.ts for what each means. */
 export interface HazardData {
-  caveIn: CaveInData;
+  slump: SlumpData;
   water: WaterData;
   gas: GasData;
   lava: LavaData;
