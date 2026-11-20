@@ -393,6 +393,13 @@ export { slumpCheck, unstableAfterMine, unstableAfterSeal, unstableSquares } fro
 export type { SlumpCheck, SlumpHold, SlumpReason, UnstableSquare } from './slump';
 export type { CountdownForecast } from './forecast';
 export type { ShiftForecast, UpkeepForecast } from './shift';
+export type {
+  CrewDamageForecast,
+  CrewDamageSquare,
+  CrewForecast,
+  DamageCertainty,
+  RunLostForecast,
+} from './forecast';
 export {
   blockAt,
   blockDefAt,

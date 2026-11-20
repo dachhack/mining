@@ -11,7 +11,9 @@ import type { GameState } from '../../src/engine';
 import { setGasOn, setLavaOn, setWaterOn } from '../../src/engine/standing';
 import {
   armCharge,
+  cloneState,
   setBlock,
+  setCrackTimer,
   setGas,
   setLava,
   setStructure,
@@ -170,8 +172,14 @@ describe('the forecast: one line for each thing, the most dangerous first', () =
   it('puts what hurts the crew first and the fuel bookkeeping last', () => {
     const view = buildView(busy(), { deepestDepth: 3 });
     const lines = view.forecastLines;
-    expect(lines[0]).toContain('THE EXPLOSIVE on x1 y1 GOES OFF');
-    expect(lines[0]).toContain('THE CREW WORKED THERE: it loses 6 health.');
+    // The engine's forecast of crew damage comes first, then the total.
+    expect(lines[0]).toBe(
+      'THE CREW LOSES 6 health: the blast on x1 y1, where it worked this shift.',
+    );
+    expect(lines[1]).toBe('Crew health 10 -> 4: 6 damage in all.');
+    expect(
+      lines.findIndex((line) => line.includes('THE EXPLOSIVE on x1 y1 GOES OFF')),
+    ).toBeGreaterThan(1);
     expect(lines[lines.length - 1]).toBe('5 unspent AP will be lost, fuel 10 -> 9 (-1 shift).');
     // Every line is one thing: the joined text is the lines in order.
     expect(view.forecast).toBe(lines.join(' '));
@@ -209,7 +217,7 @@ describe('the forecast: one line for each thing, the most dangerous first', () =
     const printed = forecastTextLines(view);
     expect(printed[0]).toBe('If you end the shift now:');
     expect(printed).toHaveLength(view.forecastLines.length + 1);
-    expect(printed[1]?.startsWith('  - THE EXPLOSIVE')).toBe(true);
+    expect(printed[1]?.startsWith('  - THE CREW LOSES 6 health')).toBe(true);
   });
 
   it('a full lava source is one sentence, when it happens as well', () => {
@@ -375,7 +383,7 @@ describe('refusals on the phone name buttons, not commands (review of PR #111)',
   });
 });
 
-describe('the forecast warns where a hazard will reach the crew (review of PR #111)', () => {
+describe('the forecast says what each hazard takes off crew health (issue #112)', () => {
   it('names the worked squares water, lava, gas and a slump will reach', () => {
     // Water flows from x0 onto x1; gas stands on x3; lava stands beside x5.
     const state = pit(['3333333'], {
@@ -390,17 +398,19 @@ describe('the forecast warns where a hazard will reach the crew (review of PR #1
     setGasOn(state, 3, 0, 2);
     setLavaOn(state, 6, 0, 1, false);
     const lines = buildView(state, { deepestDepth: 3 }).forecastLines;
-    const danger = lines.find((line) => line.startsWith('THE CREW IS IN DANGER')) ?? '';
-    expect(danger).toContain('x1 y0 (water)');
-    expect(danger).toContain('x3 y0 (gas)');
-    expect(danger).toContain('x5 y0 (lava beside it)');
-    expect(danger).toContain('this line does not say how much');
-    // It is among the first lines, before the flows themselves.
-    expect(lines.indexOf(danger)).toBeLessThan(
-      lines.findIndex((line) => line.startsWith('WATER WILL FLOW')),
-    );
-    // And it is true: ending the shift hurts the crew.
-    expect(endShift(state).state.crew.health).toBeLessThan(state.crew.health);
+    // One line for each kind, the first three lines, then the total: all of
+    // it before the flows themselves. Equal amounts keep the engine's order.
+    expect(lines.slice(0, 4)).toEqual([
+      'THE CREW LOSES 1 health: water flowing onto x1 y0, where it worked this shift.',
+      'THE CREW LOSES 1 health: lava beside x5 y0, where it worked this shift.',
+      'THE CREW LOSES 1 health: gas on x3 y0, where it worked this shift.',
+      'Crew health 10 -> 7: 3 damage in all.',
+    ]);
+    expect(lines.findIndex((line) => line.startsWith('WATER WILL FLOW'))).toBeGreaterThan(3);
+    // Nothing hidden is uncovered, so there is no "may be more" line.
+    expect(lines.join(' ')).not.toContain('you have not seen');
+    // And it is true: ending the shift takes exactly that.
+    expect(endShift(state).state.crew.health).toBe(7);
   });
 
   it('a slump that lands on a worked square', () => {
@@ -413,20 +423,96 @@ describe('the forecast warns where a hazard will reach the crew (review of PR #1
     );
     const lines = buildView(worked, { deepestDepth: 3 }).forecastLines;
     expect(lines.join(' ')).toContain('THE PIT WALL SLUMPS');
-    expect(lines[0]).toContain('THE CREW IS IN DANGER where it worked this shift: x2 y0 (a slump)');
+    expect(lines[0]).toBe(
+      'THE CREW LOSES 3 health: the slump at x2 y0, where it worked this shift.',
+    );
+    expect(lines[1]).toBe('Crew health 10 -> 7: 3 damage in all.');
+    // The block that falls uncovers one the player has not seen.
+    expect(lines[2]).toContain('A block you have not seen will be uncovered');
+    expect(endShift(worked).state.crew.health).toBe(7);
+  });
+
+  it('the largest amount first; a run that would be lost is said first of all', () => {
+    // Lava on the worked square x0 (5); water flows onto the worked x3 (1).
+    const state = pit(['33333'], {
+      shift: 3,
+      health: 6,
+      worked: [
+        { x: 0, y: 0 },
+        { x: 3, y: 0 },
+      ],
+    });
+    setLavaOn(state, 0, 0, 1, false);
+    setWaterOn(state, 4, 0, 3);
+    const view = buildView(state, { deepestDepth: 3 });
+    expect(view.forecastLines.slice(0, 4)).toEqual([
+      'THE RUN WILL BE LOST if you end the shift now: the crew has 6 health and loses 6.',
+      'THE CREW LOSES 5 health: lava on x0 y0, where it worked this shift.',
+      'THE CREW LOSES 1 health: water flowing onto x3 y0, where it worked this shift.',
+      'Crew health 6 -> 0: 6 damage in all.',
+    ]);
+    expect(view.crewLostWarning).toBe(view.forecastLines[0]);
+    expect(endShift(state).state.status).toMatchObject({ kind: 'ended', outcome: 'lost' });
+
+    // With one more health the run goes on, and nothing warns of a loss.
+    const safe = cloneState(state);
+    safe.crew.health = 7;
+    const safeView = buildView(safe, { deepestDepth: 3 });
+    expect(safeView.crewLostWarning).toBeNull();
+    expect(safeView.forecast).not.toContain('THE RUN');
+  });
+
+  it('"may" and "at least" are worded so, and a run that may be lost is said', () => {
+    // A slump uncovers a hidden block, so the water that then flows onto the
+    // worked square x1 y1 is a "may".
+    const state = pit(['024', '122'], { worked: [{ x: 1, y: 1 }], health: 1 }, undefined);
+    setCrackTimer(state, { x: 1, y: 0, z: 2 }, 0);
+    setWaterOn(state, 0, 1, 1);
+    const view = buildView(state, { deepestDepth: 4 });
+    expect(view.forecastLines.slice(0, 4)).toEqual([
+      'THE RUN MAY BE LOST if you end the shift now: the crew has 1 health and may lose 1.',
+      'THE CREW MAY LOSE 1 health: water flowing onto x1 y1, where it worked this shift.',
+      'Crew health 1 -> 0: 1 damage in all (0 of it is certain).',
+      'A block you have not seen will be uncovered: if a pocket is under it, ' +
+        'its water, lava or gas may hurt the crew more than this says.',
+    ]);
+
+    // A blast uncovers hidden blocks: gas far from it is "at least".
+    const blast = pit(['111111'], { worked: [{ x: 5, y: 0 }] });
+    setStructure(blast, { x: 2, y: 0, z: 1 }, STRUCTURES.explosive.code);
+    armCharge(blast, { x: 2, y: 0, z: 1 }, 'explosive');
+    setGasOn(blast, 5, 0, 1);
+    expect(buildView(blast, { deepestDepth: 1 }).forecastLines[0]).toBe(
+      'THE CREW LOSES AT LEAST 1 health: gas on x5 y0, where it worked this shift.',
+    );
+  });
+
+  it('the map marks the worked squares where the crew will be hurt', () => {
+    const state = pit(['3333333'], {
+      shift: 2,
+      worked: [
+        { x: 1, y: 0 },
+        { x: 4, y: 0 },
+      ],
+    });
+    setWaterOn(state, 0, 0, 3);
+    expect(buildTile(state, 1, 0).crewHurt).toBe(true);
+    // Worked, but nothing reaches it; and not worked at all.
+    expect(buildTile(state, 4, 0)).toMatchObject({ worked: true, crewHurt: false });
+    expect(buildTile(state, 2, 0)).toMatchObject({ worked: false, crewHurt: false });
   });
 
   it('says nothing when no hazard reaches a worked square, or a vent will clear the gas', () => {
     const calm = pit(['3333333'], { shift: 2, worked: [{ x: 3, y: 0 }] });
     setWaterOn(calm, 0, 0, 3);
-    expect(buildView(calm, { deepestDepth: 3 }).forecast).not.toContain('IN DANGER');
+    expect(buildView(calm, { deepestDepth: 3 }).forecast).not.toContain('THE CREW');
 
     const vented = pit(['333'], {
       worked: [{ x: 0, y: 0 }],
       structures: [{ pos: { x: 2, y: 0, z: 3 }, structure: 'vent' }],
     });
     setGasOn(vented, 0, 0, 2);
-    expect(buildView(vented, { deepestDepth: 3 }).forecast).not.toContain('IN DANGER');
+    expect(buildView(vented, { deepestDepth: 3 }).forecast).not.toContain('THE CREW');
     expect(endShift(vented).state.crew.health).toBe(vented.crew.health);
   });
 });

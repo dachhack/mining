@@ -45,6 +45,7 @@ import {
   shiftsUntilRegrowth,
   slumpCheck,
   stockpileEntries,
+  workedSquares,
 } from '../../engine';
 import type { GameState, KnownSquare } from '../../engine';
 import {
@@ -52,7 +53,8 @@ import {
   choiceName,
   contentsNames,
   crackDueText,
-  crewDangerLine,
+  crewLostWarning,
+  forecastCrewLines,
   depthName,
   describeChoice,
   forecastFlowLines,
@@ -210,6 +212,12 @@ export interface PlayerView {
   forecastLines: string[];
   /** The same lines as one string; `null` once the run is over. */
   forecast: string | null;
+  /**
+   * The warning to show before End shift when the engine's forecast says the
+   * run would or may be lost to crew damage (issue #112); `null` otherwise,
+   * and once the run is over. The phone asks the player to confirm.
+   */
+  crewLostWarning: string | null;
   /** The mines and cuts on offer; `null` once the run is over. */
   squares: SquareChoicesView | null;
   /** The listed choices: crafting, leaving, ending the shift. */
@@ -621,6 +629,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       notOffered: [],
       forecastLines: [],
       forecast: null,
+      crewLostWarning: null,
       squares: null,
       choices: [],
     };
@@ -694,6 +703,11 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   // One line for each thing that will happen, each with its rank; they are
   // put most dangerous first at the end (`rankedText`).
   const ranked: RankedLine[] = [];
+  // The crew first: what each hazard will take off its health, the total,
+  // and whether the run would be lost. All of it is the engine's forecast
+  // (`ShiftForecast.crew`; issue #112); the cube phase comes before upkeep,
+  // so these lines hold even when the fuel has run out.
+  ranked.push(...forecastCrewLines(preview.crew, workedSquares(state).length > 0));
   if (upkeep.runEnds !== null) {
     ranked.push({
       rank: FORECAST_RANK.runEnds,
@@ -707,12 +721,6 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     // What step (c) will do: gas spreads, charges and armed ore go off, gas
     // burns (design doc 6.5 and 6.6).
     ranked.push(...forecastGasLines(state, preview.gas));
-    // A warning where a slump, water, lava or gas will reach a square the
-    // crew worked: the engine's forecast does not report that damage yet.
-    const danger = crewDangerLine(state, preview.slumps, preview.flows, preview.gas);
-    if (danger !== null) {
-      ranked.push(danger);
-    }
     if (state.crew.restingAt !== null && state.crew.health < CREW.startHealth) {
       ranked.push({
         rank: FORECAST_RANK.relief,
@@ -807,6 +815,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     notOffered,
     forecastLines,
     forecast,
+    crewLostWarning: crewLostWarning(preview.crew),
     squares: {
       mines,
       cuts,

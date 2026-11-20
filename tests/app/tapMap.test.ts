@@ -93,6 +93,7 @@ describe('tiles', () => {
       // No tell, nobody worked here, and no camp is near (issue #110).
       tells: { damp: false, pitted: false, warm: false, hairline: false },
       worked: false,
+      crewHurt: false,
       cheaperEdge: NO_HIGHER,
       structure: null,
       crack: null,

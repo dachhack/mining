@@ -12,7 +12,7 @@ import type { CubePhase } from './cube/phase';
 import { stepTimers } from './cube/timers';
 import type { GameEvent, RunEndCause } from './events';
 import { forecastCountdowns, forecastHazards } from './forecast';
-import type { CountdownForecast } from './forecast';
+import type { CountdownForecast, CrewForecast } from './forecast';
 import { endRun, isRunActive } from './state';
 import { forecastRegrowth } from './surface/regrowth';
 import type { GameState } from './state';
@@ -80,6 +80,14 @@ export interface ShiftForecast {
    * cavern, a pocket) cannot be forecast.
    */
   gas: GameEvent[];
+  /**
+   * What steps (a) to (c) will do to the crew (design doc 5.2; issue #112):
+   * the damage of each kind of hazard that reaches a square worked this
+   * shift, where, the total, and whether it loses the run. Where the outcome
+   * depends on hidden cells or on chance, an amount is marked "at least" or
+   * "may" (`DamageCertainty` in forecast.ts) and nothing hidden is told.
+   */
+  crew: CrewForecast;
   /** What upkeep will do to the gauges. */
   upkeep: UpkeepForecast;
   /**
@@ -251,6 +259,7 @@ export function forecastShift(state: GameState): ShiftForecast {
     slumps: hazards.slumps,
     flows: hazards.flows,
     gas: hazards.gas,
+    crew: hazards.crew,
     upkeep: computeUpkeep(state),
     regrowth: forecastRegrowth(state),
   };

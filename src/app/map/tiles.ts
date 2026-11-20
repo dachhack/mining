@@ -92,6 +92,11 @@ export interface Tile {
    * squares are the player's own actions, so this tells nothing hidden.
    */
   worked: boolean;
+  /**
+   * True if the engine's forecast says a hazard will hurt the crew on this
+   * worked square when the shift ends (`ShiftForecast.crew`; issue #112).
+   */
+  crewHurt: boolean;
   structure: StructureMark | null;
   /**
    * The countdown of a crack on the top block (design doc 6.1): 1 means it
@@ -238,6 +243,8 @@ export interface ComingFlows {
   gas: Set<string>;
   blast: Set<string>;
   vented: Set<string>;
+  /** The worked squares where the crew will be hurt. */
+  hurt: Set<string>;
 }
 
 /**
@@ -252,6 +259,7 @@ export function comingFlows(state: GameState): ComingFlows {
     gas: new Set(),
     blast: new Set(),
     vented: new Set(),
+    hurt: new Set(),
   };
   if (!isRunActive(state)) {
     return coming;
@@ -273,6 +281,11 @@ export function comingFlows(state: GameState): ComingFlows {
       for (const cell of event.cells) {
         coming.blast.add(`${cell.x},${cell.y}`);
       }
+    }
+  }
+  for (const entry of forecast.crew.damage) {
+    for (const square of entry.squares) {
+      coming.hurt.add(`${square.x},${square.y}`);
     }
   }
   return coming;
@@ -327,6 +340,7 @@ export function buildTile(
     vented: flows.vented.has(`${x},${y}`),
     blast: flows.blast.has(`${x},${y}`),
     worked: isWorked(state, x, y),
+    crewHurt: flows.hurt.has(`${x},${y}`),
     cheaperEdge: cheaperEdgeOf(state, x, y),
   };
   const higher: HigherSides = {

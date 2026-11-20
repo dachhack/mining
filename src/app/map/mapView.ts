@@ -776,7 +776,31 @@ function drawTells(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
  * shift ends hurts the crew. Corners only, so that it is not taken for the
  * dashed frame of a blast, which may be on the same square.
  */
-function drawWorked(ctx: CanvasRenderingContext2D, x: number, y: number, c: number): void {
+function drawWorked(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  c: number,
+  hurt = false,
+): void {
+  if (hurt) {
+    // The crew will be hurt here (the engine's forecast): a whole red frame,
+    // dark underneath. A closed frame, so that it differs from the plain
+    // white corners in shape as well as in colour.
+    const edge = Math.max(1.5, c * 0.06);
+    ctx.save();
+    for (const [colour, width] of [
+      [MARK_COLOURS.fluidOutline, Math.max(4, c / 5)],
+      [MARK_COLOURS.crewHurt, Math.max(2.5, c / 8)],
+    ] as const) {
+      ctx.strokeStyle = colour;
+      ctx.lineWidth = width;
+      ctx.strokeRect(x + edge, y + edge, c - 2 * edge, c - 2 * edge);
+    }
+    ctx.restore();
+    // The frame stands in for the white corners: they would hide most of it.
+    return;
+  }
   const arm = c * 0.3;
   const inset = Math.max(1.5, c * 0.06);
   const left = x + inset;
@@ -998,7 +1022,7 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
   drawBelowMarks(ctx, tile, x, y, c);
   // (The corners are drawn after the scan marks, which sit at the left edge.)
   if (tile.worked) {
-    drawWorked(ctx, x, y, c);
+    drawWorked(ctx, x, y, c, tile.crewHurt);
   }
   drawCrack(ctx, tile, x, y, c);
   drawFluidBadge(ctx, tile, x, y, c);
@@ -1019,6 +1043,7 @@ function sampleTile(overrides: Partial<Tile>): Tile {
     traced: false,
     tells: NO_TELLS,
     worked: false,
+    crewHurt: false,
     cheaperEdge: { north: false, east: false, south: false, west: false },
     structure: null,
     crack: null,
@@ -1124,9 +1149,14 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
 
   // What the crew did and built.
   add(
-    (t) => t.worked,
+    (t) => t.worked && !t.crewHurt,
     { worked: true },
     'white corners: the crew worked here this shift; a hazard that reaches it hurts the crew',
+  );
+  add(
+    (t) => t.crewHurt,
+    { worked: true, crewHurt: true },
+    'red frame: the crew worked here and WILL BE HURT when the shift ends (the list under End shift says by what)',
   );
   add((t) => t.structure === 'support', { structure: 'support' }, 'support: holds the square');
   add(
@@ -1485,6 +1515,7 @@ export function createTapMap(
     // Where the squares start on the canvas: after the rulers.
     canvas.dataset['originPx'] = String(ruler);
     canvas.dataset['worked'] = list((t) => (t.worked ? at(t) : null));
+    canvas.dataset['crewHurt'] = list((t) => (t.crewHurt ? at(t) : null));
     // The cracks in view with their countdowns: "3,4:2", or "3,4:2:stopped".
     canvas.dataset['cracks'] = list((t) => {
       if (t.crack === null) {

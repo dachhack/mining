@@ -150,7 +150,9 @@ describe('the forecast says what gas and charges will do (design doc 11)', () =>
   it('warns when the crew worked in the blast, and how much it loses', () => {
     const state = pit(['111'], { worked: [{ x: 0, y: 0 }] });
     plant(state, 1, 0, 1);
-    expect(forecastOf(state)).toContain('THE CREW WORKED THERE: it loses 6 health.');
+    expect(forecastOf(state)).toContain(
+      'THE CREW LOSES 6 health: the blast on x0 y0, where it worked this shift.',
+    );
     const { state: after, events } = endShift(state);
     expect(describeEvents(after, events)).toContain(
       'The crew lost 6 health to an explosion where it worked this shift (crew health is now 4).',
@@ -166,7 +168,10 @@ describe('the forecast says what gas and charges will do (design doc 11)', () =>
     setGasOn(state, 1, 0, 1);
     expect(forecastOf(state)).toContain(
       'GAS EXPLODES on x1 y0, x2 y0: the gas burns off, and what is placed on those squares ' +
-        'and beside them is destroyed. THE CREW WORKED THERE: it loses 3 health.',
+        'and beside them is destroyed.',
+    );
+    expect(forecastOf(state)).toContain(
+      'THE CREW LOSES 3 health: a gas explosion at or beside x1 y0, where it worked this shift.',
     );
     const { state: after, events } = endShift(state);
     expect(describeEvents(after, events)).toContain(

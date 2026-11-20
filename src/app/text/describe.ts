@@ -20,16 +20,15 @@ import {
   itemDef,
 } from '../../data';
 import type { ItemStack } from '../../data';
-import {
-  SQUARE_STEPS,
-  isSquare,
-  isWorked,
-  knownSquare,
-  mineCheck,
-  oreArmedByMine,
-  scanSquares,
+import { isSquare, knownSquare, mineCheck, oreArmedByMine, scanSquares } from '../../engine';
+import type {
+  Action,
+  CrewDamageForecast,
+  CrewForecast,
+  GameEvent,
+  GameState,
+  KnownSquare,
 } from '../../engine';
-import type { Action, GameEvent, GameState, KnownSquare } from '../../engine';
 import { belowCellText } from '../below';
 import type { LogEntry } from './log';
 import { blastText, patchText, squareText } from './squares';
@@ -576,38 +575,6 @@ function chanceText(): string {
 }
 
 /**
- * What the crew loses to the explosion `event`, from the squares it worked
- * this shift, or 0: a charge or ore hurts when its blast includes a worked
- * square, a gas explosion on a worked square or beside one (design doc 5.2).
- * The worked squares are the player's own actions, so this tells nothing
- * hidden.
- */
-function explosionDamage(
-  state: GameState,
-  event: Extract<GameEvent, { type: 'exploded' }>,
-): number {
-  for (const cell of event.cells) {
-    if (!isSquare(state, cell.x, cell.y)) {
-      continue;
-    }
-    if (isWorked(state, cell.x, cell.y)) {
-      return event.kind === 'gas' ? CREW.damage.gasExplosion : CREW.damage.explosion;
-    }
-    if (event.kind !== 'gas') {
-      continue;
-    }
-    for (const step of SQUARE_STEPS) {
-      const x = cell.x + step.dx;
-      const y = cell.y + step.dy;
-      if (isSquare(state, x, y) && isWorked(state, x, y)) {
-        return CREW.damage.gasExplosion;
-      }
-    }
-  }
-  return 0;
-}
-
-/**
  * What step (c) of the coming cube phase will do, for the "If you end the
  * shift now" line: where gas will reach, what goes off, what each explosion
  * destroys, and whether the crew is in it. `gas` is `ShiftForecast.gas`;
@@ -656,29 +623,28 @@ export function forecastGasLines(state: GameState, gas: GameEvent[]): RankedLine
     switch (event.type) {
       case 'exploded': {
         const where = squareText(event.pos.x, event.pos.y);
-        const damage = explosionDamage(state, event);
-        const crew = damage > 0 ? ` THE CREW WORKED THERE: it loses ${damage} health.` : '';
-        const rank = damage > 0 ? FORECAST_RANK.crewOrCamp : FORECAST_RANK.explosion;
+        // What the crew loses to it is in the crew's own lines (`forecastCrewLines`).
+        const rank = FORECAST_RANK.explosion;
         if (event.kind === 'explosive') {
           lines.push({
             rank,
             text:
               `THE EXPLOSIVE on ${where} GOES OFF: its blast covers ${explodedSquaresText(event)} ` +
-              `and destroys their top blocks, with no yield.${crew}`,
+              `and destroys their top blocks, with no yield.`,
           });
         } else if (event.kind === 'unstableOre') {
           lines.push({
             rank,
             text:
               `THE UNSTABLE ORE on ${where} GOES OFF: the ore is destroyed, and its blast covers ` +
-              `${explodedSquaresText(event)}.${crew}`,
+              `${explodedSquaresText(event)}.`,
           });
         } else {
           lines.push({
             rank,
             text:
               `GAS EXPLODES on ${explodedSquaresText(event)}: the gas burns off, and what is ` +
-              `placed on those squares and beside them is destroyed.${crew}`,
+              `placed on those squares and beside them is destroyed.`,
           });
         }
         break;
@@ -718,101 +684,91 @@ export function forecastGasLines(state: GameState, gas: GameEvent[]): RankedLine
   return lines;
 }
 
-/**
- * A warning for the forecast: the squares the crew worked this shift that a
- * slump, water, lava or gas will reach when the shift ends (design doc 5.2),
- * or `null` if there is none. Explosions are left out: their own lines say
- * what the crew loses.
- *
- * It is a warning, not a sum. The engine's forecast does not report damage
- * to the crew yet, and the view must not work the rules out a second time,
- * so the line names the squares and the hazards and gives no number. Without
- * it, a forecast with no word of the crew read as "safe" (review of PR #111).
- *
- * What counts, from the forecast's own events and what stands in the open:
- * - a slump that falls from a worked square or comes to rest on one;
- * - water that flows onto a worked square;
- * - lava that stands on, or flows onto, a worked square or one beside it;
- * - gas that stands on, or spreads onto, a worked square no vent will clear.
- * The worked squares are the player's own actions, so nothing hidden is read.
- */
-export function crewDangerLine(
-  state: GameState,
-  slumps: GameEvent[],
-  flows: GameEvent[],
-  gas: GameEvent[],
-): RankedLine | null {
-  // Worked square "x,y" -> the hazards that will reach it, in the order found.
-  const reasons = new Map<string, { x: number; y: number; hazards: string[] }>();
-  const note = (x: number, y: number, hazard: string): void => {
-    if (!isSquare(state, x, y) || !isWorked(state, x, y)) {
-      return;
-    }
-    const key = `${x},${y}`;
-    const entry = reasons.get(key) ?? { x, y, hazards: [] };
-    if (!entry.hazards.includes(hazard)) {
-      entry.hazards.push(hazard);
-    }
-    reasons.set(key, entry);
-  };
-  /** Lava on (x, y) threatens that square and the four beside it. */
-  const noteLava = (x: number, y: number): void => {
-    note(x, y, 'lava');
-    for (const step of SQUARE_STEPS) {
-      note(x + step.dx, y + step.dy, 'lava beside it');
-    }
-  };
+/** What each kind of hazard is called in a crew line, before the squares: "lava on x3 y4". */
+function crewHazardText(entry: CrewDamageForecast): string {
+  switch (entry.cause) {
+    case 'slump':
+      return 'the slump at';
+    case 'water':
+      return 'water flowing onto';
+    case 'lava':
+      // Lava on a worked square is the larger amount; beside one, the smaller.
+      return entry.amount === CREW.damage.lavaOn ? 'lava on' : 'lava beside';
+    case 'gas':
+      return 'gas on';
+    case 'gasExplosion':
+      return 'a gas explosion at or beside';
+    case 'explosion':
+      return 'the blast on';
+  }
+}
 
-  for (const event of slumps) {
-    if (event.type === 'blockFell') {
-      note(event.from.x, event.from.y, 'a slump');
-      note(event.to.x, event.to.y, 'a slump');
-    }
-  }
-  for (const event of flows) {
-    if (event.type === 'fluidMoved' && event.fluid === 'water') {
-      note(event.to.x, event.to.y, 'water');
-    } else if (event.type === 'fluidMoved' && event.fluid === 'lava') {
-      noteLava(event.to.x, event.to.y);
-    }
-  }
-  // The squares a vent will clear: gas there does not reach the crew.
-  const vented = new Set<string>();
-  for (const event of gas) {
-    if (event.type === 'gasRemoved' && event.reason === 'vented') {
-      vented.add(`${event.pos.x},${event.pos.y}`);
-    }
-  }
-  for (const event of gas) {
-    if (event.type === 'gasMoved' && !vented.has(`${event.to.x},${event.to.y}`)) {
-      note(event.to.x, event.to.y, 'gas');
-    }
-  }
-  // What stands in the open now, where the crew worked.
-  for (let y = 0; y < state.size.y; y += 1) {
-    for (let x = 0; x < state.size.x; x += 1) {
-      const contents = knownSquare(state, x, y).contents;
-      if (contents.lava > 0) {
-        noteLava(x, y);
-      }
-      if (contents.gas > 0 && !vented.has(`${x},${y}`)) {
-        note(x, y, 'gas');
-      }
-    }
-  }
-  if (reasons.size === 0) {
+/**
+ * The warning shown before End shift when the engine's forecast says the run
+ * would or may be lost to crew damage, or `null` when it says neither.
+ */
+export function crewLostWarning(crew: CrewForecast): string | null {
+  if (crew.runLost === 'no' || crew.lossCause === null) {
     return null;
   }
-  const parts: string[] = [];
-  for (const entry of reasons.values()) {
-    parts.push(`${squareText(entry.x, entry.y)} (${entry.hazards.join(', ')})`);
+  const how = `the crew has ${crew.health} health and ${
+    crew.runLost === 'yes' ? 'loses' : 'may lose'
+  } ${crew.total}`;
+  if (crew.runLost === 'yes') {
+    return `THE RUN WILL BE LOST if you end the shift now: ${how}.`;
   }
-  return {
-    rank: FORECAST_RANK.crewOrCamp,
-    text:
-      `THE CREW IS IN DANGER where it worked this shift: ${parts.join('; ')}. ` +
-      'A hazard that reaches a worked square hurts the crew; this line does not say how much.',
-  };
+  return `THE RUN MAY BE LOST if you end the shift now: ${how}.`;
+}
+
+/**
+ * The crew's lines of the forecast, from the engine's own forecast of damage
+ * (`ShiftForecast.crew`; issue #112). The view works out no rule itself.
+ *
+ * - If the run would or may be lost: that, first of all.
+ * - One line for each kind of hazard that will hurt the crew, the largest
+ *   amount first, with the worked squares where it deals that amount. An
+ *   amount the engine marks "at least" or "may" is worded so.
+ * - The total and the health left, when anything hurts.
+ * - If something hidden may add to it, a line that says so.
+ */
+export function forecastCrewLines(crew: CrewForecast, anyWorked: boolean): RankedLine[] {
+  const lines: RankedLine[] = [];
+  const lost = crewLostWarning(crew);
+  if (lost !== null) {
+    lines.push({ rank: FORECAST_RANK.runEnds, text: lost });
+  }
+  // The largest amount first. The sort is stable: equals keep the engine's order.
+  const byAmount = [...crew.damage].sort((a, b) => b.amount - a.amount);
+  for (const entry of byAmount) {
+    const worst = entry.squares.filter((square) => square.amount === entry.amount);
+    const where = worst.map((square) => squareText(square.x, square.y)).join(', ');
+    let verb = 'LOSES';
+    if (entry.certainty === 'atLeast') {
+      verb = 'LOSES AT LEAST';
+    } else if (entry.certainty === 'may') {
+      verb = 'MAY LOSE';
+    }
+    lines.push({
+      rank: FORECAST_RANK.crewOrCamp,
+      text: `THE CREW ${verb} ${entry.amount} health: ${crewHazardText(entry)} ${where}, where it worked this shift.`,
+    });
+  }
+  if (crew.damage.length > 0) {
+    const sure = crew.total === crew.totalAtLeast ? '' : ` (${crew.totalAtLeast} of it is certain)`;
+    lines.push({
+      rank: FORECAST_RANK.crewOrCamp,
+      text: `Crew health ${crew.health} -> ${crew.healthAfter}: ${crew.total} damage in all${sure}.`,
+    });
+  }
+  if (!crew.exact && anyWorked) {
+    lines.push({
+      rank: FORECAST_RANK.crewOrCamp,
+      text:
+        'A block you have not seen will be uncovered: if a pocket is under it, ' +
+        'its water, lava or gas may hurt the crew more than this says.',
+    });
+  }
+  return lines;
 }
 
 /**

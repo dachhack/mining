@@ -9,6 +9,7 @@
 
 import { isBesideWorked, isWorked } from '../crew';
 import type { DamageCause } from '../events';
+import { SQUARE_STEPS, isSquare } from '../heightmap';
 import type { Square } from '../heightmap';
 import type { GameState } from '../state';
 
@@ -16,6 +17,19 @@ import type { GameState } from '../state';
 export interface RecordedDamage {
   amount: number;
   cause: DamageCause;
+}
+
+/**
+ * One worked square where a hazard of kind `cause` hurts the crew, and the
+ * largest amount it deals there. Kept for the end-shift forecast, which tells
+ * the player where the crew will be hurt (issue #112); step (e) does not read
+ * it.
+ */
+export interface DamageSquare {
+  x: number;
+  y: number;
+  cause: DamageCause;
+  amount: number;
 }
 
 /** The notes of one cube phase. `runCubePhase` makes a fresh one each time. */
@@ -26,6 +40,12 @@ export interface CubePhase {
    * hazard hurts the crew at most once per shift, by its largest amount").
    */
   damage: RecordedDamage[];
+  /**
+   * Where the damage in `damage` comes from: one entry for each worked square
+   * and kind of hazard, in the order they were met. Only the forecast reads
+   * it (`forecastCrew` in forecast.ts).
+   */
+  damageSquares: DamageSquare[];
   /**
    * The squares whose top block cracked in step (a) of this phase, in the
    * order they cracked. Step (d) does not tick their countdowns: a fresh
@@ -44,7 +64,7 @@ export interface CubePhase {
 
 /** Fresh notes. `forecast` is true only for the end-shift forecast (see `CubePhase.forecast`). */
 export function newCubePhase(forecast = false): CubePhase {
-  return { damage: [], newCracks: [], forecast };
+  return { damage: [], damageSquares: [], newCracks: [], forecast };
 }
 
 /** Throws unless `amount` is a whole number, 0 or more. */
@@ -66,6 +86,31 @@ function noteDamage(phase: CubePhase, cause: DamageCause, amount: number): void 
   const already = phase.damage.find((entry) => entry.cause === cause);
   if (already === undefined) {
     phase.damage.push({ amount, cause });
+  } else if (amount > already.amount) {
+    already.amount = amount;
+  }
+}
+
+/**
+ * Write down that the hazard `cause` hurts the crew by `amount` on the worked
+ * square (x, y). A square is in the list once for a kind, with the larger
+ * amount. Recording 0 damage does nothing.
+ */
+function noteDamageSquare(
+  phase: CubePhase,
+  cause: DamageCause,
+  amount: number,
+  x: number,
+  y: number,
+): void {
+  if (amount === 0) {
+    return;
+  }
+  const already = phase.damageSquares.find(
+    (entry) => entry.cause === cause && entry.x === x && entry.y === y,
+  );
+  if (already === undefined) {
+    phase.damageSquares.push({ x, y, cause, amount });
   } else if (amount > already.amount) {
     already.amount = amount;
   }
@@ -101,6 +146,7 @@ export function recordDamage(
     return false;
   }
   noteDamage(phase, cause, amount);
+  noteDamageSquare(phase, cause, amount, x, y);
   return true;
 }
 
@@ -127,5 +173,13 @@ export function recordDamageBeside(
     return false;
   }
   noteDamage(phase, cause, amount);
+  // The worked squares beside (x, y) are where the crew is hurt.
+  for (const step of SQUARE_STEPS) {
+    const nx = x + step.dx;
+    const ny = y + step.dy;
+    if (isSquare(state, nx, ny) && isWorked(state, nx, ny)) {
+      noteDamageSquare(phase, cause, amount, nx, ny);
+    }
+  }
   return true;
 }
