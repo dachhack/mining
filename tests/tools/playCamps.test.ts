@@ -256,7 +256,7 @@ describe('"rest x,y" and "decommission x,y"', () => {
       'No camp is centred on x1 y1. A camp is named by its centre square: x3 y3.',
     );
     expect(decommissionChoice(field(), 3, 3).refusal).toBe(
-      'There is no camp yet: found one first ("camp X,Y").',
+      'There is no camp yet: found one first.',
     );
     expect(restChoice(campField({ ap: 0 }), 3, 3).refusal).toContain('needs at least 1 AP');
     expect(decommissionChoice(campField({ ap: 0 }), 3, 3).refusal).toContain('costs 1 AP');

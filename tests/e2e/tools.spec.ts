@@ -20,9 +20,11 @@ async function squareCentre(canvas: Locator, x: number, y: number) {
     throw new Error('the map is not on screen');
   }
   const cellPx = Number(data['cellPx']);
+  // The squares start after the rulers along the top and the left of the map.
+  const originPx = Number(data['originPx']);
   return {
-    x: box.x + (x - Number(data['camX']) + 0.5) * cellPx,
-    y: box.y + (y - Number(data['camY']) + 0.5) * cellPx,
+    x: box.x + originPx + (x - Number(data['camX']) + 0.5) * cellPx,
+    y: box.y + originPx + (y - Number(data['camY']) + 0.5) * cellPx,
   };
 }
 
@@ -69,7 +71,7 @@ test('sealant is crafted and used from the tool bar; look and hold list a square
   await expect(outcome).toContainText('Got 1 Coal');
 
   // Craft sealant at the camp: the seal tool appears.
-  await page.getByText('Other actions').click();
+  await page.locator('.actions-heading').click();
   await page.locator('[data-choice="craft-sealant"]').click();
   await expect(outcome).toContainText('Got 1 Sealant');
   await expect(sealTool).toHaveText('Seal (1)');

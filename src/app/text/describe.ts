@@ -35,6 +35,49 @@ import type { LogEntry } from './log';
 import { blastText, patchText, squareText } from './squares';
 import { tracedSymbolsText } from './symbols';
 
+/**
+ * Who a sentence is for. The play tool and the phone show the same facts,
+ * but a sentence that says HOW to do something differs: the play tool names
+ * a command to type ("rest 17,12"), the phone a button or a mark on its map
+ * (issue #110).
+ */
+export type Audience = 'playTool' | 'phone';
+
+/**
+ * One line of the end-of-shift forecast, with how dangerous it is. The lines
+ * are shown most dangerous first: a smaller `rank` comes earlier, and lines
+ * of the same rank keep the order they were made in.
+ */
+export interface RankedLine {
+  rank: number;
+  text: string;
+}
+
+/** The ranks of the forecast's lines (presentation only: nothing here is a game rule). */
+export const FORECAST_RANK = {
+  /** The run ends, or the fuel runs out. */
+  runEnds: 0,
+  /** The crew loses health, or a camp is destroyed. */
+  crewOrCamp: 1,
+  explosion: 2,
+  slump: 3,
+  lava: 4,
+  water: 5,
+  gas: 6,
+  /** Things placed, trees and blocks that will be destroyed. */
+  destroyed: 7,
+  newCracks: 8,
+  /** Good or neutral news: pumps, vents, rest, regrowth. */
+  relief: 9,
+  /** The fuel and AP bookkeeping: always last. */
+  upkeep: 10,
+};
+
+/** `lines` most dangerous first, as text. The sort is stable: equal ranks keep their order. */
+export function rankedText(lines: RankedLine[]): string[] {
+  return [...lines].sort((a, b) => a.rank - b.rank).map((line) => line.text);
+}
+
 /** "2 Stone, 1 Coal", or "nothing". */
 export function stackListText(stacks: ItemStack[]): string {
   if (stacks.length === 0) {
@@ -272,6 +315,32 @@ export function choiceName(entry: LogEntry): string {
 }
 
 /**
+ * The short name of a listed choice on the phone, where nothing is typed:
+ * "Craft Support", "Rest at the camp", "Close the mine". The play tool's
+ * name for the same choice is `choiceName` ("craft-support").
+ */
+export function choiceLabel(entry: LogEntry): string {
+  switch (entry.type) {
+    case 'craft': {
+      const recipe = findRecipe(entry.recipe) ?? findCampRecipe(entry.recipe);
+      return `Craft ${recipe?.name ?? entry.recipe}`;
+    }
+    case 'rest':
+      return 'Rest at the camp';
+    case 'decommissionCamp':
+      return 'Decommission the camp';
+    case 'closeMine':
+      return 'Close the mine';
+    case 'endShift':
+      return 'End shift';
+    default:
+      // The square actions are tapped on the map, not listed; their typed
+      // name is the best short name there is.
+      return choiceName(entry);
+  }
+}
+
+/**
  * The words for a choice: a line of the action list, and the start of the
  * line that says what was done (`takeTurn`). Describe the choice in the state
  * before it is taken.
@@ -343,7 +412,12 @@ function isFlowEvent(event: GameEvent): boolean {
  * flows; the moves are said first because they are what threatens.)
  */
 export function describeFlows(events: GameEvent[], coming: boolean): string[] {
-  const sentences: string[] = [];
+  return flowLines(events, coming).map((line) => line.text);
+}
+
+/** `describeFlows`, with each sentence's rank for the forecast. */
+function flowLines(events: GameEvent[], coming: boolean): RankedLine[] {
+  const lines: RankedLine[] = [];
 
   // The moves, counted for each pair of squares, in the order first seen.
   for (const fluid of ['water', 'lava'] as const) {
@@ -364,7 +438,10 @@ export function describeFlows(events: GameEvent[], coming: boolean): string[] {
     }
     const name = fluid === 'water' ? 'Water' : 'Lava';
     const verb = coming ? `${name.toUpperCase()} WILL FLOW` : `${name} flowed`;
-    sentences.push(`${verb}: ${parts.join('; ')}.`);
+    lines.push({
+      rank: fluid === 'water' ? FORECAST_RANK.water : FORECAST_RANK.lava,
+      text: `${verb}: ${parts.join('; ')}.`,
+    });
   }
 
   // Pumps (design doc 6.3): what they took, square by square.
@@ -375,11 +452,12 @@ export function describeFlows(events: GameEvent[], coming: boolean): string[] {
     }
   }
   if (pumped.length > 0) {
-    sentences.push(
-      coming
+    lines.push({
+      rank: FORECAST_RANK.relief,
+      text: coming
         ? `The pumps will take water: ${pumped.join('; ')}.`
         : `The pumps took water: ${pumped.join('; ')}.`,
-    );
+    });
   }
 
   // Stone: how many blocks formed on each square.
@@ -391,53 +469,96 @@ export function describeFlows(events: GameEvent[], coming: boolean): string[] {
     }
   }
 
+  // A source that is already full to ground level: what it pours drains away
+  // at once. The engine says so with two events (poured, then drained); they
+  // are worded as one sentence (issue #110). The key is the square, the value
+  // the units that drain there.
+  const drained = new Map<string, number>();
+  for (const event of events) {
+    if (
+      event.type === 'fluidRemoved' &&
+      event.reason === 'reachedSurface' &&
+      event.fluid === 'lava'
+    ) {
+      drained.set(`${event.pos.x},${event.pos.y}`, event.units);
+    }
+  }
+  const fullSources = new Set<string>();
+
   for (const event of events) {
     if (event.type === 'lavaPoured') {
       const where = squareText(event.pos.x, event.pos.y);
-      sentences.push(
-        coming
+      const key = `${event.pos.x},${event.pos.y}`;
+      if (drained.get(key) === event.units) {
+        fullSources.add(key);
+        lines.push({
+          rank: FORECAST_RANK.lava,
+          text: coming
+            ? `The lava source on ${where} is full to ground level: the ${event.units} lava it pours will drain away.`
+            : `The lava source on ${where} was full to ground level: the ${event.units} lava it poured drained away.`,
+        });
+        continue;
+      }
+      lines.push({
+        rank: FORECAST_RANK.lava,
+        text: coming
           ? `The lava source on ${where} will pour ${event.units} more lava.`
           : `The lava source on ${where} poured ${event.units} more lava.`,
-      );
+      });
     } else if (event.type === 'fluidRemoved' && event.reason === 'reachedSurface') {
+      if (event.fluid === 'lava' && fullSources.has(`${event.pos.x},${event.pos.y}`)) {
+        continue; // said with the source, above
+      }
       const where = squareText(event.pos.x, event.pos.y);
-      sentences.push(
-        coming
+      lines.push({
+        rank: FORECAST_RANK.relief,
+        text: coming
           ? `${event.units} ${event.fluid} on ${where} stands above ground level and will drain away.`
           : `${event.units} ${event.fluid} on ${where} stood above ground level and drained away.`,
-      );
+      });
     }
   }
   for (const [where, blocks] of stone) {
     const raised = blocks === 1 ? '1 level' : `${blocks} levels`;
-    sentences.push(
-      coming
+    lines.push({
+      rank: FORECAST_RANK.relief,
+      text: coming
         ? `Water will meet lava on ${where}: they turn to stone, and the square comes up ${raised}.`
         : `Water met lava on ${where}: they turned to stone, and the square came up ${raised}.`,
-    );
+    });
   }
-  return sentences;
+  return lines;
 }
 
 /**
  * What the coming cube phase will do with water and lava, for the "If you
- * end the shift now" line: `describeFlows`, and what the lava will destroy.
+ * end the shift now" lines: `describeFlows`, and what the lava will destroy.
  * `flows` is `ShiftForecast.flows`.
  */
 export function describeForecastFlows(flows: GameEvent[]): string[] {
-  const sentences = describeFlows(flows, true);
+  return forecastFlowLines(flows).map((line) => line.text);
+}
+
+/** `describeForecastFlows`, with each sentence's rank. */
+export function forecastFlowLines(flows: GameEvent[]): RankedLine[] {
+  const lines = flowLines(flows, true);
   for (const event of flows) {
     if (event.type === 'structureDestroyed') {
-      sentences.push(
-        `The ${structureNameByCode(event.structure)} on ${squareText(event.pos.x, event.pos.y)} ` +
+      lines.push({
+        rank: FORECAST_RANK.destroyed,
+        text:
+          `The ${structureNameByCode(event.structure)} on ${squareText(event.pos.x, event.pos.y)} ` +
           `will be destroyed by ${event.cause}.`,
-      );
+      });
     } else if (event.type === 'campDestroyed') {
       const fluid = event.cause === 'lava' ? 'LAVA' : 'WATER';
-      sentences.push(`THE ${fluid} DESTROYS THE CAMP at ${squareText(event.pos.x, event.pos.y)}.`);
+      lines.push({
+        rank: FORECAST_RANK.crewOrCamp,
+        text: `THE ${fluid} DESTROYS THE CAMP at ${squareText(event.pos.x, event.pos.y)}.`,
+      });
     }
   }
-  return sentences;
+  return lines;
 }
 // ---------------------------------------------------------------------------
 // Gas and explosions (design doc 6.5 and 6.6; issue #103)
@@ -494,11 +615,19 @@ function explosionDamage(
  * `knownSquare` and the worked squares.
  */
 export function describeForecastGas(state: GameState, gas: GameEvent[]): string[] {
-  const sentences: string[] = [];
-  // What the vents will clear comes first: it is the good news, and it
-  // explains why gas that "will spread" below is not there afterwards.
+  return forecastGasLines(state, gas).map((line) => line.text);
+}
+
+/** `describeForecastGas`, with each sentence's rank. */
+export function forecastGasLines(state: GameState, gas: GameEvent[]): RankedLine[] {
+  const lines: RankedLine[] = [];
+  // What the vents will clear: it explains why gas that "will spread" is not
+  // there afterwards.
   if (gas.some((event) => event.type === 'gasRemoved' && event.reason === 'vented')) {
-    sentences.push(`The vents will clear gas: ${ventedText(gas)}.`);
+    lines.push({
+      rank: FORECAST_RANK.relief,
+      text: `The vents will clear gas: ${ventedText(gas)}.`,
+    });
   }
 
   // Gas: only the squares it has not reached yet. Settled gas goes on
@@ -519,7 +648,7 @@ export function describeForecastGas(state: GameState, gas: GameEvent[]): string[
     for (const [where, units] of reached) {
       parts.push(`${where} (${units})`);
     }
-    sentences.push(`GAS WILL SPREAD onto: ${parts.join(', ')}.`);
+    lines.push({ rank: FORECAST_RANK.gas, text: `GAS WILL SPREAD onto: ${parts.join(', ')}.` });
   }
 
   const destroyed: string[] = [];
@@ -529,29 +658,38 @@ export function describeForecastGas(state: GameState, gas: GameEvent[]): string[
         const where = squareText(event.pos.x, event.pos.y);
         const damage = explosionDamage(state, event);
         const crew = damage > 0 ? ` THE CREW WORKED THERE: it loses ${damage} health.` : '';
+        const rank = damage > 0 ? FORECAST_RANK.crewOrCamp : FORECAST_RANK.explosion;
         if (event.kind === 'explosive') {
-          sentences.push(
-            `THE EXPLOSIVE on ${where} GOES OFF: its blast covers ${explodedSquaresText(event)} ` +
+          lines.push({
+            rank,
+            text:
+              `THE EXPLOSIVE on ${where} GOES OFF: its blast covers ${explodedSquaresText(event)} ` +
               `and destroys their top blocks, with no yield.${crew}`,
-          );
+          });
         } else if (event.kind === 'unstableOre') {
-          sentences.push(
-            `THE UNSTABLE ORE on ${where} GOES OFF: the ore is destroyed, and its blast covers ` +
+          lines.push({
+            rank,
+            text:
+              `THE UNSTABLE ORE on ${where} GOES OFF: the ore is destroyed, and its blast covers ` +
               `${explodedSquaresText(event)}.${crew}`,
-          );
+          });
         } else {
-          sentences.push(
-            `GAS EXPLODES on ${explodedSquaresText(event)}: the gas burns off, and what is ` +
+          lines.push({
+            rank,
+            text:
+              `GAS EXPLODES on ${explodedSquaresText(event)}: the gas burns off, and what is ` +
               `placed on those squares and beside them is destroyed.${crew}`,
-          );
+          });
         }
         break;
       }
       case 'blockMayBeDestroyed':
-        sentences.push(
-          `The ${blockDefByCode(event.block).name} on ${squareText(event.pos.x, event.pos.y)} is in ` +
+        lines.push({
+          rank: FORECAST_RANK.destroyed,
+          text:
+            `The ${blockDefByCode(event.block).name} on ${squareText(event.pos.x, event.pos.y)} is in ` +
             `the blast: it may be destroyed (${chanceText()}), and is otherwise left in place.`,
-        );
+        });
         break;
       case 'treeDestroyed':
         destroyed.push(`the tree on ${squareText(event.pos.x, event.pos.y)}`);
@@ -562,18 +700,22 @@ export function describeForecastGas(state: GameState, gas: GameEvent[]): string[
         );
         break;
       case 'campDestroyed':
-        sentences.push(
-          `THE EXPLOSION DESTROYS THE CAMP at ${squareText(event.pos.x, event.pos.y)}.`,
-        );
+        lines.push({
+          rank: FORECAST_RANK.crewOrCamp,
+          text: `THE EXPLOSION DESTROYS THE CAMP at ${squareText(event.pos.x, event.pos.y)}.`,
+        });
         break;
       default:
         break;
     }
   }
   if (destroyed.length > 0) {
-    sentences.push(`The explosion will destroy ${destroyed.join(', ')}.`);
+    lines.push({
+      rank: FORECAST_RANK.destroyed,
+      text: `The explosion will destroy ${destroyed.join(', ')}.`,
+    });
   }
-  return sentences;
+  return lines;
 }
 
 /**
@@ -621,11 +763,32 @@ export function crackFallsText(shown: number): string {
 }
 
 /**
+ * The same for the Hazards list: "due at the end of this shift". "Due", not
+ * "falls": a crack that is due may not fall, because an earlier slump of the
+ * same end of shift can fill the hole it would fall into; the forecast's
+ * "THE PIT WALL SLUMPS" line names the ones that will (issue #110).
+ */
+export function crackDueText(shown: number): string {
+  if (shown <= 1) {
+    return 'due at the end of this shift';
+  }
+  if (shown === 2) {
+    return 'due at the end of the next shift';
+  }
+  return `due at the end of the shift ${shown - 1} shifts from now`;
+}
+
+/**
  * What the coming cube phase will do to the pit walls, as sentences for the
  * "If you end the shift now" line. `slumps` is `ShiftForecast.slumps`: the
  * events step (a) would emit. Empty when nothing will slump or crack.
  */
 export function describeForecastSlumps(slumps: GameEvent[]): string[] {
+  return forecastSlumpLines(slumps).map((line) => line.text);
+}
+
+/** `describeForecastSlumps`, with each sentence's rank. */
+export function forecastSlumpLines(slumps: GameEvent[]): RankedLine[] {
   const falls: string[] = [];
   const cracks: string[] = [];
   const campsLost: string[] = [];
@@ -640,19 +803,23 @@ export function describeForecastSlumps(slumps: GameEvent[]): string[] {
       campsLost.push(squareText(event.pos.x, event.pos.y));
     }
   }
-  const sentences: string[] = [];
+  const lines: RankedLine[] = [];
   if (falls.length > 0) {
-    sentences.push(`THE PIT WALL SLUMPS: ${falls.join('; ')}.`);
+    lines.push({ rank: FORECAST_RANK.slump, text: `THE PIT WALL SLUMPS: ${falls.join('; ')}.` });
   }
   if (campsLost.length > 0) {
-    sentences.push(`THE SLUMP DESTROYS THE CAMP at ${campsLost.join(', ')}.`);
+    lines.push({
+      rank: FORECAST_RANK.crewOrCamp,
+      text: `THE SLUMP DESTROYS THE CAMP at ${campsLost.join(', ')}.`,
+    });
   }
   if (cracks.length > 0) {
-    sentences.push(
-      `New cracks (unstable squares): ${cracks.join(', ')}; each falls at the end of the shift after next unless it is supported or made stable.`,
-    );
+    lines.push({
+      rank: FORECAST_RANK.newCracks,
+      text: `New cracks (unstable squares): ${cracks.join(', ')}; each falls at the end of the shift after next unless it is supported or made stable.`,
+    });
   }
-  return sentences;
+  return lines;
 }
 
 /**
@@ -695,11 +862,15 @@ function spaceCollapsedText(event: Extract<GameEvent, { type: 'spaceCollapsed' }
  * step led to; it is read only through `knownSquare`, to say what a square
  * shows now.
  */
-export function describeEvents(after: GameState, events: GameEvent[]): string[] {
+export function describeEvents(
+  after: GameState,
+  events: GameEvent[],
+  audience: Audience = 'playTool',
+): string[] {
   const lines: string[] = [];
   // Said once for a step, however many blocks it was seen on.
   let tracesSaid = false;
-  const tracesLine = tracesSeenText(events);
+  const tracesLine = tracesSeenText(events, audience);
   // A space that collapsed says what the new top is itself.
   const roofFell = events.some((event) => event.type === 'spaceCollapsed');
   // Water and lava: all of a step's flow is said together, where it began.
@@ -787,7 +958,9 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
         lines.push(
           `The camp stands on ${patchText(event.pos.x, event.pos.y)} (${depthName(event.pos.z)}). ` +
             'Its squares cannot be mined; mining near it is cheaper; camp recipes are on the list; ' +
-            `"rest ${event.pos.x},${event.pos.y}" restores crew health.`,
+            (audience === 'phone'
+              ? '"Rest at the camp", under "Other actions", restores crew health.'
+              : `"rest ${event.pos.x},${event.pos.y}" restores crew health.`),
         );
         break;
       case 'restStarted':
@@ -967,8 +1140,13 @@ function scannedLines(after: GameState, x: number, y: number, cells: number): st
  * just mined (issue #47 item 6; review of PR #48). Only the step's events are
  * read: which block was mined, and that traces were seen.
  */
-function tracesSeenText(events: GameEvent[]): string {
-  const onMap = `(On the map: ${tracedSymbolsText()}.)`;
+function tracesSeenText(events: GameEvent[], audience: Audience): string {
+  // The play tool's map draws traced rock with its own characters; the
+  // phone's map puts three gold dots on it.
+  const onMap =
+    audience === 'phone'
+      ? '(On the map: three gold dots.)'
+      : `(On the map: ${tracedSymbolsText()}.)`;
   const oreNames: string[] = TELLS.mineralTraces.sourceBlocks;
   const minedOre = events.some(
     (event) => event.type === 'blockMined' && oreNames.includes(blockIdByCode(event.block)),

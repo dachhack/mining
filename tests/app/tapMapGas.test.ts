@@ -157,10 +157,21 @@ describe('tiles, charges and blasts', () => {
       return state;
     }
     const window = { x0: 0, y0: 0, size: 3 };
-    const plain = JSON.stringify(buildTiles(charged(false), window));
-    const withHidden = JSON.stringify(buildTiles(charged(true), window));
-    // Only the "pitted" tell could differ, and tiles do not carry tells.
-    expect(withHidden).toBe(plain);
+    const plain = buildTiles(charged(false), window);
+    const withHidden = buildTiles(charged(true), window);
+    // Tells are the one deliberate hint of what is hidden (design doc 3.4),
+    // and tiles carry them (issue #110): the gas pocket shows as pitted rock
+    // on the top block over it, and the unstable ore and the relic show as
+    // nothing. With the tells set aside, the tiles are the same.
+    expect(withHidden[1]?.[1]?.tells).toEqual({
+      damp: false,
+      pitted: true,
+      warm: false,
+      hairline: false,
+    });
+    const withoutTells = (rows: typeof plain): string =>
+      JSON.stringify(rows.map((row) => row.map((tile) => ({ ...tile, tells: null }))));
+    expect(withoutTells(withHidden)).toBe(withoutTells(plain));
   });
 });
 

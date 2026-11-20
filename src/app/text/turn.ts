@@ -3,6 +3,7 @@
 // line what it was and what came of it.
 
 import { describeChoice, describeEvents } from './describe';
+import type { Audience } from './describe';
 import { step } from './log';
 import type { LogEntry, Session } from './log';
 
@@ -27,10 +28,14 @@ export function takeTurn(session: Session, entry: LogEntry): string {
  * `describeEvents` marks by starting them with two spaces) follows as a line
  * of its own, and anything said after the list as a last line.
  */
-export function takeTurnLines(session: Session, entry: LogEntry): string[] {
+export function takeTurnLines(
+  session: Session,
+  entry: LogEntry,
+  audience: Audience = 'playTool',
+): string[] {
   const text = describeChoice(session.state, entry);
   const events = step(session, entry);
-  const told = describeEvents(session.state, events);
+  const told = describeEvents(session.state, events, audience);
   const firstListLine = told.findIndex((line) => line.startsWith('  '));
   if (firstListLine === -1) {
     return [`> ${text}. ${told.join(' ')}`.trimEnd()];

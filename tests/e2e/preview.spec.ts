@@ -31,7 +31,7 @@ test('a run on a fixed seed is played with the buttons under the map', async ({ 
   const gauges = page.getByTestId('gauges');
   await expect(gauges).toContainText('Shift 1 | AP 5/5 | Fuel 24');
   await expect(gauges).toContainText('Stockpile: 1 Camp kit, 2 Timber');
-  await expect(page.getByTestId('forecast')).toContainText('If you end the shift now:');
+  await expect(page.getByTestId('forecast')).toContainText('When you end the shift:');
 
   await page.getByTestId('end-shift').click();
   // The same choice in `npm run play -- --seed 7 --do end` gives the same gauges.

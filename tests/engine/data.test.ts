@@ -442,6 +442,7 @@ describe('M2 data (decision note 0014)', () => {
       lava: {
         unitsPerCell: 1,
         flowEveryShifts: 2,
+        flowMinDrop: 2,
         sourcePocketCellsOver: 8,
         sourceUnitsPerStep: 1,
         sourceKeepsUnits: 1,
@@ -652,14 +653,17 @@ describe('M2 data (decision note 0014)', () => {
     const problems = problemsAfter((data) => {
       // A drop of 1 would let a unit of water swap back and forth for ever.
       data.hazards.water.flowMinDrop = 1;
+      // Lava has its own number, with the same limit (issue #110).
+      data.hazards.lava.flowMinDrop = 1;
       data.hazards.water.floodedMineExtraAp = -1;
       data.hazards.lava.sourceUnitsPerStep = 0;
       // A cell with no lava is never a source, so a source keeps at least 1.
       data.hazards.lava.sourceKeepsUnits = 0;
     });
-    expect(problems).toHaveLength(4);
+    expect(problems).toHaveLength(5);
     for (const part of [
       'hazards.water.flowMinDrop must be a whole number of at least 2',
+      'hazards.lava.flowMinDrop must be a whole number of at least 2',
       'hazards.water.floodedMineExtraAp',
       'hazards.lava.sourceUnitsPerStep',
       'hazards.lava.sourceKeepsUnits',

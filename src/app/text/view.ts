@@ -17,8 +17,8 @@
 // "traced" character (`D`, `%`, `h`: see symbols.ts). That is the hint the
 // rule intends, and the engine decides it. The hazard tells (damp stone,
 // pitted rock, warm glow, hairline glow; design doc 3.7) are the same kind of
-// hint; they are listed under the map, square by square, until task T14
-// gives them marks.
+// hint. The play tool lists them under its map, square by square; the phone
+// draws a mark for each on its map (issue #110), so its notes leave them out.
 
 import {
   CAMPS,
@@ -48,17 +48,20 @@ import {
 } from '../../engine';
 import type { GameState, KnownSquare } from '../../engine';
 import {
+  FORECAST_RANK,
   choiceName,
   contentsNames,
-  crackFallsText,
+  crackDueText,
   depthName,
   describeChoice,
-  describeForecastFlows,
-  describeForecastGas,
-  describeForecastSlumps,
+  forecastFlowLines,
+  forecastGasLines,
+  forecastSlumpLines,
+  rankedText,
   runEndText,
   tellNames,
 } from './describe';
+import type { Audience, RankedLine } from './describe';
 import { END_SHIFT, listedChoices } from './log';
 import type { LogEntry } from './log';
 import { tooLittleApNote } from './missing';
@@ -99,6 +102,12 @@ import {
 export interface ViewOptions {
   /** The greatest depth mined to in this run (the session tracks it). */
   deepestDepth: number;
+  /**
+   * Who the view is for: the play tool (the default) or the phone. The phone
+   * gets its own wording wherever the play tool names a command to type, and
+   * its notes leave out what its map draws (issue #110).
+   */
+  audience?: Audience;
 }
 
 /** One line of the action list. */
@@ -193,7 +202,12 @@ export interface PlayerView {
    * when nothing is.
    */
   notOffered: string[];
-  /** What ending the shift now would do; `null` once the run is over. */
+  /**
+   * What ending the shift now would do, one line for each thing that will
+   * happen, the most dangerous first; empty once the run is over.
+   */
+  forecastLines: string[];
+  /** The same lines as one string; `null` once the run is over. */
   forecast: string | null;
   /** The mines and cuts on offer; `null` once the run is over. */
   squares: SquareChoicesView | null;
@@ -399,16 +413,20 @@ function runText(from: number, to: number): string {
  * that lists the squares where mining is cheaper, and one if the crew is
  * resting. Camps, depths and the crew's rest are all seen by the player.
  */
-function campNotes(state: GameState): string[] {
+function campNotes(state: GameState, audience: Audience): string[] {
   const notes: string[] = [];
   for (const camp of state.camps) {
     const due = campUpkeepIsDue(state, camp)
       ? `it burns ${CAMPS.upkeepFuel} fuel when this shift ends`
       : `it burns ${CAMPS.upkeepFuel} fuel every ${CAMPS.upkeepEveryShifts} shifts`;
+    // How to use the camp: the play tool's commands, or the phone's buttons.
+    const how =
+      audience === 'phone'
+        ? 'Rest and Decommission are under "Other actions".'
+        : `"rest ${camp.pos.x},${camp.pos.y}" or "decommission ${camp.pos.x},${camp.pos.y}".`;
     notes.push(
       `Camp at ${squareText(camp.pos.x, camp.pos.y)} (${depthName(camp.pos.z)}), on ` +
-        `${patchText(camp.pos.x, camp.pos.y)}: ${due}. ` +
-        `"rest ${camp.pos.x},${camp.pos.y}" or "decommission ${camp.pos.x},${camp.pos.y}".`,
+        `${patchText(camp.pos.x, camp.pos.y)}: ${due}. ${how}`,
     );
   }
   if (state.camps.length === 0) {
@@ -435,7 +453,8 @@ function campNotes(state: GameState): string[] {
       rows.push(`y${y} ${runs.join(' ')}`);
     }
   }
-  if (rows.length > 0) {
+  // The phone's map draws a line round those squares instead.
+  if (rows.length > 0 && audience !== 'phone') {
     notes.push(
       `Mining costs ${CAMPS.mineDiscountAp} AP less (never below ${CAMPS.mineMinAp}) near a camp: ` +
         `within ${CAMPS.mineDiscountSteps} steps of a camp square and no more than ` +
@@ -457,6 +476,15 @@ function campNotes(state: GameState): string[] {
  * see the note at the top of this file.
  */
 export function buildView(state: GameState, options: ViewOptions): PlayerView {
+  const audience: Audience = options.audience ?? 'playTool';
+  // The phone's map draws what stands on a square, its tells, and where the
+  // pumps and vents are, so the phone's notes do not repeat them.
+  const mapDrawsMarks = audience === 'phone';
+  // How many squares hold water, lava and gas, for the Hazards list.
+  let waterSquares = 0;
+  let lavaSquares = 0;
+  let lavaSources = 0;
+  let gasSquares = 0;
   // The map, the legend of the characters it actually uses, and the notes.
   const rows: string[] = [];
   const legend = new Map<string, string>();
@@ -489,9 +517,13 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       const crackRunning =
         square.top !== null && square.top.crackTimer !== null && slumpCheck(state, x, y).unstable;
       const note = onTopNote(square, crackRunning);
-      if (note !== null) {
+      if (note !== null && !mapDrawsMarks) {
         notes.push(note);
       }
+      if (square.contents.water > 0) waterSquares += 1;
+      if (square.contents.lava > 0) lavaSquares += 1;
+      if (square.contents.lavaSource) lavaSources += 1;
+      if (square.contents.gas > 0) gasSquares += 1;
       const tellsHere = tellNames(square);
       if (tellsHere.length > 0) {
         tells.push(`${squareText(x, y)} ${tellsHere.join(', ')}`);
@@ -516,9 +548,9 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     }
     rows.push(row.trimEnd());
   }
-  if (tells.length > 0) {
+  if (tells.length > 0 && !mapDrawsMarks) {
     notes.push(
-      'Tells on top blocks (damp: water under or beside; pitted: gas under or beside; ' +
+      'Tells on top blocks (damp stone: water under or beside; pitted rock: gas under or beside; ' +
         'warm glow: lava within 2; hairline glow: unstable ore, which is armed by mining beside it): ' +
         tells.join('; '),
     );
@@ -528,13 +560,13 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       `Stumps, and the shifts until a tree grows back (1 is the end of this shift): ${stumps.join('; ')}`,
     );
   }
-  if (vents.length > 0) {
+  if (vents.length > 0 && !mapDrawsMarks) {
     notes.push(
       `Vents on ${vents.join(', ')}: when a shift ends each clears all the gas on the squares ` +
         `within ${VENT_REACH} steps of it, after the gas has spread and before it can burn or poison.`,
     );
   }
-  if (pumps.length > 0) {
+  if (pumps.length > 0 && !mapDrawsMarks) {
     notes.push(
       `Pumps on ${pumps.join(', ')}: each takes up to ${PUMP_UNITS} water a shift from the squares ` +
         `within ${PUMP_REACH} steps of it (the nearest first), before the water flows.`,
@@ -550,7 +582,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       `${KNOWN_BELOW_NOTE} ` + `${marked.length === 0 ? 'plain rock only' : marked.join('; ')}.`,
     );
   }
-  notes.push(...campNotes(state));
+  notes.push(...campNotes(state, audience));
 
   const legendLines: string[] = [];
   for (const symbol of [...legend.keys()].sort()) {
@@ -586,6 +618,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       notes,
       hazards: [],
       notOffered: [],
+      forecastLines: [],
       forecast: null,
       squares: null,
       choices: [],
@@ -620,50 +653,87 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       );
     }
     return (
-      `${where} is cracked: ${crackFallsText(countdown.inShifts)}, ` +
+      `${where} is cracked: ${crackDueText(countdown.inShifts)}, ` +
       `onto ${squareText(countdown.to.x, countdown.to.y)}`
     );
   });
+  // After the countdowns, what stands in the pit: with gas on a square the
+  // list must not read "none known" (issue #110). The map shows where.
+  const squaresText = (count: number): string => (count === 1 ? '1 square' : `${count} squares`);
+  if (lavaSquares > 0) {
+    const sources =
+      lavaSources === 0
+        ? ''
+        : ` (${lavaSources === 1 ? '1 is a source' : `${lavaSources} are sources`}: it keeps pouring)`;
+    hazards.push(
+      `lava stands on ${squaresText(lavaSquares)}${sources}: it burns a crew working on or beside it`,
+    );
+  }
+  if (waterSquares > 0) {
+    hazards.push(
+      `water stands on ${squaresText(waterSquares)}: it hurts the crew if it flows onto a square worked this shift`,
+    );
+  }
+  if (gasSquares > 0) {
+    hazards.push(
+      `gas stands on ${squaresText(gasSquares)}: it hurts a crew working there, and lava or a blast sets it off`,
+    );
+  }
   const upkeep = preview.upkeep;
-  let forecast: string;
+  // One line for each thing that will happen, each with its rank; they are
+  // put most dangerous first at the end (`rankedText`).
+  const ranked: RankedLine[] = [];
   if (upkeep.runEnds !== null) {
-    forecast = `THE RUN ENDS: ${runEndText(upkeep.runEnds)}. No fuel is left, and unspent AP does not become fuel.`;
+    ranked.push({
+      rank: FORECAST_RANK.runEnds,
+      text: `THE RUN ENDS: ${runEndText(upkeep.runEnds)}. No fuel is left, and unspent AP does not become fuel.`,
+    });
   } else {
-    // Unspent AP is lost at the end of a shift (issue #32); say so only when
-    // there is some, so a player does not end a shift early by oversight.
-    const unspent = state.ap > 0 ? `${state.ap} unspent AP will be lost, ` : '';
-    const shiftFuel = upkeep.fuelConsumed - upkeep.campFuelConsumed;
-    const campFuel = upkeep.campFuelConsumed > 0 ? `, -${upkeep.campFuelConsumed} camp upkeep` : '';
-    forecast = `${unspent}fuel ${state.fuel} -> ${upkeep.fuelAfter} (-${shiftFuel} shift${campFuel}).`;
-    if (state.crew.restingAt !== null && state.crew.health < CREW.startHealth) {
-      forecast += ` The crew rests: health ${state.crew.health} -> ${CREW.startHealth}, if nothing hurts it or reaches the camp first.`;
-    }
     // What step (a) of the cube phase will do: slumps, then new cracks.
-    for (const sentence of describeForecastSlumps(preview.slumps)) {
-      forecast += ` ${sentence}`;
-    }
+    ranked.push(...forecastSlumpLines(preview.slumps));
     // What step (b) will do: water and lava flow (design doc 6.3 and 6.4).
-    for (const sentence of describeForecastFlows(preview.flows)) {
-      forecast += ` ${sentence}`;
-    }
+    ranked.push(...forecastFlowLines(preview.flows));
     // What step (c) will do: gas spreads, charges and armed ore go off, gas
     // burns (design doc 6.5 and 6.6).
-    for (const sentence of describeForecastGas(state, preview.gas)) {
-      forecast += ` ${sentence}`;
+    ranked.push(...forecastGasLines(state, preview.gas));
+    if (state.crew.restingAt !== null && state.crew.health < CREW.startHealth) {
+      ranked.push({
+        rank: FORECAST_RANK.relief,
+        text: `The crew rests: health ${state.crew.health} -> ${CREW.startHealth}, if nothing hurts it or reaches the camp first.`,
+      });
     }
     if (preview.regrowth.length > 0) {
       const cells = preview.regrowth.map((cell) => squareText(cell.x, cell.y)).join(', ');
-      forecast += ` A tree grows back on the stump at ${cells}.`;
+      ranked.push({
+        rank: FORECAST_RANK.relief,
+        text: `A tree grows back on the stump at ${cells}.`,
+      });
     }
     if (upkeep.fuelAfter <= 0) {
       // The run does not end at this end of shift, but it will at the next
       // one unless fuel is crafted first (decision note 0005 item 21;
       // issue #47 item 4).
-      forecast +=
-        ' FUEL WILL BE 0: the next shift is your last unless you craft fuel during it' +
-        ' (ending a shift with no fuel ends the run).';
+      ranked.push({
+        rank: FORECAST_RANK.runEnds,
+        text:
+          'FUEL WILL BE 0: the next shift is your last unless you craft fuel during it' +
+          ' (ending a shift with no fuel ends the run).',
+      });
     }
+    // Unspent AP is lost at the end of a shift (issue #32); say so only when
+    // there is some, so a player does not end a shift early by oversight.
+    const unspent = state.ap > 0 ? `${state.ap} unspent AP will be lost, ` : '';
+    const shiftFuel = upkeep.fuelConsumed - upkeep.campFuelConsumed;
+    const campFuel = upkeep.campFuelConsumed > 0 ? `, -${upkeep.campFuelConsumed} camp upkeep` : '';
+    // The first letter is a capital: each line stands by itself now.
+    const bookkeeping = `${unspent}fuel ${state.fuel} -> ${upkeep.fuelAfter} (-${shiftFuel} shift${campFuel}).`;
+    ranked.push({
+      rank: FORECAST_RANK.upkeep,
+      text: bookkeeping.charAt(0).toUpperCase() + bookkeeping.slice(1),
+    });
   }
+  const forecastLines = rankedText(ranked);
+  const forecast = forecastLines.join(' ');
 
   // The mines, cuts and supports on offer are counted from the engine's own list.
   let cuts = 0;
@@ -705,7 +775,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   }
 
   const notOffered: string[] = [];
-  const apNote = tooLittleApNote(state);
+  const apNote = tooLittleApNote(state, audience);
   if (apNote !== null) {
     notOffered.push(apNote);
   }
@@ -718,6 +788,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     notes,
     hazards,
     notOffered,
+    forecastLines,
     forecast,
     squares: {
       mines,
@@ -806,14 +877,32 @@ export function renderMap(view: PlayerView): MapText {
   return { header, grid, after };
 }
 
-/** The "Hazards:" line. */
-export function hazardsLine(view: PlayerView): string {
-  return `Hazards: ${view.hazards.length === 0 ? 'none known' : view.hazards.join(' | ')}`;
+/** The heading of the hazards list. */
+export const HAZARDS_HEADING = 'Hazards:';
+
+/** The heading of the end-of-shift forecast. */
+export const FORECAST_HEADING = 'If you end the shift now:';
+
+/** The same heading on the phone, where ending the shift is a button. */
+export const FORECAST_HEADING_PHONE = 'When you end the shift:';
+
+/**
+ * The hazards, as lines: the heading, then one line for each hazard. With
+ * none, a single line: "Hazards: none known".
+ */
+export function hazardsLines(view: PlayerView): string[] {
+  if (view.hazards.length === 0) {
+    return [`${HAZARDS_HEADING} none known`];
+  }
+  return [HAZARDS_HEADING, ...view.hazards.map((hazard) => `  - ${hazard}`)];
 }
 
-/** The "If you end the shift now:" line. */
-export function forecastLine(view: PlayerView): string {
-  return `If you end the shift now: ${view.forecast ?? ''}`;
+/**
+ * The forecast, as lines: the heading, then one line for each thing that
+ * will happen when the shift ends, the most dangerous first.
+ */
+export function forecastTextLines(view: PlayerView): string[] {
+  return [FORECAST_HEADING, ...view.forecastLines.map((line) => `  - ${line}`)];
 }
 
 /**
@@ -941,8 +1030,8 @@ export function renderView(view: PlayerView): string {
     return lines.join('\n');
   }
 
-  lines.push(hazardsLine(view));
-  lines.push(forecastLine(view));
+  lines.push(...hazardsLines(view));
+  lines.push(...forecastTextLines(view));
   for (const note of view.notOffered) {
     lines.push(`Not possible now: ${note}`);
   }

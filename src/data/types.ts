@@ -261,8 +261,8 @@ export interface WaterData {
   /** Extra AP to mine a square that water stands on (design doc 4.2). */
   floodedMineExtraAp: number;
   /**
-   * Water and lava move from a square to a neighbour only when the
-   * neighbour's level is at least this many levels lower (design doc 6.3).
+   * Water moves from a square to a neighbour only when the neighbour's level
+   * is at least this many levels lower (design doc 6.3).
    */
   flowMinDrop: number;
   pumpUnitsPerShift: number;
@@ -287,6 +287,8 @@ export interface ExplosionData {
 export interface LavaData {
   unitsPerCell: number;
   flowEveryShifts: number;
+  /** Lava's own `flowMinDrop`: see `WaterData.flowMinDrop` (design doc 6.4). */
+  flowMinDrop: number;
   sourcePocketCellsOver: number;
   /** Units a lava source gives on every lava step (design doc 6.2). */
   sourceUnitsPerStep: number;

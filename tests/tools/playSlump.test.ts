@@ -64,7 +64,7 @@ describe('"support x,y"', () => {
 
   it('is refused with the reason', () => {
     expect(supportChoice(pit(['00']), 0, 0).refusal).toBe(
-      'You have no support to place: craft one first ("craft-support").',
+      'You have no support to place: craft one first ("Craft Support" on the list of actions).',
     );
     const state = buildState({
       layers: [['##.#']],
@@ -151,14 +151,16 @@ describe('cracks and slumps in the view', () => {
     );
     const text = viewText(one.state);
     expect(text).toContain('On x0 y0: a crack, countdown 2');
+    // The Hazards list says "due", not "falls": an earlier slump of the same
+    // end of shift may fill the hole first (issue #110).
     expect(text).toContain(
-      'Hazards: x0 y0 is cracked: it falls at the end of the next shift, onto x2 y0',
+      'Hazards:\n  - x0 y0 is cracked: due at the end of the next shift, onto x2 y0',
     );
 
     const two = endShift(one.state);
     const due = viewText(two.state);
     expect(due).toContain('On x0 y0: a crack, countdown 1');
-    expect(due).toContain('x0 y0 is cracked: it falls at the end of this shift, onto x2 y0');
+    expect(due).toContain('x0 y0 is cracked: due at the end of this shift, onto x2 y0');
     expect(due).toContain('THE PIT WALL SLUMPS: x0 y0 onto x2 y0.');
 
     const three = endShift(two.state);

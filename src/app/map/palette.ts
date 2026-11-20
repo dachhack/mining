@@ -33,6 +33,20 @@ export const PREVIEW_MAP = {
   /** From this cell size in pixels up, a dug square shows its depth as a number. */
   depthNumberMinCellPx: 20,
   /**
+   * Below this cell size in pixels a square is too small for numbers: the
+   * units of water and lava and a crack's countdown are left out, and the
+   * marks that say something is coming are drawn bigger (issue #110).
+   */
+  numbersMinCellPx: 16,
+  /**
+   * The width in pixels of the strips along the top and the left of the map
+   * that hold the x and y of the squares (the text under the map names
+   * squares as "x17 y12").
+   */
+  rulerPx: 14,
+  /** A ruler names every square from this cell size up, and every 5th below it. */
+  rulerEveryCellPx: 18,
+  /**
    * Depth shading (issue #86): a square `d` levels down is drawn at
    * `depthBrightnessPerLevel ** d` of its full brightness, and never darker
    * than `depthMinBrightness`, so that the block's colour can still be told.
@@ -138,6 +152,30 @@ export const UNKNOWN_LOOK = { colour: '#1d1916', ink: '#3a332d' };
 /** Colours of the marks drawn on top of tiles. */
 export const MARK_COLOURS = {
   support: '#e8e0d0',
+  /** The numbers and ticks of the rulers along the top and the left of the map. */
+  ruler: '#c9c0b3',
+  rulerBackground: '#14110f',
+  /** Tells on top blocks (design doc 3.7), each with a shape of its own. */
+  tellDamp: '#5db4ff',
+  tellPit: '#141a05',
+  tellPitRim: '#d6ee6a',
+  tellWarm: '#ff8a2a',
+  tellHairline: '#fff7c2',
+  tellOutline: 'rgba(0, 0, 0, 0.75)',
+  /** The corners of a square the crew worked this shift. */
+  worked: '#ffffff',
+  /** "Water flows here": a drop. "Lava flows here": a flame with a yellow heart. */
+  waterComing: '#3b9bff',
+  waterComingEdge: '#ffffff',
+  lavaComing: '#ff5a14',
+  lavaComingHeart: '#ffe14d',
+  /** The badge under the units of water, and under the units of lava. */
+  waterBadge: '#1257c4',
+  lavaBadge: '#7a1c00',
+  /** The badge of a running crack's countdown, of a stopped one, and their digits. */
+  crackBadge: '#d9301a',
+  crackStoppedBadge: '#8f887e',
+  badgeInk: '#ffffff',
   otherStructure: '#60d0ff',
   /** A vent: a pale green disc with a dark "V"; and the arrow on a square it will clear. */
   vent: '#d9f7a1',

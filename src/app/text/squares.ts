@@ -307,7 +307,9 @@ export function supportChoice(state: GameState, x: number, y: number): SquareCho
   const where = squareText(x, y);
   const check = supportCheck(state, x, y);
   if (check.refusal === 'noSupport') {
-    return refused('You have no support to place: craft one first ("craft-support").');
+    return refused(
+      'You have no support to place: craft one first ("Craft Support" on the list of actions).',
+    );
   }
   if (check.refusal === 'tree') {
     return refused(
@@ -355,7 +357,7 @@ export function explosiveChoice(state: GameState, x: number, y: number): SquareC
   const check = explosiveCheck(state, x, y);
   if (check.refusal === 'noExplosive') {
     return refused(
-      'You have no explosive to place: a camp makes one ("craft-explosive" while a camp stands).',
+      'You have no explosive to place: a camp makes one ("Craft Explosive" on the list of actions while a camp stands).',
     );
   }
   if (check.refusal === 'tree') {
@@ -423,7 +425,9 @@ export function pumpChoice(state: GameState, x: number, y: number): SquareChoice
   const where = squareText(x, y);
   const check = pumpCheck(state, x, y);
   if (check.refusal === 'noItem') {
-    return refused('You have no pump to place: one is crafted at a camp ("craft-pump").');
+    return refused(
+      'You have no pump to place: one is crafted at a camp ("Craft Pump" on the list of actions).',
+    );
   }
   if (check.refusal === 'tree') {
     return refused(`A tree stands on ${where}: nothing is placed on a tree.`);
@@ -465,7 +469,9 @@ export function ventChoice(state: GameState, x: number, y: number): SquareChoice
   const where = squareText(x, y);
   const check = ventCheck(state, x, y);
   if (check.refusal === 'noItem') {
-    return refused('You have no vent to place: one is crafted at a camp ("craft-vent").');
+    return refused(
+      'You have no vent to place: one is crafted at a camp ("Craft Vent" on the list of actions).',
+    );
   }
   if (check.refusal === 'tree') {
     return refused(`A tree stands on ${where}: nothing is placed on a tree.`);
@@ -507,7 +513,9 @@ export function sealChoice(state: GameState, x: number, y: number): SquareChoice
   const where = squareText(x, y);
   const check = sealCheck(state, x, y);
   if (check.refusal === 'noSealant') {
-    return refused('You have no sealant: it is crafted at a camp ("craft-sealant").');
+    return refused(
+      'You have no sealant: it is crafted at a camp ("Craft Sealant" on the list of actions).',
+    );
   }
   if (check.refusal === 'groundLevel') {
     return refused(
@@ -584,7 +592,7 @@ export function scanChoice(state: GameState, x: number, y: number): SquareChoice
   const check = scanCheck(state, x, y);
   if (check.refusal === 'noCharge') {
     return refused(
-      'You have no scanner charge: one is crafted at a camp ("craft-scanner-charge"). A scan uses one up.',
+      'You have no scanner charge: one is crafted at a camp ("Craft Scanner charge" on the list of actions). A scan uses one up.',
     );
   }
   if (check.ap === null) {
@@ -653,7 +661,7 @@ function foundRefusalText(state: GameState, x: number, y: number, check: FoundCa
     case 'noKit':
       return (
         `You have no ${itemDef(CAMPS.kitItem).name.toLowerCase()}: founding a camp uses one up. ` +
-        'One is crafted at a camp ("craft-camp-kit").'
+        'One is crafted at a camp ("Craft Camp kit" on the list of actions).'
       );
     case 'offMap':
       return (
@@ -719,7 +727,7 @@ export function campChoice(state: GameState, x: number, y: number): SquareChoice
 /** The refusal for a camp action that names a square with no camp centred on it. */
 function noCampRefusal(state: GameState, x: number, y: number): string {
   if (state.camps.length === 0) {
-    return 'There is no camp yet: found one first ("camp X,Y").';
+    return 'There is no camp yet: found one first.';
   }
   const centres = state.camps.map((camp: Camp) => squareText(camp.pos.x, camp.pos.y));
   return (
