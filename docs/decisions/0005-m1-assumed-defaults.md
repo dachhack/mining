@@ -2,6 +2,8 @@
 
 Date: 2026-11-18. Status: assumed by the coordinator under agent plan section 6; every item is an assumed reading of a [Default] or of a point the design doc leaves unspecified, and the owner can change any of them. No [Decided] item is changed. Item 23 applies a [Decided] section (9.4, salvage) as written to the milestones before contracts exist; the owner should look at that one in particular (question 20).
 
+**Partly superseded by 0025 (design doc v0.2, top-down terrain; owner, issue #82):** there is no avatar, so items 2, 5–11 and 13–19 (surface layer, footing, moves, falls, reach, light, lamp oil, yields into a carried pack, weights, ladders) and item 23 (leaving) no longer apply; item 22's lamp oil and ladders are gone. Items 1, 3, 4, 12, 20, 21, 24 and 25 stand.
+
 ## Context
 
 Milestone M1 (engine core) needs answers to owner questions 1–6, 11, and 14, and to a few gaps found while splitting M1 into tasks (questions 18–21). The owner has not answered yet. So that every developer builds on the same reading, the coordinator fixed one here. Each number below lives in `src/data`, so changing an answer later is a data edit or a small rule change, not a rewrite.

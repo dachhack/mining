@@ -2,6 +2,8 @@
 
 Date: 2026-11-18. Status: accepted with M1 task 6 (issue #8).
 
+**Partly superseded by 0025 (design doc v0.2):** the `staircase` and `wander` policies move an avatar, which no longer exists; new policies come with the terrain model. The golden-run format and the policy rules stand.
+
 ## Context
 
 M1 task 6 adds `npm run sim`, the acceptance test, and the determinism, property and golden tests. They all need the same things: a way to play a whole run from a script, and a way to write a run down.

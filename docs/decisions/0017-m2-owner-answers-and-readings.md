@@ -2,6 +2,8 @@
 
 Date: 2026-11-19. Status: accepted. Amends decision note 0014 where it says so; 0014 has been edited to point here.
 
+**Partly superseded by 0025 (design doc v0.2):** readings 5 and 6 (air line), 7 (stash), 9 (carrying a kit), 15 (air) and 17 (loose items), and the carry-overs for #53, #54 and #59, go with the avatar. Owner answers 1–4 (camp kit, gas 3 against explosive 6, relics by probability, dirt) stand, re-expressed in design doc v0.2.
+
 ## Context
 
 The five M2 developers (issues #52, #53, #54, #55, #57) were paused part-way on 2026-11-18. Before the pause they raised questions that 0014 does not settle. Four went to the owner (questions 59, 63, 64, 65 in `docs/owner-questions.md`); the coordinator settles the rest here so that work can resume without another round of questions.

@@ -2,6 +2,8 @@
 
 Date: 2026-11-18. Status: accepted with issues #30 and #20. Amends 0009 (the text play interface); what 0009 says about the play log is unchanged.
 
+**Partly superseded by 0025 (design doc v0.2):** the "not on the list" notes, ladder advice, drop lines and the layer map belong to the avatar, which is gone. Names for choices and the leak test stand.
+
 ## Context
 
 The first playtest round (m1-r1, finding 10) lost five actions in four runs to menu numbers that changed meaning inside a chain, found the action list long where it carried no choice, did not find the top layer the help said was known, and could not tell why a move was missing. Since then decision 0011 (the lamp) added a second reason for a missing move: a cell it is judged by has not been seen.

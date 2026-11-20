@@ -2,6 +2,8 @@
 
 Date: 2026-11-19. Status: accepted (owner, issue #75).
 
+**Superseded by 0025 (design doc v0.2, top-down terrain; owner, issue #82):** any square's top block can be mined, under the level rule, and every top block is known. Kept as history.
+
 ## Context
 
 Owner, issue #75: mining should work as in Minecraft. Until then the pick reached 17 cells (0005 item 10): the 8 round the miner on its level and the 9 on the level below, diagonals included. With the lamp lit the miner also knew every cell in that reach, the cell overhead, and the cells over an edge (`edgeLookCells`, 0005 item 10 and question 40). Digging out the block underfoot was an uncontrolled fall from the first block (issue #34). The owner asked for face-only reach, a safe one-block drop when digging down, and that only exposed faces be known.

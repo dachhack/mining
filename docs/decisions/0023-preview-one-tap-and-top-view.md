@@ -2,6 +2,8 @@
 
 Date: 2026-11-19. Status: accepted (owner, issue #78; coordinator's reading). Amends 0019 for the preview screen only; no rule changes.
 
+**Partly superseded by 0025 (design doc v0.2):** the surface drawn over layer 0 as the miner's layer, and walks on it, are gone. One tap with no menu, and a double tap for a risky tap, stand.
+
 ## Decision
 
 - **No menu.** The pop-up chooser of 0019 is gone. A tap on a cell does one action at once (`tapAction` in `src/app/map/targets.ts`), picked by a fixed priority: mining or cutting a tree, then moving, then taking items; among equals, the first in the action list. Everything else stays in the full list under the map.

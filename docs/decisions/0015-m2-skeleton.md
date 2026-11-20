@@ -2,6 +2,8 @@
 
 Date: 2026-11-18. Status: accepted with M2 task 1 (issue #50). It builds decision note 0014 items 1–4 and 35 and nothing else of that note. The points under "Readings" are choices this task had to make where 0014 or the issue left room; they are in the pull request for the coordinator to confirm.
 
+**Partly superseded by 0025 (design doc v0.2):** `avatar.air`, the air step, `giveUp`, the stash actions and the per-task file table go with the old M2 plan. The cube-phase pipeline, `recordDamage`, the destroy helpers and `knownCell` / `knownCube` stand.
+
 ## Context
 
 M2 task 1 fixes the shapes the other M2 tasks build on, so that issues #51 to #59 can be worked on at the same time in separate files. After it the game plays exactly as it did in M1: every hazard step is empty and every new action module offers nothing.

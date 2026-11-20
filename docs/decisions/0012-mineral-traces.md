@@ -2,6 +2,8 @@
 
 Date: 2026-11-18. Status: the direction is the owner's ("ore hints are good", answer to question 41); the form below is the coordinator's assumed default from issue #35, for the owner to confirm. Every number and block list is a [Default] in `src/data/tells.ts`.
 
+**Partly superseded by 0025 (design doc v0.2):** with no light, traces show on every known block (top blocks and scanned blocks). The rule itself, distance 2 counted in 3D, and "traces stay once seen" stand.
+
 ## Context
 
 Playtest round m1-r1 (finding 2, issue #22) found that whether a run finds ore depends on where the first shaft goes: a one-cell shaft from the start cell shows iron or copper by layer 12 on 576 of 1,000 seeds. The player had nothing to go on. Design doc 6 gives every hazard a tell on the blocks near it; this gives ore one in the same way.
