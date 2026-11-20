@@ -33,7 +33,7 @@ import type { SurfaceMark } from './palette';
 export type TileKind = 'block' | 'hidden' | 'floor';
 
 /** A mark drawn on top of a tile. */
-export type StructureMark = 'support' | 'pump' | 'other';
+export type StructureMark = 'support' | 'pump' | 'vent' | 'other';
 
 /**
  * Something on a square that goes off when this shift ends (design doc 6.6):
@@ -90,6 +90,12 @@ export interface Tile {
    * goes on shifting units between equal neighbours, and that is not news.
    */
   gasComing: boolean;
+  /**
+   * True if a vent will clear this square of gas when this shift ends
+   * (design doc 6.5; issue #107): the gas that stands on it now, or gas that
+   * would have spread onto it.
+   */
+  vented: boolean;
   /** A placed explosive or armed unstable ore on the square, or `null`. */
   charge: ChargeMark | null;
   /**
@@ -147,6 +153,7 @@ function surfaceMark(code: number): SurfaceMark {
 function structureMark(code: number): StructureMark | null {
   if (code === STRUCTURES.support.code) return 'support';
   if (code === STRUCTURES.pump.code) return 'pump';
+  if (code === STRUCTURES.vent.code) return 'vent';
   // A placed explosive has its own mark (`Tile.charge`), not the plain one.
   if (code === STRUCTURES.explosive.code) return null;
   // Any other structure (vents) gets a plain mark for now.
@@ -183,13 +190,15 @@ function isHigher(state: GameState, x: number, y: number, depth: number): boolea
  * - `gas`: the squares gas will be given to (`buildTile` marks only those
  *   that have none now);
  * - `blast`: the squares of every explosion: the blast of each charge and of
- *   each armed ore block, and the squares whose gas will burn.
+ *   each armed ore block, and the squares whose gas will burn;
+ * - `vented`: the squares a vent will clear of gas (issue #107).
  */
 export interface ComingFlows {
   water: Set<string>;
   lava: Set<string>;
   gas: Set<string>;
   blast: Set<string>;
+  vented: Set<string>;
 }
 
 /**
@@ -203,6 +212,7 @@ export function comingFlows(state: GameState): ComingFlows {
     lava: new Set(),
     gas: new Set(),
     blast: new Set(),
+    vented: new Set(),
   };
   if (!isRunActive(state)) {
     return coming;
@@ -218,6 +228,8 @@ export function comingFlows(state: GameState): ComingFlows {
   for (const event of forecast.gas) {
     if (event.type === 'gasMoved') {
       coming.gas.add(`${event.to.x},${event.to.y}`);
+    } else if (event.type === 'gasRemoved' && event.reason === 'vented') {
+      coming.vented.add(`${event.pos.x},${event.pos.y}`);
     } else if (event.type === 'exploded') {
       for (const cell of event.cells) {
         coming.blast.add(`${cell.x},${cell.y}`);
@@ -247,7 +259,11 @@ export function buildTile(
     waterComing: flows.water.has(`${x},${y}`),
     lavaComing: flows.lava.has(`${x},${y}`),
     gas: square.contents.gas,
-    gasComing: square.contents.gas === 0 && flows.gas.has(`${x},${y}`),
+    // Gas that spreads onto a square a vent clears is gone again in the same
+    // end of shift, so that square is marked as vented, not as "gas coming".
+    gasComing:
+      square.contents.gas === 0 && flows.gas.has(`${x},${y}`) && !flows.vented.has(`${x},${y}`),
+    vented: flows.vented.has(`${x},${y}`),
     blast: flows.blast.has(`${x},${y}`),
   };
   const higher: HigherSides = {

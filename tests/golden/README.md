@@ -71,3 +71,5 @@ Nothing was recorded again for issue #99 (water and lava on squares; decision no
 Nothing was re-hashed or recorded again for issue #104 (camp tools; decision note 0034): the shape of the state did not change and no recorded run holds a pump, sealant, a scanner charge or a drill, so every hash is as it was. No policy crafts a camp tool, so no golden run uses one; `tests/engine/campTools.test.ts` pins a hand-played run (seed 1: camp, sealant, seal) by its hash instead.
 
 Nothing was recorded again for issue #103 (gas, ignition, unstable ore and explosives; decision note 0035): no recorded run meets gas, unstable ore or an explosive, and the state's shape did not change, so `npm run golden -- --rehash` reports every hash unchanged. Until a policy digs to the gas (task T15), step (c) of the cube phase is pinned by a fixed scenario with a recorded hash, "a pinned blast" in `tests/engine/explosions.test.ts`. Treat a change of that hash like a change of a golden hash.
+
+Nothing was re-hashed for issue #107 (the vent; decision note 0036) either: no recorded run holds a vent.

@@ -256,6 +256,7 @@ describe('the action list', () => {
       campSites: 0,
       // The camp-made tools (issue #104): none at the start of a run.
       pumpsHeld: 0,
+      ventsHeld: 0,
       sealantHeld: 0,
       scanChargesHeld: 0,
       hasDrill: false,

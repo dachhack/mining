@@ -8,7 +8,8 @@
 //                   of every cube phase it takes water off the squares near
 //                   it (cube/fluids.ts).
 //   placeVent x,y   a vent from the stockpile goes on the square. In step (c)
-//                   it clears the gas near it (cube/gas.ts).
+//                   of every cube phase it clears all the gas on the squares
+//                   near it (cube/gas.ts; issue #107).
 //   seal x,y        one sealant puts a block of sealed rock on top of the
 //                   square: the square comes up 1 level, and the water, lava
 //                   and gas standing on it are destroyed. A dam, or a plug
@@ -31,7 +32,13 @@
 
 import { ACTION_COSTS, BLOCKS, CAMP_TOOLS, NO_STRUCTURE, STRUCTURES } from '../../data';
 import type { BlockId, StructureId, Vec3 } from '../../data';
-import type { CampToolAction, PlacePumpAction, ScanAction, SealAction } from '../actionTypes';
+import type {
+  CampToolAction,
+  PlacePumpAction,
+  PlaceVentAction,
+  ScanAction,
+  SealAction,
+} from '../actionTypes';
 import { contentsOn } from '../breach';
 import { campAtSquare } from '../camps';
 import { markWorked } from '../crew';
@@ -138,6 +145,14 @@ function toolCheck(state: GameState, tool: PlacedTool, x: number, y: number): To
  */
 export function pumpCheck(state: GameState, x: number, y: number): ToolCheck {
   return toolCheck(state, 'pump', x, y);
+}
+
+/**
+ * The same for a vent (design doc 4.1 and 6.5; issue #107). Gas on the
+ * square does not stop it: a vent is placed where the gas is.
+ */
+export function ventCheck(state: GameState, x: number, y: number): ToolCheck {
+  return toolCheck(state, 'vent', x, y);
 }
 
 /** Put `tool` on the square: one less in the stockpile, the structure, the event, a worked square. */
@@ -404,8 +419,8 @@ function applyScan(state: GameState, action: ScanAction, events: GameEvent[]): v
 // ---------------------------------------------------------------------------
 
 /**
- * Every `placePump`, `seal` and `scan` action the player could take now, in
- * that order, each row by row (y, then x). (`placeVent` joins with the vent.)
+ * Every `placePump`, `placeVent`, `seal` and `scan` action the player could
+ * take now, in that order, each row by row (y, then x).
  *
  * - `ap` comes from `ACTION_COSTS`. Lists actions as if AP were unlimited;
  *   the dispatcher removes the ones that cost too much.
@@ -413,14 +428,16 @@ function applyScan(state: GameState, action: ScanAction, events: GameEvent[]): v
  */
 export function legalCampToolActions(state: GameState): CampToolAction[] {
   const pumps: PlacePumpAction[] = [];
+  const vents: PlaceVentAction[] = [];
   const seals: SealAction[] = [];
   const scans: ScanAction[] = [];
   // Without the item the answer is the same for every square: do not ask
   // 1,024 times.
   const hasPump = countItem(state, STRUCTURES.pump.placedFromItem) >= 1;
+  const hasVent = countItem(state, STRUCTURES.vent.placedFromItem) >= 1;
   const hasSealant = countItem(state, CAMP_TOOLS.sealantItem) >= 1;
   const hasCharge = countItem(state, CAMP_TOOLS.scanChargeItem) >= CAMP_TOOLS.scanChargesPerScan;
-  if (!hasPump && !hasSealant && !hasCharge) {
+  if (!hasPump && !hasVent && !hasSealant && !hasCharge) {
     return [];
   }
   for (let y = 0; y < state.size.y; y += 1) {
@@ -429,6 +446,12 @@ export function legalCampToolActions(state: GameState): CampToolAction[] {
         const check = pumpCheck(state, x, y);
         if (check.allowed && check.ap !== null) {
           pumps.push({ type: 'placePump', x, y, ap: check.ap });
+        }
+      }
+      if (hasVent) {
+        const check = ventCheck(state, x, y);
+        if (check.allowed && check.ap !== null) {
+          vents.push({ type: 'placeVent', x, y, ap: check.ap });
         }
       }
       if (hasSealant) {
@@ -445,7 +468,7 @@ export function legalCampToolActions(state: GameState): CampToolAction[] {
       }
     }
   }
-  return [...pumps, ...seals, ...scans];
+  return [...pumps, ...vents, ...seals, ...scans];
 }
 
 /**
@@ -461,7 +484,7 @@ export function isLegalCampToolAction(state: GameState, action: CampToolAction):
     case 'placePump':
       return pumpCheck(state, action.x, action.y).ap === action.ap;
     case 'placeVent':
-      return false; // the vent is not built yet
+      return ventCheck(state, action.x, action.y).ap === action.ap;
     case 'seal':
       return sealCheck(state, action.x, action.y).ap === action.ap;
     case 'scan':

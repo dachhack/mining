@@ -6,9 +6,9 @@
 import { describe, expect, it } from 'vitest';
 import { applyAction, hashState } from '../../src/engine';
 import type { GameState } from '../../src/engine';
-import { setWaterOn } from '../../src/engine/standing';
+import { setGasOn, setWaterOn } from '../../src/engine/standing';
 import { belowMarksOf, belowMarksText } from '../../src/app/below';
-import { NO_MARKS, lookOutcome, pumpRange, tapOutcome } from '../../src/app/map/targets';
+import { NO_MARKS, lookOutcome, pumpRange, tapOutcome, ventRange } from '../../src/app/map/targets';
 import { buildTile, buildTiles } from '../../src/app/map/tiles';
 import { buildState, terrainLayers } from '../engine/helpers';
 import type { BuildStateOptions } from '../engine/helpers';
@@ -94,6 +94,60 @@ describe('the pump tool', () => {
   });
 });
 
+describe('the vent tool (issue #107)', () => {
+  it('the first tap shows the range and how much of it is gassy; the second places the vent', () => {
+    const state = pit(['22222', '22222', '22222'], { stockpile: { vent: 1 } });
+    setGasOn(state, 2, 1, 2);
+    setGasOn(state, 4, 1, 1); // 3 steps from (1, 1): out of reach
+    const first = tapOutcome(state, 1, 1, 'vent');
+    expect(first.entry).toBeNull();
+    expect(first.needsConfirm).toBe(true);
+    expect(first.marks.range).toEqual(ventRange(state, 1, 1));
+    expect(first.marks.range).toContainEqual({ x: 3, y: 1 });
+    expect(first.marks.range).not.toContainEqual({ x: 4, y: 1 });
+    expect(first.lines[1]).toBe(
+      `A vent here clears all the gas on the ${first.marks.range.length} marked squares (within 2 steps) ` +
+        'each time a shift ends; 1 of them has gas on now. Tap the square again to place it.',
+    );
+    expect(tapOutcome(state, 1, 1, 'vent', true)).toEqual({
+      entry: { type: 'placeVent', x: 1, y: 1, ap: 1 },
+      lines: [],
+      marks: NO_MARKS,
+      needsConfirm: false,
+    });
+  });
+
+  it('a placed vent has its own mark; the squares it will clear carry an arrow', () => {
+    const state = pit(['22222'], {
+      structures: [{ pos: { x: 0, y: 0, z: 2 }, structure: 'vent' }],
+    });
+    // 1 unit on x 2 (in reach) and 1 on x 4 (4 steps away): neither spreads.
+    setGasOn(state, 2, 0, 1);
+    setGasOn(state, 4, 0, 1);
+    expect(buildTile(state, 0, 0).structure).toBe('vent');
+    expect(buildTile(state, 2, 0)).toMatchObject({ gas: 1, vented: true });
+    expect(buildTile(state, 4, 0)).toMatchObject({ gas: 1, vented: false });
+    expect(buildTile(state, 1, 0).vented).toBe(false); // no gas there to clear
+    // Looking at the vent marks its range.
+    const looked = lookOutcome(state, 0, 0);
+    expect(looked.lines[1]).toContain('A vent stands here');
+    expect(looked.marks.range).toEqual(ventRange(state, 0, 0));
+  });
+
+  it('gas that would spread onto a square the vent clears is marked as vented, not as coming', () => {
+    // 9 units on x 4 give 4 to x 3, which is 2 steps from the vent on x 1.
+    const state = pit(['22222'], {
+      structures: [{ pos: { x: 1, y: 0, z: 2 }, structure: 'vent' }],
+    });
+    setGasOn(state, 4, 0, 9);
+    expect(buildTile(state, 3, 0)).toMatchObject({ gas: 0, gasComing: false, vented: true });
+    // Without the vent the same square is marked "gas coming".
+    const open = pit(['22222']);
+    setGasOn(open, 4, 0, 9);
+    expect(buildTile(open, 3, 0)).toMatchObject({ gasComing: true, vented: false });
+  });
+});
+
 describe('the seal tool', () => {
   it('a tap seals a dug square at once', () => {
     const state = pit(['121'], { stockpile: { sealant: 1 } });
@@ -113,6 +167,24 @@ describe('the seal tool', () => {
     expect(outcome.lines[1]).toContain('would leave it 2 levels above x2 y0 (depth 2)');
     expect(outcome.marks.selected).toEqual({ x: 1, y: 0 });
     expect(outcome.marks.blocked).toEqual([{ x: 2, y: 0 }]);
+  });
+});
+
+describe('a risky seal (issue #107)', () => {
+  it('is not taken at the first tap: it warns and marks the square; the second tap takes it', () => {
+    const state = pit(['2234'], { stockpile: { sealant: 1 } });
+    const first = tapOutcome(state, 0, 0, 'seal');
+    expect(first.entry).toBeNull();
+    expect(first.needsConfirm).toBe(true);
+    expect(first.marks.unstable).toEqual([{ x: 0, y: 0 }]);
+    expect(first.lines[1]).toContain('Sealing x0 y0 would make x0 y0 itself');
+    expect(first.lines[2]).toBe('Tap the square again to seal it all the same.');
+    expect(tapOutcome(state, 0, 0, 'seal', true).entry).toEqual({
+      type: 'seal',
+      x: 0,
+      y: 0,
+      ap: 1,
+    });
   });
 });
 
