@@ -9,6 +9,7 @@
 
 import { isBesideWorked, isWorked } from '../crew';
 import type { DamageCause } from '../events';
+import type { Square } from '../heightmap';
 import type { GameState } from '../state';
 
 /** One piece of damage waiting for step (e). */
@@ -25,10 +26,16 @@ export interface CubePhase {
    * hazard hurts the crew at most once per shift, by its largest amount").
    */
   damage: RecordedDamage[];
+  /**
+   * The squares whose top block cracked in step (a) of this phase, in the
+   * order they cracked. Step (d) does not tick their countdowns: a fresh
+   * crack shows its full countdown through the next shift (design doc 6.1).
+   */
+  newCracks: Square[];
 }
 
 export function newCubePhase(): CubePhase {
-  return { damage: [] };
+  return { damage: [], newCracks: [] };
 }
 
 /** Throws unless `amount` is a whole number, 0 or more. */

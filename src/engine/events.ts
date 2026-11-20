@@ -36,13 +36,15 @@ export type FluidKind = 'water' | 'lava';
 
 /**
  * What destroyed a structure or a camp:
- * - `rockfall`: a falling block passed through the cell or came to rest in it;
+ * - `rockfall`: a block slumped from the square or came to rest on it;
+ * - `mined`: the block the structure stood on was mined (owner question 82);
  * - `water`, `lava`: the fluid entered the cell;
  * - `explosion`: the cell exploded, or was beside one that did;
  * - `noHold`: a support with nothing left to stand against (0014 item 6);
  * - `sealed`: sealant turned the cell to rock (0014 item 12).
  */
-export type DestructionCause = 'rockfall' | 'water' | 'lava' | 'explosion' | 'noHold' | 'sealed';
+export type DestructionCause =
+  'rockfall' | 'mined' | 'water' | 'lava' | 'explosion' | 'noHold' | 'sealed';
 
 /** Why water, lava or gas left the cube without moving to another cell. */
 export type RemovalReason =
@@ -62,7 +64,8 @@ export type GameEvent =
    * `pos` is the square's new top block, now rubble. `water`, `lava` and
    * `gas` are the units the space held, which now stand on that square;
    * `lavaSource` is true if the lava keeps pouring. All four are 0 or false
-   * for a cavern. It follows the `blockMined` of the same action. Where the
+   * for a cavern. It follows the `blockMined` of the same action, or the
+   * `blockFell` of a block that slumped off such a roof. Where the
    * rest of the space was is not said: that is below the tops, which the
    * player does not see.
    */
@@ -103,14 +106,16 @@ export type GameEvent =
   // --- M2: hazards and camps ---
 
   /**
-   * The block at `pos` (code `block`) cracked, or its stored timer changed
-   * (0014 item 7). `timer` is the stored timer; the number shown is `timer + 1`.
+   * The top block at `pos` (code `block`) cracked, or its countdown went down
+   * (design doc 6.1). `timer` is the stored timer; the number shown is
+   * `timer + 1`, and 1 means "falls in the coming cube phase".
    */
   | { type: 'blockCracked'; pos: Vec3; block: number; timer: number }
   /**
-   * A cracked block fell from `from` and stopped at `to` (0014 item 8).
-   * `block` is the code of what fell. `rubble` is true if it became rubble at
-   * `to`, false if it broke up there (on a support, or in the avatar's cell).
+   * A cracked block slumped: it slid from `from`, the top of its square, to
+   * `to`, the top of the foot of its slide path, which is at least one layer
+   * lower (design doc 6.1). `block` is the code of what fell. `rubble` is
+   * always true: it lies at `to` as rubble, whatever it was.
    */
   | { type: 'blockFell'; from: Vec3; to: Vec3; block: number; rubble: boolean }
   /**

@@ -243,3 +243,27 @@ button.small {
   color: #a89f92;
   font-family: ui-monospace, monospace;
 }
+
+/* The tool bar over the map (design doc 11): what a tap does. */
+.tool-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0;
+}
+
+.tool-bar .tool {
+  flex: none;
+}
+
+/* The support tool while it is on: a tap places a support. */
+.tool-bar .tool.on {
+  background: #e8e0d0;
+  color: #1d1915;
+  font-weight: bold;
+}
+
+.tool-hint {
+  font-size: 0.85rem;
+  color: #b9ad9c;
+}

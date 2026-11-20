@@ -9,7 +9,8 @@
 // cut a tap on the map stands for (`takeTurn`, which calls the engine's
 // `applyAction` or `endShift`). It never edits the state itself.
 
-import { ENGINE_VERSION, isRunActive } from '../engine';
+import { STRUCTURES } from '../data';
+import { ENGINE_VERSION, countItem, isRunActive } from '../engine';
 import {
   MAX_SEED,
   clearSavedRun,
@@ -22,7 +23,7 @@ import {
 import type { SaveStore } from './previewSession';
 import { createTapMap } from './map/mapView';
 import { NO_MARKS, tapOutcome } from './map/targets';
-import type { MapMarks } from './map/targets';
+import type { MapMarks, MapSquare, MapTool } from './map/targets';
 import type { LogEntry, Session } from './text/log';
 import { takeTurn } from './text/turn';
 import { buildView, forecastLine, hazardsLine, renderEndedLines } from './text/view';
@@ -133,6 +134,16 @@ export function mountPreview(root: HTMLElement): void {
   const tapMap = createTapMap((x, y) => {
     tapSquare(x, y);
   });
+  // The tool bar (design doc 11): what a tap on the map does. One toggle for
+  // now: on, a tap places a support; off, a tap mines or cuts (issue #94;
+  // task T14 builds the full tool bar).
+  const toolBar = element('section', 'tool-bar');
+  const supportTool = element('button', 'small tool');
+  supportTool.type = 'button';
+  supportTool.dataset['testid'] = 'tool-support';
+  const toolHint = element('span', 'tool-hint');
+  toolHint.dataset['testid'] = 'tool-hint';
+  toolBar.append(supportTool, toolHint);
   // What the map cannot show.
   const mapNotes = element('section', 'map-notes');
   mapNotes.dataset['testid'] = 'map-notes';
@@ -161,6 +172,7 @@ export function mountPreview(root: HTMLElement): void {
     playTop,
     gauges,
     ended,
+    toolBar,
     tapMap.element,
     outcome,
     endShiftButton,
@@ -179,6 +191,10 @@ export function mountPreview(root: HTMLElement): void {
   let session: Session = loaded.session ?? startRun(randomSeed(Math.random));
   let lastLines: string[] = [];
   let marks: MapMarks = NO_MARKS;
+  // What a tap on the map does, and the square of a risky mine that is
+  // waiting for its second tap (`null` when none is).
+  let tool: MapTool = 'dig';
+  let pending: MapSquare | null = null;
   note.textContent = loaded.note ?? '';
   note.hidden = loaded.note === null;
   if (loaded.session === null) {
@@ -203,6 +219,19 @@ export function mountPreview(root: HTMLElement): void {
       showLines(forecast, []);
     }
     showLines(outcome, lastLines);
+
+    // The tool bar: how many supports there are, and what a tap does now.
+    const supportsHeld = countItem(session.state, STRUCTURES.support.placedFromItem);
+    supportTool.textContent = `Place support (${supportsHeld})`;
+    supportTool.setAttribute('aria-pressed', tool === 'support' ? 'true' : 'false');
+    supportTool.classList.toggle('on', tool === 'support');
+    toolBar.hidden = view.ended !== null;
+    toolHint.textContent =
+      tool === 'support'
+        ? 'A tap places a support. Tap the button again to go back to mining.'
+        : supportsHeld === 0
+          ? 'A tap mines or cuts. Craft a support to place one.'
+          : 'A tap mines or cuts.';
 
     // End shift has its own button; it is hidden once the run is over.
     endShiftButton.hidden = view.ended !== null;
@@ -234,22 +263,27 @@ export function mountPreview(root: HTMLElement): void {
   }
 
   /**
-   * A tap on the square (x, y) of the map: mine it, or cut its tree. A tap
-   * the rules refuse changes nothing: the reason is shown under the map, and
-   * the map marks the square and, for the level rule, the neighbours that
-   * are too high.
+   * A tap on the square (x, y) of the map: mine it, or cut its tree; with
+   * the support tool on, place a support there. A tap the rules refuse
+   * changes nothing: the reason is shown under the map, and the map marks the
+   * square and, for the level rule, the neighbours that are too high. A mine
+   * that would make squares unstable is not taken at the first tap either:
+   * the map marks those squares, and a second tap on the square takes it.
    */
   function tapSquare(x: number, y: number): void {
     if (!isRunActive(session.state)) {
       return;
     }
-    const outcome = tapOutcome(session.state, x, y);
+    // A second tap in a row on the same square confirms a risky mine.
+    const confirmed = pending !== null && pending.x === x && pending.y === y;
+    const outcome = tapOutcome(session.state, x, y, tool, confirmed);
     if (outcome.entry !== null) {
       take(outcome.entry, false);
       return;
     }
     lastLines = outcome.lines;
     marks = outcome.marks;
+    pending = outcome.needsConfirm ? { x, y } : null;
     draw(false);
   }
 
@@ -263,12 +297,17 @@ export function mountPreview(root: HTMLElement): void {
       return;
     }
     marks = NO_MARKS;
+    pending = null;
     try {
       lastLines = [takeTurn(session, entry)];
     } catch (error) {
       // Should not happen: the choice came from the list of legal choices,
       // or from a tap the rules had just allowed.
       lastLines = [`That could not be done: ${error instanceof Error ? error.message : ''}`];
+    }
+    // With the last support placed, a tap goes back to mining.
+    if (countItem(session.state, STRUCTURES.support.placedFromItem) === 0) {
+      tool = 'dig';
     }
     note.hidden = true;
     saveRun(store, session);
@@ -284,6 +323,8 @@ export function mountPreview(root: HTMLElement): void {
     session = startRun(seed);
     lastLines = [];
     marks = NO_MARKS;
+    tool = 'dig';
+    pending = null;
     saveRun(store, session);
     note.textContent = message;
     note.hidden = false;
@@ -291,6 +332,13 @@ export function mountPreview(root: HTMLElement): void {
     draw(true);
     window.scrollTo(0, 0);
   }
+
+  supportTool.addEventListener('click', () => {
+    tool = tool === 'support' ? 'dig' : 'support';
+    marks = NO_MARKS;
+    pending = null;
+    draw(false);
+  });
 
   endShiftButton.addEventListener('click', () => {
     take({ type: 'endShift' }, false);

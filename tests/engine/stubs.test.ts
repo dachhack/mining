@@ -1,5 +1,5 @@
 // The rule modules were stubs until M1 tasks 2 to 5, and the M2 action
-// modules are stubs until M2 tasks 3, 5, 7, 8 and 9. This file pins the one
+// modules are stubs until their tasks (placing a support is built: issue #94). This file pins the one
 // thing every later task relies on in the meantime: that the stubs keep the
 // engine usable (nothing legal, nothing thrown), so tasks can be built and
 // tested one at a time in any order.
@@ -22,10 +22,10 @@ describe('actionKey and sameAction', () => {
   const actions: Action[] = [
     { type: 'mine', x: 1, y: 2, ap: 2 },
     { type: 'cutTree', x: 1, y: 2, ap: 2 },
+    { type: 'placeSupport', x: 1, y: 2, ap: 1 },
     { type: 'craft', recipe: 'support', ap: 1 },
     { type: 'closeMine', ap: 0 },
     // The M2 actions (decision note 0015).
-    { type: 'placeSupport', target: { x: 1, y: 2, z: 3 }, ap: 1 },
     { type: 'placeExplosive', target: { x: 1, y: 2, z: 3 }, ap: 1 },
     { type: 'placePump', target: { x: 1, y: 2, z: 3 }, ap: 1 },
     { type: 'placeVent', target: { x: 1, y: 2, z: 3 }, ap: 1 },
@@ -67,12 +67,7 @@ describe('the M2 action modules are stubs (decision note 0015)', () => {
   const state = buildState({
     layers: [['#.#'], ['###']],
     revealAll: true,
-    stockpile: { support: 2, explosive: 1, pump: 1, vent: 1, sealant: 1 },
-  });
-
-  it('placeSupport offers nothing (until M2-3)', async () => {
-    const { legalPlaceSupportActions } = await import('../../src/engine/actions/placeSupport');
-    expect(legalPlaceSupportActions(state)).toEqual([]);
+    stockpile: { explosive: 1, pump: 1, vent: 1, sealant: 1 },
   });
 
   it('placeExplosive offers nothing (until M2-5)', async () => {

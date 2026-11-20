@@ -242,7 +242,14 @@ describe('the action list', () => {
   it('counts the same mines and cuts as the engine offers', () => {
     const state = stoneCube(['0,0', '2,2']);
     const view = buildView(state, { deepestDepth: 0 });
-    expect(view.squares).toEqual({ mines: 7, cuts: 2, cutAp: SURFACE.cutTree.ap });
+    expect(view.squares).toEqual({
+      mines: 7,
+      cuts: 2,
+      cutAp: SURFACE.cutTree.ap,
+      supportsHeld: 0,
+      supports: 0,
+      supportAp: 1,
+    });
   });
 
   it('lists a craft once its inputs are there, by name and by number', () => {
@@ -283,10 +290,25 @@ describe('the action list', () => {
 
 describe('mine and cut by name', () => {
   it('reads "mine x,y" and "cut x,y", with or without spaces', () => {
-    expect(parseSquareChoice('mine 3,4')).toEqual({ kind: 'mine', x: 3, y: 4 });
-    expect(parseSquareChoice('MINE 3 , 4')).toEqual({ kind: 'mine', x: 3, y: 4 });
-    expect(parseSquareChoice('mine-3,4')).toEqual({ kind: 'mine', x: 3, y: 4 });
-    expect(parseSquareChoice('cut 10,31')).toEqual({ kind: 'cut', x: 10, y: 31 });
+    const mine = { kind: 'mine', confirmed: false, x: 3, y: 4 };
+    expect(parseSquareChoice('mine 3,4')).toEqual(mine);
+    expect(parseSquareChoice('MINE 3 , 4')).toEqual(mine);
+    expect(parseSquareChoice('mine-3,4')).toEqual(mine);
+    expect(parseSquareChoice('cut 10,31')).toEqual({
+      kind: 'cut',
+      confirmed: false,
+      x: 10,
+      y: 31,
+    });
+    // A support names a square too, and "mine!" is a confirmed mine (issue #94).
+    expect(parseSquareChoice('support 2,5')).toEqual({
+      kind: 'support',
+      confirmed: false,
+      x: 2,
+      y: 5,
+    });
+    expect(parseSquareChoice('mine! 3,4')).toEqual({ ...mine, confirmed: true });
+    expect(parseSquareChoice('cut! 3,4')).toBeNull();
     expect(parseSquareChoice('mine 3')).toBeNull();
     expect(parseSquareChoice('close-mine')).toBeNull();
   });
@@ -716,13 +738,24 @@ describe('the help text', () => {
       `warm glow      a lava pocket lies within ${TELLS.hazards.warmGlowDistance} steps`,
     );
     expect(help).toContain('they do\n    not spread, and they do not hurt the crew');
-    expect(help).toContain('Pit walls that slump, supports that hold a wall, camps and contracts');
+    expect(help).toContain('Camps and contracts are not built yet');
     expect(help).toContain('goes straight into the stockpile');
     expect(help).toContain('The stockpile has no limit');
     expect(help).toContain('close-mine               close the mine (ends the run alive)');
     expect(help).toContain(
       `"close-mine" is always on the list and costs ${ACTION_COSTS.closeMine} AP`,
     );
+    // Pit walls slump, and supports (issue #94).
+    expect(help).toContain('support X,Y');
+    expect(help).toContain('mine! X,Y');
+    expect(help).toContain('Pit walls slump');
+    expect(help).toContain(
+      'dirt and rubble hold a\n    fall of 1, most rock and ore 2, hard rock and crystal 3',
+    );
+    expect(help).toContain('shows a countdown of 2');
+    expect(help).toContain('A SUPPORT holds the square it is placed on, and only that square');
+    expect(help).toContain(`A slump takes ${CREW.damage.slump} health`);
+    expect(help).toContain('Camps and contracts are not built yet');
     // Nothing of the miner is left in it.
     for (const gone of [
       'mine-down',

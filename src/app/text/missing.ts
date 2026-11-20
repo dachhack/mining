@@ -43,7 +43,10 @@ export function tooLittleApNote(state: GameState): string | null {
   const mines = tooDear.filter((action) => action.type === 'mine').length;
   const cuts = tooDear.filter((action) => action.type === 'cutTree').length;
   const listed = tooDear
-    .filter((action) => action.type !== 'mine' && action.type !== 'cutTree')
+    .filter(
+      (action) =>
+        action.type !== 'mine' && action.type !== 'cutTree' && action.type !== 'placeSupport',
+    )
     .map((action) => `[${action.ap}] ${choiceName(action)}`);
 
   const parts: string[] = [];

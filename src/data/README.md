@@ -6,11 +6,11 @@ Every gameplay number and recipe from the design doc lives here, as plain TypeSc
 | --------------- | ----------------------------------------------------------- | ----------------------- |
 | `world.ts`      | Cube size, surface layer, depth bands                       | Design doc 3, 3.1; 0005 |
 | `generation.ts` | Rock, veins, caverns and pockets in each depth band         | Design doc 3.3, 3.6     |
-| `blocks.ts`     | Block types: code, mine cost, yield, span, shaft limit      | Design doc 3.2; 0014    |
+| `blocks.ts`     | Block types: code, mine cost, yield, slump limit            | Design doc 3.5; 0014    |
 | `items.ts`      | Item types                                                  | Design doc 3.5, 7       |
 | `structures.ts` | Things placed in a cell (support, pump, vent, ...)          | Design doc 4.1; 0014    |
 | `recipes.ts`    | Field recipes and camp recipes                              | Design doc 7.1, 7.2     |
-| `hazards.ts`    | Cave-in, water, gas and lava numbers                        | Design doc 6; 0014      |
+| `hazards.ts`    | Slump, water, gas and lava numbers                          | Design doc 6; 0014      |
 | `camps.ts`      | Camp size, costs and upkeep; scanner numbers                | Design doc 8; 0014      |
 | `crew.ts`       | Crew health; what each hazard takes off it                  | Design doc 5.1, 5.2     |
 | `surface.ts`    | The surface forest: kinds, cutting, regrowth, generation    | Design doc 3; 0020      |

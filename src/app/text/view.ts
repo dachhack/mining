@@ -31,26 +31,30 @@ import {
   itemDef,
 } from '../../data';
 import {
+  countItem,
   isRunActive,
   knownSquare,
   legalActions,
   previewCubePhase,
   shiftsUntilRegrowth,
+  slumpCheck,
   stockpileEntries,
 } from '../../engine';
 import type { GameState, KnownSquare } from '../../engine';
 import {
   choiceName,
   contentsNames,
+  crackFallsText,
   depthName,
   describeChoice,
+  describeForecastSlumps,
   runEndText,
   tellNames,
 } from './describe';
 import { END_SHIFT, listedChoices } from './log';
 import type { LogEntry } from './log';
 import { tooLittleApNote } from './missing';
-import { squareText } from './squares';
+import { SUPPORT_AP, squareText } from './squares';
 import {
   MARK_GROUND,
   MARK_STUMP,
@@ -87,8 +91,9 @@ export interface ChoiceView {
 }
 
 /**
- * The mines and cuts on offer. They are not lines of the list (there can be
- * some 1,700): the player names a square, "mine 3,4" or "cut 3,4".
+ * The mines, cuts and supports on offer. They are not lines of the list
+ * (there can be some 1,700): the player names a square, "mine 3,4", "cut 3,4"
+ * or "support 3,4".
  */
 export interface SquareChoicesView {
   /** How many squares can be mined now, with the AP left. */
@@ -97,6 +102,12 @@ export interface SquareChoicesView {
   cuts: number;
   /** What cutting a tree costs, in AP. */
   cutAp: number;
+  /** How many supports are in the stockpile. */
+  supportsHeld: number;
+  /** How many squares a support can be placed on now, with the AP left. */
+  supports: number;
+  /** What placing a support costs, in AP. */
+  supportAp: number;
 }
 
 /** The summary printed once the run is over. */
@@ -232,16 +243,23 @@ function structureName(code: number): string | null {
  * What stands or lies on a square's top that two characters cannot show
  * (water, lava, gas, a crack, a structure), or `null` if there is nothing.
  * Water, lava and gas come from a pocket the player broke into (design doc
- * 6.2). Cracks and structures are not made by the game yet; the line is here
- * so that nothing on a top can go unseen when they are.
+ * 6.2); cracks and supports from pit walls that slump (6.1; issue #94).
  */
-function onTopNote(square: KnownSquare): string | null {
+function onTopNote(square: KnownSquare, crackRunning: boolean): string | null {
   const top = square.top;
   if (top === null || square.tree) {
     return null;
   }
   const things: string[] = contentsNames(square);
-  if (top.crackTimer !== null) things.push(`cracked (falls in ${top.crackTimer + 1})`);
+  // The countdown: 1 means "falls when this shift ends". A stopped one is
+  // said to be stopped; the Hazards line says where the block would land.
+  if (top.crackTimer !== null) {
+    things.push(
+      crackRunning
+        ? `a crack, countdown ${top.crackTimer + 1}`
+        : `a crack, stopped at ${top.crackTimer + 1}`,
+    );
+  }
   const structure = structureName(top.structure);
   if (structure !== null) things.push(`a ${structure}`);
   if (things.length === 0) {
@@ -294,7 +312,11 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
       if (square.depth > 0) {
         anyDug = true;
       }
-      const note = onTopNote(square);
+      // Whether a crack's countdown is running: the square is unstable.
+      // `slumpCheck` reads only what the player sees.
+      const crackRunning =
+        square.top !== null && square.top.crackTimer !== null && slumpCheck(state, x, y).unstable;
+      const note = onTopNote(square, crackRunning);
       if (note !== null) {
         notes.push(note);
       }
@@ -366,11 +388,23 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   // The forecast comes from the engine's own preview, so it cannot disagree
   // with what ending the shift then does.
   const preview = previewCubePhase(state);
-  // Countdowns only (0014 item 4, part 1); both parts of the forecast are
-  // empty until the hazards are built, and task T14 words them.
+  // The countdowns the player can read: every cracked square (design doc
+  // 6.1), with when it falls and where to. T14 words the other kinds.
   const hazards = preview.countdowns.map((countdown) => {
-    const c = countdown.pos;
-    return `${countdown.kind} in ${countdown.inShifts} shift(s) at ${squareText(c.x, c.y)}`;
+    const where = squareText(countdown.pos.x, countdown.pos.y);
+    if (countdown.kind !== 'slump') {
+      return `${countdown.kind} in ${countdown.inShifts} shift(s) at ${where}`;
+    }
+    if (!countdown.running || countdown.to === null) {
+      return (
+        `${where} is cracked, countdown stopped at ${countdown.inShifts}: ` +
+        'the square is stable or held now, and it goes on if that changes'
+      );
+    }
+    return (
+      `${where} is cracked: ${crackFallsText(countdown.inShifts)}, ` +
+      `onto ${squareText(countdown.to.x, countdown.to.y)}`
+    );
   });
   const upkeep = preview.upkeep;
   let forecast: string;
@@ -381,6 +415,10 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     // there is some, so a player does not end a shift early by oversight.
     const unspent = state.ap > 0 ? `${state.ap} unspent AP will be lost, ` : '';
     forecast = `${unspent}fuel ${state.fuel} -> ${upkeep.fuelAfter} (-${upkeep.fuelConsumed} shift).`;
+    // What step (a) of the cube phase will do: slumps, then new cracks.
+    for (const sentence of describeForecastSlumps(preview.slumps)) {
+      forecast += ` ${sentence}`;
+    }
     if (preview.regrowth.length > 0) {
       const cells = preview.regrowth.map((cell) => squareText(cell.x, cell.y)).join(', ');
       forecast += ` A tree grows back on the stump at ${cells}.`;
@@ -395,13 +433,16 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     }
   }
 
-  // The mines and cuts on offer are counted from the engine's own list.
+  // The mines, cuts and supports on offer are counted from the engine's own list.
   let cuts = 0;
+  let supports = 0;
   for (const action of legalActions(state)) {
     if (action.type === 'mine') {
       mines += 1;
     } else if (action.type === 'cutTree') {
       cuts += 1;
+    } else if (action.type === 'placeSupport') {
+      supports += 1;
     }
   }
 
@@ -440,7 +481,14 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     hazards,
     notOffered,
     forecast,
-    squares: { mines, cuts, cutAp: SURFACE.cutTree.ap },
+    squares: {
+      mines,
+      cuts,
+      cutAp: SURFACE.cutTree.ap,
+      supportsHeld: countItem(state, STRUCTURES.support.placedFromItem),
+      supports,
+      supportAp: SUPPORT_AP,
+    },
     choices,
   };
 }
@@ -517,8 +565,8 @@ export function forecastLine(view: PlayerView): string {
 }
 
 /**
- * The two lines that say how to mine and cut: the squares are named, not
- * listed. Empty once the run is over.
+ * The three lines that say how to mine, cut and place a support: the squares
+ * are named, not listed. Empty once the run is over.
  */
 export function squareChoiceLines(view: PlayerView): string[] {
   const squares = view.squares;
@@ -527,10 +575,16 @@ export function squareChoiceLines(view: PlayerView): string[] {
   }
   const mineCount = squares.mines === 1 ? '1 square' : `${squares.mines} squares`;
   const cutCount = squares.cuts === 1 ? '1 tree' : `${squares.cuts} trees`;
+  const held =
+    squares.supportsHeld === 0
+      ? 'You have none: craft-support makes one.'
+      : `You have ${squares.supportsHeld}.`;
   return [
-    `    mine X,Y  [AP by block: see the legend] Mine the top block of square x X, y Y. ` +
+    `    mine X,Y     [AP by block: see the legend] Mine the top block of square x X, y Y. ` +
       `${mineCount} can be mined now.`,
-    `    cut X,Y   [${squares.cutAp}] Cut the tree on square x X, y Y. ${cutCount} can be cut now.`,
+    `    cut X,Y      [${squares.cutAp}] Cut the tree on square x X, y Y. ${cutCount} can be cut now.`,
+    `    support X,Y  [${squares.supportAp}] Place a support on square x X, y Y: ` +
+      `it holds that square against slumping. ${held}`,
   ];
 }
 
