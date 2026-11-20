@@ -3,8 +3,7 @@
 // No DOM is needed: storage is a small stand-in for `localStorage`.
 import { describe, expect, it } from 'vitest';
 
-import { BLOCKS } from '../../src/data';
-import { ENGINE_VERSION, cellIndex, hashState } from '../../src/engine';
+import { ENGINE_VERSION, hashState } from '../../src/engine';
 import {
   MAX_SEED,
   SAVE_KEY,
@@ -17,11 +16,10 @@ import {
 } from '../../src/app/previewSession';
 import type { SaveStore } from '../../src/app/previewSession';
 import { runCli } from '../../tools/play/cli';
-import { menuChoices, newSession } from '../../src/app/text/log';
-import type { LogEntry } from '../../src/app/text/log';
-import { choiceName, describeChoice } from '../../src/app/text/describe';
+import { tapOutcome } from '../../src/app/map/targets';
+import { LOG_FORMAT, menuChoices } from '../../src/app/text/log';
 import { takeTurn } from '../../src/app/text/turn';
-import { DEFAULT_LAYERS, buildView } from '../../src/app/text/view';
+import { buildView } from '../../src/app/text/view';
 
 /** A stand-in for `localStorage`, backed by a Map. */
 function memoryStore(): SaveStore & { data: Map<string, string> } {
@@ -51,18 +49,23 @@ const brokenStore: SaveStore = {
   },
 };
 
-/** Take the choice with this name (as the play tool names it) from the menu. */
+/** Take the listed choice with this name (as the play tool names it): "end", "leave", a craft. */
 function take(session: ReturnType<typeof startRun>, name: string): string {
-  const view = buildView(session.state, {
-    radius: null,
-    layers: DEFAULT_LAYERS,
-    deepestZ: session.deepestZ,
-  });
+  const view = buildView(session.state, { deepestDepth: session.deepestDepth });
   const choice = view.choices.find((c) => c.name === name);
   if (choice === undefined) {
     throw new Error(`no choice named ${name}`);
   }
   return takeTurn(session, choice.entry);
+}
+
+/** Tap the square (x, y) as the screen does: mine it, or cut its tree. */
+function tap(session: ReturnType<typeof startRun>, x: number, y: number): string {
+  const outcome = tapOutcome(session.state, x, y);
+  if (outcome.entry === null) {
+    throw new Error(`the tap on (${x}, ${y}) was refused: ${outcome.lines.join(' ')}`);
+  }
+  return takeTurn(session, outcome.entry);
 }
 
 describe('seeds', () => {
@@ -87,8 +90,9 @@ describe('seeds', () => {
 describe('a turn on the preview', () => {
   it('prints the same "what came of it" lines as npm run play', () => {
     const session = startRun(7);
-    const lines = [take(session, 'e'), take(session, 'mine-down'), take(session, 'end')];
-    const cli = runCli(['--seed', '7', '--do', 'e,mine-down,end']).output.split('\n');
+    // Seed 7: (12, 0) is open ground over stone, (11, 0) has a tree.
+    const lines = [tap(session, 12, 0), tap(session, 11, 0), take(session, 'end')];
+    const cli = runCli(['--seed', '7', '--do', 'mine 12,0; cut 11,0; end']).output.split('\n');
     for (const line of lines) {
       expect(cli).toContain(line);
     }
@@ -99,8 +103,8 @@ describe('saving and resuming', () => {
   it('a saved run resumes to the same state', () => {
     const store = memoryStore();
     const session = startRun(7);
-    take(session, 'e');
-    take(session, 'mine-down');
+    tap(session, 12, 0);
+    tap(session, 11, 0);
     expect(saveRun(store, session)).toBe(true);
 
     const loaded = loadRun(store);
@@ -113,7 +117,7 @@ describe('saving and resuming', () => {
   it('a save from another engine version is resumed with a note saying so', () => {
     const store = memoryStore();
     const session = startRun(7);
-    take(session, 'e');
+    tap(session, 12, 0);
     saveRun(store, session);
     const log = JSON.parse(store.data.get(SAVE_KEY) ?? '{}') as { engineVersion: string };
     log.engineVersion = '0.0.1';
@@ -145,12 +149,36 @@ describe('saving and resuming', () => {
     saveRun(store, session);
     // Change the saved log so its first choice is not legal on this seed.
     const log = JSON.parse(store.data.get(SAVE_KEY) ?? '{}') as { actions: unknown[] };
-    log.actions = [{ type: 'move', to: { x: -5, y: -5, z: -5 }, ap: 1 }];
+    log.actions = [{ type: 'mine', x: -5, y: -5, ap: 1 }];
     store.data.set(SAVE_KEY, JSON.stringify(log));
 
     const loaded = loadRun(store);
     expect(loaded.session).toBeNull();
     expect(loaded.note).toContain('could not be resumed');
+    expect(store.data.has(SAVE_KEY)).toBe(false);
+  });
+
+  it('a save in the old log format (from before mining by square) is dropped, with a note', () => {
+    // What a version-0.3.0 build left on the phone: log format 1, with a move.
+    const store = memoryStore();
+    saveRun(store, startRun(7));
+    const log = JSON.parse(store.data.get(SAVE_KEY) ?? '{}') as Record<string, unknown>;
+    expect(log['format']).toBe(LOG_FORMAT);
+    log['format'] = LOG_FORMAT - 1;
+    log['engineVersion'] = '0.3.0';
+    log['actions'] = [{ type: 'move', to: { x: 17, y: 16, z: -1 }, ap: 1 }];
+    store.data.set(SAVE_KEY, JSON.stringify(log));
+
+    const loaded = loadRun(store);
+    expect(loaded.session).toBeNull();
+    expect(loaded.note).toContain('could not be resumed');
+    expect(store.data.has(SAVE_KEY)).toBe(false);
+  });
+
+  it('text that is not a play log at all is dropped too', () => {
+    const store = memoryStore();
+    store.data.set(SAVE_KEY, 'not json');
+    expect(loadRun(store).session).toBeNull();
     expect(store.data.has(SAVE_KEY)).toBe(false);
   });
 
@@ -167,47 +195,12 @@ describe('saving and resuming', () => {
   it('the menu after resuming is the menu before saving', () => {
     const store = memoryStore();
     const session = startRun(7);
-    take(session, 'e');
+    tap(session, 12, 0);
     saveRun(store, session);
     const resumed = loadRun(store).session;
     expect(resumed).not.toBeNull();
     if (resumed !== null) {
       expect(menuChoices(resumed.state)).toEqual(menuChoices(session.state));
     }
-  });
-});
-
-describe('the result line after a dig down (review of PR #74; issue #80)', () => {
-  /** Seed 7 at the start, and its "mine-down" choice. */
-  function atStart(): { session: ReturnType<typeof newSession>; dig: LogEntry } {
-    const session = newSession(7, 'none', 'standard');
-    const dig = menuChoices(session.state).find(
-      (entry) => choiceName(session.state, entry) === 'mine-down',
-    );
-    if (dig === undefined) {
-      throw new Error('mine-down is not on the list');
-    }
-    return { session, dig };
-  }
-
-  it('says what was mined; the miner is then in the dug cell, and nothing is said of a fall', () => {
-    const { session, dig } = atStart();
-    // Before: the list says the miner will move down into the block.
-    expect(describeChoice(session.state, dig)).toContain('you move down into it');
-    const before = session.state.avatar.pos;
-    const line = takeTurn(session, dig);
-    expect(line).toBe('> Mine below you: Dirt, gives nothing. Mined Dirt.');
-    expect(session.state.avatar.pos).toEqual({ ...before, z: before.z + 1 });
-  });
-
-  it('says the same with open space under the block: the miner does not fall (issue #80)', () => {
-    const { session, dig } = atStart();
-    const { x, y } = session.state.avatar.pos;
-    const under = cellIndex(session.state.size, { x, y, z: 1 });
-    session.state.blocks[under] = BLOCKS.air.code;
-    const line = takeTurn(session, dig);
-    expect(line).toBe('> Mine below you: Dirt, gives nothing. Mined Dirt.');
-    expect(session.state.avatar.pos).toEqual({ x, y, z: 0 });
-    expect(session.state.avatar.health).toBe(10);
   });
 });

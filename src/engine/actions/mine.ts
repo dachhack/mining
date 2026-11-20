@@ -18,13 +18,7 @@ import { depthAt, mayMine } from '../heightmap';
 import type { HigherNeighbour } from '../heightmap';
 import { addItem, blockAt, blockDefAt, inGrid, isOpen, setBlock } from '../state';
 import type { GameState } from '../state';
-import {
-  hasStump,
-  hasTree,
-  setStumpAge,
-  setSurfaceKind,
-  surfaceCellAbove,
-} from '../surface/state';
+import { hasStump, hasTree, setStumpAge, setSurfaceKind, surfaceCellAbove } from '../surface/state';
 
 /** Why a square cannot be mined now. */
 export type MineRefusalReason =

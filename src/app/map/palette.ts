@@ -10,11 +10,14 @@ import type { BlockId } from '../../data';
 
 /** The sizes and timings of the map. */
 export const PREVIEW_MAP = {
-  /** Cells across and down the window at the default zoom. */
-  viewCells: 16,
+  /**
+   * Cells across and down the window at the default zoom. 14 across a phone
+   * 390 px wide makes each square about 26 px: big enough to tap.
+   */
+  viewCells: 14,
   /** The most zoomed in: this many cells across (big tiles, easy to tap). */
   minCells: 8,
-  /** The most zoomed out: this many cells across (a whole 32 x 32 layer). */
+  /** The most zoomed out: this many cells across (the whole 32 x 32 map). */
   maxCells: 32,
   /**
    * How fast the mouse wheel zooms: each pixel of wheel movement multiplies
@@ -25,13 +28,17 @@ export const PREVIEW_MAP = {
   gridMinCellPx: 12,
   /** A press that moves less than this many pixels is a tap; more is a drag. */
   dragThresholdPx: 8,
-  /** How long the "nothing to do there" hint stays, in milliseconds. */
-  hintMs: 1500,
+  /** From this cell size in pixels up, a dug square shows its depth as a number. */
+  depthNumberMinCellPx: 20,
   /**
-   * How long a risky tap's mark waits for the second tap on the same cell,
-   * in milliseconds (issue #78). After that the mark clears.
+   * Depth shading (issue #86): a square `d` levels down is drawn at
+   * `depthBrightnessPerLevel ** d` of its full brightness, and never darker
+   * than `depthMinBrightness`, so that the block's colour can still be told.
    */
-  doubleTapMs: 3000,
+  depthBrightnessPerLevel: 0.8,
+  depthMinBrightness: 0.22,
+  /** How wide the shadow under a higher neighbour is, as a part of the cell. */
+  wallShadowWidth: 0.14,
   /** How strongly a surface kind's pattern is drawn over the block under it on the top view. */
   surfaceMarkAlpha: 0.55,
 };
@@ -67,7 +74,7 @@ export interface BlockLook {
 
 /** One entry per block the cube can hold. A comment says what each is meant to suggest. */
 export const BLOCK_LOOKS: Record<BlockId, BlockLook> = {
-  // Open space: pale, so the tunnels stand out against the rock.
+  // Open space: never a top block; kept so that every block has a look.
   air: { colour: '#d9cfbf', ink: '#d9cfbf', pattern: 'plain' },
   // Dirt: warm brown, speckled like loose earth.
   dirt: { colour: '#8a5a33', ink: '#5e3c20', pattern: 'speckle' },
@@ -103,9 +110,9 @@ export const BLOCK_LOOKS: Record<BlockId, BlockLook> = {
 export type SurfaceMark = 'tree' | 'stump' | 'path' | 'meadow' | 'outcrop';
 
 /**
- * How each kind of surface cell looks on the top view (issue #78). A tree
- * hides the block under it, so it is drawn solid in its `haze` colour with
- * its pattern. The open kinds draw only their pattern, faintly
+ * How each kind of surface cell looks on a square at ground level (issue
+ * #78). A tree hides the block under it, so it is drawn solid in its `haze`
+ * colour with its pattern. The open kinds draw only their pattern, faintly
  * (`PREVIEW_MAP.surfaceMarkAlpha`), over the block under them, so each still
  * differs from the others by pattern as well as colour; their `haze` is used
  * for nothing but the legend's look of the colour family.
@@ -126,21 +133,18 @@ export const SURFACE_LOOKS: Record<SurfaceMark, { haze: string; ink: string; pat
 /** Cells the player has not seen: dark, with diagonal lines, never coloured by what is there. */
 export const UNKNOWN_LOOK = { colour: '#1d1916', ink: '#3a332d' };
 
-/** How much darker a seen cell is drawn when it is not in light (0 = black, 1 = as lit). */
-export const UNLIT_BRIGHTNESS = 0.45;
-
 /** Colours of the marks drawn on top of tiles. */
 export const MARK_COLOURS = {
-  miner: '#ff5a36',
-  minerOutline: '#ffffff',
-  torch: '#ff9d2e',
-  torchCore: '#fff2a8',
   support: '#e8e0d0',
   otherStructure: '#60d0ff',
-  items: '#ffffff',
-  itemsOutline: '#000000',
   traces: '#ffd84a',
-  /** The outline of a cell waiting for a second tap (issue #78). */
-  pending: '#ffe14d',
+  /** The outline of the square a refused tap was on. */
+  selected: '#ffe14d',
+  /** The outline of a neighbour that is too high for the level rule. */
+  tooHigh: '#ff4a3a',
+  /** The shadow a higher neighbour casts on a lower square. */
+  wallShadow: 'rgba(0, 0, 0, 0.5)',
+  depthNumber: '#ffffff',
+  depthNumberOutline: 'rgba(0, 0, 0, 0.75)',
   grid: 'rgba(0, 0, 0, 0.35)',
 };

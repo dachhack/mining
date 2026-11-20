@@ -1,52 +1,47 @@
-// The tap map of the phone preview (issue #66): a 16 x 16 window of one
-// layer drawn as coloured tiles on a canvas, dragged to pan, tapped to act.
-// Layer 0 is the top view, with the surface's trees drawn on it (issue #78).
-// A tap does one thing at once, with no menu; a risky one (a fall that
-// hurts, a yield too heavy to carry) waits for a second tap on the same cell.
+// The tap map of the phone preview (issues #66 and #86): the whole surface
+// seen from above, drawn as coloured tiles on a canvas. Each square shows its
+// top block, shaded by depth (deeper is darker); trees are drawn on top.
+// Drag to pan, pinch to zoom, tap a square to mine it or cut its tree. There
+// are no layers and no miner: only the top level is ever shown (owner, issue
+// #82).
 //
-// It draws only from `buildLayer` (tiles.ts), which holds what the player
-// knows and nothing else, and it changes the game only by handing one of the
-// legal actions to `onChoose` (the screen then calls `takeTurn`). It never
-// edits the state.
+// It draws only from `buildTiles` (tiles.ts), which holds what the player
+// knows and nothing else. It changes nothing itself: a tap is handed to
+// `onTap` as a square, and the screen decides what it does (preview.ts).
 
-import { BLOCKS, SHIFT, WORLD } from '../../data';
+import { BLOCKS } from '../../data';
 import type { BlockId } from '../../data';
-import { actionKey } from '../../engine';
-import type { Action, GameState } from '../../engine';
-import { choiceWarning } from '../text/describe';
+import type { GameState } from '../../engine';
 import {
   VIEW_CELLS,
   cellAt,
-  centredOn,
-  clampCells,
-  followMiner,
+  centredOnMiddle,
+  clampCamera,
   isInView,
   panned,
+  wholeMap,
   zoomedAbout,
 } from './camera';
 import type { Camera } from './camera';
-import {
-  BLOCK_LOOKS,
-  MARK_COLOURS,
-  PREVIEW_MAP,
-  SURFACE_LOOKS,
-  UNKNOWN_LOOK,
-  UNLIT_BRIGHTNESS,
-} from './palette';
+import { BLOCK_LOOKS, MARK_COLOURS, PREVIEW_MAP, SURFACE_LOOKS, UNKNOWN_LOOK } from './palette';
 import type { Pattern, SurfaceMark } from './palette';
-import { actionsForCell, mapLayerOf, tapAction, tapIsRisky, verticalAction } from './targets';
-import { buildLayer, layerContext } from './tiles';
-import type { LayerContext, Tile } from './tiles';
+import { NO_MARKS } from './targets';
+import type { MapMarks } from './targets';
+import { buildTiles, depthBrightness } from './tiles';
+import type { Tile } from './tiles';
 
 /** What the screen gets back from `createTapMap`. */
 export interface TapMap {
   /** The map's whole element, to put on the page. */
   element: HTMLElement;
+  /** The legend for what is on screen, to put further down the page. */
+  legend: HTMLElement;
   /**
-   * Show `state`. `fresh` is true for a new or resumed run: the map then
-   * goes to the miner's layer and centres on the miner.
+   * Show `state`, with `marks` drawn over it (the square a refused tap was
+   * on, and the neighbours that are too high). `fresh` is true for a new or
+   * resumed run: the map then centres on the middle.
    */
-  show(state: GameState, fresh: boolean): void;
+  show(state: GameState, fresh: boolean, marks: MapMarks): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -242,26 +237,74 @@ function drawPattern(
   ctx.restore();
 }
 
-/** An unseen cell: dark with diagonal lines, the same whatever is really there. */
-function drawUnknown(ctx: CanvasRenderingContext2D, x: number, y: number, c: number): void {
-  ctx.fillStyle = UNKNOWN_LOOK.colour;
-  ctx.fillRect(x, y, c, c);
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(x, y, c, c);
-  ctx.clip();
-  ctx.strokeStyle = UNKNOWN_LOOK.ink;
-  ctx.lineWidth = Math.max(1, c / 14);
-  ctx.beginPath();
-  for (const f of [0.25, 0.75, 1.25, 1.75]) {
-    ctx.moveTo(x + f * c, y);
-    ctx.lineTo(x + (f - 1) * c, y + c);
+/** Draw one tile, with its top-left corner at (x, y) and side `c` pixels. */
+export function drawTile(
+  ctx: CanvasRenderingContext2D,
+  tile: Tile,
+  x: number,
+  y: number,
+  c: number,
+  grid = true,
+): void {
+  if (tile.surface === 'tree') {
+    // A tree hides the square under it (issue #70): drawn solid.
+    const look = SURFACE_LOOKS.tree;
+    ctx.fillStyle = look.haze;
+    ctx.fillRect(x, y, c, c);
+    drawPattern(ctx, look.pattern, x, y, c, look.ink);
+  } else {
+    const look = tile.kind === 'floor' ? BLOCK_LOOKS.bedrock : BLOCK_LOOKS[tile.block ?? 'air'];
+    ctx.fillStyle =
+      tile.kind === 'block' && tile.block === null ? UNKNOWN_LOOK.colour : look.colour;
+    ctx.fillRect(x, y, c, c);
+    drawPattern(ctx, look.pattern, x, y, c, look.ink);
+    if (tile.surface !== null) {
+      // At ground level: what lies on the surface (a stump, a path, a meadow,
+      // an outcrop), as its pattern drawn faintly over the block, so the
+      // block still shows (issue #78).
+      const kind = SURFACE_LOOKS[tile.surface];
+      ctx.save();
+      ctx.globalAlpha = PREVIEW_MAP.surfaceMarkAlpha;
+      drawPattern(ctx, kind.pattern, x, y, c, kind.ink);
+      ctx.restore();
+    }
+    // Depth shading: a black veil, thicker with every level down.
+    const veil = 1 - depthBrightness(tile.depth);
+    if (veil > 0) {
+      ctx.fillStyle = `rgba(0, 0, 0, ${veil})`;
+      ctx.fillRect(x, y, c, c);
+    }
   }
-  ctx.stroke();
-  ctx.restore();
+  // The shadow of each higher neighbour, along that side: the pit's walls.
+  const w = Math.max(1.5, c * PREVIEW_MAP.wallShadowWidth);
+  ctx.fillStyle = MARK_COLOURS.wallShadow;
+  if (tile.higher.north) ctx.fillRect(x, y, c, w);
+  if (tile.higher.south) ctx.fillRect(x, y + c - w, c, w);
+  if (tile.higher.west) ctx.fillRect(x, y, w, c);
+  if (tile.higher.east) ctx.fillRect(x + c - w, y, w, c);
+
+  drawMarks(ctx, tile, x, y, c);
+  if (tile.depth > 0 && c >= PREVIEW_MAP.depthNumberMinCellPx) {
+    // The depth as a number in the bottom-right corner, white with a dark edge.
+    ctx.save();
+    ctx.font = `bold ${Math.round(c * 0.42)}px system-ui, sans-serif`;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'alphabetic';
+    ctx.lineWidth = Math.max(2, c / 10);
+    ctx.strokeStyle = MARK_COLOURS.depthNumberOutline;
+    ctx.fillStyle = MARK_COLOURS.depthNumber;
+    ctx.strokeText(String(tile.depth), x + c - 2, y + c - 2);
+    ctx.fillText(String(tile.depth), x + c - 2, y + c - 2);
+    ctx.restore();
+  }
+  if (grid) {
+    ctx.strokeStyle = MARK_COLOURS.grid;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, c - 1, c - 1);
+  }
 }
 
-/** The marks drawn over a tile: traces, structure, loose items, the miner. */
+/** The marks drawn over a tile: mineral traces and a structure. */
 function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number, c: number) {
   const mid = c / 2;
   if (tile.traced) {
@@ -269,21 +312,11 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
     ctx.fillStyle = MARK_COLOURS.traces;
     for (const fx of [0.25, 0.5, 0.75]) {
       ctx.beginPath();
-      ctx.arc(x + fx * c, y + 0.14 * c, Math.max(1.2, c / 11), 0, Math.PI * 2);
+      ctx.arc(x + fx * c, y + 0.16 * c, Math.max(1.2, c / 11), 0, Math.PI * 2);
       ctx.fill();
     }
   }
-  if (tile.structure === 'torch') {
-    // A flame: an orange disc with a pale core.
-    ctx.fillStyle = MARK_COLOURS.torch;
-    ctx.beginPath();
-    ctx.arc(x + mid, y + mid, c * 0.28, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = MARK_COLOURS.torchCore;
-    ctx.beginPath();
-    ctx.arc(x + mid, y + mid, c * 0.12, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (tile.structure === 'support') {
+  if (tile.structure === 'support') {
     // A T: a beam on a post.
     ctx.strokeStyle = MARK_COLOURS.support;
     ctx.lineWidth = Math.max(2, c / 7);
@@ -298,98 +331,6 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
     ctx.lineWidth = Math.max(1.5, c / 10);
     ctx.strokeRect(x + 0.25 * c, y + 0.25 * c, 0.5 * c, 0.5 * c);
   }
-  if (tile.items) {
-    // A small white diamond with a dark outline, in the bottom-right corner.
-    const cx = x + 0.75 * c;
-    const cy = y + 0.75 * c;
-    // Never smaller than 2.5 px, so it stays visible zoomed right out.
-    const r = Math.max(c * 0.17, 2.5);
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - r);
-    ctx.lineTo(cx + r, cy);
-    ctx.lineTo(cx, cy + r);
-    ctx.lineTo(cx - r, cy);
-    ctx.closePath();
-    ctx.fillStyle = MARK_COLOURS.items;
-    ctx.fill();
-    ctx.strokeStyle = MARK_COLOURS.itemsOutline;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  }
-  if (tile.minerColumn) {
-    // On another layer: a dashed ring where the miner is, above or below.
-    ctx.save();
-    ctx.strokeStyle = MARK_COLOURS.miner;
-    ctx.lineWidth = Math.max(1.5, c / 12);
-    ctx.setLineDash([c / 6, c / 8]);
-    ctx.beginPath();
-    ctx.arc(x + mid, y + mid, c * 0.33, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-  }
-  if (tile.miner) {
-    // The miner: a red-orange disc with a white ring and a white centre.
-    ctx.fillStyle = MARK_COLOURS.miner;
-    ctx.strokeStyle = MARK_COLOURS.minerOutline;
-    ctx.lineWidth = Math.max(2, c / 9);
-    // At least 4 px across, so the miner is easy to find zoomed right out.
-    ctx.beginPath();
-    ctx.arc(x + mid, y + mid, Math.max(c * 0.33, 4), 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = MARK_COLOURS.minerOutline;
-    ctx.beginPath();
-    ctx.arc(x + mid, y + mid, c * 0.09, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-/** Draw one tile, with its top-left corner at (x, y) and side `c` pixels. */
-export function drawTile(
-  ctx: CanvasRenderingContext2D,
-  tile: Tile,
-  x: number,
-  y: number,
-  c: number,
-  grid = true,
-): void {
-  if (tile.surface === 'tree') {
-    // A tree hides the cell under it (issue #70): drawn solid, whatever is known below.
-    const look = SURFACE_LOOKS.tree;
-    ctx.fillStyle = look.haze;
-    ctx.fillRect(x, y, c, c);
-    drawPattern(ctx, look.pattern, x, y, c, look.ink);
-  } else {
-    if (tile.kind === 'unknown') {
-      drawUnknown(ctx, x, y, c);
-    } else {
-      const look = BLOCK_LOOKS[tile.block ?? 'air'];
-      ctx.fillStyle = look.colour;
-      ctx.fillRect(x, y, c, c);
-      drawPattern(ctx, look.pattern, x, y, c, look.ink);
-      if (!tile.lit) {
-        // Seen, but not in light now: drawn darker.
-        ctx.fillStyle = `rgba(0, 0, 0, ${1 - UNLIT_BRIGHTNESS})`;
-        ctx.fillRect(x, y, c, c);
-      }
-    }
-    if (tile.surface !== null) {
-      // On the top view: what lies on the surface over the cell (a stump, a
-      // path, a meadow, an outcrop), as its pattern drawn faintly over the
-      // block under it, so the block still shows (issue #78).
-      const kind = SURFACE_LOOKS[tile.surface];
-      ctx.save();
-      ctx.globalAlpha = PREVIEW_MAP.surfaceMarkAlpha;
-      drawPattern(ctx, kind.pattern, x, y, c, kind.ink);
-      ctx.restore();
-    }
-  }
-  drawMarks(ctx, tile, x, y, c);
-  if (grid) {
-    ctx.strokeStyle = MARK_COLOURS.grid;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x + 0.5, y + 0.5, c - 1, c - 1);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -401,15 +342,13 @@ function sampleTile(overrides: Partial<Tile>): Tile {
   return {
     x: 0,
     y: 0,
+    depth: 0,
     kind: 'block',
     block: 'stone',
-    lit: true,
     traced: false,
     structure: null,
-    items: false,
-    miner: false,
-    minerColumn: false,
     surface: null,
+    higher: { north: false, east: false, south: false, west: false },
     ...overrides,
   };
 }
@@ -439,50 +378,32 @@ function legendEntry(tile: Tile, label: string): HTMLElement {
 function legendFor(tiles: Tile[]): HTMLElement[] {
   const entries: HTMLElement[] = [];
   const blocks = new Set<BlockId>();
-  let unknown = false;
-  let unlit = false;
-  let open = false;
-  const marks = new Set<string>();
+  const surfaceKinds = new Set<SurfaceMark>();
+  const structures = new Set<string>();
+  let floor = false;
+  let dug = false;
+  let traced = false;
   for (const tile of tiles) {
-    if (tile.kind === 'unknown') unknown = true;
-    if (tile.kind === 'open') open = true;
     if (tile.kind === 'block' && tile.block !== null) blocks.add(tile.block);
-    if (tile.kind !== 'unknown' && !tile.lit) unlit = true;
-    if (tile.traced) marks.add('traced');
-    if (tile.structure !== null) marks.add(tile.structure);
-    if (tile.items) marks.add('items');
-    if (tile.miner) marks.add('miner');
-    if (tile.minerColumn) marks.add('minerColumn');
+    if (tile.kind === 'floor') floor = true;
+    if (tile.surface !== null) surfaceKinds.add(tile.surface);
+    if (tile.structure !== null) structures.add(tile.structure);
+    if (tile.depth > 0) dug = true;
+    if (tile.traced) traced = true;
   }
-  if (marks.has('miner')) {
-    entries.push(legendEntry(sampleTile({ kind: 'open', block: null, miner: true }), 'you'));
-  }
-  if (marks.has('minerColumn')) {
-    entries.push(
-      legendEntry(
-        sampleTile({ kind: 'open', block: null, minerColumn: true }),
-        'above or below you',
-      ),
-    );
-  }
-  // The surface kinds (issue #70), in a fixed order. On the top view the
-  // open kinds are drawn faintly over the block under them.
+  // The surface kinds (issue #70), in a fixed order.
   const surfaceLabels: [SurfaceMark, string][] = [
-    ['tree', 'tree (tap beside it to cut; hides the block under it)'],
+    ['tree', 'tree (tap to cut; hides the block under it)'],
     ['stump', 'stump (a tree grows back)'],
     ['path', 'dirt path'],
     ['meadow', 'meadow'],
     ['outcrop', 'stone outcrop'],
   ];
-  const surfaceKinds = new Set(tiles.map((tile) => tile.surface));
   for (const [kind, label] of surfaceLabels) {
     if (surfaceKinds.has(kind)) {
       // Shown over dirt, as on the map (a tree hides it anyway).
       entries.push(legendEntry(sampleTile({ block: 'dirt', surface: kind }), label));
     }
-  }
-  if (open) {
-    entries.push(legendEntry(sampleTile({ kind: 'open', block: null }), 'open'));
   }
   // In the order of the data's block list, so the legend does not jump about.
   for (const id of Object.keys(BLOCKS) as BlockId[]) {
@@ -490,25 +411,29 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
       entries.push(legendEntry(sampleTile({ block: id }), BLOCKS[id].name));
     }
   }
-  if (unknown) {
-    entries.push(legendEntry(sampleTile({ kind: 'unknown', block: null }), 'not seen yet'));
+  if (floor) {
+    entries.push(legendEntry(sampleTile({ kind: 'floor', block: null }), 'bedrock floor'));
   }
-  if (unlit) {
-    entries.push(legendEntry(sampleTile({ lit: false }), 'seen, not in light (darker)'));
+  if (dug) {
+    entries.push(legendEntry(sampleTile({ depth: 3 }), 'dug: deeper is darker'));
+    entries.push(
+      legendEntry(
+        sampleTile({
+          depth: 1,
+          higher: { north: true, east: false, south: false, west: true },
+        }),
+        'shadow: that side is higher',
+      ),
+    );
   }
-  if (marks.has('traced')) {
+  if (traced) {
     entries.push(legendEntry(sampleTile({ traced: true }), 'mineral traces'));
   }
-  const markLabels: [string, Partial<Tile>, string][] = [
-    ['torch', { structure: 'torch' }, 'torch'],
-    ['support', { structure: 'support' }, 'support'],
-    ['other', { structure: 'other' }, 'other structure'],
-    ['items', { items: true }, 'loose items'],
-  ];
-  for (const [mark, overrides, label] of markLabels) {
-    if (marks.has(mark)) {
-      entries.push(legendEntry(sampleTile({ kind: 'open', block: null, ...overrides }), label));
-    }
+  if (structures.has('support')) {
+    entries.push(legendEntry(sampleTile({ structure: 'support' }), 'support'));
+  }
+  if (structures.has('other')) {
+    entries.push(legendEntry(sampleTile({ structure: 'other' }), 'other structure'));
   }
   return entries;
 }
@@ -523,24 +448,6 @@ function button(className: string, text: string): HTMLButtonElement {
   made.className = className;
   made.textContent = text;
   return made;
-}
-
-/**
- * What to say when a tap stands for no choice. If the cell would have a
- * choice with a full shift of AP, the trouble is AP, and the hint says so.
- * That is worked out on a copy of the state with the AP topped up: the same
- * legal actions the player would see next shift, so it tells nothing new.
- */
-function emptyTapHint(state: GameState, viewZ: number, x: number, y: number): string {
-  if (state.ap < SHIFT.apPerShift) {
-    // `structuredClone` makes a deep copy, so the real state is not touched.
-    const rested: GameState = structuredClone(state);
-    rested.ap = SHIFT.apPerShift;
-    if (actionsForCell(rested, viewZ, x, y).length > 0) {
-      return `Not enough AP (you have ${state.ap})`;
-    }
-  }
-  return 'Nothing to do there';
 }
 
 /** The `localStorage` key the zoom level is kept under, per device (issue #69). */
@@ -567,10 +474,10 @@ function saveZoom(cells: number): void {
 }
 
 /**
- * Make the tap map. `onChoose` is called with the action the player picked;
- * the screen takes it (and then calls `show` again).
+ * Make the tap map. `onTap` is called with the square the player tapped; the
+ * screen decides what the tap does (and then calls `show` again).
  */
-export function createTapMap(onChoose: (action: Action) => void): TapMap {
+export function createTapMap(onTap: (x: number, y: number) => void): TapMap {
   const element = document.createElement('section');
   element.className = 'tap-map';
   element.dataset['testid'] = 'tap-map';
@@ -578,90 +485,48 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
   // The row of buttons over the map.
   const bar = document.createElement('div');
   bar.className = 'map-bar';
-  // Look at another layer (the map shows one at a time). Words, not arrows:
-  // the arrows are on the buttons that move the miner (issue #80).
-  const upButton = button('small layer-button', 'Look up');
-  upButton.setAttribute('aria-label', 'Look one layer up');
-  const layerLabel = document.createElement('span');
-  layerLabel.className = 'layer-label';
-  layerLabel.dataset['testid'] = 'layer-label';
-  const downButton = button('small layer-button', 'Look down');
-  downButton.setAttribute('aria-label', 'Look one layer down');
-  const centreButton = button('small', 'Centre on me');
-  // Back to the default zoom (issue #69).
-  const zoomButton = button('small', `${VIEW_CELLS}×${VIEW_CELLS}`);
-  zoomButton.setAttribute('aria-label', `Zoom to ${VIEW_CELLS} by ${VIEW_CELLS}`);
-  bar.append(layerLabel, upButton, downButton, centreButton, zoomButton);
+  const mapLabel = document.createElement('span');
+  mapLabel.className = 'map-label';
+  mapLabel.dataset['testid'] = 'map-label';
+  // Zoom right out, and back to the usual size (issue #69).
+  const wholeButton = button('small', 'Whole map');
+  wholeButton.dataset['testid'] = 'whole-map';
+  const zoomButton = button('small', 'Zoom in');
+  zoomButton.dataset['testid'] = 'zoom-in';
+  zoomButton.setAttribute('aria-label', `Zoom in to ${VIEW_CELLS} squares across`);
+  bar.append(mapLabel, wholeButton, zoomButton);
 
-  // The canvas, with the hint laid over it.
   const frame = document.createElement('div');
   frame.className = 'map-frame';
   const canvas = document.createElement('canvas');
   canvas.className = 'map-canvas';
   canvas.dataset['testid'] = 'map-canvas';
-  const hint = document.createElement('div');
-  hint.className = 'map-hint';
-  hint.dataset['testid'] = 'map-hint';
-  hint.hidden = true;
-  frame.append(canvas, hint);
+  frame.append(canvas);
 
   const legend = document.createElement('div');
   legend.className = 'map-legend';
   legend.dataset['testid'] = 'map-legend';
 
-  // Go up and go down (issue #80): the miner has no gravity, and the map
-  // shows one layer, so the move into the cell above or below (or the mine
-  // of that block) has buttons of its own, in a row under the map.
-  const moveBar = document.createElement('div');
-  moveBar.className = 'move-bar';
-  const goUpButton = button('small move-button', '▲ Go up');
-  goUpButton.dataset['testid'] = 'go-up';
-  const goDownButton = button('small move-button', '▼ Go down');
-  goDownButton.dataset['testid'] = 'go-down';
-  moveBar.append(goUpButton, goDownButton);
-
-  element.append(bar, frame, moveBar, legend);
+  element.append(bar, frame);
 
   // ----- What the map is showing -----
   let state: GameState | null = null;
-  let viewZ = 0;
+  let marks: MapMarks = NO_MARKS;
   // The zoom starts where the player left it last time on this device.
   let camera: Camera = { x: 0, y: 0, cells: loadZoom() ?? VIEW_CELLS };
-  // The layer the miner was on when last shown, to follow it when it changes.
-  let lastMinerLayer: number | null = null;
-  let hintTimer: ReturnType<typeof setTimeout> | null = null;
-  // Light and traces for `state`, worked out on the first draw after `show`.
-  let context: LayerContext | null = null;
-  /**
-   * A risky tap waiting for its second tap (issue #78): the cell, the layer,
-   * and the action it stands for (by `actionKey`, so a stale one is never
-   * taken). `null` when nothing is marked.
-   */
-  let pending: { x: number; y: number; z: number; key: string } | null = null;
-  // The same for a Go up / Go down press whose yield is too heavy to carry.
-  let pendingButton: { direction: 'up' | 'down'; key: string } | null = null;
-  let pendingTimer: ReturnType<typeof setTimeout> | null = null;
-
-  /** The map layer the miner is shown on: the top view (layer 0) while on the surface. */
-  function minersMapLayer(s: GameState): number {
-    return mapLayerOf(s.avatar.pos.z);
-  }
 
   function cellPixels(): number {
     return frame.clientWidth / camera.cells;
   }
 
-  function layerText(s: GameState): string {
-    const here = s.avatar.pos.z;
-    const name = viewZ === WORLD.surfaceZ + 1 ? 'Top layer' : `Layer ${viewZ}`;
-    if (viewZ === here) {
-      return `${name} · you are here`;
-    }
-    if (here === WORLD.surfaceZ && viewZ === WORLD.surfaceZ + 1) {
-      return `${name} · you are on the surface`;
-    }
-    const diff = viewZ - here;
-    return `${name} · ${Math.abs(diff)} ${diff > 0 ? 'below' : 'above'} you`;
+  /** A dashed outline round the square (x, y). */
+  function outline(ctx: CanvasRenderingContext2D, x: number, y: number, c: number, colour: string) {
+    ctx.save();
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = Math.max(2.5, c / 7);
+    ctx.setLineDash([c / 4, c / 8]);
+    ctx.strokeRect((x - camera.x) * c + 1.5, (y - camera.y) * c + 1.5, c - 3, c - 3);
+    ctx.restore();
   }
 
   function draw(): void {
@@ -689,17 +554,9 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
     const span = Math.ceil(camera.cells) + 1;
     // Grid lines only where the cells are big enough for them not to crowd the marks.
     const grid = c >= PREVIEW_MAP.gridMinCellPx;
-    // Light and traces are worked out once per state, not on every frame of a drag.
-    if (context === null) {
-      context = layerContext(s);
-    }
-    const rows = buildLayer(s, viewZ, { x0, y0, size: span }, context);
     const drawn: Tile[] = [];
-    for (const row of rows) {
+    for (const row of buildTiles(s, { x0, y0, size: span })) {
       for (const tile of row) {
-        if (tile.x >= s.size.x || tile.y >= s.size.y) {
-          continue;
-        }
         drawTile(ctx, tile, (tile.x - camera.x) * c, (tile.y - camera.y) * c, c, grid);
         if (isInView(camera, tile.x, tile.y)) {
           drawn.push(tile);
@@ -708,139 +565,41 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
     }
     legend.replaceChildren(...legendFor(drawn));
 
-    // The cell waiting for a second tap: a bright dashed outline.
-    if (pending !== null && pending.z === viewZ) {
-      ctx.save();
-      ctx.strokeStyle = MARK_COLOURS.pending;
-      ctx.lineWidth = Math.max(2, c / 8);
-      ctx.setLineDash([c / 4, c / 8]);
-      ctx.strokeRect((pending.x - camera.x) * c + 1, (pending.y - camera.y) * c + 1, c - 2, c - 2);
-      ctx.restore();
+    // After a refused tap: the tapped square in yellow, and the neighbours
+    // that are too high for the level rule in red.
+    for (const square of marks.tooHigh) {
+      outline(ctx, square.x, square.y, c, MARK_COLOURS.tooHigh);
+    }
+    if (marks.selected !== null) {
+      outline(ctx, marks.selected.x, marks.selected.y, c, MARK_COLOURS.selected);
     }
 
-    layerLabel.textContent = layerText(s);
-    const onMinersLayer = viewZ === minersMapLayer(s);
-    layerLabel.classList.toggle('mine', onMinersLayer);
-    frame.classList.toggle('mine', onMinersLayer);
-    // Layer 0, the top view, is as high as the map goes (issue #78).
-    upButton.disabled = viewZ <= WORLD.surfaceZ + 1;
-    downButton.disabled = viewZ >= s.size.z - 1;
-    goUpButton.disabled = verticalAction(s, 'up') === null;
-    goDownButton.disabled = verticalAction(s, 'down') === null;
+    const across = Math.round(camera.cells);
+    mapLabel.textContent =
+      across >= Math.max(s.size.x, s.size.y)
+        ? 'The whole map · tap a square'
+        : `${across} of ${s.size.x} squares across · tap a square`;
 
-    // For the tests: where the camera is and how big a cell is.
+    // For the tests: where the camera is, how big a cell is, what is marked.
     canvas.dataset['camX'] = String(camera.x);
     canvas.dataset['camY'] = String(camera.y);
     canvas.dataset['cellPx'] = String(c);
     canvas.dataset['cells'] = String(camera.cells);
-    canvas.dataset['layer'] = String(viewZ);
-    canvas.dataset['pending'] = pending === null ? '' : `${pending.x},${pending.y}`;
+    canvas.dataset['selected'] =
+      marks.selected === null ? '' : `${marks.selected.x},${marks.selected.y}`;
+    canvas.dataset['tooHigh'] = marks.tooHigh.map((square) => `${square.x},${square.y}`).join(' ');
   }
 
-  /** Hide the hint now. */
-  function hideHint(): void {
-    hint.hidden = true;
-    if (hintTimer !== null) {
-      clearTimeout(hintTimer);
-      hintTimer = null;
-    }
-  }
-
-  /** Show `text` over the map; it goes after `ms` milliseconds. */
-  function showHint(text: string, ms: number = PREVIEW_MAP.hintMs): void {
-    hint.textContent = text;
-    hint.hidden = false;
-    if (hintTimer !== null) {
-      clearTimeout(hintTimer);
-    }
-    hintTimer = setTimeout(() => {
-      hint.hidden = true;
-    }, ms);
-  }
-
-  /** Forget the cell waiting for a second tap, if any. Returns true if there was one. */
-  function clearPending(): boolean {
-    if (pendingTimer !== null) {
-      clearTimeout(pendingTimer);
-      pendingTimer = null;
-    }
-    if (pending === null && pendingButton === null) {
-      return false;
-    }
-    pending = null;
-    pendingButton = null;
-    hideHint();
-    return true;
-  }
-
-  /** What a risky tap is about to do, in a few words, for the hint. */
-  function tapVerb(s: GameState, action: Action): string {
-    const here = s.avatar.pos;
-    switch (action.type) {
-      case 'mine':
-        if (action.target.x === here.x && action.target.y === here.y) {
-          return action.target.z > here.z ? 'dig down' : 'mine overhead';
-        }
-        return 'mine';
-      case 'cutTree':
-        return 'cut the tree';
-      case 'move':
-        return 'go there';
-      case 'pickUp':
-        return 'pick it up';
-      default:
-        return 'do it';
-    }
-  }
-
-  /**
-   * A tap (not a drag) at (px, py) pixels from the map's top-left corner
-   * (issue #78). The tap does the cell's one action (`tapAction`) at once,
-   * unless it is risky (`tapIsRisky`: since issue #80 only a yield too heavy
-   * to carry). A risky tap marks the cell and says what the
-   * risk is; a second tap on the same cell within `doubleTapMs` does it. A
-   * tap anywhere else while a cell is marked only clears the mark.
-   */
+  /** A tap (not a drag) at (px, py) pixels from the map's top-left corner. */
   function tap(px: number, py: number): void {
     if (state === null) {
       return;
     }
-    // A tap on the map cancels a Go up / Go down press waiting for its second.
-    if (pendingButton !== null) {
-      clearPending();
-      draw();
-      return;
-    }
     const cell = cellAt(camera, px, py, cellPixels());
-    const action = tapAction(state, viewZ, cell.x, cell.y);
-    if (pending !== null) {
-      const sameCell = pending.x === cell.x && pending.y === cell.y && pending.z === viewZ;
-      const confirmed = sameCell && action !== null && actionKey(action) === pending.key;
-      clearPending();
-      if (confirmed && action !== null) {
-        onChoose(action);
-      } else {
-        draw();
-      }
+    if (cell.x < 0 || cell.y < 0 || cell.x >= state.size.x || cell.y >= state.size.y) {
       return;
     }
-    if (action === null) {
-      showHint(emptyTapHint(state, viewZ, cell.x, cell.y));
-      return;
-    }
-    if (!tapIsRisky(state, action)) {
-      onChoose(action);
-      return;
-    }
-    // Risky: mark the cell and wait for a second tap.
-    pending = { x: cell.x, y: cell.y, z: viewZ, key: actionKey(action) };
-    const warning = choiceWarning(state, action) ?? 'it is risky';
-    showHint(`Tap again to ${tapVerb(state, action)}: ${warning}`, PREVIEW_MAP.doubleTapMs);
-    pendingTimer = setTimeout(() => {
-      clearPending();
-      draw();
-    }, PREVIEW_MAP.doubleTapMs);
-    draw();
+    onTap(cell.x, cell.y);
   }
 
   // ----- Touch and mouse: a drag pans, a pinch zooms, a tap acts -----
@@ -905,7 +664,6 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
       gesture.pinchDistance = fingers.distance;
       gesture.pinchMidX = fingers.midX;
       gesture.pinchMidY = fingers.midY;
-      clearPending();
     }
   });
 
@@ -938,7 +696,6 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
     const dy = event.clientY - gesture.startY;
     if (gesture.kind === 'press' && Math.hypot(dx, dy) > PREVIEW_MAP.dragThresholdPx) {
       gesture.kind = 'drag';
-      clearPending();
     }
     if (gesture.kind === 'drag') {
       camera = panned(gesture.camera, dx, dy, cellPixels(), state.size);
@@ -1002,7 +759,6 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
       // Wheel down (positive deltaY) zooms out: more cells across.
       const cells = camera.cells * Math.exp(event.deltaY * PREVIEW_MAP.wheelZoomRate);
       camera = zoomedAbout(camera, cells, px, py, px, py, frame.clientWidth, state.size);
-      clearPending();
       draw();
       saveZoom(camera.cells);
     },
@@ -1010,113 +766,45 @@ export function createTapMap(onChoose: (action: Action) => void): TapMap {
   );
 
   // ----- The buttons -----
-  /**
-   * Go up or go down (issue #80): the move into the cell above or below, or
-   * the mine of that block (`verticalAction`). Like a tap, a yield too heavy
-   * to carry needs a second press within `doubleTapMs`.
-   */
-  function goVertically(direction: 'up' | 'down'): void {
+  /** Zoom to `cells` across about the middle of what is on screen. */
+  function zoomTo(cells: number): void {
     if (state === null) {
       return;
     }
-    const action = verticalAction(state, direction);
-    const waiting = pendingButton;
-    clearPending();
-    if (action === null) {
-      draw();
-      return;
-    }
-    const key = actionKey(action);
-    const confirmed = waiting !== null && waiting.direction === direction && waiting.key === key;
-    if (confirmed || !tapIsRisky(state, action)) {
-      onChoose(action);
-      return;
-    }
-    pendingButton = { direction, key };
-    const warning = choiceWarning(state, action) ?? 'it is risky';
-    showHint(`Press again to ${tapVerb(state, action)}: ${warning}`, PREVIEW_MAP.doubleTapMs);
-    pendingTimer = setTimeout(() => {
-      clearPending();
-      draw();
-    }, PREVIEW_MAP.doubleTapMs);
+    const middle = frame.clientWidth / 2;
+    camera = zoomedAbout(
+      camera,
+      cells,
+      middle,
+      middle,
+      middle,
+      middle,
+      frame.clientWidth,
+      state.size,
+    );
     draw();
+    saveZoom(camera.cells);
   }
-  goUpButton.addEventListener('click', () => {
-    goVertically('up');
-  });
-  goDownButton.addEventListener('click', () => {
-    goVertically('down');
-  });
-  upButton.addEventListener('click', () => {
-    if (state !== null && viewZ > WORLD.surfaceZ + 1) {
-      viewZ -= 1;
-      clearPending();
-      draw();
-    }
-  });
-  downButton.addEventListener('click', () => {
-    if (state !== null && viewZ < state.size.z - 1) {
-      viewZ += 1;
-      clearPending();
-      draw();
-    }
-  });
-  centreButton.addEventListener('click', () => {
+  wholeButton.addEventListener('click', () => {
     if (state !== null) {
-      // Keeps the zoom; only the position changes.
-      camera = centredOn(state.avatar.pos.x, state.avatar.pos.y, state.size, camera.cells);
-      viewZ = minersMapLayer(state);
-      clearPending();
-      draw();
+      zoomTo(wholeMap(state.size).cells);
     }
   });
   zoomButton.addEventListener('click', () => {
-    if (state !== null) {
-      // Back to the default zoom about the middle of the map, then make sure
-      // the miner's neighbours are still on screen.
-      const middle = frame.clientWidth / 2;
-      camera = zoomedAbout(
-        camera,
-        VIEW_CELLS,
-        middle,
-        middle,
-        middle,
-        middle,
-        frame.clientWidth,
-        state.size,
-      );
-      const here = state.avatar.pos;
-      if (viewZ === minersMapLayer(state)) {
-        camera = followMiner(camera, here.x, here.y, state.size);
-      }
-      clearPending();
-      draw();
-      saveZoom(camera.cells);
-    }
+    zoomTo(VIEW_CELLS);
   });
   window.addEventListener('resize', () => {
     draw();
   });
 
-  function show(next: GameState, fresh: boolean): void {
+  function show(next: GameState, fresh: boolean, nextMarks: MapMarks): void {
     state = next;
-    context = null;
-    clearPending();
-    const here = next.avatar.pos;
-    const layer = minersMapLayer(next);
-    if (fresh || lastMinerLayer !== layer) {
-      // A new run, or the miner changed layer: follow it.
-      viewZ = layer;
-    }
-    if (fresh) {
-      camera = centredOn(here.x, here.y, next.size, clampCells(camera.cells, next.size));
-    } else {
-      // Recentre if the miner, or a cell it could act on next, is off screen.
-      camera = followMiner(camera, here.x, here.y, next.size);
-    }
-    lastMinerLayer = layer;
+    marks = nextMarks;
+    // A new or resumed run starts on the middle of the map, at the zoom the
+    // player last used; otherwise the map stays where the player left it.
+    camera = fresh ? centredOnMiddle(next.size, camera.cells) : clampCamera(camera, next.size);
     draw();
   }
 
-  return { element, show };
+  return { element, legend, show };
 }

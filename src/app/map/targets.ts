@@ -1,158 +1,85 @@
-// What a tap on the map does (issues #66, #78 and #80).
+// What a tap on the map does (issue #86).
 //
-// `actionsForCell` lists, from the legal actions, those that act on the cell
-// tapped:
-// - a move into it, a mine of it, a pick-up from it, cutting the tree in it;
-// - on the miner's own cell, on the miner's layer: also the moves up and down
-//   the same column and mining the block underfoot.
-// A move belongs to the layer it ends on, and a mine to the layer of its
-// block. Layer 0 is the top view (issue #78): it stands for the surface as
-// well, so on it a tap also reaches the walks, cuts and pick-ups on the
-// surface over the cell. The miner on the surface counts as on layer 0.
+// There is no miner and no menu: a tap on a square mines its top block, or
+// cuts its tree if it has one (design doc 11). The text layer decides which
+// (`tapChoice` in ../text/squares.ts, which the play tool's "mine x,y" and
+// "cut x,y" use too) and words a refusal. This file adds what the map needs
+// to show a refusal: which square was tapped, and, for the level rule, which
+// neighbours are too high (design doc 4.2: "a tap on a square the rule
+// forbids says which neighbours are too high").
 //
-// `tapAction` then picks the ONE action a tap does, by a fixed priority
-// (coordinator's reading of issue #78): mining or cutting first, then
-// moving, then taking items. The miner has no gravity (owner, issue #80), so
-// a tap on a solid neighbour mines it and a tap on an open one moves there.
-// A tap on the miner's own cell goes down: it digs the block underfoot, or
-// moves down into the cell below when that is open; it never moves up (the
-// "Go up" button does). There is no menu: anything else is in the full list
-// under the map. Crafting, placing, dropping, leaving and ending the shift
-// are only there.
-//
-// `tapIsRisky` says which taps need a second tap on the same cell: since
-// issue #80 only a yield too heavy to carry.
-//
-// It reads nothing but the actions and the miner's position, so it can say
-// nothing about cells the player has not seen.
+// Everything is read through `knownSquare` and `mineCheck`, which look at
+// nothing below a top block.
 
-import { WORLD } from '../../data';
-import { legalActions } from '../../engine';
-import type { Action, GameState } from '../../engine';
-import { tapActsAtOnce } from '../text/describe';
+import { isRunActive, isSquare, knownSquare, mineCheck } from '../../engine';
+import type { CutTreeAction, GameState, MineAction } from '../../engine';
+import { depthName, topBlockText } from '../text/describe';
+import { squareText, tapChoice } from '../text/squares';
 
-/** The cell an action acts on, or `null` for one that acts on no cell of the map. */
-function actionCell(action: Action): { x: number; y: number; z: number } | null {
-  switch (action.type) {
-    case 'move':
-      return action.to;
-    case 'mine':
-      return action.target;
-    case 'pickUp':
-      return action.from;
-    case 'cutTree':
-      return action.target;
-    default:
-      return null;
-  }
+/** A square of the map. */
+export interface MapSquare {
+  x: number;
+  y: number;
 }
 
-/** The layer the map shows the miner on: the surface is drawn on layer 0, the top view. */
-export function mapLayerOf(z: number): number {
-  return z === WORLD.surfaceZ ? WORLD.surfaceZ + 1 : z;
+/** What the map marks after a tap that was refused. Nothing is marked after one that was taken. */
+export interface MapMarks {
+  /** The square that was tapped, or `null`. */
+  selected: MapSquare | null;
+  /** The neighbours that are too high for the level rule. */
+  tooHigh: MapSquare[];
 }
 
-/** The legal actions that act on cell (x, y) of map layer `viewZ`, in list order. */
-export function actionsForCell(state: GameState, viewZ: number, x: number, y: number): Action[] {
-  const here = state.avatar.pos;
-  const onMinersLayer = viewZ === mapLayerOf(here.z);
-  const isMinersCell = here.x === x && here.y === y;
+/** No marks at all. */
+export const NO_MARKS: MapMarks = { selected: null, tooHigh: [] };
 
-  return legalActions(state).filter((action) => {
-    const cell = actionCell(action);
-    if (cell === null || cell.x !== x || cell.y !== y) {
-      return false;
-    }
-    if (mapLayerOf(cell.z) === viewZ) {
-      return true;
-    }
-    if (onMinersLayer && isMinersCell) {
-      // The moves up and down the miner's column, or mining the block underfoot.
-      return action.type === 'move' || (action.type === 'mine' && cell.z === here.z + 1);
-    }
-    return false;
-  });
-}
-
-/** How a tap ranks an action: lower goes first (issue #78). */
-function tapRank(action: Action): number {
-  switch (action.type) {
-    case 'mine':
-    case 'cutTree':
-      return 0;
-    case 'move':
-      return 1;
-    case 'pickUp':
-      return 2;
-    default:
-      return 3;
-  }
-}
-
-/** True if `action` moves the miner up its own column (issue #80: not a tap on its own cell). */
-function movesUpOwnColumn(state: GameState, action: Action): boolean {
-  const here = state.avatar.pos;
-  return (
-    action.type === 'move' &&
-    action.to.x === here.x &&
-    action.to.y === here.y &&
-    action.to.z < here.z
-  );
+/** What a tap on a square came to. */
+export interface TapOutcome {
+  /** The action to take, or `null` if the tap is refused. */
+  entry: MineAction | CutTreeAction | null;
+  /** The lines to show the player for a refused tap; empty when `entry` is set. */
+  lines: string[];
+  /** What to mark on the map for a refused tap; `NO_MARKS` when `entry` is set. */
+  marks: MapMarks;
 }
 
 /**
- * The one action a tap on cell (x, y) of map layer `viewZ` does, or `null`
- * if it does nothing. Among equals, the first in the action list wins.
- *
- * On the miner's own cell, on the miner's layer, a tap never moves the miner
- * up (issue #80): it digs down, or moves down into an open cell below. On
- * the top view that cell also stands for the surface over the miner, so
- * without this a tap on yourself in an open-bottomed hole would climb out.
+ * One line about the square (x, y), as far as the player knows it:
+ * "x12 y3, depth 2: Stone, gives 1 Stone" or "x4 y4, ground level: a tree".
  */
-export function tapAction(state: GameState, viewZ: number, x: number, y: number): Action | null {
-  const here = state.avatar.pos;
-  const onOwnCell = viewZ === mapLayerOf(here.z) && here.x === x && here.y === y;
-  let best: Action | null = null;
-  for (const action of actionsForCell(state, viewZ, x, y)) {
-    if (onOwnCell && movesUpOwnColumn(state, action)) {
-      continue;
-    }
-    if (best === null || tapRank(action) < tapRank(best)) {
-      best = action;
-    }
+export function squareSummary(state: GameState, x: number, y: number): string {
+  const square = knownSquare(state, x, y);
+  const where = `${squareText(x, y)}, ${depthName(square.depth)}`;
+  if (square.tree) {
+    return `${where}: a tree`;
   }
-  return best;
+  return `${where}: ${topBlockText(state, x, y)}`;
 }
 
 /**
- * True if a tap on `action` needs a second tap first (issue #78). The miner
- * never falls (issue #80), so no move is risky; the one risk left is a yield
- * too heavy to carry, as `tapActsAtOnce` says. The full list still shows
- * every warning.
+ * A tap on the square (x, y): the action it stands for, or why it is refused
+ * and what to mark. Does not change `state`.
  */
-export function tapIsRisky(state: GameState, action: Action): boolean {
-  return !tapActsAtOnce(state, action);
-}
-
-/**
- * What the "▲ Go up" or "▼ Go down" button does now (issue #80), or `null`
- * if it can do nothing (it is then disabled). The map shows one layer, so
- * moving up or down needs a control of its own:
- * - the move into the cell above (or below), if that cell is open;
- * - otherwise the mine of that block, if the engine offers it (below: the
- *   block underfoot; above: only with a support in the miner's cell).
- * Like a tap, it reads only the engine's legal actions.
- */
-export function verticalAction(state: GameState, direction: 'up' | 'down'): Action | null {
-  const here = state.avatar.pos;
-  const z = direction === 'up' ? here.z - 1 : here.z + 1;
-  const isTarget = (cell: { x: number; y: number; z: number }): boolean =>
-    cell.x === here.x && cell.y === here.y && cell.z === z;
-  const legal = legalActions(state);
-  const move = legal.find((action) => action.type === 'move' && isTarget(action.to));
-  if (move !== undefined) {
-    return move;
+export function tapOutcome(state: GameState, x: number, y: number): TapOutcome {
+  const choice = tapChoice(state, x, y);
+  if (choice.entry !== null) {
+    return { entry: choice.entry, lines: [], marks: NO_MARKS };
   }
-  const mine = legal.find((action) => action.type === 'mine' && isTarget(action.target));
-  return mine ?? null;
+  const refusal = choice.refusal ?? 'That cannot be done.';
+  if (!isRunActive(state) || !isSquare(state, x, y)) {
+    return { entry: null, lines: [refusal], marks: NO_MARKS };
+  }
+  // The neighbours the level rule names. A tap on a tree is a cut, which the
+  // level rule never refuses, so nothing is marked for it.
+  const tooHigh: MapSquare[] = [];
+  if (!knownSquare(state, x, y).tree) {
+    for (const neighbour of mineCheck(state, x, y).higherNeighbours) {
+      tooHigh.push({ x: neighbour.x, y: neighbour.y });
+    }
+  }
+  return {
+    entry: null,
+    lines: [`${squareSummary(state, x, y)}.`, refusal],
+    marks: { selected: { x, y }, tooHigh },
+  };
 }

@@ -1,6 +1,6 @@
 # Playing the early preview on a phone
 
-The early preview (issues #64 and #66) is a plain tap screen for the game as it stands on `main`: the same information as `npm run play`, with a coloured map you can drag and tap. It is throwaway; M3 replaces it. You can play it two ways.
+The early preview (issues #64, #66 and #86) is a plain tap screen for the game as it stands on `main`: the same information as `npm run play`, with a coloured top-down map you can drag, pinch and tap. It is throwaway; M3 replaces it. You can play it two ways.
 
 ## In the phone's browser
 
@@ -36,17 +36,17 @@ If Android ever refuses with "App not installed" or a "conflicting package" mess
 
 ## Playing
 
-![The preview at phone width (390 × 844): seed 7 on the top view, after cutting two trees](images/android-preview-top-view.png)
+![The preview at phone width (390 × 844): seed 7 after a small pit, a cut tree, and a tap the level rule refused](images/android-preview-top-down.png)
 
-- The gauges stay at the top. Below them: what came of your last choice, then the map.
-- **The map** shows 16 × 16 cells of one layer as coloured tiles; the legend under it names what is on screen. Cells you have not seen are dark with diagonal lines (they never show what is really there). Cells you have seen but that are not in light now are drawn darker. Each kind of rock has a pattern as well as a colour. Marks on top: you (a red disc with a white ring), torches, loose items (a small white diamond), and gold dots for mineral traces.
-- **The top view.** A run starts on the top layer, with the surface drawn on it: trees (solid dark green; they hide the block under them), and over the blocks you can see, the faint marks of stumps, dirt paths, meadows and stone outcrops. You are drawn on it while you walk on the surface. There is no separate surface layer.
-- **Pinch** with two fingers to zoom: from 8 × 8 cells (big tiles, easy to tap) out to the whole 32 × 32 layer. On a computer the mouse wheel does the same. **16×16** goes back to the usual size, and the phone remembers your zoom.
-- **Drag** the map to look around. **Centre on me** brings it back to you. **Look down** and **Look up** show the layers below the top view (the label says which layer, and the map's border is orange on your own layer). They only change what you see.
-- **▲ Go up** and **▼ Go down**, under the map, move you: into the cell above or below if it is open, or they mine that block if it is solid and in reach (below: the block you stand on; above: only with a support in your cell). Go up is how you climb out of a hole onto the surface. A button that can do nothing is greyed out. Like a tap, a yield too heavy to carry needs a second press.
-- **Tap a cell** and it happens at once, as in Minecraft; there is no menu. The miner has no gravity: it never falls, and moves into any open cell beside it, above or below. Tap a block beside you to break it, an open cell beside you to move into it, and a tree beside you to cut it (the block under it then shows). Tap yourself to go down: it digs the block you stand on and moves you into it, or moves you down if the cell below is already open. A tap on yourself never takes you up. On the layer above you, a tap on your column moves you up into it. Your pick reaches only the blocks beside you (north, east, south, west) and the one you stand on. If a cell offers more than one thing, a tap breaks or cuts first, else moves, else picks up. The rest is in the full list.
-- **A yield too heavy to carry needs a second tap.** That is the one risky tap left. The first tap only marks the cell (a yellow dashed outline) and says why ("Tap again to mine: too heavy to carry: it will be left lying there"). Tap the same cell again within three seconds to do it, or tap anywhere else to cancel.
-- A tap with nothing to do says "Nothing to do there", or "Not enough AP" when the cell would have something with more AP.
-- Everything else (crafting, placing torches, dropping, leaving, ending the shift) is in **All actions** under the map: tap it to unfold the full list.
-- The run is saved on the phone after every choice and resumed when you open the game again.
+There is no miner. You look down on the whole surface and tap squares (design doc v0.2; issue #86).
+
+- The gauges stay at the top. Below them: the map, then what came of your last tap, then **End shift**.
+- **The map** is the whole 32 × 32 surface from above. Each square shows its top block as a coloured, patterned tile; the legend at the bottom of the page names what is on screen. A square you have dug is **darker the deeper it is**, shows its depth as a number, and has a shadow along each side where the square beside it is higher, so the terraces of a pit read at a glance. Trees are solid dark green and hide the block under them. Stumps, dirt paths, meadows and stone outcrops are faint marks over the block. Gold dots are mineral traces. There are no layers: only the top level is ever shown.
+- **Tap a square** and it happens at once; there is no menu. A tap on a tree cuts it (2 AP, 2 timber; the block under it then shows). A tap on any other square mines its top block, wherever it is on the map.
+- **A tap the rules refuse** changes nothing. The reason appears under the map, with the square's depth and block, and the square gets a yellow dashed outline. If it is the level rule (a square may be mined only when no square beside it is higher), the squares that are too high get **red dashed outlines**: mine those first. Too little AP is also said there. The outlines go at your next tap or choice.
+- **Zoom.** The map starts on its middle, showing 14 squares across, so each square is big enough to tap. **Pinch** with two fingers to zoom, from 8 squares across out to all 32; on a computer the mouse wheel does the same. **Whole map** shows everything at once (squares are then about 11 px on a phone: good for looking, fiddly for tapping), and **Zoom in** goes back to 14 across. The phone remembers your zoom.
+- **Drag** the map to look around. A drag or a pinch is never taken for a tap.
+- **End shift** is the wide button under the map. Crafting and leaving are in **Other actions** below it; leaving asks first, because it ends the run.
+- No tap needs a second tap any more. The double tap of earlier builds guarded a fall, and then a yield too heavy to carry; there are no falls, and the carry limit is not enforced (decision note 0026).
+- The run is saved on the phone after every choice and resumed when you open the game again. A run saved by a build from before mining by square cannot be replayed: the app says so once and starts a new run.
 - **Restart** plays the same seed again from the start. **New run** asks for a seed (a random one is filled in); the same seed always makes the same cube.
