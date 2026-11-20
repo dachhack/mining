@@ -11,10 +11,39 @@ Task T15 (issue #108), for the owner's question 85: "Measure first." Engine 0.4.
    - (a) shallower bands: runs reach the middle band (79% to 100%), but at most 4% release water or gas, because pockets are few and only the bottom few squares of a pit are in the band;
    - (b) more fuel or AP: runs reach depth 8 (67% to 100%), but at most 2% release water or gas, for the same reason;
    - (c) larger slump limits: almost no effect (19% reach depth 8 today, 27% with every limit 2 higher).
-5. **Combinations do work, if pocket and ore density go up too.** Three candidate settings are measured below (table 9). Under each, a careful player releases water or gas in about half of runs and mines ore in 6 or 7 runs of 10, and a greedy player is still buried every time. Each needs four numbers to change: where the bands start, the starting fuel, how many pockets, how many ore veins.
+5. **Combinations do work, if pocket and ore density go up too.** Three candidate settings are measured below (table 9). Under each, a careful player releases water or gas in about half of runs (49% to 60%) and mines ore in 65% to 75%, and a greedy player is still buried every time. Each needs four numbers to change: where the bands start, the starting fuel, how many pockets, how many ore veins.
 6. **Two things the survey found on the way:** a pit in a corner costs about a third of a pit in the middle, so a careful player always digs in a corner (question 129); and the starting camp makes a careful digger slightly worse off, not better (table 10; question 130).
 
 The choice is the owner's: question 128 in `docs/owner-questions.md`.
+
+## What the owner chose, and what it did
+
+**Added after the survey (2026-11-20, issue #108).** Everything from "How it was measured" down describes the game before the choice: 24 fuel, the middle band at layer 8. The owner chose:
+
+- **candidate C:** the middle band starts at layer 4 and the deep band at 12; starting fuel 72; six times as many water and gas pockets; three times as many iron and copper veins;
+- **camps worth founding:** the cheaper mining reaches 8 steps (was 4) and a camp's upkeep comes every 8 shifts (was 4);
+- **corner pits:** left as they are.
+
+Those numbers are now in `src/data` (decision note 0040). Measured again on the real data, 300 seeds for each policy (tables A1 to A5 at the end):
+
+|                                                             | Before                   | After                    |
+| ----------------------------------------------------------- | ------------------------ | ------------------------ |
+| Careful pit planned 8 deep (`terrace:8`): finished it       | 18%                      | 89%                      |
+| ... mined iron or copper                                    | 0%                       | 57%                      |
+| ... released water / released gas                           | 0% / 0%                  | 24% / 20%                |
+| ... crew was hurt / crew lost                               | 0% / 0%                  | 39% / 11% (all poisoned) |
+| ... shifts played (median)                                  | 45                       | 67                       |
+| Benched pit in the middle (`pit`): deepest square (median)  | 3                        | 5                        |
+| ... mined ore / released water / released gas               | 0% / 0% / 0%             | 16% / 19% / 10%          |
+| ... shifts played (median)                                  | 45                       | 99                       |
+| Greedy player buried                                        | 100%                     | 100%                     |
+| Careful pit 8 deep with a camp against without: finished it | 41% against 48% (7 deep) | 94% against 89%          |
+
+- The hazards are part of normal play now, and the camp pays for itself.
+- **Every crew lost by the careful script is lost to gas.** The script digs on in gas without a vent; a person who heeds pitted rock, or makes a vent, should not. That is the first thing for the M2 playtest round to look at.
+- Lava and unstable ore are still never met: the deep band starts at 12 and no run gets below 10.
+- A careful run now takes 34 to 99 shifts, against the design doc's target of 150 to 250 for a finished contract.
+- The 60%, 75% and 24% quoted for candidate C in table 9 are for a pit planned 10 deep (`terrace:10`), measured with exactly these numbers; the table above gives the pit planned 8 deep, which most runs finish.
 
 ## How it was measured
 
@@ -167,7 +196,7 @@ npm run sim -- --survey candidates --runs 200 --max-shifts 400   # table 9
 npm run sim -- --survey camp --runs 300        # table 10
 ```
 
-The same command always prints the same tables. The trials are in `tools/whatIf.ts`, the candidates in `tools/survey.ts`.
+The same command always prints the same tables. The trials are in `tools/whatIf.ts`, the candidates in `tools/survey.ts`. The three commands above reproduce tables 1 to 10 only on the commit that merged this survey (PR #113): the trials are written as changes from the numbers of that day, and the numbers have since changed. To measure the game as it is now, use `npm run sim -- --survey depth-now --runs 300`.
 
 ## The tables
 
@@ -406,3 +435,79 @@ Camp survey: engine 0.4.0, seeds 1 to 300 (300 runs a row). The terracing policy
 | 2 AP off a mine near the camp                                             | with a camp    | 122 (41%)                 | 5.65                 | 81.8               | 39.3                |
 | Cheaper mining reaches 8 steps                                            | with a camp    | 128 (43%)                 | 5.79                 | 83.0               | 37.3                |
 | Reaches 8 steps and upkeep every 8 shifts                                 | with a camp    | 152 (51%)                 | 6.03                 | 84.9               | 38.4                |
+
+## After the owner's choice: the main tables again
+
+The output of `npm run sim -- --survey depth-now --runs 300` on the data of decision note 0040, pasted unchanged but for the table numbers (A1 to A5).
+
+Depth survey: engine 0.4.0, seeds 1 to 300 (300 runs for each policy), standard loadout, shift cap 300.
+
+### Table A1. How deep runs get
+
+The deepest square is the most levels any one square went down by mining. 0 is untouched ground; the middle band, where water, gas, iron and copper begin, starts at 4.
+
+| Policy         | Runs | Deepest square: median (min to max) | mean | Shifts played: median (min to max) | Blocks mined: median (min to max) | Trees cut: median |
+| -------------- | ---- | ----------------------------------- | ---- | ---------------------------------- | --------------------------------- | ----------------- |
+| random         | 300  | 1 (1 to 1)                          | 1.00 | 73 (72 to 91)                      | 51 (28 to 72)                     | 41.5              |
+| greedy         | 300  | 3 (3 to 4)                          | 3.03 | 15 (8 to 24)                       | 35 (22 to 65)                     | 14                |
+| camp           | 300  | 3 (2 to 7)                          | 3.78 | 17 (9 to 115)                      | 48 (23 to 273)                    | 15                |
+| pit            | 300  | 5 (4 to 6)                          | 4.78 | 99 (75 to 228)                     | 248 (168 to 569)                  | 68                |
+| terrace        | 300  | 6 (6 to 6)                          | 6.00 | 34 (29 to 44)                      | 61 (56 to 76)                     | 14                |
+| terrace:8      | 300  | 8 (6 to 8)                          | 7.86 | 67 (46 to 78)                      | 124 (109 to 140)                  | 24                |
+| terrace:8:camp | 300  | 8 (6 to 8)                          | 7.92 | 58 (46 to 75)                      | 125 (110 to 140)                  | 24                |
+
+### Table A2. How runs end
+
+| Policy         | Mine closed (alive) | Out of fuel | Crew lost: buried | Crew lost: drowned | Crew lost: burned | Crew lost: poisoned | Still going at the shift cap |
+| -------------- | ------------------- | ----------- | ----------------- | ------------------ | ----------------- | ------------------- | ---------------------------- |
+| random         | 0                   | 300         | 0                 | 0                  | 0                 | 0                   | 0                            |
+| greedy         | 0                   | 0           | 300               | 0                  | 0                 | 0                   | 0                            |
+| camp           | 32                  | 0           | 267               | 1                  | 0                 | 0                   | 0                            |
+| pit            | 299                 | 0           | 0                 | 0                  | 0                 | 1                   | 0                            |
+| terrace        | 300                 | 0           | 0                 | 0                  | 0                 | 0                   | 0                            |
+| terrace:8      | 268                 | 0           | 0                 | 0                  | 0                 | 32                  | 0                            |
+| terrace:8:camp | 282                 | 0           | 0                 | 1                  | 0                 | 17                  | 0                            |
+
+### Table A3. The deepest square, run by run
+
+Each cell is the number of runs whose deepest square was at that depth.
+
+| Deepest square | random | greedy | camp | pit | terrace | terrace:8 | terrace:8:camp |
+| -------------- | ------ | ------ | ---- | --- | ------- | --------- | -------------- |
+| 0              | 0      | 0      | 0    | 0   | 0       | 0         | 0              |
+| 1              | 300    | 0      | 0    | 0   | 0       | 0         | 0              |
+| 2              | 0      | 0      | 1    | 0   | 0       | 0         | 0              |
+| 3              | 0      | 292    | 182  | 0   | 0       | 0         | 0              |
+| 4              | 0      | 8      | 55   | 73  | 0       | 0         | 0              |
+| 5              | 0      | 0      | 18   | 221 | 0       | 0         | 0              |
+| 6              | 0      | 0      | 32   | 6   | 300     | 11        | 5              |
+| 7              | 0      | 0      | 12   | 0   | 0       | 21        | 13             |
+| 8              | 0      | 0      | 0    | 0   | 0       | 268       | 282            |
+
+### Table A4. What runs met
+
+Each cell is the number of runs in which it happened at least once.
+
+| Policy         | Saw mineral traces | Mined iron, copper or crystal | A block cracked | A block slumped | Broke into a cavern | Saw damp stone | Released water | Saw pitted rock | Released gas | Saw warm glow | Released lava | Saw unstable ore | Crew was hurt |
+| -------------- | ------------------ | ----------------------------- | --------------- | --------------- | ------------------- | -------------- | -------------- | --------------- | ------------ | ------------- | ------------- | ---------------- | ------------- |
+| random         | 0 (0%)             | 0 (0%)                        | 0 (0%)          | 0 (0%)          | 82 (27%)            | 0 (0%)         | 0 (0%)         | 0 (0%)          | 0 (0%)       | 0 (0%)        | 0 (0%)        | 0 (0%)           | 0 (0%)        |
+| greedy         | 159 (53%)          | 0 (0%)                        | 300 (100%)      | 300 (100%)      | 41 (14%)            | 16 (5.3%)      | 0 (0%)         | 2 (0.7%)        | 0 (0%)       | 0 (0%)        | 0 (0%)        | 0 (0%)           | 300 (100%)    |
+| camp           | 210 (70%)          | 29 (9.7%)                     | 300 (100%)      | 300 (100%)      | 65 (22%)            | 52 (17%)       | 23 (7.7%)      | 22 (7.3%)       | 9 (3.0%)     | 0 (0%)        | 0 (0%)        | 0 (0%)           | 300 (100%)    |
+| pit            | 297 (99%)          | 47 (16%)                      | 300 (100%)      | 0 (0%)          | 164 (55%)           | 140 (47%)      | 58 (19%)       | 78 (26%)        | 30 (10%)     | 0 (0%)        | 0 (0%)        | 0 (0%)           | 74 (25%)      |
+| terrace        | 219 (73%)          | 69 (23%)                      | 300 (100%)      | 0 (0%)          | 51 (17%)            | 44 (15%)       | 30 (10%)       | 35 (12%)        | 20 (6.7%)    | 0 (0%)        | 0 (0%)        | 0 (0%)           | 35 (12%)      |
+| terrace:8      | 278 (93%)          | 170 (57%)                     | 299 (100%)      | 0 (0%)          | 78 (26%)            | 107 (36%)      | 72 (24%)       | 83 (28%)        | 60 (20%)     | 0 (0%)        | 0 (0%)        | 0 (0%)           | 118 (39%)     |
+| terrace:8:camp | 279 (93%)          | 170 (57%)                     | 300 (100%)      | 0 (0%)          | 78 (26%)            | 108 (36%)      | 72 (24%)       | 83 (28%)        | 60 (20%)     | 0 (0%)        | 0 (0%)        | 0 (0%)           | 118 (39%)     |
+
+### Table A5. The terracing policy, by the depth it plans for
+
+The terracing policy plans its pit for one target depth and closes the mine when the pit is finished, so no run goes deeper than its target. The `terrace` column of tables 1 to 4 is target 6.
+
+| Target depth | Runs that reached it | Deepest square: median (min to max) | Shifts played: median (min to max) | Blocks mined: median | Fuel made from coal: mean | Supports placed: mean | Trees cut: median | Crew was hurt |
+| ------------ | -------------------- | ----------------------------------- | ---------------------------------- | -------------------- | ------------------------- | --------------------- | ----------------- | ------------- |
+| 4            | 300 (100%)           | 4 (4 to 4)                          | 14 (9 to 22)                       | 25                   | 0.0                       | 5.2                   | 7                 | 0 (0%)        |
+| 5            | 300 (100%)           | 5 (5 to 5)                          | 22 (17 to 32)                      | 40                   | 0.0                       | 10.0                  | 10                | 8 (2.7%)      |
+| 6            | 300 (100%)           | 6 (6 to 6)                          | 34 (29 to 44)                      | 61                   | 0.0                       | 16.0                  | 14                | 35 (12%)      |
+| 7            | 295 (98%)            | 7 (6 to 7)                          | 48 (41 to 59)                      | 89                   | 0.0                       | 23.3                  | 19                | 71 (24%)      |
+| 8            | 268 (89%)            | 8 (6 to 8)                          | 67 (46 to 78)                      | 124                  | 2.7                       | 30.1                  | 24                | 118 (39%)     |
+| 9            | 119 (40%)            | 8 (5 to 9)                          | 87 (48 to 102)                     | 166                  | 17.0                      | 32.9                  | 28.5              | 156 (52%)     |
+| 10           | 20 (6.7%)            | 7 (5 to 10)                         | 90 (55 to 137)                     | 199                  | 22.9                      | 22.6                  | 33                | 179 (60%)     |
