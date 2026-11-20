@@ -48,7 +48,7 @@ A scan is the one sanctioned way to learn what lies below a top. The tests say s
 ### Views
 
 - **Play tool.** `pump X,Y`, `seal X,Y` and `scan X,Y` are taken by name like a mine, and their lines show once the tool is held. A scan prints what it showed, square by square. The notes say where pumps stand and what is known under the tops (ore, a pocket, a cavern). `look X,Y` is the play tool's "hold a square": it lists what is known of one square, does nothing, and is not written to the log. `--help` has a "Camp tools" section.
-- **Phone map.** The tool bar gains "Place pump (n)", "Seal (n)", "Scan (n)" (each shown while one is held) and "Look". A pump and a scan take two taps: the first marks the range in light blue, the second takes it (question 118). Holding a square for half a second lists its known blocks with any tool. A pump is a blue disc with a "P". A square with known blocks below carries a gold diamond (ore), a blue disc (a pocket), a ring (a cavern) or a grey bar (plain rock); the legend names each.
+- **Phone map.** The tool bar gains "Place pump (n)", "Seal (n)", "Scan (n)" (each shown while one is held) and "Inspect" (not "Look": an older test keeps that name free of the v0.1 layer buttons). A pump and a scan take two taps: the first marks the range in light blue, the second takes it (question 118). Holding a square for half a second lists its known blocks with any tool. A pump is a blue disc with a "P". A square with known blocks below carries a gold diamond (ore), a blue disc (a pocket), a ring (a cavern) or a grey bar (plain rock); the legend names each.
 
 ## The vent
 

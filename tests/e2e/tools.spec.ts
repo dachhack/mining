@@ -55,7 +55,7 @@ test('sealant is crafted and used from the tool bar; look and hold list a square
   await expect(sealTool).toBeHidden();
   await expect(page.getByTestId('tool-pump')).toBeHidden();
   await expect(page.getByTestId('tool-scan')).toBeHidden();
-  await expect(lookTool).toHaveText('Look');
+  await expect(lookTool).toHaveText('Inspect');
 
   // Shift 1: found a camp. Shift 2: mine stone and coal near it.
   await page.getByTestId('tool-camp').click();

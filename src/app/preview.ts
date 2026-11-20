@@ -272,7 +272,7 @@ export function mountPreview(root: HTMLElement): void {
     showTool(pumpTool, 'pump', `Place pump (${held.pumps})`, held.pumps > 0);
     showTool(sealTool, 'seal', `Seal (${held.sealant})`, held.sealant > 0);
     showTool(scanTool, 'scan', `Scan (${held.charges})`, held.charges > 0);
-    showTool(lookTool, 'look', 'Look', true);
+    showTool(lookTool, 'look', 'Inspect', true);
     toolBar.hidden = view.ended !== null;
     if (tool === 'support') {
       toolHint.textContent = 'A tap places a support. Tap the button again to go back to mining.';
