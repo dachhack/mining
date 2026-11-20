@@ -15,7 +15,6 @@
 
 import { HAZARDS, STRUCTURES } from '../data';
 import {
-  copyDepthMap,
   depthIn,
   depthMapOf,
   footIn,
@@ -171,24 +170,68 @@ export function unstableSquares(state: GameState): UnstableSquare[] {
  *
  * Whether the mine is allowed is not looked at: ask `mineCheck` for that.
  * Throws if (x, y) is not a square. Changes nothing.
+ *
+ * `depths` may be given by a caller that asks about many squares of the same
+ * state (a simulator policy): `depthMapOf(state)`, worked out once. It is
+ * handed back unchanged.
+ *
+ * ONLY SQUARES NEAR THE MINE ARE LOOKED AT, because no other square can
+ * change. Say the mined square is at depth d. A square's answer depends on
+ * the squares beside it and on its slide path. The mine changes the path of a
+ * square q only if that path comes to the mined square or to a square beside
+ * it that would now step into it; such a square is at depth d or less. Every
+ * step of a path goes at least 1 level down and depths start at 0, so the
+ * path has taken at most d steps by then. So q is within d + 1 steps of the
+ * mined square. (A test checks this against looking at every square.)
  */
-export function unstableAfterMine(state: GameState, x: number, y: number): UnstableSquare[] {
-  const before = depthMapOf(state);
-  const depth = depthIn(before, x, y);
+export function unstableAfterMine(
+  state: GameState,
+  x: number,
+  y: number,
+  depths?: DepthMap,
+): UnstableSquare[] {
+  const map = depths ?? depthMapOf(state);
+  const depth = depthIn(map, x, y);
   if (depth >= state.size.z) {
     return [];
   }
-  const after = copyDepthMap(before);
-  setDepthIn(after, x, y, depth + 1);
+  const reach = depth + 1;
 
+  // The squares within `reach` steps, row by row (y, then x).
+  const near: Square[] = [];
+  for (let ny = Math.max(0, y - reach); ny <= Math.min(map.height - 1, y + reach); ny += 1) {
+    for (let nx = Math.max(0, x - reach); nx <= Math.min(map.width - 1, x + reach); nx += 1) {
+      const steps = Math.abs(nx - x) + Math.abs(ny - y);
+      if (steps > 0 && steps <= reach) {
+        near.push({ x: nx, y: ny }); // `steps > 0` leaves out the mined square: see above
+      }
+    }
+  }
+
+  // Which of them are stable now?
+  const stableNow = near.filter((square) => !stabilityIn(state, map, square.x, square.y).unstable);
+
+  // And which of those would be unstable with (x, y) one level deeper? The
+  // table is changed for the question and put back afterwards (`finally`
+  // runs even if something throws), so the caller's table is never left
+  // changed.
   const made: UnstableSquare[] = [];
-  for (const square of unstableSquaresIn(state, after)) {
-    if (square.x === x && square.y === y) {
-      continue; // the mined square: see above
+  setDepthIn(map, x, y, depth + 1);
+  try {
+    for (const square of stableNow) {
+      const check = stabilityIn(state, map, square.x, square.y);
+      if (check.unstable && check.reason !== null) {
+        made.push({
+          x: square.x,
+          y: square.y,
+          reason: check.reason,
+          foot: check.foot,
+          fall: check.fall,
+        });
+      }
     }
-    if (!stabilityIn(state, before, square.x, square.y).unstable) {
-      made.push(square);
-    }
+  } finally {
+    setDepthIn(map, x, y, depth);
   }
   return made;
 }

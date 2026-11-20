@@ -325,6 +325,8 @@ export { shiftsUntilRegrowth } from './surface/regrowth';
 // true cube, under a tree too: a view must use `knownSquare` instead.
 export {
   depthAt,
+  depthIn,
+  depthMapOf,
   fallOf,
   footOf,
   isSquare,

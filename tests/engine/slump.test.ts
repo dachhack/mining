@@ -828,6 +828,43 @@ describe('what the player is told (design doc 6.1 and 11)', () => {
     expect(unstableAfterMine(pit(['011'], ['ddd'], { surface: ['T..'] }), 2, 0)).toEqual([]);
   });
 
+  it('looking only near the mine gives the same answer as looking at every square', () => {
+    // `unstableAfterMine` looks only at squares within (depth + 1) steps of
+    // the mine. Here the same question is answered the slow way, for every
+    // square of 30 random pits: every square's stability before, and again
+    // on a copy of the cube with the mined column one level deeper.
+    const materials = 'dR#Hxci';
+    for (let seed = 1; seed <= 30; seed += 1) {
+      const rng = createRng(seed);
+      const size = 4 + nextInt(rng, 5);
+      const depthRows: string[] = [];
+      const materialRows: string[] = [];
+      for (let y = 0; y < size; y += 1) {
+        let depthRow = '';
+        let materialRow = '';
+        for (let x = 0; x < size; x += 1) {
+          depthRow += String(nextInt(rng, 6));
+          materialRow += materials.charAt(nextInt(rng, materials.length));
+        }
+        depthRows.push(depthRow);
+        materialRows.push(materialRow);
+      }
+      const state = buildState({ layers: terrainLayers(depthRows, materialRows, 8) });
+      const unstableBefore = new Set(unstableSquares(state).map((s) => `${s.x},${s.y}`));
+      for (let y = 0; y < size; y += 1) {
+        for (let x = 0; x < size; x += 1) {
+          // The slow way: take the top block away on a copy and ask again.
+          const deeper = structuredClone(state);
+          setBlock(deeper, { x, y, z: depthAt(state, x, y) }, BLOCKS.air.code);
+          const expected = unstableSquares(deeper).filter(
+            (s) => !(s.x === x && s.y === y) && !unstableBefore.has(`${s.x},${s.y}`),
+          );
+          expect(unstableAfterMine(state, x, y), `seed ${seed}, mine ${x},${y}`).toEqual(expected);
+        }
+      }
+    }
+  });
+
   it('does not name a square that is unstable already', () => {
     const state = pit(['0122'], ['dddd']);
     expect(unstableSquares(state).map((square) => square.x)).toEqual([0]);
