@@ -1,4 +1,4 @@
-// Text play interface: play a run in a terminal, seeing only what the avatar
+// Text play interface: play a run in a terminal, seeing only what the player
 // could know. This is what playtest agents use (docs/agent-plan.md 3.1).
 //
 //   npm run play -- --help
@@ -31,9 +31,9 @@ async function interactive(options: CliOptions): Promise<void> {
   if (options.logPath !== null && opened.isNew) {
     saveLog(options.logPath, session.log);
   }
-  console.log([...opened.notes, sessionView(session, options)].join('\n'));
+  console.log([...opened.notes, sessionView(session)].join('\n'));
 
-  const prompt = 'Choice (a number or a name from the list, or "q" to stop)> ';
+  const prompt = 'Choice ("mine X,Y", "cut X,Y", a number or name from the list, or "q" to stop)> ';
   // `for await` reads the lines of standard input one at a time as they
   // arrive, and ends when the input is closed (Ctrl-D, or the end of a pipe).
   const lines = createInterface({ input: process.stdin });
@@ -56,7 +56,7 @@ async function interactive(options: CliOptions): Promise<void> {
     if (result.refused !== null) {
       output.push(result.refused);
     }
-    output.push(sessionView(session, options));
+    output.push(sessionView(session));
     console.log(output.join('\n'));
     if (!isRunActive(session.state)) {
       break;

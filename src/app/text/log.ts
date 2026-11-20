@@ -15,6 +15,7 @@ import {
   ENGINE_VERSION,
   applyAction,
   createRun,
+  depthAt,
   endShift,
   hashState,
   inventoryEntries,
@@ -23,8 +24,12 @@ import {
 } from '../../engine';
 import type { Action, GameEvent, GameState } from '../../engine';
 
-/** Bumped if the shape of the log file ever changes. */
-export const LOG_FORMAT = 1;
+/**
+ * Bumped if the shape of the log file ever changes. 2: mine and cut actions
+ * name a square (x, y), and the outcome holds `deepestDepth` where format 1
+ * held the miner's `deepestLayer` (issue #86).
+ */
+export const LOG_FORMAT = 2;
 
 /** "End shift" is not an engine action (it is `endShift`), so the log has its own entry for it. */
 export interface EndShiftEntry {
@@ -41,8 +46,8 @@ export interface LogOutcome {
   outcome: string;
   cause: string;
   shiftsPlayed: number;
-  /** The deepest layer the avatar stood on; -1 means it never left the surface. */
-  deepestLayer: number;
+  /** The depth of the deepest square of the map; 0 means nothing was dug. */
+  deepestDepth: number;
   inventory: ItemStack[];
   /** `hashState` of the final state, so a replay can be checked against it. */
   stateHash: string;
@@ -59,11 +64,12 @@ export interface PlayLog {
   outcome: LogOutcome | null;
 }
 
-/** A run in progress: its log, the state the log leads to, and the deepest layer reached. */
+/** A run in progress: its log, the state the log leads to, and the deepest square dug. */
 export interface Session {
   log: PlayLog;
   state: GameState;
-  deepestZ: number;
+  /** The greatest depth any square has been mined to in this run. */
+  deepestDepth: number;
 }
 
 /** Start a new run. Throws (from `createRun`) on a bad seed or unknown id. */
@@ -80,19 +86,30 @@ export function newSession(seed: number, contractId: string, loadoutId: string):
       outcome: null,
     },
     state,
-    deepestZ: state.avatar.pos.z,
+    deepestDepth: 0,
   };
 }
 
 /**
- * What the player may choose now, in menu order: the engine's legal actions,
- * then "end shift". Empty once the run has ended.
+ * Everything the player may choose now: the engine's legal actions, then
+ * "end shift". Empty once the run has ended. On a fresh map this is some
+ * 1,700 entries, nearly all of them a mine or a cut of one square.
  */
 export function menuChoices(state: GameState): LogEntry[] {
   if (!isRunActive(state)) {
     return [];
   }
   return [...legalActions(state), END_SHIFT];
+}
+
+/**
+ * The choices that are printed as a list, in menu order: every legal action
+ * that is not a mine or a cut of a square (crafting, leaving), then "end
+ * shift". Mines and cuts are named by their square instead ("mine 3,4"; see
+ * squares.ts). Empty once the run has ended.
+ */
+export function listedChoices(state: GameState): LogEntry[] {
+  return menuChoices(state).filter((entry) => entry.type !== 'mine' && entry.type !== 'cutTree');
 }
 
 /**
@@ -106,7 +123,11 @@ export function step(session: Session, entry: LogEntry): GameEvent[] {
     entry.type === 'endShift' ? endShift(session.state) : applyAction(session.state, entry);
   session.state = result.state;
   session.log.actions.push(entry);
-  session.deepestZ = Math.max(session.deepestZ, result.state.avatar.pos.z);
+  if (entry.type === 'mine') {
+    // Only the player's own mining is counted: the depth of the square just
+    // mined. (A depth is seen by the player, so this reads nothing hidden.)
+    session.deepestDepth = Math.max(session.deepestDepth, depthAt(result.state, entry.x, entry.y));
+  }
 
   const status = result.state.status;
   if (status.kind === 'ended') {
@@ -114,7 +135,7 @@ export function step(session: Session, entry: LogEntry): GameEvent[] {
       outcome: status.outcome,
       cause: status.cause,
       shiftsPlayed: result.state.shift - SHIFT.firstShiftNumber + 1,
-      deepestLayer: session.deepestZ,
+      deepestDepth: session.deepestDepth,
       inventory: inventoryEntries(result.state),
       stateHash: hashState(result.state),
     };
