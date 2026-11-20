@@ -597,6 +597,42 @@ describe('property tests: hidden blocks change nothing the player gets (issue #8
     60000,
   );
 
+  it.each([8, 31])(
+    'seed %i, with scans: a tell on a scanned block also depends only on cells within its reach',
+    (seed) => {
+      // The same in a run that scans (issue #107): a scanned block shows its
+      // tells too, so the cells near it are kept as well as those near a top.
+      const scrambler = createRng(seed + 11000);
+      let compared = 0;
+      let scans = 0;
+      let comparedAfterScan = 0;
+      playRandomly(
+        seed,
+        60,
+        (state, label, decision) => {
+          if (decision !== null && decision !== 'endShift' && decision.type === 'scan') {
+            scans += 1;
+          }
+          compared += 1;
+          if (compared % 6 !== 1 || !isRunActive(state)) {
+            return;
+          }
+          if (scans > 0) {
+            comparedAfterScan += 1;
+          }
+          const farOnly = scrambleHidden(state, scrambler, TELL_REACH);
+          expect(snapshot(farOnly) === snapshot(state), `${label}: scramble`).toBe(false);
+          expect(playerSees(farOnly, true) === playerSees(state, true), label).toBe(true);
+        },
+        TOOL_KIT,
+        ['mine', 'seal'],
+      );
+      expect(scans).toBeGreaterThan(0);
+      expect(comparedAfterScan).toBeGreaterThan(0);
+    },
+    60000,
+  );
+
   it('ending the shift shows the same events whatever is hidden, tells apart', () => {
     const state = createRun(21, CONTRACT, DEFAULT_LOADOUT_ID);
     const other = scrambleHidden(state, createRng(77));

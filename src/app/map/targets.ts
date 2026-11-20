@@ -176,8 +176,8 @@ export function squareSummary(state: GameState, x: number, y: number): string {
  * or why it is not taken and what to mark. Does not change `state`.
  *
  * `confirmed` is true for the second tap in a row on the same square. A mine
- * that would make squares unstable is taken only then; the first tap shows
- * the warning and marks those squares. A pump and a scan are also taken only
+ * or a seal that would make squares unstable is taken only then; the first
+ * tap shows the warning and marks those squares. A pump and a scan are also taken only
  * at the second tap: the first marks their range.
  */
 export function tapOutcome(
@@ -231,7 +231,9 @@ export function tapOutcome(
       lines: [
         `${squareSummary(state, x, y)}.`,
         choice.warning,
-        'Tap the square again to mine it all the same.',
+        tool === 'seal'
+          ? 'Tap the square again to seal it all the same.'
+          : 'Tap the square again to mine it all the same.',
       ],
       marks: {
         selected: { x, y },

@@ -188,6 +188,16 @@ export interface PlayerView {
   choices: ChoiceView[];
 }
 
+/**
+ * How the note about what is known under the tops begins. Each view adds its
+ * own hint to that note for how to list a square's known blocks: the play
+ * tool's is "look X,Y" (`renderMap`), the phone's is Inspect or a hold.
+ */
+export const KNOWN_BELOW_NOTE = 'Known under the tops (scanned, or buried after you saw it):';
+
+/** The play tool's hint for the note above. */
+const LOOK_HINT = '"look X,Y" lists what you know under a square.';
+
 /** The two characters of one square, and what its first character means (for the legend). */
 interface SquareCellView {
   text: string;
@@ -496,9 +506,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
     if (underPocket.length > 0) marked.push(`a pocket under ${underPocket.join(', ')}`);
     if (underCavern.length > 0) marked.push(`a cavern under ${underCavern.join(', ')}`);
     notes.push(
-      'Known under the tops (scanned, or buried after you saw it): ' +
-        `${marked.length === 0 ? 'plain rock only' : marked.join('; ')}. ` +
-        '"look X,Y" lists what you know under a square.',
+      `${KNOWN_BELOW_NOTE} ` + `${marked.length === 0 ? 'plain rock only' : marked.join('; ')}.`,
     );
   }
   notes.push(...campNotes(state));
@@ -726,7 +734,11 @@ export function renderMap(view: PlayerView): MapText {
   map.rows.forEach((row, y) => {
     grid.push(`y${String(y).padStart(3, ' ')} ${row}`);
   });
-  const after = [`Legend: ${view.legend.join(' | ')}`, ...view.notes];
+  // The play tool lists a square's known blocks with "look X,Y".
+  const notes = view.notes.map((note) =>
+    note.startsWith(KNOWN_BELOW_NOTE) ? `${note} ${LOOK_HINT}` : note,
+  );
+  const after = [`Legend: ${view.legend.join(' | ')}`, ...notes];
   return { header, grid, after };
 }
 

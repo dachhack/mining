@@ -13,10 +13,12 @@
 // see a slump coming, and the warnings built on these functions cannot leak
 // anything hidden.
 
-import { HAZARDS, STRUCTURES } from '../data';
+import { BLOCKS, CAMP_TOOLS, HAZARDS, STRUCTURES } from '../data';
+import type { BlockId } from '../data';
 import {
   depthIn,
   depthMapOf,
+  fallIn,
   footIn,
   lowestNeighbourIn,
   setDepthIn,
@@ -232,6 +234,57 @@ export function unstableAfterMine(
     }
   } finally {
     setDepthIn(map, x, y, depth);
+  }
+  return made;
+}
+
+/**
+ * The squares that sealing square (x, y) would make unstable (design doc 6.1
+ * and 7.2; issue #107): the squares that are stable now and would be unstable
+ * with (x, y) one level higher and sealed rock on top of it. Row by row.
+ *
+ * The sealed square itself is the usual one: sealant raises it by 1, so its
+ * fall grows by 1, and at the top of a run of steps that can be more than
+ * sealed rock holds. It is never "steep": a square with a deeper neighbour
+ * cannot be sealed. Raising a square can also turn another square's slide
+ * path towards a deeper foot, so every other square is asked too.
+ *
+ * For a square that cannot be sealed (ground level, or no such square) the
+ * list is empty. Like `unstableAfterMine`, it reads only what the player
+ * sees. Does not change `state`.
+ */
+export function unstableAfterSeal(state: GameState, x: number, y: number): UnstableSquare[] {
+  const before = depthMapOf(state);
+  const depth = depthIn(before, x, y);
+  if (depth <= 0) {
+    return [];
+  }
+  const after = depthMapOf(state);
+  setDepthIn(after, x, y, depth - 1);
+
+  const made: UnstableSquare[] = [];
+  for (let sy = 0; sy < state.size.y; sy += 1) {
+    for (let sx = 0; sx < state.size.x; sx += 1) {
+      if (sx === x && sy === y) {
+        // The sealed square: its new top is sealed rock, which `state` does
+        // not hold yet, so its limit is read from the data. Sealant clears
+        // any structure check: a square that holds one cannot be sealed.
+        // `as BlockId`: `validateData` checks that the id names a block.
+        const limit = BLOCKS[CAMP_TOOLS.sealedBlock as BlockId].slumpLimit;
+        const fall = fallIn(after, x, y);
+        if (limit !== null && fall > limit) {
+          made.push({ x, y, reason: 'tall', foot: footIn(after, x, y), fall });
+        }
+        continue;
+      }
+      if (stabilityIn(state, before, sx, sy).unstable) {
+        continue; // unstable already: the seal does not make it so
+      }
+      const check = stabilityIn(state, after, sx, sy);
+      if (check.unstable && check.reason !== null) {
+        made.push({ x: sx, y: sy, reason: check.reason, foot: check.foot, fall: check.fall });
+      }
+    }
   }
   return made;
 }

@@ -139,7 +139,7 @@ export function legalActions(state: GameState): Action[] {
  * that one square: `mineCheck`, `supportCheck`, and so on. The few kinds
  * with a short list of their own (craft, close the mine, the camp actions,
  * the explosive) are looked up in that list. A test checks that this agrees
- * with `legalActions` (dispatcher.test.ts).
+ * with `legalActions` (campTools.test.ts and properties.test.ts).
  */
 export function isLegalAction(state: GameState, action: Action): boolean {
   if (!isRunActive(state)) {
@@ -376,7 +376,7 @@ export { squaresWithinSteps } from './cube/fluids';
 // Pit walls slump (design doc 6.1): is a square unstable, and which squares
 // would a mine make unstable? These read only what the player sees (depths,
 // trees, supports, seen top blocks), so a view may call them freely.
-export { slumpCheck, unstableAfterMine, unstableSquares } from './slump';
+export { slumpCheck, unstableAfterMine, unstableAfterSeal, unstableSquares } from './slump';
 export type { SlumpCheck, SlumpHold, SlumpReason, UnstableSquare } from './slump';
 export type { CountdownForecast } from './forecast';
 export type { ShiftForecast, UpkeepForecast } from './shift';

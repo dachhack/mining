@@ -25,8 +25,14 @@ import { createTapMap } from './map/mapView';
 import { NO_MARKS, lookOutcome, tapOutcome } from './map/targets';
 import type { MapMarks, MapSquare, MapTool } from './map/targets';
 import type { LogEntry, Session } from './text/log';
-import { takeTurn } from './text/turn';
-import { buildView, forecastLine, hazardsLine, renderEndedLines } from './text/view';
+import { takeTurnLines } from './text/turn';
+import {
+  KNOWN_BELOW_NOTE,
+  buildView,
+  forecastLine,
+  hazardsLine,
+  renderEndedLines,
+} from './text/view';
 import type { ChoiceView, PlayerView } from './text/view';
 
 /**
@@ -234,7 +240,15 @@ export function mountPreview(root: HTMLElement): void {
     showLines(gauges, view.hud);
     showLines(ended, renderEndedLines(view));
     tapMap.show(session.state, fresh, marks);
-    showLines(mapNotes, view.notes);
+    // The phone lists a square's known blocks by a hold or the Inspect tool.
+    showLines(
+      mapNotes,
+      view.notes.map((note) =>
+        note.startsWith(KNOWN_BELOW_NOTE)
+          ? `${note} Hold a square, or tap it with Inspect, to list what you know under it.`
+          : note,
+      ),
+    );
     if (view.ended === null) {
       const notOffered = view.notOffered.map((line) => `Not possible now: ${line}`);
       showLines(forecast, [hazardsLine(view), forecastLine(view), ...notOffered]);
@@ -391,7 +405,7 @@ export function mountPreview(root: HTMLElement): void {
     marks = NO_MARKS;
     pending = null;
     try {
-      lastLines = [takeTurn(session, entry)];
+      lastLines = takeTurnLines(session, entry);
     } catch (error) {
       // Should not happen: the choice came from the list of legal choices,
       // or from a tap the rules had just allowed.

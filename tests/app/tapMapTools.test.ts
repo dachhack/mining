@@ -116,6 +116,24 @@ describe('the seal tool', () => {
   });
 });
 
+describe('a risky seal (issue #107)', () => {
+  it('is not taken at the first tap: it warns and marks the square; the second tap takes it', () => {
+    const state = pit(['2234'], { stockpile: { sealant: 1 } });
+    const first = tapOutcome(state, 0, 0, 'seal');
+    expect(first.entry).toBeNull();
+    expect(first.needsConfirm).toBe(true);
+    expect(first.marks.unstable).toEqual([{ x: 0, y: 0 }]);
+    expect(first.lines[1]).toContain('Sealing x0 y0 would make x0 y0 itself');
+    expect(first.lines[2]).toBe('Tap the square again to seal it all the same.');
+    expect(tapOutcome(state, 0, 0, 'seal', true).entry).toEqual({
+      type: 'seal',
+      x: 0,
+      y: 0,
+      ap: 1,
+    });
+  });
+});
+
 describe('the scan tool and what a scan shows', () => {
   it('the first tap marks the 3 x 3 patch; the second scans', () => {
     const state = prospect();

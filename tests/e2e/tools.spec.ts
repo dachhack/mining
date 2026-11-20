@@ -92,6 +92,11 @@ test('sealant is crafted and used from the tool bar; look and hold list a square
   // The block the sealant buried was seen, so it is known under the new top.
   await expect(canvas).toHaveAttribute('data-below', '16,10:-');
   await expect(page.getByTestId('map-legend')).toContainText('plain rock known below');
+  // The note under the map words the hint for the phone, not for the play tool.
+  await expect(page.getByTestId('map-notes')).toContainText(
+    'Hold a square, or tap it with Inspect',
+  );
+  await expect(page.getByTestId('map-notes')).not.toContainText('look X,Y');
 
   // The look tool lists it, and takes nothing.
   await lookTool.click();

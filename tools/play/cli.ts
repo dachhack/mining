@@ -201,7 +201,17 @@ export function resolveChoice(state: GameState, choice: string): ResolvedChoice 
       return pumpChoice(state, square.x, square.y);
     }
     if (square.kind === 'seal') {
-      return sealChoice(state, square.x, square.y);
+      const seal = sealChoice(state, square.x, square.y);
+      if (seal.entry !== null && seal.warning !== null && !square.confirmed) {
+        // A risky seal, like a risky mine: warn first; "seal!" takes it.
+        return {
+          entry: null,
+          refusal:
+            `${seal.warning} Nothing was done. To seal it all the same, ` +
+            `type "seal! ${square.x},${square.y}".`,
+        };
+      }
+      return seal;
     }
     if (square.kind === 'scan') {
       return scanChoice(state, square.x, square.y);

@@ -30,6 +30,8 @@ import {
   sealCheck,
   squaresWithinSteps,
   structureOnSquare,
+  unstableAfterSeal,
+  unstableSquares,
 } from '../../src/engine';
 import type { Action, GameEvent, GameState } from '../../src/engine';
 import { contentsOn } from '../../src/engine/breach';
@@ -503,6 +505,53 @@ describe('sealant (design doc 4.1 and 7.2: a block of sealed rock on a square)',
         health: CREW.startHealth - CREW.damage.lavaBeside,
       },
     ]);
+  });
+});
+
+describe('a seal that would make a square unstable (design doc 6.1; issue #107)', () => {
+  it('sealing the top of a run of steps makes the sealed square itself tall', () => {
+    // x 0 and x 1 are 2 deep, and the floor steps down to depth 4. Sealed,
+    // x 0 is 1 deep and its slide path falls 3: more than sealed rock holds (2).
+    const state = pit(['2234'], { stockpile: { sealant: 1 } });
+    expect(sealCheck(state, 0, 0).allowed).toBe(true);
+    expect(unstableAfterSeal(state, 0, 0)).toEqual([
+      { x: 0, y: 0, reason: 'tall', foot: { x: 3, y: 0 }, fall: 3 },
+    ]);
+    // And it is what then happens: the sealed block cracks when the shift ends.
+    const sealed = act(state, { type: 'seal', x: 0, y: 0 }).state;
+    const cracked = endShift(sealed).events.filter((event) => event.type === 'blockCracked');
+    expect(cracked).toEqual([
+      { type: 'blockCracked', pos: { x: 0, y: 0, z: 1 }, block: BLOCKS.sealed.code, timer: 1 },
+    ]);
+  });
+
+  it('a seal on a level floor, or one that keeps the fall within 2, makes nothing unstable', () => {
+    expect(unstableAfterSeal(pit(['121'], { stockpile: { sealant: 1 } }), 1, 0)).toEqual([]);
+    // Sealed, x 0 falls 2: sealed rock holds that.
+    expect(unstableAfterSeal(pit(['223'], { stockpile: { sealant: 1 } }), 0, 0)).toEqual([]);
+  });
+
+  it('agrees with what a seal then makes unstable, on every square of a stepped pit', () => {
+    const state = pit(['2234', '1223', '1123'], { stockpile: { sealant: 1 } }, [
+      'dd##',
+      'dd##',
+      'dd##',
+    ]);
+    for (const action of findActions(state, { type: 'seal' })) {
+      const seal = action as { x: number; y: number };
+      const before = new Set(unstableSquares(state).map((square) => `${square.x},${square.y}`));
+      const after = unstableSquares(applyAction(state, action).state)
+        .map((square) => `${square.x},${square.y}`)
+        .filter((key) => !before.has(key));
+      const told = unstableAfterSeal(state, seal.x, seal.y).map(
+        (square) => `${square.x},${square.y}`,
+      );
+      expect(told, `seal ${seal.x},${seal.y}`).toEqual(after);
+    }
+  });
+
+  it('gives nothing for a square at ground level', () => {
+    expect(unstableAfterSeal(pit(['012']), 0, 0)).toEqual([]);
   });
 });
 

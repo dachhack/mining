@@ -37,6 +37,7 @@ export function helpText(): string {
   const rubbleCost = BLOCKS.rubble.mineCost ?? 0;
   const drilledCost = BLOCKS.hardRock.mineCostWithDrill ?? 0;
   const sealedCost = BLOCKS.sealed.mineCost ?? 0;
+  const sealedLimit = BLOCKS.sealed.slumpLimit ?? 0;
   // Pit walls slump (design doc 6.1): the numbers of the rule.
   const weakLimit = BLOCKS.dirt.slumpLimit ?? 0;
   const rockLimit = BLOCKS.stone.slumpLimit ?? 0;
@@ -242,7 +243,10 @@ THE GAME
     source: a sealed source stops for good. Lava does not stop a seal. A square cannot be
     sealed at ground level, on a camp square, while something is placed on it, or when a
     square beside it is deeper (the sealed rock would stand 2 levels above it: seal the deeper
-    square first). Sealed rock ("=") costs ${sealedCost} AP to mine and gives nothing.
+    square first). Sealed rock ("=") costs ${sealedCost} AP to mine and gives nothing. It holds a slope
+    that falls up to ${sealedLimit} levels, like stone: a seal that would leave a square unstable (usually the
+    sealed square itself, at the top of a run of steps) is not done the first time. You get a
+    warning; type "seal! X,Y" to do it all the same.
   - SCANNER. "scan X,Y" (${ACTION_COSTS.scan} AP, ${CAMP_TOOLS.scanChargesPerScan} scanner charge) shows the ${CAMP_TOOLS.scanDepth} blocks under the top block of the
     square you name and of the 8 squares round it. This is the only way to see what lies
     under a top block. What a scan shows stays known. The line after the scan lists it; the

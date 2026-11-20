@@ -36,6 +36,7 @@ import {
   sealCheck,
   supportCheck,
   unstableAfterMine,
+  unstableAfterSeal,
 } from '../../engine';
 import type {
   Camp,
@@ -75,8 +76,8 @@ export interface SquareChoice {
   /** Why it is refused, as a sentence for the player; `null` when `entry` is set. */
   refusal: string | null;
   /**
-   * For a mine that is allowed but risky: the squares it would make unstable
-   * (design doc 11), and `warning`, the sentence that names them. The play
+   * For a mine or a seal that is allowed but risky: the squares it would make
+   * unstable (design doc 11), and `warning`, the sentence that names them. The play
    * tool and the phone map ask the player to confirm such a mine. Empty and
    * `null` for everything else.
    */
@@ -387,7 +388,30 @@ export function sealChoice(state: GameState, x: number, y: number): SquareChoice
       `Sealing a square costs ${check.ap} AP and you have ${state.ap} left this shift.`,
     );
   }
-  return allowed({ type: 'seal', x, y, ap: check.ap });
+  const entry: SealAction = { type: 'seal', x, y, ap: check.ap };
+  // The squares this seal would make unstable: usually the sealed square
+  // itself, at the top of a run of steps (issue #107). Like a risky mine, it
+  // is allowed, with a warning to confirm.
+  const makesUnstable = unstableAfterSeal(state, x, y);
+  if (makesUnstable.length === 0) {
+    return allowed(entry);
+  }
+  const names = makesUnstable.map((square) =>
+    square.x === x && square.y === y
+      ? `${squareText(x, y)} itself (sealed rock, at the top of a slope that would fall ${square.fall})`
+      : unstableSquareText(state, square),
+  );
+  const it = makesUnstable.length === 1 ? 'It' : 'Each';
+  return {
+    entry,
+    refusal: null,
+    makesUnstable,
+    warning:
+      `Sealing ${squareText(x, y)} would make ${joinWithAnd(names)} unstable. ` +
+      `${it} would crack when the shift ends and slump into the pit later, taking the sealed rock ` +
+      'with it, unless it is supported or the slope is made gentler first.',
+    blockedSquares: [],
+  };
 }
 
 /**
@@ -636,7 +660,7 @@ const SQUARE_CHOICE_PATTERN = new RegExp(
  * Read a typed choice as a square action: "mine 3,4", "cut 3,4",
  * "support 3,4", "camp 3,4", "rest 3,4", "decommission 3,4", "pump 3,4",
  * "seal 3,4" or "scan 3,4" (a space or a dash after the word, a comma
- * between the numbers). "mine! 3,4" is a mine the player has confirmed: it is taken even
+ * between the numbers). "mine! 3,4" (or "seal! 3,4") is one the player has confirmed: it is taken even
  * if it would make squares unstable. `null` if the text is not of that form;
  * then it is something else (a listed choice, or a mistake).
  */
@@ -652,8 +676,8 @@ export function parseSquareChoice(
   }
   const word = match[1];
   const confirmed = match[2] === '!';
-  if (confirmed && word !== 'mine') {
-    return null; // only a mine is ever confirmed
+  if (confirmed && word !== 'mine' && word !== 'seal') {
+    return null; // only a mine or a seal is ever confirmed
   }
   // `find` gives back the word as one of the kinds, or `undefined`.
   const kind = SQUARE_CHOICE_KINDS.find((known) => known === word);

@@ -12,6 +12,7 @@ import { describeEvents } from '../../src/app/text/describe';
 import { newSession } from '../../src/app/text/log';
 import type { Session } from '../../src/app/text/log';
 import { pumpChoice, scanChoice, sealChoice } from '../../src/app/text/squares';
+import { takeTurnLines } from '../../src/app/text/turn';
 import { buildView, lookLines, renderView } from '../../src/app/text/view';
 import { resolveChoice, runCli, splitChoices, takeChoices } from '../../tools/play/cli';
 import { buildState, terrainLayers } from '../engine/helpers';
@@ -119,6 +120,26 @@ describe('seal X,Y', () => {
   });
 });
 
+describe('a risky seal (issue #107)', () => {
+  it('warns and does nothing the first time; "seal!" takes it', () => {
+    const session = sessionOn(pit(['2234'], { stockpile: { sealant: 1 } }));
+    const first = takeChoices(session, ['seal 0,0']);
+    expect(first.taken).toBe(0);
+    expect(first.refused).toContain(
+      'Sealing x0 y0 would make x0 y0 itself (sealed rock, at the top of a slope that would fall 3) unstable.',
+    );
+    expect(first.refused).toContain('type "seal! 0,0"');
+    const second = takeChoices(session, ['seal! 0,0']);
+    expect(second.refused).toBeNull();
+    expect(second.lines.join('\n')).toContain('Sealed x0 y0');
+  });
+
+  it('a seal that makes nothing unstable needs no "!"', () => {
+    expect(sealChoice(pit(['121'], { stockpile: { sealant: 1 } }), 1, 0).warning).toBeNull();
+    expect(splitChoices('seal! 3,4, end')).toEqual(['seal! 3,4', 'end']);
+  });
+});
+
 describe('scan X,Y and look X,Y', () => {
   it('a scan lists what it showed, square by square, from the top down', () => {
     const session = sessionOn(prospect());
@@ -140,8 +161,13 @@ describe('scan X,Y and look X,Y', () => {
     const view = buildView(session.state, { deepestDepth: 0 });
     expect(view.map.rows).toEqual(buildView(before, { deepestDepth: 0 }).map.rows);
     expect(view.notes.join('\n')).toContain(
-      'Known under the tops (scanned, or buried after you saw it): ore under x1 y1; a pocket under x1 y1. ' +
-        '"look X,Y" lists what you know under a square.',
+      'Known under the tops (scanned, or buried after you saw it): ore under x1 y1; a pocket under x1 y1.',
+    );
+    // The play tool adds its own hint when it prints the note; the view's
+    // data does not hold it, so the phone can word its own (issue #107).
+    expect(view.notes.join('\n')).not.toContain('look X,Y');
+    expect(renderView(view)).toContain(
+      'a pocket under x1 y1. "look X,Y" lists what you know under a square.',
     );
     // Before the scan there is no such note.
     expect(buildView(before, { deepestDepth: 0 }).notes.join('\n')).not.toContain(
@@ -166,6 +192,20 @@ describe('scan X,Y and look X,Y', () => {
       '    depth 2: open space: 1 water (a pocket)',
       '    depth 3: Stone, mineral traces, damp',
     ]);
+  });
+
+  it('for a screen, a scan comes as a list: one line for each square (issue #107)', () => {
+    const session = sessionOn(prospect());
+    const lines = takeTurnLines(session, { type: 'scan', x: 1, y: 1, ap: 2 });
+    expect(lines[0]).toContain('Scanned round x1 y1: 27 blocks are newly known.');
+    expect(lines).toHaveLength(11); // the turn, 9 squares, the traces
+    expect(lines[5]).toBe(
+      'under x1 y1: depth 1 Iron ore, damp (gives 1 Raw iron ore); depth 2 open space: 1 water (a pocket); depth 3 Stone, mineral traces, damp',
+    );
+    expect(lines[10]).toContain('You notice mineral traces');
+    // A turn with no list is one line, as before.
+    const other = sessionOn(prospect());
+    expect(takeTurnLines(other, { type: 'mine', x: 0, y: 0, ap: 2 })).toHaveLength(1);
   });
 
   it('a look is not a choice taken: nothing is done, and the chain goes on', () => {
