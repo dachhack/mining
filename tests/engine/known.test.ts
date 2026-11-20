@@ -27,7 +27,7 @@ const UNSEEN = { x: 2, y: 0, z: 1 };
 function halfSeenState(): GameState {
   const state = buildState({
     layers: [['#..'], ['...'], ['#U#']],
-    avatar: { x: 0, y: 0, z: -1 },
+    revealTops: false,
     looseItems: [
       { pos: SEEN, item: 'coal', count: 2 },
       { pos: UNSEEN, item: 'stone', count: 1 },

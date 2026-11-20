@@ -127,33 +127,12 @@ describe('when a craft is legal', () => {
     );
   });
 
-  it('allows a craft that leaves the avatar at exactly the carry limit', () => {
-    // 9 stone (18) + 1 timber + 1 coal = 20. A torch (1) replaces timber and
-    // coal (2): 19 afterwards.
-    const state = surfaceState({ inventory: { stone: 9, timber: 1, coal: 1 } });
-    expect(carriedWeight(state)).toBe(20);
-    expect(craftable(state)).toContain('torch');
-    // A support (2) replaces 1 timber and 1 stone (3): also fits.
-    expect(craftable(state)).toContain('support');
-  });
-
-  it('refuses a craft whose result is over the carry limit', () => {
-    // No M1 recipe makes the load heavier, so the limit can only refuse a
-    // craft when the avatar is already over it. 10 stone (20) + 1 timber + 1
-    // coal + 1 more coal = 23; after a torch, 22; after a support, 22; after
-    // fuel or lamp oil, 22. All over 20.
+  it('does not enforce the carry limit (decision note 0026)', () => {
+    // With no miner there is no way to drop anything, so a load over the
+    // limit must not stop the player crafting fuel. 10 stone (20) + 1 timber
+    // + 2 coal = 23, over the limit of 20.
     const over = surfaceState({ inventory: { stone: 10, timber: 1, coal: 2 } });
     expect(carriedWeight(over)).toBe(23);
-    expect(craftable(over)).toEqual([]);
-    expect(() => applyAction(over, { type: 'craft', recipe: 'torch', ap: 1 })).toThrow(
-      'Not a legal action',
-    );
-
-    // One over the limit, where the craft brings the load back to the limit:
-    // 9 stone (18) + 1 timber + 2 coal = 21. Torch: 21 - 2 + 1 = 20, fits.
-    // Support: 21 - 3 + 2 = 20, fits. Fuel: 21 - 1 = 20, fits.
-    const justOver = surfaceState({ inventory: { stone: 9, timber: 1, coal: 2 } });
-    expect(carriedWeight(justOver)).toBe(21);
-    expect(craftable(justOver)).toEqual(['support', 'torch', 'fuel', 'lampOil']);
+    expect(craftable(over)).toEqual(['support', 'torch', 'fuel', 'lampOil']);
   });
 });

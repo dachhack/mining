@@ -4,18 +4,17 @@ Recorded runs: seed + list of decisions → expected state hash. `golden.test.ts
 
 ## The files
 
-| File                            | What it is                                                                                                                   | Decisions | Ends                   | Hash               |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------- | ---------------------- | ------------------ |
-| `staircase-seed-8.json`         | The staircase policy: dig to layer 8, go back up the way it came, leave                                                      | 54        | salvage, left          | `96fb3911f9d0f329` |
-| `wander-seed-9.json`            | Random legal actions, never leaving, until the fuel runs out                                                                 | 133       | death, out of fuel     | `9393f2325da85f5a` |
-| `random-seed-27-cut-short.json` | Random legal actions, stopped after 150 decisions with the run still going                                                   | 150       | still going (`active`) | `05502a961d337580` |
-| `staircase-seed-11-traces.json` | The staircase policy on a seed where it lights rock near ore: mineral traces are seen, and stay after one ore block is mined | 54        | salvage, left          | `445c0bc15ecec172` |
-| `wander-seed-150-forest.json`   | Random legal actions, never leaving, on a seed where it cuts five trees on the surface and three grow back (issue #70)       | 190       | death, out of fuel     | `74749a3ad6a45471` |
+| File                            | What it is                                                                                                                                                                           | Decisions | Ends                   | Hash               |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- | ---------------------- | ------------------ |
+| `pit-seed-11.json`              | The pit policy: digs a terraced pit round the middle of the map under the level rule, cuts the trees in its way, crafts fuel from coal, and leaves when the fuel is about to run out | 125       | salvage, left          | `671d5c37caee7453` |
+| `pit-seed-31-traces.json`       | The pit policy on a seed where the pit gets deep enough for top blocks to lie near ore: mineral traces are seen, and stay on the map                                                 | 265       | salvage, left          | `8e6d149649a69031` |
+| `random-seed-9-forest.json`     | Random legal actions, never leaving, until the fuel runs out. It cuts 35 trees: some grow back, and none on a stump whose square was mined                                           | 104       | death, out of fuel     | `9c69c51a561aa26b` |
+| `random-seed-27-cut-short.json` | Random legal actions, stopped after 60 decisions with the run still going                                                                                                            | 60        | still going (`active`) | `c4323aa0100f8296` |
 
 Each file holds:
 
 - `seed`, `contractId`, `loadoutId`: what `createRun` is called with.
-- `decisions`: every decision in order. `"endShift"` ends the shift; anything else is the engine's `actionKey` of an action (for example `"mine 17,16,0 ap 1"`), and the replay takes the legal action with that key.
+- `decisions`: every decision in order. `"endShift"` ends the shift; anything else is the engine's `actionKey` of an action (for example `"mine 17,16 ap 1"`: mine the top block of square (17, 16)), and the replay takes the legal action with that key.
 - `expectedHash`: `hashState` of the state after the last decision.
 - `expectedStatus`: `active`, or `ended: <outcome>, <cause>`. The hash already covers it; it is there so a person can read how the run ended.
 - `description` and `recordedWith`: for the reader. A replay uses only the decisions, so changing a policy in `tools/policies.ts` does not change a golden run.
@@ -34,20 +33,21 @@ If the rules, the data in `src/data`, cube generation, the RNG, `serialise` or t
 
    It replays each file, prints the old and new hash, and rewrites `expectedHash` and `expectedStatus`.
 
-2. **A recorded decision is no longer legal** (the replay says which one). The recording no longer describes a possible run, so record it again:
+2. **A recorded decision is no longer legal** (the replay says which one). The recording no longer describes a possible run, so record the whole set again:
 
    ```bash
-   npm run golden -- --record staircase-seed-8 --seed 8 --policy staircase
-   npm run golden -- --record wander-seed-9 --seed 9 --policy wander
-   npm run golden -- --record random-seed-27-cut-short --seed 27 --policy random --max-decisions 150
-   npm run golden -- --record staircase-seed-11-traces --seed 11 --policy staircase
-   npm run golden -- --record wander-seed-150-forest --seed 150 --policy wander
+   npm run golden -- --record-all
    ```
 
-   Add `--description "..."` to keep a sentence about the run. A new recording may play out quite differently from the old one; check that it still covers what the table above says, and pick another seed if it does not.
+   The set is the list `STANDARD_RUNS` in `tools/golden.ts` (name, seed, policy, where to cut, description). A new recording may play out quite differently from the old one; `golden.test.ts` checks that each file still covers what the table above says, and if one does not, pick another seed in `STANDARD_RUNS`. One run can also be recorded by hand:
 
-All five were recorded again for issue #75 (face-only reach and the safe one-block dig down made recorded mines illegal); the forest run moved from seed 181, which no longer sees a tree grow back, to seed 182.
+   ```bash
+   npm run golden -- --record pit-seed-11 --seed 11 --policy pit
+   npm run golden -- --record random-seed-27-cut-short --seed 27 --policy random --max-decisions 60
+   ```
 
-All five were recorded again for issue #80 (no gravity, no ladders): a move's action key no longer has a `drop` field, and recorded ladder actions are gone, so no old recording replays. The random run moved from seed 25, whose random run now leaves after 17 decisions, to seed 27; the forest run moved from seed 182, which no longer sees a tree grow back, to seed 150.
+   Add `--description "..."` to keep a sentence about the run.
+
+All the files were replaced for issue #86 (mine by square; engine 0.4.0; decision note 0025): there is no miner, so no recorded move replays, a mine names a square and not a cell, and the `staircase` and `wander` policies that recorded the old runs are gone. The new set is recorded with the `pit` and `random` policies. Earlier re-recordings (issues #75 and #80) are in the git history of this file.
 
 Either way: update the table above, and say in the PR description which hashes changed and why (`CLAUDE.md`, working agreement).

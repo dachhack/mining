@@ -39,7 +39,8 @@ function smallState() {
       ['#d##', '#.##', '####'], // z = 0
       ['HHHH', 'HcHH', 'HHHH'], // z = 1
     ],
-    avatar: { x: 1, y: 1, z: 0 },
+    // Nothing revealed, so that the tests below can set the flag themselves.
+    revealTops: false,
   });
 }
 
@@ -127,7 +128,7 @@ describe('what is at (x, y, z)', () => {
         expect(isOpen(state, { x, y, z: -1 })).toBe(true);
       }
     }
-    // The avatar cannot leave the footprint of the cube, or go higher.
+    // Beyond the footprint of the cube, and above the surface, is bedrock.
     expect(blockAt(state, { x: -1, y: 0, z: -1 })).toBe(BLOCKS.bedrock.code);
     expect(blockAt(state, { x: 0, y: 3, z: -1 })).toBe(BLOCKS.bedrock.code);
     expect(blockAt(state, { x: 0, y: 0, z: -2 })).toBe(BLOCKS.bedrock.code);
@@ -328,7 +329,6 @@ describe('cloneState', () => {
   it('makes an equal copy that shares nothing with the original', () => {
     const state = buildState({
       layers: [['#.'], ['##']],
-      avatar: { x: 1, y: 0, z: 0 },
       inventory: { timber: 2 },
       looseItems: [{ pos: { x: 1, y: 0, z: 0 }, item: 'stone', count: 1 }],
       torches: [{ x: 1, y: 0, z: 0 }],
@@ -350,7 +350,6 @@ describe('cloneState', () => {
     copy.structures.fill(0);
     copy.rng.s += 1;
     copy.size.x = 99;
-    copy.avatar.pos.z = 1;
     copy.avatar.health -= 1;
     copy.avatar.air -= 1;
     copy.avatar.resting = true;
@@ -371,7 +370,6 @@ describe('cloneState', () => {
     copy.status = { kind: 'ended', outcome: 'death', cause: 'outOfFuel' };
 
     expect(hashState(state)).toBe(before);
-    expect(state.avatar.pos).toEqual({ x: 1, y: 0, z: 0 });
     expect(state.looseItems).toEqual([{ pos: { x: 1, y: 0, z: 0 }, item: 'stone', count: 1 }]);
   });
 });
@@ -382,7 +380,6 @@ describe('buildState (the test helper)', () => {
     expect(state.size).toEqual(SIZE);
     expect(layerText(state, 0)).toEqual(['#d##', '#.##', '####']);
     expect(layerText(state, 1)).toEqual(['HHHH', 'HcHH', 'HHHH']);
-    expect(state.avatar.pos).toEqual({ x: 1, y: 1, z: 0 });
   });
 
   it('rejects a drawing with ragged rows or an unknown character', () => {

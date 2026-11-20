@@ -18,13 +18,21 @@ import { applyDecisions, playRun, replayDecisions } from '../../tools/simRun';
 
 const CONTRACT = CONTRACT_IDS[0] as string;
 
-/** Decisions of a fairly busy run: the wander policy mines, crafts, places, drops. */
-function recordedRun(seed: number, maxDecisions: number): { decisions: string[]; hash: string } {
+/**
+ * The decisions of a run of the named policy, cut after `maxDecisions`. The
+ * `random` policy mines and cuts all over the map; the `pit` policy also
+ * crafts fuel and leaves.
+ */
+function recordedRun(
+  policyName: string,
+  seed: number,
+  maxDecisions: number,
+): { decisions: string[]; hash: string } {
   const result = playRun({
     seed,
     contractId: CONTRACT,
     loadoutId: DEFAULT_LOADOUT_ID,
-    policy: makePolicy('wander', seed),
+    policy: makePolicy(policyName, seed),
     maxShifts: 300,
     maxDecisions,
   });
@@ -46,38 +54,39 @@ describe('determinism', () => {
   });
 
   it('the same seed and decisions give the same hash, run twice in one process', () => {
-    // Seeds whose wander run lasts at least 200 decisions. Without a fuel
-    // refill (issue #32) most wander runs end out of fuel a little sooner.
-    // (Seed 6 took the place of seed 4, whose run the forest of issue #70
-    // shortened to 186 decisions. Seeds 5 and 26 took the places of seeds 6
-    // and 11 with issue #75, which shortened their runs to 172 and 128.
-    // Seeds 15 and 49 took the places of 5 and 26 with issue #80, which
-    // shortened their runs to 145 and 150.)
-    for (const seed of [15, 49]) {
-      const recorded = recordedRun(seed, 200);
-      expect(recorded.decisions.length).toBe(200);
-      const first = replayDecisions(seed, CONTRACT, DEFAULT_LOADOUT_ID, recorded.decisions);
-      const second = replayDecisions(seed, CONTRACT, DEFAULT_LOADOUT_ID, recorded.decisions);
+    // A random run lasts about 100 decisions (24 fuel, and it hardly ever
+    // crafts more); a pit run goes on longer.
+    const runs = [
+      { policyName: 'random', seed: 15, maxDecisions: 80 },
+      { policyName: 'pit', seed: 49, maxDecisions: 120 },
+    ];
+    for (const run of runs) {
+      const recorded = recordedRun(run.policyName, run.seed, run.maxDecisions);
+      expect(recorded.decisions.length).toBe(run.maxDecisions);
+      const first = replayDecisions(run.seed, CONTRACT, DEFAULT_LOADOUT_ID, recorded.decisions);
+      const second = replayDecisions(run.seed, CONTRACT, DEFAULT_LOADOUT_ID, recorded.decisions);
       expect(hashState(first)).toBe(recorded.hash);
       expect(hashState(second)).toBe(recorded.hash);
     }
   });
 
   it('a policy with the same seed makes the same decisions again', () => {
-    expect(recordedRun(7, 120)).toEqual(recordedRun(7, 120));
+    expect(recordedRun('random', 7, 80)).toEqual(recordedRun('random', 7, 80));
+    expect(recordedRun('pit', 7, 80)).toEqual(recordedRun('pit', 7, 80));
   });
 
   it('a run saved and loaded part-way, then continued, ends in the same hash', () => {
     const seed = 9;
-    // The whole run, to its end (out of fuel, a few hundred decisions).
-    const recorded = recordedRun(seed, 100000);
+    // The whole run, to its end (out of fuel, about a hundred decisions).
+    const recorded = recordedRun('random', seed, 100000);
     const total = recorded.decisions.length;
+    expect(total).toBeGreaterThan(60);
     const start = createRun(seed, CONTRACT, DEFAULT_LOADOUT_ID);
     expect(isRunActive(applyDecisions(start, recorded.decisions))).toBe(false);
 
     // Cut after the first decision, at a few points in the middle (most of
     // them part-way through a shift), and just before the last.
-    for (const cut of [1, 37, Math.floor(total / 2), total - 60, total - 1]) {
+    for (const cut of [1, 37, Math.floor(total / 2), total - 1]) {
       const before = applyDecisions(start, recorded.decisions.slice(0, cut));
       const loaded = throughJson(before);
       expect(hashState(loaded)).toBe(hashState(before));
@@ -90,7 +99,7 @@ describe('determinism', () => {
 
   it('saving and loading after every decision changes nothing', () => {
     const seed = 3;
-    const recorded = recordedRun(seed, 80);
+    const recorded = recordedRun('pit', seed, 50);
     let state = createRun(seed, CONTRACT, DEFAULT_LOADOUT_ID);
     for (const decision of recorded.decisions) {
       state = throughJson(applyDecisions(state, [decision]));

@@ -1,15 +1,14 @@
 // Helpers for scenario tests: build a small hand-made state, and apply an
 // action without spelling out every field.
 //
-// Example: a 3 x 3 x 2 cube of stone with a one-cell pit in the middle of the
-// top layer, the avatar standing in the pit.
+// Example: a 3 x 3 x 2 cube of stone with a one-square pit in the middle,
+// 1 level deep.
 //
 //   const state = buildState({
 //     layers: [
 //       ['###', '#.#', '###'],   // z = 0 (top layer); each string is a row, y = 0 first
 //       ['###', '###', '###'],   // z = 1
 //     ],
-//     avatar: { x: 1, y: 1, z: 0 },
 //   });
 
 import {
@@ -20,7 +19,6 @@ import {
   SHIFT,
   STRUCTURES,
   SURFACE,
-  WORLD,
   blockDefByCode,
 } from '../../src/data';
 import type { BlockId, StructureId, Vec3 } from '../../src/data';
@@ -46,6 +44,8 @@ import {
   setStructure,
   setWater,
 } from '../../src/engine/state';
+import { updateReveal } from '../../src/engine/reveal';
+import { updateMineralTraces } from '../../src/engine/tells';
 
 /** The character that stands for each block in a layer string. */
 export const BLOCK_CHARS: Record<string, BlockId> = {
@@ -84,8 +84,6 @@ export interface BuildStateOptions {
    * row the same length.
    */
   layers: string[][];
-  /** Where the avatar is. Default: the surface cell above (0, 0). */
-  avatar?: Vec3;
   /** Default: full health from the data. */
   health?: number;
   /** Default: full air from the data. */
@@ -128,8 +126,16 @@ export interface BuildStateOptions {
   surface?: string[];
   /** How far each stump's regrowth count has gone. Default: 0. */
   stumpAges?: { pos: Vec3; age: number }[];
-  /** Mark every cell as revealed. Default: false (nothing revealed). */
+  /** Mark every cell as revealed. Default: false. */
   revealAll?: boolean;
+  /**
+   * Reveal every square's top block that no tree hides, and note the mineral
+   * traces on them, as the engine does after every step (`updateReveal`,
+   * `updateMineralTraces`). Default: true, so that a hand-built state is one
+   * the engine could have produced. Pass false for a state with nothing
+   * revealed.
+   */
+  revealTops?: boolean;
   seed?: number;
   status?: RunStatus;
 }
@@ -209,7 +215,6 @@ export function buildState(options: BuildStateOptions): GameState {
   state.armed = canonicalArmed(options.armed ?? []);
   state.camps = canonicalCamps(options.camps ?? []);
 
-  state.avatar.pos = { ...(options.avatar ?? { x: 0, y: 0, z: WORLD.surfaceZ }) };
   state.avatar.health = options.health ?? AVATAR.startHealth;
   state.avatar.air = options.air ?? HAZARDS.air.max;
   state.ap = options.ap ?? SHIFT.apPerShift;
@@ -221,6 +226,10 @@ export function buildState(options: BuildStateOptions): GameState {
   state.looseItems = canonicalLooseItems(options.looseItems ?? []);
   if (options.status !== undefined) {
     state.status = { ...options.status };
+  }
+  if (options.revealTops !== false) {
+    updateReveal(state, []);
+    updateMineralTraces(state, []);
   }
   return state;
 }
@@ -268,9 +277,9 @@ function matches(action: Action, wanted: object): boolean {
 
 /**
  * The legal actions that match a partial description. For example
- * `findActions(state, { type: 'move' })` is every legal move, and
- * `findActions(state, { type: 'mine', target: { x: 1, y: 1, z: 1 } })` is the
- * action that mines that block, if it is legal.
+ * `findActions(state, { type: 'mine' })` is every legal mine, and
+ * `findActions(state, { type: 'mine', x: 1, y: 1 })` is the action that
+ * mines the square (1, 1), if it is legal.
  */
 export function findActions(state: GameState, wanted: object): Action[] {
   return legalActions(state).filter((action) => matches(action, wanted));
@@ -280,7 +289,7 @@ export function findActions(state: GameState, wanted: object): Action[] {
  * Apply the one legal action that matches `wanted`, so a test can say what it
  * means without repeating the AP cost:
  *
- *   const { state: after, events } = act(state, { type: 'move', to: { x: 2, y: 1, z: 0 } });
+ *   const { state: after, events } = act(state, { type: 'mine', x: 2, y: 1 });
  *
  * Throws if no legal action matches, or more than one does.
  */

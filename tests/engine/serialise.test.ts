@@ -28,7 +28,6 @@ function busyState(): GameState {
       ['#d#', 't.c', '###'],
       ['HiH', 'uxH', 'HHH'],
     ],
-    avatar: { x: 1, y: 1, z: 0 },
     health: 7,
     ap: 3,
     fuel: 11,
@@ -179,9 +178,6 @@ describe('serialise and deserialise', () => {
     expect(() => deserialise({ ...saved, tracesSeen: [1, 17] })).toThrow('"tracesSeen"');
     expect(() => deserialise({ ...saved, size: { x: 3, y: 3, z: 3 } })).toThrow('damaged');
     expect(() =>
-      deserialise({ ...saved, avatar: { ...saved.avatar, pos: { x: 9, y: 0, z: 0 } } }),
-    ).toThrow('the avatar is at (9, 0, 0)');
-    expect(() =>
       deserialise({ ...saved, armed: [{ pos: { x: 0, y: 0, z: 5 }, kind: 'explosive' }] }),
     ).toThrow('bad armed charge');
     expect(() =>
@@ -197,10 +193,10 @@ describe('serialise and deserialise', () => {
 
   it('refuses a save from before the M2 skeleton with a clear error', () => {
     // State version 3 was the last M1 shape (decision note 0012).
-    expect(STATE_VERSION).toBe(6);
+    expect(STATE_VERSION).toBe(7);
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 3 })).toThrow(
-      'Saved state has version 3; this build reads version 6',
+      'Saved state has version 3; this build reads version 7',
     );
   });
 
@@ -208,7 +204,7 @@ describe('serialise and deserialise', () => {
     // State version 4 was the M2 skeleton's shape, with no surface arrays.
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 4 })).toThrow(
-      'Saved state has version 4; this build reads version 6',
+      'Saved state has version 4; this build reads version 7',
     );
   });
 
@@ -216,7 +212,16 @@ describe('serialise and deserialise', () => {
     // State version 5 could hold a ladder (structure code 1, item 'ladder').
     const saved = serialise(busyState());
     expect(() => deserialise({ ...saved, version: 5 })).toThrow(
-      'Saved state has version 5; this build reads version 6',
+      'Saved state has version 5; this build reads version 7',
+    );
+  });
+
+  it('refuses a save from before mining by square with a clear error (issue #86)', () => {
+    // State version 6 held the miner's position, and its revealed cells
+    // followed the light rule.
+    const saved = serialise(busyState());
+    expect(() => deserialise({ ...saved, version: 6 })).toThrow(
+      'Saved state has version 6; this build reads version 7',
     );
   });
 });
@@ -235,7 +240,8 @@ describe('hashState', () => {
     // Each entry changes one thing on a fresh copy.
     const changes: Record<string, (state: GameState) => void> = {
       block: (s) => (s.blocks[0] = 0),
-      revealed: (s) => (s.revealed[1] = 1),
+      // Cell 9 is (0, 0, 1): under a top block, so not revealed in `base`.
+      revealed: (s) => (s.revealed[9] = 1),
       water: (s) => (s.water[0] = 1),
       lava: (s) => (s.lava[0] = 1),
       'lava source': (s) => setLava(s, { x: 1, y: 2, z: 1 }, 1, true),
@@ -243,12 +249,12 @@ describe('hashState', () => {
       'a new crack': (s) => setCrackTimer(s, { x: 1, y: 0, z: 0 }, 0),
       'a crack timer': (s) => setCrackTimer(s, { x: 2, y: 0, z: 0 }, 1),
       structure: (s) => (s.structures[0] = 1),
-      'traces seen': (s) => (s.tracesSeen[0] = 1),
+      // Cell 9 again: traces are already seen on the top blocks near the ore.
+      'traces seen': (s) => (s.tracesSeen[9] = 1),
       'a surface cell': (s) => (s.surface[0] = 1),
       "a stump's age": (s) => (s.stumpAge[1] = 3),
       rng: (s) => nextUint32(s.rng),
       seed: (s) => (s.seed += 1),
-      'avatar position': (s) => (s.avatar.pos.x = 0),
       health: (s) => (s.avatar.health -= 1),
       air: (s) => (s.avatar.air -= 1),
       resting: (s) => (s.avatar.resting = false),
@@ -323,7 +329,7 @@ describe('hashState', () => {
 
   it('gives a state and its saved-and-loaded copy the same order to walk', () => {
     // Built so that the live order is not the sorted order.
-    const state = buildState({ layers: [['....'], ['####']], avatar: { x: 0, y: 0, z: 0 } });
+    const state = buildState({ layers: [['....'], ['####']] });
     addItem(state, 'timber', 1);
     addItem(state, 'coal', 2);
     addItem(state, 'torch', 3);

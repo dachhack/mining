@@ -20,30 +20,44 @@ function options(policyName: string, runs: number): SimOptions {
   };
 }
 
+/** One run of the named policy on `seed`, measured. */
+function run(policyName: string, seed: number, maxDecisions?: number): RunMetrics {
+  const playOptions: PlayOptions = {
+    seed,
+    contractId: CONTRACT,
+    loadoutId: DEFAULT_LOADOUT_ID,
+    policy: makePolicy(policyName, seed),
+    maxShifts: 300,
+  };
+  // Set only when given: an optional field may be left out, not set to `undefined`.
+  if (maxDecisions !== undefined) {
+    playOptions.maxDecisions = maxDecisions;
+  }
+  return playRun(playOptions).metrics;
+}
+
 describe('simulate', () => {
   // Run in `beforeAll`, not while the file is loaded, so that a crash in the
   // simulator is reported under this name.
   let report: SimReport;
   beforeAll(() => {
-    report = simulate(options('random', 12));
+    report = simulate(options('random', 6));
   });
 
   it('gives the same report for the same options', () => {
-    expect(simulate(options('random', 12))).toEqual(report);
+    expect(simulate(options('random', 6))).toEqual(report);
   });
 
   it('reports one entry per run, in seed order', () => {
-    expect(report.runs.map((run) => run.seed)).toEqual([
-      40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51,
-    ]);
-    expect(report.aggregate.runs).toBe(12);
+    expect(report.runs.map((entry) => entry.seed)).toEqual([40, 41, 42, 43, 44, 45]);
+    expect(report.aggregate.runs).toBe(6);
   });
 
   it('counts every run under exactly one outcome and one cause', () => {
     const total = (counts: Record<string, number>): number =>
       Object.values(counts).reduce((sum, count) => sum + count, 0);
-    expect(total(report.aggregate.outcomes)).toBe(12);
-    expect(total(report.aggregate.causes)).toBe(12);
+    expect(total(report.aggregate.outcomes)).toBe(6);
+    expect(total(report.aggregate.causes)).toBe(6);
     expect(Object.keys(report.aggregate.outcomes)).toEqual(['salvage', 'death', 'unfinished']);
     expect(Object.keys(report.aggregate.causes)).toEqual(['left', 'outOfFuel', 'shiftCap']);
   });
@@ -52,20 +66,24 @@ describe('simulate', () => {
     const recipeIds = FIELD_RECIPES.map((recipe) => recipe.id);
     expect(Object.keys(report.aggregate.recipesUsed)).toEqual(recipeIds);
     expect(Object.keys(report.aggregate.finalInventoryMean)).toEqual(Object.keys(ITEMS));
-    for (const run of report.runs) {
-      expect(Object.keys(run.recipesUsed)).toEqual(recipeIds);
-      expect(Object.keys(run.finalInventory)).toEqual(Object.keys(ITEMS));
+    for (const entry of report.runs) {
+      expect(Object.keys(entry.recipesUsed)).toEqual(recipeIds);
+      expect(Object.keys(entry.finalInventory)).toEqual(Object.keys(ITEMS));
     }
   });
 
   it('adds the runs up', () => {
-    const crafts = report.runs.reduce((sum, run) => sum + (run.recipesUsed['fuel'] ?? 0), 0);
-    expect(report.aggregate.recipesUsed['fuel']?.crafts).toBe(crafts);
+    const pit = simulate(options('pit', 2));
+    const crafts = pit.runs.reduce((sum, entry) => sum + (entry.recipesUsed['fuel'] ?? 0), 0);
+    expect(crafts).toBeGreaterThan(0);
+    expect(pit.aggregate.recipesUsed['fuel']?.crafts).toBe(crafts);
     // Each fuel craft makes 3 fuel (design doc 7.1).
-    expect(report.aggregate.itemsCrafted['fuel']).toBe(3 * crafts);
-    const shifts = report.runs.map((run) => run.shiftsPlayed);
-    expect(report.aggregate.shiftsPlayed.min).toBe(Math.min(...shifts));
-    expect(report.aggregate.shiftsPlayed.max).toBe(Math.max(...shifts));
+    expect(pit.aggregate.itemsCrafted['fuel']).toBe(3 * crafts);
+    const shifts = pit.runs.map((entry) => entry.shiftsPlayed);
+    expect(pit.aggregate.shiftsPlayed.min).toBe(Math.min(...shifts));
+    expect(pit.aggregate.shiftsPlayed.max).toBe(Math.max(...shifts));
+    const depths = pit.runs.map((entry) => entry.deepestSquare);
+    expect(pit.aggregate.deepestSquare.max).toBe(Math.max(...depths));
   });
 
   it('is plain JSON', () => {
@@ -74,76 +92,71 @@ describe('simulate', () => {
 
   it('prints a summary that names the policy and the outcomes', () => {
     const summary = formatSummary(report);
-    expect(summary).toContain('12 runs, policy random, seeds 40-51');
+    expect(summary).toContain('6 runs, policy random, seeds 40-45');
     expect(summary).toContain('outcomes:');
+    expect(summary).toContain('deepest square:');
+    expect(summary).toContain('trees cut:');
     expect(summary).toContain('recipes used');
+    expect(summary).toContain('mineral traces:');
   });
 });
 
 describe('playRun', () => {
-  it('measures a staircase run', () => {
-    const { metrics } = playRun({
-      seed: 8,
-      contractId: CONTRACT,
-      loadoutId: DEFAULT_LOADOUT_ID,
-      policy: makePolicy('staircase', 8),
-      maxShifts: 300,
-    });
+  // Two whole pit runs, played once and used by several tests below.
+  let pit11: RunMetrics;
+  let pit31: RunMetrics;
+  beforeAll(() => {
+    pit11 = run('pit', 11);
+    pit31 = run('pit', 31);
+  });
+
+  it('measures a pit run', () => {
+    const metrics = pit11;
     expect(metrics.outcome).toBe('salvage');
     expect(metrics.cause).toBe('left');
-    expect(metrics.deepestLayer).toBe(8);
-    expect(metrics.blocksMined).toBe(17);
-    expect(metrics.shareOfCubeMined).toBeCloseTo(17 / 32768, 10);
-    // 11 since issue #80: the way back up is two moves a stair (up, then
-    // back along), not one step up.
-    expect(metrics.shiftsPlayed).toBe(11);
-    // 24 fuel at the start, 1 used at each of the 10 ends of shift.
-    expect(metrics.fuelAtEnd).toBe(14);
+    // The pit goes down by terraces: several levels, many more blocks.
+    expect(metrics.deepestSquare).toBeGreaterThanOrEqual(4);
+    expect(metrics.blocksMined).toBeGreaterThan(10 * metrics.deepestSquare);
+    expect(metrics.shareOfCubeMined).toBeCloseTo(metrics.blocksMined / 32768, 10);
+    expect(metrics.treesCut).toBeGreaterThan(0);
+    // It leaves with the fuel nearly gone, never having started a shift on 0.
+    expect(metrics.fuelAtEnd).toBe(1);
     expect(metrics.shiftsAtZeroFuel).toBe(0);
-    // 3 lamp oil lasts 12 shifts; the run is over before then.
-    expect(metrics.shiftsInTheDark).toBe(0);
-    expect(metrics.legalActionsPerPhase.min).toBeGreaterThan(0);
+    expect(metrics.damageTaken).toBe(0);
+    // A mine or a cut for almost every one of the 1,024 squares.
+    expect(metrics.legalActionsPerPhase.min).toBeGreaterThan(500);
+  });
+
+  it('reports 0 for the deepest square when nothing was mined', () => {
+    const metrics = run('pit', 11, 0);
+    expect(metrics.deepestSquare).toBe(0);
+    expect(metrics.blocksMined).toBe(0);
+    expect(metrics.outcome).toBe('unfinished');
+    expect(metrics.cause).toBe('cutShort');
   });
 
   it('says whether mineral traces were seen before the first ore was mined', () => {
-    function staircase(seed: number, maxDecisions?: number): RunMetrics {
-      const playOptions: PlayOptions = {
-        seed,
-        contractId: CONTRACT,
-        loadoutId: DEFAULT_LOADOUT_ID,
-        policy: makePolicy('staircase', seed),
-        maxShifts: 300,
-      };
-      // Set only when given: an optional field may be left out, not set to `undefined`.
-      if (maxDecisions !== undefined) {
-        playOptions.maxDecisions = maxDecisions;
-      }
-      return playRun(playOptions).metrics;
-    }
-    // The staircase stops in layer 8, the first layer that can hold ore.
-    // Seed 8: no rock with traces along the way, and no ore mined.
-    expect(staircase(8).oreBlocksMined).toBe(0);
-    expect(staircase(8).tracesSeenBeforeFirstOre).toBe(false);
-    // Seed 7: traces seen, though the staircase mined no ore.
-    expect(staircase(7).oreBlocksMined).toBe(0);
-    expect(staircase(7).tracesSeenBeforeFirstOre).toBe(true);
-    // Seed 11: traces seen, and then an ore block mined.
-    expect(staircase(11).oreBlocksMined).toBe(1);
-    expect(staircase(11).tracesSeenBeforeFirstOre).toBe(true);
+    // Seed 11: the pit stays too far above the ore to show any traces.
+    expect(pit11.oreBlocksMined).toBe(0);
+    expect(pit11.tracesSeenBeforeFirstOre).toBe(false);
+    // Seed 31: traces seen, though the pit mined no ore.
+    expect(pit31.oreBlocksMined).toBe(0);
+    expect(pit31.tracesSeenBeforeFirstOre).toBe(true);
     // A run stopped before its first decision has seen only the top layer,
     // which is too far above the ore to show any traces.
-    expect(staircase(11, 0).tracesSeenBeforeFirstOre).toBe(false);
+    expect(run('pit', 31, 0).tracesSeenBeforeFirstOre).toBe(false);
   });
 
   it('counts the runs that saw traces and the runs that mined ore', () => {
-    const report = simulate(options('staircase', 6));
+    // Seeds 31 and 32; `...` copies the options, then `firstSeed` replaces one.
+    const report = simulate({ ...options('pit', 2), firstSeed: 31 });
     const a = report.aggregate;
     expect(a.runsWithTracesSeenBeforeFirstOre).toBe(
-      report.runs.filter((run) => run.tracesSeenBeforeFirstOre).length,
+      report.runs.filter((entry) => entry.tracesSeenBeforeFirstOre).length,
     );
-    expect(a.runsThatMinedOre).toBe(report.runs.filter((run) => run.oreBlocksMined > 0).length);
+    expect(a.runsWithTracesSeenBeforeFirstOre).toBeGreaterThan(0);
+    expect(a.runsThatMinedOre).toBe(report.runs.filter((entry) => entry.oreBlocksMined > 0).length);
     expect(a.runsThatMinedOreAfterSeeingTraces).toBeLessThanOrEqual(a.runsThatMinedOre);
-    expect(formatSummary(report)).toContain('mineral traces:');
   });
 
   it('stops a run at the shift cap and says so', () => {
@@ -151,7 +164,7 @@ describe('playRun', () => {
       seed: 2,
       contractId: CONTRACT,
       loadoutId: DEFAULT_LOADOUT_ID,
-      policy: makePolicy('wander', 2),
+      policy: makePolicy('random', 2),
       maxShifts: 3,
     });
     expect(metrics.outcome).toBe('unfinished');
@@ -160,47 +173,28 @@ describe('playRun', () => {
     expect(finalState.status.kind).toBe('active');
   });
 
-  it('counts a shift that begins with no fuel', () => {
-    // The wander policy on seed 9 runs out of fuel; the shift before the
-    // last upkeep began at 0.
-    const { metrics } = playRun({
-      seed: 9,
-      contractId: CONTRACT,
-      loadoutId: DEFAULT_LOADOUT_ID,
-      policy: makePolicy('wander', 9),
-      maxShifts: 300,
-    });
+  it('counts a shift that begins with no fuel, and the shifts begun with the lamp out', () => {
+    // The random policy on seed 9 crafts nothing. So its 24 fuel last 24
+    // shifts, the 25th begins at 0, and its upkeep ends the run. Its 3 lamp
+    // oil burn at the ends of shifts 4, 8 and 12, so every shift from 13 on
+    // begins with the lamp out (which changes nothing since issue #86).
+    const metrics = run('random', 9);
     expect(metrics.cause).toBe('outOfFuel');
-    expect(metrics.fuelAtEnd).toBe(0);
-    expect(metrics.shiftsAtZeroFuel).toBeGreaterThanOrEqual(1);
-  });
-
-  it('counts the shifts that begin with the lamp out', () => {
-    // The same run. It crafts no lamp oil, so the 3 it starts with burn at the
-    // ends of shifts 4, 8 and 12, and every shift from 13 on begins in the
-    // dark. It lasts 25 shifts: 24 fuel, and the last shift at 0. (Before the
-    // forest of issue #70 changed the start, it crafted some fuel and lasted 28.)
-    const { metrics } = playRun({
-      seed: 9,
-      contractId: CONTRACT,
-      loadoutId: DEFAULT_LOADOUT_ID,
-      policy: makePolicy('wander', 9),
-      maxShifts: 300,
-    });
+    expect(metrics.recipesUsed['fuel']).toBe(0);
     expect(metrics.recipesUsed['lampOil']).toBe(0);
+    expect(metrics.fuelAtEnd).toBe(0);
     expect(metrics.shiftsPlayed).toBe(25);
+    expect(metrics.shiftsAtZeroFuel).toBe(1);
     expect(metrics.shiftsInTheDark).toBe(25 - 12);
-    const report = simulate(options('wander', 3));
-    expect(report.aggregate.runsWithAShiftInTheDark).toBe(
-      report.runs.filter((run) => run.shiftsInTheDark > 0).length,
-    );
-    expect(formatSummary(report)).toContain('shifts in the dark:');
+    // The random policy never leaves, and hardly ever goes a second level down.
+    expect(metrics.deepestSquare).toBeGreaterThanOrEqual(1);
   });
 
   it('knows each policy name, and refuses any other', () => {
+    expect(POLICY_NAMES).toEqual(['random', 'pit']);
     for (const name of POLICY_NAMES) {
       expect(makePolicy(name, 1).name).toBe(name);
     }
-    expect(() => makePolicy('clever', 1)).toThrow(/Unknown policy/);
+    expect(() => makePolicy('staircase', 1)).toThrow(/Unknown policy/);
   });
 });

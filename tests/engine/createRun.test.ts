@@ -1,27 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { AVATAR, CONTRACT_IDS, LOADOUTS, SHIFT, WORLD } from '../../src/data';
-import {
-  createRun,
-  hashState,
-  isOpen,
-  isSolid,
-  isSurface,
-  legalActions,
-  previewCubePhase,
-} from '../../src/engine';
+import { createRun, hashState, legalActions, previewCubePhase } from '../../src/engine';
 import { cellCount } from '../../src/engine/state';
 
 describe('createRun', () => {
-  it('puts the avatar at the start position from the data, on the surface', () => {
+  it('has no miner on the board: the avatar is only its gauges (issue #86)', () => {
     const state = createRun(1, 'none', 'standard');
-    expect(state.avatar.pos).toEqual(WORLD.startPosition);
-    expect(isSurface(state.size, state.avatar.pos)).toBe(true);
-    expect(isOpen(state, state.avatar.pos)).toBe(true);
-    // It stands on the top layer of the cube.
-    const below = { ...state.avatar.pos, z: state.avatar.pos.z + 1 };
-    expect(isSolid(state, below)).toBe(true);
-    // A copy, so that moving the avatar cannot change the data table.
-    expect(state.avatar.pos).not.toBe(WORLD.startPosition);
+    expect(Object.keys(state.avatar).sort()).toEqual(['air', 'health', 'resting']);
   });
 
   it('gives the starting kit of the loadout', () => {
@@ -47,7 +32,6 @@ describe('createRun', () => {
     expect(state.lampOil).toBe(3);
     // No ladders since issue #80.
     expect(state.inventory).toEqual({ timber: 2 });
-    expect(state.avatar.pos).toEqual({ x: 16, y: 16, z: -1 });
     expect(state.avatar.health).toBe(10);
     expect(state.ap).toBe(5);
     expect(state.size).toEqual({ x: 32, y: 32, z: 32 });

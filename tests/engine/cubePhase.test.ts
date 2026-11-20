@@ -30,7 +30,6 @@ type StepFunction = CubePhaseStep['run'];
 function tunnelState(options: Omit<BuildStateOptions, 'layers'> = {}): GameState {
   return buildState({
     layers: [['#.#'], ['###']],
-    avatar: { x: 1, y: 0, z: 0 },
     revealAll: true,
     ...options,
   });
@@ -355,10 +354,11 @@ describe('health is checked before air (0014 item 2)', () => {
     expect(events.map((event) => event.type)).toEqual(['damageTaken', 'runEnded']);
   });
 
-  it('with no air left in a flooded cell the avatar drowns', () => {
+  it('with no air left it suffocates even beside water: there is no cell to be flooded', () => {
+    // "Drowned" needed the avatar's cell, which is gone (decision note 0026).
     const state = tunnelState({ air: 0, water: [{ x: 1, y: 0, z: 0 }] });
     stepAvatarEffects(state, [], newCubePhase());
-    expect(state.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'drowned' });
+    expect(state.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'suffocated' });
   });
 
   it('with air left nothing happens: the air rule itself is not built yet', () => {
@@ -397,12 +397,10 @@ describe('rest (0014 item 2: only for an avatar alive after damage and air)', ()
 });
 
 describe('after step (e): settle once, then upkeep (0014 item 2)', () => {
-  it('an avatar whose floor the cube phase took stays where it is (issue #80)', () => {
-    // A shaft: the avatar stands on a block that step (a) removes. It takes
-    // the recorded damage, and does not fall: the miner has no gravity.
+  it('damage recorded in the cube phase is applied in step (e), then upkeep runs', () => {
+    // A shaft: step (a) removes a block and records damage.
     const state = buildState({
       layers: [['.'], ['#'], ['.'], ['.'], ['#']],
-      avatar: { x: 0, y: 0, z: 0 },
       revealAll: true,
       health: 10,
     });
@@ -413,13 +411,12 @@ describe('after step (e): settle once, then upkeep (0014 item 2)', () => {
           recordDamage(phase, 4, 'rockfall');
         },
         timers: (current) => {
-          // The avatar does not move during steps (a) to (d).
-          expect(current.avatar.pos).toEqual({ x: 0, y: 0, z: 0 });
+          // The avatar is not hurt during steps (a) to (d).
+          expect(current.avatar.health).toBe(10);
         },
       },
       () => {
         const { state: after, events } = endShift(state);
-        expect(after.avatar.pos).toEqual({ x: 0, y: 0, z: 0 });
         expect(events.map((event) => event.type)).toEqual([
           'damageTaken', // rockfall, in step (e)
           'fuelChanged',
@@ -430,11 +427,10 @@ describe('after step (e): settle once, then upkeep (0014 item 2)', () => {
     );
   });
 
-  it('an avatar that step (e) kills stays where it died; loose items still fall', () => {
+  it('when step (e) kills the avatar, loose items still fall and nothing else follows', () => {
     // The same shaft, deeper, and the rockfall takes all the health that is left.
     const state = buildState({
       layers: [['.'], ['#'], ['.'], ['.'], ['.'], ['.'], ['.'], ['.'], ['.'], ['#']],
-      avatar: { x: 0, y: 0, z: 0 },
       revealAll: true,
       health: 4,
       looseItems: [{ pos: { x: 0, y: 0, z: 0 }, item: 'coal', count: 1 }],
@@ -449,9 +445,8 @@ describe('after step (e): settle once, then upkeep (0014 item 2)', () => {
       () => {
         const { state: after, events } = endShift(state);
         expect(after.status).toEqual({ kind: 'ended', outcome: 'death', cause: 'crushed' });
-        // The avatar stays where it died, and nothing follows `runEnded`
-        // except the loose coal dropping down the shaft.
-        expect(after.avatar.pos).toEqual({ x: 0, y: 0, z: 0 });
+        // Nothing follows `runEnded` except the loose coal dropping down the
+        // shaft.
         expect(events.map((event) => event.type)).toEqual(['damageTaken', 'runEnded', 'itemFell']);
         expect(after.looseItems).toEqual([{ pos: { x: 0, y: 0, z: 8 }, item: 'coal', count: 1 }]);
       },
