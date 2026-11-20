@@ -232,6 +232,15 @@ describe('serialise and deserialise', () => {
       'Saved state has version 9; this build reads version 11',
     );
   });
+
+  it('refuses a save from before pit walls slumped with a clear error (issue #94)', () => {
+    // State version 10 has the same fields, but a structure or a crack could
+    // be stored in a cell that is not its square's top block.
+    const saved = serialise(busyState());
+    expect(() => deserialise({ ...saved, version: 10 })).toThrow(
+      'Saved state has version 10; this build reads version 11',
+    );
+  });
 });
 
 describe('hashState', () => {

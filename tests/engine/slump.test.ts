@@ -364,6 +364,29 @@ describe('cracks and the slump (design doc 6.1)', () => {
     expect(contentsOn(after, 1, 0).water).toBe(2);
   });
 
+  it('a space opened from the side stays sealed (owner question 102)', () => {
+    // x=0 stands at ground level over a water pocket (the open cell at z=1).
+    // x=1, one level down, is steep above the hole at x=2 and is due. When its
+    // block goes, the pocket has open air beside it, but its roof is whole.
+    const state = buildState({
+      layers: [['d..'], ['.d.'], ['##.'], ['###']],
+      water: [{ x: 0, y: 0, z: 1 }],
+      cracks: [{ pos: { x: 1, y: 0, z: 1 }, timer: 0 }],
+    });
+    expect(depthText(state)).toEqual(['013']);
+    const { state: after, events } = endShift(state);
+    expect(eventsOf(events, 'blockFell').map((event) => event.from)).toEqual([
+      { x: 1, y: 0, z: 1 },
+    ]);
+    expect(depthText(after)).toEqual(['022']);
+    // Nothing collapsed and nothing poured out: the pocket is as it was.
+    expect(eventsOf(events, 'spaceCollapsed')).toEqual([]);
+    expect(blockAt(after, { x: 0, y: 0, z: 1 })).toBe(BLOCKS.air.code);
+    expect(waterAt(after, { x: 0, y: 0, z: 1 })).toBe(1);
+    expect(contentsOn(after, 0, 0).water).toBe(0);
+    expect(contentsOn(after, 1, 0).water).toBe(0);
+  });
+
   it('water, lava and gas on the square a block lands on rise with the rubble', () => {
     // On the foot (x=1, depth 2) stand 3 water, 1 lava (a source) and 4 gas,
     // in the cell the rubble lands in.
@@ -416,6 +439,34 @@ describe('cascades (design doc 6.1)', () => {
     expect(shownCrack(after, 2, 0)).toBe(1);
   });
 
+  it('rubble that lands on a due square does not fall in its place (review of PR #98)', () => {
+    // Stone at depths 0 2 2 3, with cracks showing 1 on x=0 and x=1. Both are
+    // on the list of due blocks. x=0 is steep and falls onto x=1, burying the
+    // cracked block there. When x=1's turn comes, its top block is the fresh
+    // rubble, which has no crack: it must stay, and crack with its own
+    // warning, although it stands at the top of a slope that falls 2.
+    const state = pit(['0223'], ['####'], {
+      cracks: [
+        { pos: { x: 0, y: 0, z: 0 }, timer: 0 },
+        { pos: { x: 1, y: 0, z: 2 }, timer: 0 },
+      ],
+    });
+    const { state: after, events } = endShift(state);
+    expect(eventsOf(events, 'blockFell')).toEqual([
+      {
+        type: 'blockFell',
+        from: { x: 0, y: 0, z: 0 },
+        to: { x: 1, y: 0, z: 1 },
+        block: BLOCKS.stone.code,
+        rubble: true,
+      },
+    ]);
+    expect(depthText(after)).toEqual(['1123']);
+    // The rubble is unstable, so it cracks now and shows the full countdown.
+    expect(blockAt(after, { x: 1, y: 0, z: 1 })).toBe(BLOCKS.rubble.code);
+    expect(shownCrack(after, 1, 0)).toBe(HAZARDS.slump.crackCountdown);
+  });
+
   it('is deterministic: the same pit slumps the same way every time', () => {
     const build = (): GameState =>
       pit(
@@ -462,11 +513,22 @@ describe('cascades (design doc 6.1)', () => {
       let slumps = 0;
       let quietShifts = 0;
       for (let shift = 0; shift < maxShifts && quietShifts < 4; shift += 1) {
+        const before = state;
         const result = endShift(state);
         state = result.state;
         const fell = eventsOf(result.events, 'blockFell');
         const cracked = eventsOf(result.events, 'blockCracked');
         quietShifts = fell.length + cracked.length === 0 ? quietShifts + 1 : 0;
+        // No block falls without its warning, and none moves twice in one
+        // cube phase: every block that fell was a top block showing a crack
+        // at 1 before the shift ended, and each fell from a different square.
+        const fellFrom = new Set(fell.map((event) => `${event.from.x},${event.from.y}`));
+        expect(fellFrom.size, `seed ${seed}`).toBe(fell.length);
+        for (const event of fell) {
+          expect(crackTimerAt(before, event.from), `seed ${seed}`).toBe(0);
+          expect(blockAt(before, event.from), `seed ${seed}`).toBe(event.block);
+          expect(depthAt(before, event.from.x, event.from.y), `seed ${seed}`).toBe(event.from.z);
+        }
         for (const event of fell) {
           slumps += 1;
           // Strictly down: a larger z is a lower layer.
