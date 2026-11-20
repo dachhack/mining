@@ -148,7 +148,7 @@ describe('generateCube', () => {
     // change here must be meant and must be said in the PR description.
     // Only the block array is hashed, so other parts of the state cannot move it.
     const blocks = generate(FULL_SIZE, 7);
-    expect(hashString(Array.from(blocks).join(','))).toBe('b9a479dbba9b7464');
+    expect(hashString(Array.from(blocks).join(','))).toBe('63f474fde3121066');
   });
 
   it('gives different cubes for different seeds', () => {
@@ -182,7 +182,8 @@ describe('generateCube', () => {
     for (const seed of SEEDS) {
       const blocks = generate(FULL_SIZE, seed);
       for (let z = 0; z < FULL_SIZE.z; z += 1) {
-        const allowedHere = z <= 7 ? upper : z <= 19 ? middle : deep;
+        // The bands since the depth survey (owner, issue #108): 0-3, 4-11, 12-31.
+        const allowedHere = z <= 3 ? upper : z <= 11 ? middle : deep;
         const allowedCodes = allowedHere.map((def) => def.code);
         for (const code of countBlocks(blocks, FULL_SIZE, [z]).keys()) {
           expect(allowedCodes, `${blockDefByCode(code).name} in layer ${z}`).toContain(code);
@@ -235,9 +236,9 @@ describe('generateCube', () => {
     for (const seed of SEEDS) {
       const blocks = generate(FULL_SIZE, seed);
       dirtTop += countBlocks(blocks, FULL_SIZE, [0]).get(BLOCKS.dirt.code) ?? 0;
-      dirtBottom += countBlocks(blocks, FULL_SIZE, [7]).get(BLOCKS.dirt.code) ?? 0;
-      hardTop += countBlocks(blocks, FULL_SIZE, [8]).get(BLOCKS.hardRock.code) ?? 0;
-      hardBottom += countBlocks(blocks, FULL_SIZE, [19]).get(BLOCKS.hardRock.code) ?? 0;
+      dirtBottom += countBlocks(blocks, FULL_SIZE, [3]).get(BLOCKS.dirt.code) ?? 0;
+      hardTop += countBlocks(blocks, FULL_SIZE, [4]).get(BLOCKS.hardRock.code) ?? 0;
+      hardBottom += countBlocks(blocks, FULL_SIZE, [11]).get(BLOCKS.hardRock.code) ?? 0;
     }
     expect(dirtTop).toBeGreaterThan(dirtBottom);
     expect(hardBottom).toBeGreaterThan(hardTop);
@@ -253,7 +254,9 @@ describe('generateCube', () => {
         const sizes = groupSizes(blocks, FULL_SIZE, codeOf(vein.block));
         const withinRange = sizes.filter((size) => size <= vein.maxSize).length;
         expect(sizes.length).toBeGreaterThan(0);
-        expect(withinRange / sizes.length, vein.block).toBeGreaterThan(0.8);
+        // 0.7: iron and copper are three times as dense since the depth
+        // survey (owner, issue #108), so more of their veins touch.
+        expect(withinRange / sizes.length, vein.block).toBeGreaterThan(0.7);
       }
     }
   });
@@ -364,11 +367,12 @@ describe('bandLayersForDepth', () => {
   });
 
   it('splits a shallower cube in the same proportions, every layer in one band', () => {
-    // 8 layers: a quarter of 32, so the bands are 0-1, 2-4 and 5-7.
+    // 8 layers: a quarter of 32, so the bands (0-3, 4-11, 12-31 in the full
+    // cube) are 0, 1-2 and 3-7.
     expect(bandLayersForDepth(8).map((band) => band.layers)).toEqual([
-      [0, 1],
-      [2, 3, 4],
-      [5, 6, 7],
+      [0],
+      [1, 2],
+      [3, 4, 5, 6, 7],
     ]);
     for (const depth of [1, 2, 3, 5, 10, 16, 31, 33, 64]) {
       const layers = bandLayersForDepth(depth).flatMap((band) => band.layers);

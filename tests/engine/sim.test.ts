@@ -163,16 +163,14 @@ describe('playRun', () => {
   });
 
   it('says whether mineral traces were seen before the first ore was mined', () => {
-    // Seed 11: the pit stays too far above the ore to show any traces.
+    // Since the depth survey (owner, issue #108) the middle band, and its
+    // ore, starts at layer 4. Both pits get 5 or 6 levels down and see
+    // mineral traces on the way; neither happens to mine ore, so "before the
+    // first ore" means "at all" for them.
     expect(pit11.oreBlocksMined).toBe(0);
-    expect(pit11.tracesSeenBeforeFirstOre).toBe(false);
-    // Seed 31 saw traces before pit walls slumped (issue #94). Now the pit's
-    // level benches keep it to 3 to 5 levels, too far above the ore (layer 8
-    // and below) on every seed tried (1 to 150 on the cubes of issue #95). So no scripted run reaches
-    // the "true" answer today; task T15's terracing policy should, and this
-    // line is where to check it.
+    expect(pit11.tracesSeenBeforeFirstOre).toBe(true);
     expect(pit31.oreBlocksMined).toBe(0);
-    expect(pit31.tracesSeenBeforeFirstOre).toBe(false);
+    expect(pit31.tracesSeenBeforeFirstOre).toBe(true);
     // A run stopped before its first decision has seen only the top layer,
     // which is too far above the ore to show any traces.
     expect(run('pit', 31, 0).tracesSeenBeforeFirstOre).toBe(false);
@@ -187,8 +185,8 @@ describe('playRun', () => {
     expect(a.runsWithTracesSeenBeforeFirstOre).toBe(
       runs.filter((entry) => entry.tracesSeenBeforeFirstOre).length,
     );
-    // No pit run sees traces since issue #94 (see the test above).
-    expect(a.runsWithTracesSeenBeforeFirstOre).toBe(0);
+    // Both runs see traces (see the test above).
+    expect(a.runsWithTracesSeenBeforeFirstOre).toBe(2);
     expect(a.runsThatMinedOre).toBe(runs.filter((entry) => entry.oreBlocksMined > 0).length);
     expect(a.runsThatMinedOreAfterSeeingTraces).toBeLessThanOrEqual(a.runsThatMinedOre);
   });
@@ -208,14 +206,14 @@ describe('playRun', () => {
   });
 
   it('counts a shift that begins with no fuel', () => {
-    // The random policy on seed 9 crafts supports but no fuel, and no camp
-    // of its stands long enough to burn any. So its 24 fuel last 24 shifts,
-    // the 25th begins at 0, and its upkeep ends the run.
+    // The random policy on seed 9 crafts fuel once (3 fuel from 1 coal), and
+    // no camp of its stands long enough to burn any. So its 72 + 3 fuel last
+    // 75 shifts, the 76th begins at 0, and its upkeep ends the run.
     const metrics = run('random', 9);
     expect(metrics.cause).toBe('outOfFuel');
-    expect(metrics.recipesUsed['fuel']).toBe(0);
+    expect(metrics.recipesUsed['fuel']).toBe(1);
     expect(metrics.fuelAtEnd).toBe(0);
-    expect(metrics.shiftsPlayed).toBe(25);
+    expect(metrics.shiftsPlayed).toBe(76);
     expect(metrics.shiftsAtZeroFuel).toBe(1);
     // The random policy never closes the mine, and hardly ever goes a second level down.
     expect(metrics.deepestSquare).toBeGreaterThanOrEqual(1);

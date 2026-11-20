@@ -70,10 +70,10 @@ describe('the data these scenarios assume', () => {
     expect(CAMPS.halfWidth).toBe(1); // 3 x 3
     expect(CAMPS.mineDiscountAp).toBe(1);
     expect(CAMPS.mineMinAp).toBe(1);
-    expect(CAMPS.mineDiscountSteps).toBe(4);
+    expect(CAMPS.mineDiscountSteps).toBe(8);
     expect(CAMPS.mineDiscountMaxDeeper).toBe(4);
     expect(CAMPS.upkeepFuel).toBe(1);
-    expect(CAMPS.upkeepEveryShifts).toBe(4);
+    expect(CAMPS.upkeepEveryShifts).toBe(8);
     expect(ACTION_COSTS.decommissionCamp).toBe(1);
     expect(ACTION_COSTS.campCraft).toBe(1);
     expect(BLOCKS.dirt.mineCost).toBe(1);
@@ -310,27 +310,27 @@ describe('mining near a camp is cheaper (design doc 8; owner, question 90)', () 
     expect(stepsFromCamp(MIDDLE_CAMP, 0, 6)).toBe(4);
   });
 
-  it('takes 1 AP off within 4 steps of a camp square, and nothing further away', () => {
+  it('takes 1 AP off within 8 steps of a camp square, and nothing further away', () => {
     const state = strip('############');
-    // The camp covers x = 0..2. x = 3..6 are 1 to 4 steps away; x = 7 is 5.
-    for (const x of [3, 4, 5, 6]) {
+    // The camp covers x = 0..2. x = 3..10 are 1 to 8 steps away; x = 11 is 9.
+    for (const x of [3, 4, 7, 10]) {
       expect(mineDiscountAt(state, x, 1)).toBe(1);
       expect(mineCheck(state, x, 1)).toMatchObject({ allowed: true, ap: 1, campDiscount: 1 });
     }
-    for (const x of [7, 8, 11]) {
+    for (const x of [11]) {
       expect(mineDiscountAt(state, x, 1)).toBe(0);
       expect(mineCheck(state, x, 1)).toMatchObject({ allowed: true, ap: 2, campDiscount: 0 });
     }
-    // A corner of the reach: (6, 0) is 4 east and 0 north of the camp's edge
-    // rows (y = 0..2 are all camp rows here), so it is 4 steps away.
-    expect(mineDiscountAt(state, 6, 0)).toBe(1);
+    // A corner of the reach: (10, 0) is 8 east and 0 north of the camp's edge
+    // rows (y = 0..2 are all camp rows here), so it is 8 steps away.
+    expect(mineDiscountAt(state, 10, 0)).toBe(1);
   });
 
   it('is what the mine action charges', () => {
     const state = strip('############', { ap: 5 });
     const near = act(state, { type: 'mine', x: 4, y: 1 });
     expect(near.state.ap).toBe(4); // stone: 2, less 1
-    const far = act(state, { type: 'mine', x: 9, y: 1 });
+    const far = act(state, { type: 'mine', x: 11, y: 1 });
     expect(far.state.ap).toBe(3); // stone at its own cost
     // The undiscounted price is no longer a legal action near the camp.
     const fullPrice: Action = { type: 'mine', x: 4, y: 1, ap: 2 };
@@ -653,7 +653,7 @@ describe('camp recipes (design doc 7.2: camp only)', () => {
   });
 });
 
-describe('camp upkeep (design doc 4: 1 fuel per active camp every 4 shifts)', () => {
+describe('camp upkeep (design doc 4: 1 fuel per active camp every 8 shifts)', () => {
   /** End `count` shifts and return the fuel after each. */
   function fuelOverShifts(start: GameState, count: number): number[] {
     const fuel: number[] = [];
@@ -665,16 +665,16 @@ describe('camp upkeep (design doc 4: 1 fuel per active camp every 4 shifts)', ()
     return fuel;
   }
 
-  it('burns 1 extra fuel at the end of every 4th shift, counting the founding shift as the first', () => {
+  it('burns 1 extra fuel at the end of every 8th shift, counting the founding shift as the first', () => {
     expect(SHIFT.fuelPerShift).toBe(1);
-    // Founded in shift 1: the extra fuel goes at the end of shifts 4 and 8.
+    // Founded in shift 1: the extra fuel goes at the end of shifts 8 and 16.
     const state = campField({ fuel: 20, shift: 1 });
-    expect(fuelOverShifts(state, 9)).toEqual([19, 18, 17, 15, 14, 13, 12, 10, 9]);
+    expect(fuelOverShifts(state, 9)).toEqual([19, 18, 17, 16, 15, 14, 13, 11, 10]);
 
-    // Founded in shift 6 (the action records the shift): shifts 9 and 13.
+    // Founded in shift 6 (the action records the shift): shifts 13 and 21.
     let later = field({ fuel: 20, shift: 6 });
     later = act(later, { type: 'foundCamp', x: 3, y: 3 }).state;
-    expect(fuelOverShifts(later, 8)).toEqual([19, 18, 17, 15, 14, 13, 12, 10]);
+    expect(fuelOverShifts(later, 8)).toEqual([19, 18, 17, 16, 15, 14, 13, 11]);
   });
 
   it('counts each camp from its own founding shift', () => {
@@ -683,19 +683,19 @@ describe('camp upkeep (design doc 4: 1 fuel per active camp every 4 shifts)', ()
       fuel: 20,
       shift: 3,
       camps: [
-        { pos: { x: 1, y: 1, z: 0 }, foundedShift: 1 }, // due at the end of shifts 4, 8
-        { pos: { x: 7, y: 1, z: 0 }, foundedShift: 3 }, // due at the end of shifts 6, 10
+        { pos: { x: 1, y: 1, z: 0 }, foundedShift: 1 }, // due at the end of shifts 8, 16
+        { pos: { x: 7, y: 1, z: 0 }, foundedShift: 3 }, // due at the end of shifts 10, 18
       ],
     });
-    // Ends of shifts 3, 4, 5, 6, 7, 8.
-    expect(fuelOverShifts(state, 6)).toEqual([19, 17, 16, 14, 13, 11]);
+    // Ends of shifts 3 to 10: 2 at the end of shift 8 and of shift 10.
+    expect(fuelOverShifts(state, 8)).toEqual([19, 18, 17, 16, 15, 13, 12, 10]);
   });
 
   it('two camps due in the same shift burn 2', () => {
     const state = buildState({
       layers: [layer('#', 9, 3), layer('#', 9, 3)],
       fuel: 20,
-      shift: 4,
+      shift: 8,
       camps: [
         { pos: { x: 1, y: 1, z: 0 }, foundedShift: 1 },
         { pos: { x: 7, y: 1, z: 0 }, foundedShift: 1 },
@@ -705,7 +705,7 @@ describe('camp upkeep (design doc 4: 1 fuel per active camp every 4 shifts)', ()
   });
 
   it('the end-shift preview says what the camps will burn', () => {
-    const due = campField({ fuel: 20, shift: 4 });
+    const due = campField({ fuel: 20, shift: 8 });
     expect(previewCubePhase(due).upkeep).toEqual({
       fuelConsumed: 2,
       campFuelConsumed: 1,
@@ -722,7 +722,7 @@ describe('camp upkeep (design doc 4: 1 fuel per active camp every 4 shifts)', ()
   });
 
   it('takes no more fuel than there is; the run then ends by the usual zero-fuel rule', () => {
-    const state = campField({ fuel: 1, shift: 4 });
+    const state = campField({ fuel: 1, shift: 8 });
     expect(previewCubePhase(state).upkeep).toEqual({
       fuelConsumed: 1,
       campFuelConsumed: 0,
@@ -737,7 +737,7 @@ describe('camp upkeep (design doc 4: 1 fuel per active camp every 4 shifts)', ()
   });
 
   it('a decommissioned camp burns nothing', () => {
-    let state = campField({ fuel: 20, shift: 4 });
+    let state = campField({ fuel: 20, shift: 8 });
     state = act(state, { type: 'decommissionCamp', x: 3, y: 3 }).state;
     expect(fuelOverShifts(state, 1)).toEqual([19]);
   });

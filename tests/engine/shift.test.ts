@@ -112,22 +112,22 @@ describe('fuel upkeep', () => {
   it('idling from the starting kit ends the run out of fuel at the expected shift', () => {
     // The standard kit's fuel, never touching an AP. Each upkeep takes
     // `fuelPerShift`; the upkeep that finds the gauge at 0 ends the run. With
-    // 24 fuel that is the upkeep ending shift 25, well inside 30 idle shifts.
+    // 72 fuel that is the upkeep ending shift 73, well inside 80 idle shifts.
     const startFuel = LOADOUTS[DEFAULT_LOADOUT_ID].fuel;
-    expect(startFuel).toBe(24);
+    expect(startFuel).toBe(72);
     let state = surfaceState({ fuel: startFuel });
     let shiftsEnded = 0;
-    while (state.status.kind === 'active' && shiftsEnded < 30) {
+    while (state.status.kind === 'active' && shiftsEnded < 80) {
       // Idle: all 5 AP unspent.
       expect(state.ap).toBe(SHIFT.apPerShift);
       state = endShift(state).state;
       shiftsEnded += 1;
     }
     expect(state.status).toEqual({ kind: 'ended', outcome: 'lost', cause: 'outOfFuel' });
-    expect(shiftsEnded).toBe(25);
+    expect(shiftsEnded).toBe(73);
     expect(shiftsEnded).toBe(startFuel / SHIFT.fuelPerShift + 1);
-    // The run ended during shift 25: its upkeep did not start shift 26.
-    expect(state.shift).toBe(25);
+    // The run ended during shift 73: its upkeep did not start shift 74.
+    expect(state.shift).toBe(73);
     expect(state.fuel).toBe(0);
   });
 
