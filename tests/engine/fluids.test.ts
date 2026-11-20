@@ -1,5 +1,5 @@
 // Water and lava on squares (design doc v0.2 sections 4.2, 5.2, 6.2, 6.3 and
-// 6.4; issue #99, task T10; decision note 0032). One group of tests for each
+// 6.4; issue #99, task T10; decision note 0033). One group of tests for each
 // rule, each on a small hand-built pit.
 //
 // A pit is drawn as a grid of depths, one digit per square, row y = 0 first:

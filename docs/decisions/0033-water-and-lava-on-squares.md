@@ -1,6 +1,6 @@
-# 0032 — T10: water and lava on squares
+# 0033 — T10: water and lava on squares
 
-Date: 2026-11-20. Status: accepted for the code as it stands (issue #99, task T10 of decision note 0025; it reworks issue #54). It builds design doc v0.2 sections 6.3 and 6.4, with 4.2 (mining), 5.2 (the crew) and 6.2 (lava sources), all [Default] (questions 80, 83 and 91). The owner chose to keep "water floods the pit" and "lava". The readings below are the developer's, made where the design doc leaves a detail open; the ones an owner might want to change are questions 103 to 106 in `docs/owner-questions.md`. None changes a [Decided] item, and the design doc is not changed.
+Date: 2026-11-20. Status: accepted for the code as it stands (issue #99, task T10 of decision note 0025; it reworks issue #54). It builds design doc v0.2 sections 6.3 and 6.4, with 4.2 (mining), 5.2 (the crew) and 6.2 (lava sources), all [Default] (questions 80, 83 and 91). The owner chose to keep "water floods the pit" and "lava". The readings below are the developer's, made where the design doc leaves a detail open; the ones an owner might want to change are questions 108 to 111 in `docs/owner-questions.md`. None changes a [Decided] item, and the design doc is not changed.
 
 ## Context
 
@@ -41,10 +41,10 @@ What stands on a square is the sum over the open cells above its top block, as T
 
 ### Readings where the design doc is silent
 
-1. **Several units may leave a square in one shift**, each going one square. So a tall column of water spreads to its neighbours in one cube phase, and the flood front then advances one square a shift (question 103).
-2. **Water and lava each flow by their own levels** and do not push each other aside. They meet only when they are on the same square; standing on neighbouring squares is not meeting (question 105).
-3. **A source never runs dry**, so its square always shows lava and can never be mined until it is sealed or turned to stone (question 104). `setLava` already says a cell with no lava is never a source, and this keeps that true.
-4. **"Water enters a worked square" is a move in the cube phase.** Water that a breach releases onto the mined square does not hurt the crew, and neither does standing water on a square the player mines: that costs AP. Lava differs, as 5.2 words it: it hurts wherever it is at the end of the step, so breaking into a lava pocket always costs 5 (question 106).
+1. **Several units may leave a square in one shift**, each going one square. So a tall column of water spreads to its neighbours in one cube phase, and the flood front then advances one square a shift (question 108).
+2. **Water and lava each flow by their own levels** and do not push each other aside. They meet only when they are on the same square; standing on neighbouring squares is not meeting (question 110).
+3. **A source never runs dry**, so its square always shows lava and can never be mined until it is sealed or turned to stone (question 109). `setLava` already says a cell with no lava is never a source, and this keeps that true.
+4. **"Water enters a worked square" is a move in the cube phase.** Water that a breach releases onto the mined square does not hurt the crew, and neither does standing water on a square the player mines: that costs AP. Lava differs, as 5.2 words it: it hurts wherever it is at the end of the step, so breaking into a lava pocket always costs 5 (question 111).
 5. **Lava above ground level drains like water.** 6.3 says so for water; note 0025 item 10 says neither stands above ground level.
 
 ### Forecast and views

@@ -1,6 +1,6 @@
 // Step (b) of the cube phase: water and lava flow across the squares of the
 // pit (design doc v0.2 sections 4, 6.2, 6.3 and 6.4; issue #99, task T10;
-// decision note 0032).
+// decision note 0033).
 //
 // THE PICTURE. Water and lava stand on squares. A square `depth` levels down
 // with `units` of water on it has its water surface `depth - units` levels

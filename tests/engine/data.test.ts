@@ -618,7 +618,7 @@ describe('M2 data (decision note 0014)', () => {
     }
   });
 
-  it('reports bad water and lava flow numbers (decision note 0032)', () => {
+  it('reports bad water and lava flow numbers (decision note 0033)', () => {
     const problems = problemsAfter((data) => {
       // A drop of 1 would let a unit of water swap back and forth for ever.
       data.hazards.water.flowMinDrop = 1;
