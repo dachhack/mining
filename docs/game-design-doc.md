@@ -29,8 +29,8 @@ Working title: **Mining Game**. A turn-based roguelike for Android and iOS. The 
 | Pacing | Turn-based |
 | Player | No avatar. The player taps any top block on the map to mine it; there is no walking and no escape. An abstract **crew** with a health bar does the work, and hazards in the pit damage it (section 5) |
 | Hazards | Pit walls slump; water floods the pit; lava; gas (section 6) |
-| Base | Middle path: field crafting for basics, plus buildable camps at depth (how "at depth" applies without a miner is question 90) |
-| Win condition | Finish the contract. The run is lost if crew health reaches 0 (section 9) |
+| Base | Middle path: field crafting for basics, plus buildable camps at depth. Without a miner, "at depth" means mining near a camp is cheaper, so camps move down the pit (owner, question 90; section 8) |
+| Win condition | Finish the contract: it is done the moment the last deliverable reaches the stockpile, with no Act 2 (owner, question 89: "Done on delivery"). The run is lost if crew health reaches 0 (section 9) |
 | Meta-progression | Unlocks only (new options between runs); no permanent stat upgrades |
 | Platforms | Android and iOS |
 
@@ -76,7 +76,7 @@ The surface is the open air above `z = 0`, one cell per square. It is mostly for
 | Middle | 8–19 | Stone and hard rock, iron, copper | Water pockets, gas pockets, caverns |
 | Deep | 20–31 | Hard rock, crystal, rare ore, relics | Lava, unstable ore, large caverns |
 
-How deep a run can reach under the level rule is open: see section 12 and question 85.
+How deep a run can reach under the level rule is measured before anything is tuned (owner, question 85: "Measure first"): see section 12.
 
 ### 3.4 What the player knows
 
@@ -143,7 +143,7 @@ Every action that targets a square may target any square on the map: there is no
 
 | Action | AP | Other cost |
 |---|---|---|
-| Mine a square's top block (4.2) | Per block type; +1 if the square is flooded | — |
+| Mine a square's top block (4.2) | Per block type; 1 less near a camp (section 8); +1 if the square is flooded | — |
 | Cut a tree | 2 | — (gives 2 timber) |
 | Place a support on a square | 1 | 1 support |
 | Place an explosive on a square | 1 | 1 explosive |
@@ -166,7 +166,7 @@ Every action that targets a square may target any square on the map: there is no
 - **The level rule** (owner: "After mining, at most 1 step"): after the mine, the square must be no more than 1 level lower than each of its face neighbours. Put the other way round: a square may be mined only when none of its face neighbours is higher than it.
 - So a square at depth 3 can be mined to depth 4 only if every neighbour is at depth 3 or deeper. Going deep means digging a terraced pit, about one extra ring of squares per level.
 - **The rule limits the player's mining only.** Hazards (slumps, explosions, a breached cavern) can leave a step of 2 or more; such a step is unstable and slumps (6.1).
-- **AP:** the block type's mine cost (3.5). [Default] +1 if water stands on the square (6.3); a square with lava on it cannot be mined (question 91).
+- **AP:** the block type's mine cost (3.5). [Default] 1 less (never below 1) near a camp (section 8); +1 if water stands on the square (6.3); a square with lava on it cannot be mined (question 91).
 - **What the player is told:** a tap on a square the rule forbids says which neighbours are too high.
 
 ## 5. The crew
@@ -305,30 +305,31 @@ Torches and lamp oil are removed (no light).
 ## 8. Camps [Decided: field crafting plus camps at depth]
 
 - **Founding [Default]:** a camp kit and a flat 3×3 patch of squares: all at the same depth, none with a tree, water, lava, gas or a structure on it. It costs the rest of the shift. The standard loadout carries one camp kit (owner, question 63).
-- **Functions:** smelter and workbench (camp recipes), and rest (crew health back to full). A camp's functions are available from anywhere on the map: the crew is abstract. How "at depth" applies without a miner is open (question 90).
+- **Functions:** smelter and workbench (camp recipes), and rest (crew health back to full). A camp's functions are available from anywhere on the map: the crew is abstract.
+- **Mining near a camp is cheaper [Default]** (owner, question 90: "Mining near it is cheaper"): mining a square costs 1 AP less (never below 1) when the square is within 4 steps of a camp square and no more than 4 levels deeper than the camp. So as the pit deepens, the discount runs out and the next camp goes further down: that is what "camps at depth" means without a miner.
 - **While a camp stands** its 9 squares cannot be mined.
 - **Vulnerability:** a camp is destroyed when water or lava enters one of its squares, an explosion includes or is beside one, or a block slumps from or onto one. A destroyed camp is lost.
 - **Upkeep:** active camps consume fuel (section 4). The player can decommission a camp to stop the upkeep; its squares can then be mined.
 - There is no stash (the stockpile has no limit) and no air line (there is no air).
 
-## 9. Contracts [Decided; outcomes without the escape: question 89]
+## 9. Contracts [Decided]
 
 ### 9.1 The contract
 
 - At run start the player chooses 1 of 3 generated contracts.
 - A contract has: 2–4 **deliverables** (e.g. 6 copper ingots, 2 crystals, 1 relic), a **survey hint** for each unique item (e.g. "relic signal, north-east, layers 24–28"), a difficulty tier, a payout, and optional **bonus clauses** (e.g. no explosives; finish within 180 shifts).
-- The final deliverable is always a **keystone item** in the deep band (whether the deep band is reachable is question 85).
+- The final deliverable is always a **keystone item** in the deep band. Whether the deep band is within reach is measured first (owner, question 85; section 12).
 
 ### 9.2 Finishing the contract
 
-- Owner: the player wins by finishing the contract. A contract is finished the moment its last deliverable reaches the stockpile; the run then ends with full success.
-- v0.1's Act 2 (taking the keystone starts an escape while the cube destabilises) has no escape to make any more. [Default] There is no Act 2: taking the keystone is simply the last deliverable. Whether to keep some last-act pressure is question 89.
+- Owner (question 89): "Done on delivery." A contract is finished the moment its last deliverable reaches the stockpile; the run then ends with full success.
+- There is no Act 2. v0.1's escape (taking the keystone started an escape while the cube destabilised) is gone; taking the keystone is simply the last deliverable.
 
 ### 9.3 Before contracts exist
 
 Until contracts are built (M4), the only way to end a run alive is to close the mine, which ends it as salvage (question 88, replacing question 20's "leave from the surface").
 
-### 9.4 Outcomes [Default, for the owner to confirm: question 89]
+### 9.4 Outcomes (owner, question 89)
 
 | Outcome | Condition | Result |
 |---|---|---|
@@ -363,7 +364,7 @@ Payouts are **credits**, spent between runs. Unlocks add options; they never rai
 
 - 150–250 shifts for a completed tier-1 contract; 20–40 minutes.
 - Roughly 2–3% of the cube mined per run (question 44: these first two targets disagree with the AP numbers).
-- **How deep a pit costs (question 85).** Under the level rule, the cheapest pit that reaches depth D is a terraced cone. Blocks to mine, with no slump benches:
+- **How deep a pit costs (owner, question 85: "Measure first").** Under the level rule, the cheapest pit that reaches depth D is a terraced cone. Blocks to mine, with no slump benches:
 
   | Depth | Pit in the middle | Pit against a side | Pit in a corner |
   |---|---|---|---|
@@ -371,7 +372,7 @@ Payouts are **credits**, spent between runs. Unlocks add options; they never rai
   | 12 | 1,156 | 650 | 364 |
   | 20 (deep band) | 5,340 | 2,870 | 1,540 |
 
-  At 5 AP a shift and 1–3 AP a block, 250 shifts mine roughly 500–800 blocks. So the middle band is within reach, and the deep band (crystal, relics, the keystone) is not, with today's numbers. Benches for slump safety (6.1) make pits wider still; explosives (6.6) make them cheaper.
+  At 5 AP a shift and 1–3 AP a block, 250 shifts mine roughly 500–800 blocks. So on paper the middle band is within reach, and the deep band (crystal, relics, the keystone) is not, with today's numbers. Benches for slump safety (6.1) make pits wider still; explosives (6.6) and the camp discount (section 8) make them cheaper. The owner chose to measure first: the bands stay as they are, a depth survey in the simulator measures how deep runs actually get, and the numbers are tuned after that.
 - A run can be suspended and resumed at any point (autosave every shift).
 
 ## 13. Open questions
@@ -383,4 +384,4 @@ Payouts are **credits**, spent between runs. Unlocks add options; they never rai
 5. Whether the crew or company has any persistent identity (name, cosmetic) across runs.
 6. Biome rule sets beyond the base cube.
 7. Game title.
-8. The owner questions raised by v0.2: 80–94 in `docs/owner-questions.md`.
+8. The owner questions raised by v0.2: 80–94 in `docs/owner-questions.md` (85, 89 and 90 answered by the owner; the rest assumed defaults).

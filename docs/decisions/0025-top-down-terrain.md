@@ -1,6 +1,6 @@
 # 0025 — Design doc v0.2: top-down terrain, no miner, the level rule, crew health
 
-Date: 2026-11-20. Status: the six choices under "Owner's decisions" are the owner's (issue #82) and are [Decided]. Everything else in design doc v0.2 that the owner did not choose is a [Default] proposal or a numbered owner question (73–94 in `docs/owner-questions.md`). This note changes no code. The milestone plan at the end is a proposal: the coordinator files the issues after the owner approves it.
+Date: 2026-11-20. Status: the six choices under "Owner's decisions" are the owner's (issue #82) and are [Decided]. The owner then answered questions 85 ("Measure first"), 89 ("Done on delivery") and 90 ("Mining near it is cheaper") the same day; they are recorded below and in the design doc. Everything else in design doc v0.2 that the owner did not choose is a [Default] proposal or a numbered owner question (73–94 in `docs/owner-questions.md`). This note changes no code. The milestone plan at the end is a proposal: the coordinator files the issues after the owner approves it.
 
 ## Context
 
@@ -35,10 +35,10 @@ By section of `docs/game-design-doc.md`:
 10. **Water, lava, gas (6.3–6.5)** stand on squares and spread across low squares. Water and lava flow downhill, one square a shift (lava on even shifts), and never stand above ground level. Gas is heavier than air (question 94), spreads to squares no higher than itself, and blows away at ground level. Lava and explosions ignite gas; there are no torches.
 11. **Unstable ore and explosives (6.6)** re-expressed for squares: ore is armed by a same-layer mine beside it while it is known and unbraced; a charge clears the top blocks of 5 squares. Relics survive a blast with a probability (question 65).
 12. **Crafting (7).** Torches, lamp oil and the safety lamp are gone. Scanning reveals 3 blocks under the tops of a 3×3 patch of squares (question 93). Sealant places a block of sealed rock: a dam or a plug.
-13. **Camps (8).** A flat 3×3 patch at one depth; rest and camp recipes; no stash, no air line. Camp kit in the standard loadout (question 63). How the [Decided] "camps at depth" applies is question 90.
-14. **Contracts (9).** Won when the last deliverable reaches the stockpile. Without an escape there is no Act 2 [Default]; outcomes become full, partial and salvage by closing the mine (question 89). Before contracts, closing the mine is salvage (question 88).
+13. **Camps (8).** A flat 3×3 patch at one depth; rest and camp recipes; no stash, no air line. Camp kit in the standard loadout (question 63). Owner, question 90: "Mining near it is cheaper". [Default] 1 AP less (never below 1) for squares within 4 steps of a camp square and no more than 4 levels deeper than the camp, so camps move down the pit.
+14. **Contracts (9).** Won when the last deliverable reaches the stockpile. Owner, question 89: "Done on delivery". No Act 2; partial means closing the mine with some deliverables, salvage with none, lost means crew health 0 or out of fuel. Before contracts, closing the mine is salvage (question 88).
 15. **Interface (11).** One top-down map of the whole surface, shaded by depth; no layers. One tap mines or cuts; other actions come from a tool bar.
-16. **Depth (12).** Under the level rule a pit to depth 20 costs about 1,500 blocks in a corner and 5,300 in the middle, against roughly 500–800 blocks a run can afford. The deep band, where the keystone is, is out of reach with today's numbers (question 85).
+16. **Depth (12).** Under the level rule a pit to depth 20 costs about 1,500 blocks in a corner and 5,300 in the middle, against roughly 500–800 blocks a run can afford. On paper the deep band, where the keystone is, is out of reach with today's numbers. Owner, question 85: "Measure first": the bands stay, the depth survey (T15) measures, then the numbers are tuned.
 
 ## What is superseded
 
@@ -87,7 +87,7 @@ Rows marked "Superseded by 0025" in `docs/owner-questions.md`: 4, 5, 6, 8, 9, 10
 | #54 water, lava, air                    | **Rework** as T10: flows on squares; air dropped                                                                                                                                             |
 | #55 gas, explosions, unstable ore       | **Rework** as T11 for squares                                                                                                                                                                |
 | #56 tells, forecast, play tool          | **Rework** as T14                                                                                                                                                                            |
-| #57 camps                               | **Rework** as T12: flat 3×3, no stash, no air line (after question 90)                                                                                                                       |
+| #57 camps                               | **Rework** as T12: flat 3×3, no stash, no air line, the mining discount near a camp (question 90)                                                                                            |
 | #58 camp tools                          | **Rework** as T13: pump, vent, sealant, scanner, drill; safety lamp and the #42 hardening dropped                                                                                            |
 | #59 entombment, deaths, sim, acceptance | **Close**; replaced by T15 (every way a run ends, sim, acceptance)                                                                                                                           |
 | #68 map hazards                         | **Rework** as part of T14                                                                                                                                                                    |
@@ -119,4 +119,4 @@ Then the M2 playtest round, as agent plan section 2 says. The repo plan's M2 and
 - Almost every engine module changes. The cube phase pipeline, `recordDamage`, the destroy helpers, `knownCell`/`knownCube`, the RNG, hash, serialise and data validation carry over.
 - Every golden run and every play log becomes unreplayable at T2; the logs of rounds m1-r1 and m1-r2 stay as history.
 - The playtest personas still fit (cautious, greedy, speed-runner, newcomer), but the Cautious line "scans, braces, and supports before every risky block" now means supports on wall squares.
-- The deep band is out of reach with today's numbers (question 85). It does not block T1–T15; it blocks contracts (M4), whose keystone lives there.
+- The deep band may be out of reach with today's numbers. The owner chose to measure first (question 85): T15's depth survey decides whether the bands, AP or costs are tuned before contracts (M4).
