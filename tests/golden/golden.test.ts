@@ -5,7 +5,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { BLOCKS, STRUCTURES, WORLD } from '../../src/data';
+import { BLOCKS, CREW, STRUCTURES, WORLD } from '../../src/data';
 import {
   depthAt,
   hasStump,
@@ -21,6 +21,7 @@ import {
   structureOnSquare,
   topBlockAt,
   unstableSquares,
+  visibleMineralTraces,
 } from '../../src/engine';
 import type { GameState } from '../../src/engine';
 import { replayDecisions, statusText } from '../../tools/simRun';
@@ -40,7 +41,13 @@ function loadGolden(name: string): GoldenRun {
 /** Replay the golden run in the file `name` and return its final state. */
 function replayFile(name: string): GameState {
   const golden = loadGolden(name);
-  return replayDecisions(golden.seed, golden.contractId, golden.loadoutId, golden.decisions);
+  return replayDecisions(
+    golden.seed,
+    golden.contractId,
+    golden.loadoutId,
+    golden.decisions,
+    golden.extraItems,
+  );
 }
 
 /** The square a recorded "mine x,y ap n" or "cutTree x,y ap n" decision names. */
@@ -227,11 +234,11 @@ describe('golden runs', () => {
   // The surface forest (issue #70; design doc 3.2): this run cuts trees. A
   // stump left alone grows a tree again; a stump whose square is mined never
   // does. The hash pins cutting, stumps, regrowth and "no regrowth once mined".
-  it('random-seed-9-forest.json cuts trees; some grow back, and none on a mined square', () => {
-    const golden = loadGolden('random-seed-9-forest.json');
+  it('random-seed-22-forest.json cuts trees; some grow back, and none on a mined square', () => {
+    const golden = loadGolden('random-seed-22-forest.json');
     const cuts = golden.decisions.filter((decision) => decision.startsWith('cutTree'));
     expect(cuts.length).toBeGreaterThan(0);
-    const state = replayFile('random-seed-9-forest.json');
+    const state = replayFile('random-seed-22-forest.json');
     let stumps = 0;
     let regrown = 0;
     let minedAfterCut = 0;
@@ -255,5 +262,82 @@ describe('golden runs', () => {
 
   it('random-seed-27-cut-short.json stops with the run still going', () => {
     expect(loadGolden('random-seed-27-cut-short.json').expectedStatus).toBe('active');
+  });
+
+  /** The action types in a golden run's decisions ("mine 3,4 ap 2" is a 'mine'). */
+  function typesIn(golden: GoldenRun): Set<string> {
+    return new Set(golden.decisions.map((decision) => decision.split(' ')[0] as string));
+  }
+
+  // The terracing policy (issue #108): a planned pit in a corner, held by
+  // supports. The hash pins supports that are placed in time, on a pit dug
+  // to its plan.
+  it('terrace-seed-4.json finishes a pit 6 deep in a corner, with supports and no slump', () => {
+    const golden = loadGolden('terrace-seed-4.json');
+    expect(golden.expectedStatus).toBe('ended: salvage, mineClosed');
+    expect(typesIn(golden)).toContain('placeSupport');
+    const state = replayFile('terrace-seed-4.json');
+    // One of the four corner squares is 6 down.
+    const lastX = state.size.x - 1;
+    const lastY = state.size.y - 1;
+    const corners = [
+      { x: 0, y: 0 },
+      { x: lastX, y: 0 },
+      { x: 0, y: lastY },
+      { x: lastX, y: lastY },
+    ];
+    const corner = corners.find((square) => depthAt(state, square.x, square.y) === 6);
+    expect(corner).toBeDefined();
+    // The walls stood: nothing slumped, so there is no rubble in the pit and
+    // the crew is unhurt.
+    expect(state.blocks.includes(BLOCKS.rubble.code)).toBe(false);
+    expect(state.crew.health).toBe(CREW.startHealth);
+    let supports = 0;
+    for (let y = 0; y < state.size.y; y += 1) {
+      for (let x = 0; x < state.size.x; x += 1) {
+        if (structureOnSquare(state, x, y) === STRUCTURES.support.code) {
+          supports += 1;
+        }
+      }
+    }
+    expect(supports).toBeGreaterThan(5);
+  });
+
+  // Mineral traces (decision note 0012) are back in a golden run: this pit
+  // reaches layer 8, where the middle band and its ore begin. It is the
+  // deepest any golden run goes, and still it meets no water and no gas:
+  // see docs/surveys/depth-survey.md.
+  it('terrace-8-seed-8-traces.json reaches the middle band and sees mineral traces', () => {
+    const golden = loadGolden('terrace-8-seed-8-traces.json');
+    expect(golden.expectedStatus).toBe('ended: salvage, mineClosed');
+    const state = replayFile('terrace-8-seed-8-traces.json');
+    const middleBand = WORLD.depthBands.find((band) => band.id === 'middle');
+    let deepest = 0;
+    for (let y = 0; y < state.size.y; y += 1) {
+      for (let x = 0; x < state.size.x; x += 1) {
+        deepest = Math.max(deepest, depthAt(state, x, y));
+      }
+    }
+    expect(deepest).toBe(middleBand?.firstLayer);
+    expect(visibleMineralTraces(state).length).toBeGreaterThan(0);
+    expect(state.crew.health).toBe(CREW.startHealth);
+  });
+
+  // The camp-made tools on a generated cube (issue #108). No run with the
+  // standard loadout gets the iron, copper and crystal for them, so this run
+  // starts with the sim-only tool kit (tools/simKit.ts). The hash pins a
+  // charge's blast, the crew's 6 damage from it, pumps, vents, sealant and
+  // scans as the dispatcher runs them.
+  it('random-kit-seed-27-blast.json uses every camp-made tool and is hurt by its own blast', () => {
+    const golden = loadGolden('random-kit-seed-27-blast.json');
+    expect(golden.extraItems).toBeDefined();
+    const types = typesIn(golden);
+    for (const type of ['placeExplosive', 'placePump', 'placeVent', 'seal', 'scan']) {
+      expect(types, type).toContain(type);
+    }
+    const state = replayFile('random-kit-seed-27-blast.json');
+    expect(state.crew.health).toBeLessThan(CREW.startHealth);
+    // Every charge went off in the shift it was placed: none is still armed.
+    expect(state.armed).toEqual([]);
   });
 });

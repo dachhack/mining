@@ -57,9 +57,13 @@ test('a shift that would lose the run: amounts, red frames, and a second tap to 
   await expect(canvas).toHaveAttribute('data-crew-hurt', /20,12/);
   await expect(canvas).toHaveAttribute('data-crew-hurt', /13,17/);
   await expect(canvas).toHaveAttribute('data-crew-hurt', /20,20/);
-  await expect(page.getByTestId('map-legend')).toContainText(
-    'red frame: the crew worked here and will or may be hurt',
-  );
+  // The slump is certain (a whole frame); the rest only may happen (dashed).
+  await expect(canvas).toHaveAttribute('data-crew-hurt-may', /13,17/);
+  await expect(canvas).toHaveAttribute('data-crew-hurt-may', /20,20/);
+  await expect(canvas).not.toHaveAttribute('data-crew-hurt-may', /20,12/);
+  const legend = page.getByTestId('map-legend');
+  await expect(legend).toContainText('red frame: the crew worked here and will be hurt');
+  await expect(legend).toContainText('dashed red frame: the crew worked here and may be hurt');
 
   // The button says so before any tap, and the first tap only asks.
   await expect(button).toContainText('End shift (');

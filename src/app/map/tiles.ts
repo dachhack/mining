@@ -97,6 +97,12 @@ export interface Tile {
    * worked square when the shift ends (`ShiftForecast.crew`; issue #112).
    */
   crewHurt: boolean;
+  /**
+   * True if every kind of damage forecast on this square is marked "may":
+   * it happens only if nothing hidden comes out first. False when at least
+   * one is certain ("exact" or "at least"), and when `crewHurt` is false.
+   */
+  crewHurtMayOnly: boolean;
   structure: StructureMark | null;
   /**
    * The countdown of a crack on the top block (design doc 6.1): 1 means it
@@ -243,8 +249,10 @@ export interface ComingFlows {
   gas: Set<string>;
   blast: Set<string>;
   vented: Set<string>;
-  /** The worked squares where the crew will be hurt. */
+  /** The worked squares where the crew will or may be hurt. */
   hurt: Set<string>;
+  /** Those of `hurt` where at least one kind of damage is certain. */
+  hurtCertain: Set<string>;
 }
 
 /**
@@ -260,6 +268,7 @@ export function comingFlows(state: GameState): ComingFlows {
     blast: new Set(),
     vented: new Set(),
     hurt: new Set(),
+    hurtCertain: new Set(),
   };
   if (!isRunActive(state)) {
     return coming;
@@ -286,6 +295,9 @@ export function comingFlows(state: GameState): ComingFlows {
   for (const entry of forecast.crew.damage) {
     for (const square of entry.squares) {
       coming.hurt.add(`${square.x},${square.y}`);
+      if (entry.certainty !== 'may') {
+        coming.hurtCertain.add(`${square.x},${square.y}`);
+      }
     }
   }
   return coming;
@@ -341,6 +353,7 @@ export function buildTile(
     blast: flows.blast.has(`${x},${y}`),
     worked: isWorked(state, x, y),
     crewHurt: flows.hurt.has(`${x},${y}`),
+    crewHurtMayOnly: flows.hurt.has(`${x},${y}`) && !flows.hurtCertain.has(`${x},${y}`),
     cheaperEdge: cheaperEdgeOf(state, x, y),
   };
   const higher: HigherSides = {

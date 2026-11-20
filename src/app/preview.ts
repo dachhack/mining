@@ -416,7 +416,7 @@ export function mountPreview(root: HTMLElement): void {
     endShiftWarning.textContent =
       lostWarning === null
         ? ''
-        : `${lostWarning} The red frames on the map show where the crew will or may be hurt; ` +
+        : `${lostWarning} The red frames on the map show where the crew will be hurt (dashed: may be hurt); ` +
           'the list below says by what. Tap End shift again to end it anyway, or do something else.';
 
     // One button per other choice on the list, in the list's order.

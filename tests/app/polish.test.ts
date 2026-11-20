@@ -468,6 +468,8 @@ describe('the forecast says what each hazard takes off crew health (issue #112)'
     const state = pit(['024', '122'], { worked: [{ x: 1, y: 1 }], health: 1 }, undefined);
     setCrackTimer(state, { x: 1, y: 0, z: 2 }, 0);
     setWaterOn(state, 0, 1, 1);
+    // The map frames that square as "may be hurt".
+    expect(buildTile(state, 1, 1)).toMatchObject({ crewHurt: true, crewHurtMayOnly: true });
     const view = buildView(state, { deepestDepth: 4 });
     expect(view.forecastLines.slice(0, 4)).toEqual([
       'THE RUN MAY BE LOST if you end the shift now: the crew has 1 health; it may lose 1.',
@@ -496,7 +498,7 @@ describe('the forecast says what each hazard takes off crew health (issue #112)'
       ],
     });
     setWaterOn(state, 0, 0, 3);
-    expect(buildTile(state, 1, 0).crewHurt).toBe(true);
+    expect(buildTile(state, 1, 0)).toMatchObject({ crewHurt: true, crewHurtMayOnly: false });
     // Worked, but nothing reaches it; and not worked at all.
     expect(buildTile(state, 4, 0)).toMatchObject({ worked: true, crewHurt: false });
     expect(buildTile(state, 2, 0)).toMatchObject({ worked: false, crewHurt: false });

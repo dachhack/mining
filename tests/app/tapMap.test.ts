@@ -94,6 +94,7 @@ describe('tiles', () => {
       tells: { damp: false, pitted: false, warm: false, hairline: false },
       worked: false,
       crewHurt: false,
+      crewHurtMayOnly: false,
       cheaperEdge: NO_HIGHER,
       structure: null,
       crack: null,

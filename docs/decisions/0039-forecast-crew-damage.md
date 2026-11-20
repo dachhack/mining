@@ -42,7 +42,7 @@ The hazard tells are **not** used to narrow this (question 131).
 ### What the player is shown
 
 - **Forecast lines** (phone and play tool, from the same function): first "THE RUN WILL BE LOST" or "THE RUN MAY BE LOST" when it applies; then one line for each kind, the largest amount first, with the squares ("THE CREW LOSES 5 health: lava on x20 y20…", "LOSES AT LEAST", "MAY LOSE"); then the total and the health left; then, if something hidden may add to it, one line that says so. That last line is shown only when something seen already hurts the crew: a slump uncovers an unseen block on nearly half of all shifts in simulated play, and hidden contents change the damage in under 1 in 200 of those (reviewer's survey). The headline and the total say the certain part and the possible part apart: "it will lose 3 and may lose 7 more"; "Crew health 8 -> 5 for certain, 0 if all that may happen does". The view's own sum for explosions ("THE CREW WORKED THERE: it loses 6 health") is removed.
-- **The map** draws a red frame, in place of the white corners, on each worked square where the crew will or may be hurt.
+- **The map** draws a red frame, in place of the white corners, on each worked square where the crew will be hurt, and a dashed red frame where every kind of damage there is only a "may".
 - **End shift on the phone**: when the run would or may be lost the button is red and says so. The first tap shows the warning over the button and ends nothing; a second tap ends the shift; any other action withdraws the question. A shift that hurts the crew without losing the run ends at one tap.
 - The play tool has no confirm step: its forecast opens with the same warning, and it is driven by typed commands and by agents.
 
