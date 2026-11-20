@@ -2,7 +2,7 @@
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CONTRACT_IDS, DEFAULT_LOADOUT_ID, FIELD_RECIPES, ITEMS } from '../../src/data';
-import { POLICY_NAMES, makePolicy } from '../../tools/policies';
+import { POLICY_NAMES, isPolicyName, makePolicy } from '../../tools/policies';
 import { aggregate, formatSummary, playRun, simulate } from '../../tools/simRun';
 import type { PlayOptions, RunMetrics, SimOptions, SimReport } from '../../tools/simRun';
 
@@ -72,7 +72,16 @@ describe('simulate', () => {
     expect(total(report.aggregate.outcomes)).toBe(6);
     expect(total(report.aggregate.causes)).toBe(6);
     expect(Object.keys(report.aggregate.outcomes)).toEqual(['salvage', 'lost', 'unfinished']);
-    expect(Object.keys(report.aggregate.causes)).toEqual(['mineClosed', 'outOfFuel', 'shiftCap']);
+    // Every way a run can end is listed, so that the ones nobody met show as 0.
+    expect(Object.keys(report.aggregate.causes)).toEqual([
+      'mineClosed',
+      'outOfFuel',
+      'buried',
+      'drowned',
+      'burned',
+      'poisoned',
+      'shiftCap',
+    ]);
   });
 
   it('lists every recipe and every item, so unused ones show as 0', () => {
@@ -199,25 +208,30 @@ describe('playRun', () => {
   });
 
   it('counts a shift that begins with no fuel', () => {
-    // The random policy on seed 9 crafts nothing. It founds a camp in shift 2
-    // and takes it down in shift 16, and the camp's upkeep burns 1 fuel at
-    // the end of shifts 5, 9 and 13 (design doc 4). So its 24 fuel last 21
-    // shifts, the 22nd begins at 0, and its upkeep ends the run.
+    // The random policy on seed 9 crafts supports but no fuel, and no camp
+    // of its stands long enough to burn any. So its 24 fuel last 24 shifts,
+    // the 25th begins at 0, and its upkeep ends the run.
     const metrics = run('random', 9);
     expect(metrics.cause).toBe('outOfFuel');
     expect(metrics.recipesUsed['fuel']).toBe(0);
     expect(metrics.fuelAtEnd).toBe(0);
-    expect(metrics.shiftsPlayed).toBe(22);
+    expect(metrics.shiftsPlayed).toBe(25);
     expect(metrics.shiftsAtZeroFuel).toBe(1);
     // The random policy never closes the mine, and hardly ever goes a second level down.
     expect(metrics.deepestSquare).toBeGreaterThanOrEqual(1);
   });
 
   it('knows each policy name, and refuses any other', () => {
-    expect(POLICY_NAMES).toEqual(['random', 'pit', 'greedy', 'camp']);
+    expect(POLICY_NAMES).toEqual(['random', 'pit', 'greedy', 'camp', 'terrace']);
     for (const name of POLICY_NAMES) {
       expect(makePolicy(name, 1).name).toBe(name);
     }
+    // The terracing policy also takes a target depth, and a camp.
+    expect(makePolicy('terrace:8', 1).name).toBe('terrace:8');
+    expect(makePolicy('terrace:8:camp', 1).name).toBe('terrace:8:camp');
+    expect(isPolicyName('terrace:8')).toBe(true);
+    expect(isPolicyName('terrace:deep')).toBe(false);
+    expect(() => makePolicy('terrace:8:tent', 1)).toThrow(/Unknown policy/);
     expect(() => makePolicy('staircase', 1)).toThrow(/Unknown policy/);
   });
 });
