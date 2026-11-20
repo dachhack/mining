@@ -922,8 +922,8 @@ function drawCrack(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
 /**
  * Everything drawn over a tile's rock, from the bottom up: the tells on the
  * rock; a camp; water, lava and gas; the edge of the cheaper area; mineral
- * traces and scan marks; a structure or a charge; what is coming when the
- * shift ends; the blast frame and, over it, the corners of a worked square;
+ * traces; a structure or a charge; what is coming when the shift ends; the
+ * blast frame and, over it, the scan marks and the corners of a worked square;
  * and last the crack and the number badges, which nothing may cover.
  */
 function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number, c: number) {
@@ -973,7 +973,6 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
     }
     ctx.restore();
   }
-  drawBelowMarks(ctx, tile, x, y, c);
   drawStructure(ctx, tile, x, y, c);
   if (tile.charge !== null) {
     drawCharge(ctx, tile.charge, x, y, c);
@@ -993,8 +992,11 @@ function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: numb
   if (tile.blast) {
     drawBlast(ctx, x, y, c);
   }
-  // The worked corners go over the blast frame: a square that is both is the
-  // one that matters most, and must show both.
+  // The scan marks and the worked corners go over the blast frame, so that
+  // the frame hides neither: a square that is worked and in a blast is the
+  // one that matters most.
+  drawBelowMarks(ctx, tile, x, y, c);
+  // (The corners are drawn after the scan marks, which sit at the left edge.)
   if (tile.worked) {
     drawWorked(ctx, x, y, c);
   }
