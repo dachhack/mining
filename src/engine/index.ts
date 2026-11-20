@@ -355,4 +355,15 @@ export {
   surfaceKindAt,
 } from './surface/state';
 export { shiftsUntilRegrowth } from './surface/regrowth';
+// The cube seen from above (design doc v0.2 section 3.1; issue #84): a
+// square's depth, its top block, and the level rule. Nothing in the rules
+// uses these yet.
+export { depthAt, isSquare, mayMine, topBlockAt, SQUARE_STEPS } from './heightmap';
+export type {
+  HigherNeighbour,
+  MayMineResult,
+  MineRefusal,
+  SquareDirection,
+  SquareStep,
+} from './heightmap';
 export type { RngState } from './rng';
