@@ -3,6 +3,10 @@
 // Taps on the map itself are in tapMap.spec.ts.
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { LOADOUTS } from '../../src/data';
+
+/** The fuel a run starts with, read from the data so that tuning it does not break the test. */
+const START_FUEL = LOADOUTS.standard.fuel;
 
 /** Start a new run on `seed` through the "New run" form. */
 async function startRun(page: Page, seed: number): Promise<void> {
@@ -29,13 +33,13 @@ test.beforeEach(async ({ page }) => {
 test('a run on a fixed seed is played with the buttons under the map', async ({ page }) => {
   await startRun(page, 7);
   const gauges = page.getByTestId('gauges');
-  await expect(gauges).toContainText('Shift 1 | AP 5/5 | Fuel 24');
+  await expect(gauges).toContainText(`Shift 1 | AP 5/5 | Fuel ${START_FUEL}`);
   await expect(gauges).toContainText('Stockpile: 1 Camp kit, 2 Timber');
   await expect(page.getByTestId('forecast')).toContainText('When you end the shift:');
 
   await page.getByTestId('end-shift').click();
   // The same choice in `npm run play -- --seed 7 --do end` gives the same gauges.
-  await expect(gauges).toContainText('Shift 2 | AP 5/5 | Fuel 23');
+  await expect(gauges).toContainText(`Shift 2 | AP 5/5 | Fuel ${START_FUEL - 1}`);
   await expect(page.getByTestId('outcome')).toContainText('> End the shift.');
 
   // Closing the mine asks first (issue #92). Answering "Cancel" changes
@@ -51,7 +55,7 @@ test('a run on a fixed seed is played with the buttons under the map', async ({ 
   await closeMine.click();
   expect(question).toContain('Close the mine? This ends the run');
   await expect(page.getByTestId('end-shift')).toBeVisible();
-  await expect(gauges).toContainText('Shift 2 | AP 5/5 | Fuel 23');
+  await expect(gauges).toContainText(`Shift 2 | AP 5/5 | Fuel ${START_FUEL - 1}`);
   await expect(page.getByTestId('ended')).not.toContainText('closed the mine');
 
   // Answering "OK" ends the run, alive.

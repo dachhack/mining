@@ -488,11 +488,11 @@ describe('M2 data (decision note 0014)', () => {
       foundMinAp: 1,
       restMinAp: 1,
       upkeepFuel: 1,
-      upkeepEveryShifts: 4,
+      upkeepEveryShifts: 8,
       // Mining near a camp is cheaper (owner, question 90).
       mineDiscountAp: 1,
       mineMinAp: 1,
-      mineDiscountSteps: 4,
+      mineDiscountSteps: 8,
       mineDiscountMaxDeeper: 4,
     });
     expect(GAME_DATA.campTools).toEqual({

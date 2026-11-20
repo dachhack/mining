@@ -25,7 +25,7 @@ Date: 2026-11-20. Status: accepted for the code as it stands (issue #108, task T
 
 - **Item 2** (the roof rule on generated cubes): covered. The golden run `pit-seed-24-caverns` (issue #95) breaks into two caverns; the acceptance check now looks at the level rule on every mine of every run, and about one run in eight breaks into a cavern; `tests/tools/acceptance.test.ts` pins seed 24 with the checker on.
 - **Item 5** (the tells data-table snapshot): restored in `tests/engine/data.test.ts`: the whole `TELLS` table is pinned.
-- **Item 6** (the sim is slow): PR #106 stopped `applyAction` building the whole action list. What is left has no single hot spot (a profile shows the time spread over the tells, the depth map and the camp sites), so this task did not change the engine for speed. Instead the two long jobs use every core: on the 4-core cloud machine 1,000 runs of every policy with the checks on take about 11 minutes.
+- **Item 6** (the sim is slow): PR #106 stopped `applyAction` building the whole action list. What is left has no single hot spot (a profile shows the time spread over the tells, the depth map and the camp sites), so this task did not change the engine for speed. Instead the two long jobs use every core: on the 4-core cloud machine 1,000 runs of every policy with the checks on take about 14 minutes.
 
 ## Consequences
 

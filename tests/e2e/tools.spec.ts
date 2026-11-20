@@ -3,14 +3,24 @@
 // the look tool, and holding a square, list what is known under a top; the
 // map marks a square with known blocks below.
 //
-// Seed 1 (see `npm run play -- --seed 1`): the patch round x17 y12 is clear,
-// flat ground. x16 y10 is stone and x14 y14 is coal, both near that patch.
+// Seed 1 (see `npm run play -- --seed 1`). The squares the test taps are not
+// written here by hand: squares.ts finds, on the seed's cube, a clear flat
+// patch for the camp, a stone square beside it and a coal square near it.
 // (A pump needs ingots and a scanner charge needs crystal, which no short
 // run reaches: those two tools are tested in tests/app/tapMapTools.test.ts.)
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
+import { findCampSpot, key, openingView, startOf } from './squares';
 
 test.use({ viewport: { width: 390, height: 844 } });
+
+const SEED = 1;
+const START = startOf(SEED);
+/** A clear patch for the camp, stone beside it, coal near it, and a spare dirt square. */
+const SPOT = findCampSpot(START, openingView(START));
+const CAMP = SPOT.centre;
+const STONE = SPOT.stoneBeside;
+const SPARE = SPOT.spare;
 
 /** Where the middle of the square (x, y) of the map is on the page. */
 async function squareCentre(canvas: Locator, x: number, y: number) {
@@ -43,9 +53,9 @@ test('sealant is crafted and used from the tool bar; look and hold list a square
   });
   await page.reload();
   await page.getByRole('button', { name: 'New run' }).click();
-  await page.getByLabel('Seed').fill('1');
+  await page.getByLabel('Seed').fill(String(SEED));
   await page.getByRole('button', { name: 'Start run' }).click();
-  await expect(page.getByTestId('seed')).toHaveText('Seed 1');
+  await expect(page.getByTestId('seed')).toHaveText(`Seed ${SEED}`);
 
   const canvas = page.getByTestId('map-canvas');
   const outcome = page.getByTestId('outcome');
@@ -61,13 +71,15 @@ test('sealant is crafted and used from the tool bar; look and hold list a square
 
   // Shift 1: found a camp. Shift 2: mine stone and coal near it.
   await page.getByTestId('tool-camp').click();
-  await tapSquare(page, canvas, 17, 12);
-  await expect(outcome).toContainText('The camp stands on x16-18, y11-13');
+  await tapSquare(page, canvas, CAMP.x, CAMP.y);
+  await expect(outcome).toContainText(
+    `The camp stands on x${CAMP.x - 1}-${CAMP.x + 1}, y${CAMP.y - 1}-${CAMP.y + 1}`,
+  );
   await page.getByTestId('end-shift').click();
   await expect(gauges).toContainText('Shift 2');
-  await tapSquare(page, canvas, 16, 10);
+  await tapSquare(page, canvas, STONE.x, STONE.y);
   await expect(outcome).toContainText('Got 1 Stone');
-  await tapSquare(page, canvas, 14, 14);
+  await tapSquare(page, canvas, SPOT.coalNear.x, SPOT.coalNear.y);
   await expect(outcome).toContainText('Got 1 Coal');
 
   // Craft sealant at the camp: the seal tool appears.
@@ -80,19 +92,21 @@ test('sealant is crafted and used from the tool bar; look and hold list a square
   await sealTool.click();
   await expect(sealTool).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('tool-hint')).toContainText('sealed rock');
-  await tapSquare(page, canvas, 15, 10);
-  await expect(outcome).toContainText('x15 y10 is at ground level');
-  await expect(canvas).toHaveAttribute('data-selected', '15,10');
+  await tapSquare(page, canvas, SPARE.x, SPARE.y);
+  await expect(outcome).toContainText(`x${SPARE.x} y${SPARE.y} is at ground level`);
+  await expect(canvas).toHaveAttribute('data-selected', key(SPARE));
   await expect(sealTool).toHaveText('Seal (1)');
 
   // The dug square is sealed with one tap; the tool goes with the last sealant.
-  await tapSquare(page, canvas, 16, 10);
-  await expect(outcome).toContainText('Sealed x16 y10: its top block is now sealed rock');
+  await tapSquare(page, canvas, STONE.x, STONE.y);
+  await expect(outcome).toContainText(
+    `Sealed x${STONE.x} y${STONE.y}: its top block is now sealed rock`,
+  );
   await expect(gauges).toContainText('AP 1/5');
   await expect(sealTool).toBeHidden();
   await expect(page.getByTestId('map-legend')).toContainText('Sealed rock');
   // The block the sealant buried was seen, so it is known under the new top.
-  await expect(canvas).toHaveAttribute('data-below', '16,10:-');
+  await expect(canvas).toHaveAttribute('data-below', `${key(STONE)}:-`);
   await expect(page.getByTestId('map-legend')).toContainText('plain rock known below');
   // The note under the map words the hint for the phone, not for the play tool.
   await expect(page.getByTestId('map-notes')).toContainText(
@@ -102,21 +116,21 @@ test('sealant is crafted and used from the tool bar; look and hold list a square
 
   // The look tool lists it, and takes nothing.
   await lookTool.click();
-  await tapSquare(page, canvas, 16, 10);
-  await expect(outcome).toContainText('x16 y10, ground level: Sealed rock');
+  await tapSquare(page, canvas, STONE.x, STONE.y);
+  await expect(outcome).toContainText(`x${STONE.x} y${STONE.y}, ground level: Sealed rock`);
   await expect(outcome).toContainText('Known under the top block:');
-  await expect(outcome).toContainText('depth 1: Dirt');
+  await expect(outcome).toContainText(`depth 1: ${SPOT.underStone}`);
   await expect(gauges).toContainText('AP 1/5');
   await lookTool.click();
   await expect(lookTool).toHaveAttribute('aria-pressed', 'false');
 
   // Holding a square does the same with the mining tool on, and does not mine it.
-  const at = await squareCentre(canvas, 15, 10);
+  const at = await squareCentre(canvas, SPARE.x, SPARE.y);
   await page.mouse.move(at.x, at.y);
   await page.mouse.down();
   await page.waitForTimeout(800);
   await page.mouse.up();
-  await expect(outcome).toContainText('x15 y10, ground level');
+  await expect(outcome).toContainText(`x${SPARE.x} y${SPARE.y}, ground level`);
   await expect(outcome).toContainText('Nothing is known under the top block');
   await expect(gauges).toContainText('AP 1/5');
   await page.screenshot({

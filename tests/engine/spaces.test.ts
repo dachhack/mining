@@ -215,7 +215,10 @@ describe('underground spaces (design doc 3.6; issue #95)', () => {
   });
 
   it('about this many spaces and open cells in a cube (the survey of decision note 0030)', () => {
-    // 51 spaces are asked for (12 + 10 + 7 + 7 + 10 + 5); a few find no room.
+    // 103 spaces are asked for since the depth survey (owner, issue #108:
+    // candidate C): 6 small caverns; 39 water pockets, 29 gas pockets and 5
+    // caverns in the middle band; 16 lava pockets and 8 large caverns. In
+    // these cubes every one finds room.
     let spaces = 0;
     let cells = 0;
     for (const found of spacesByCube) {
@@ -224,11 +227,11 @@ describe('underground spaces (design doc 3.6; issue #95)', () => {
     }
     const meanSpaces = spaces / cubes.length;
     const meanCells = cells / cubes.length;
-    expect(meanSpaces).toBeGreaterThan(45);
-    expect(meanSpaces).toBeLessThanOrEqual(51);
-    // Under 1.5% of the 32,768 cells.
-    expect(meanCells).toBeGreaterThan(250);
-    expect(meanCells).toBeLessThan(500);
+    expect(meanSpaces).toBeGreaterThan(95);
+    expect(meanSpaces).toBeLessThanOrEqual(103);
+    // About 2% of the 32,768 cells.
+    expect(meanCells).toBeGreaterThan(550);
+    expect(meanCells).toBeLessThan(900);
   });
 
   it('some lava pockets are big enough to be sources, and some are not', () => {

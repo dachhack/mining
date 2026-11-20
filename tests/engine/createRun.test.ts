@@ -39,7 +39,8 @@ describe('createRun', () => {
     // The one test that states the numbers themselves, so that an accidental
     // edit of the data shows up. A deliberate change updates this test.
     const state = createRun(1, 'none', 'standard');
-    expect(state.fuel).toBe(24);
+    // 72 since the depth survey (owner, issue #108, candidate C); it was 24.
+    expect(state.fuel).toBe(72);
     // No lamp oil since issue #89.
     expect('lampOil' in state).toBe(false);
     // No carrying since issue #92: the kit is in the stockpile.

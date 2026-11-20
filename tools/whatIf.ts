@@ -6,6 +6,13 @@
 // memory of the simulator process only, so that the survey can play the same
 // seeds with it and measure what it does.
 //
+// THE NAMED TRIALS ARE A RECORD. `WHAT_IFS` below is written as changes from
+// the numbers of the day of the survey (24 fuel, the middle band at layer 8).
+// The owner has since chosen new numbers (decision note 0040), so "starting
+// fuel 48" would now lower the fuel. They reproduce the survey's tables only
+// on the commit of PR #113. The custom trials (`set:...`, see `customWhatIf`)
+// say their numbers outright and work on any data.
+//
 // NOTHING HERE CHANGES THE GAME. The files in src/data are not touched; the
 // change lasts until the simulator process ends. `npm run sim -- --survey
 // depth` plays each trial in worker processes of its own (tools/parallel.ts),

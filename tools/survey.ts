@@ -514,8 +514,14 @@ function whatIfSummaryTable(
 // The survey
 // ---------------------------------------------------------------------------
 
-/** Play the whole depth survey and return its report as Markdown. */
-export async function runDepthSurvey(options: SurveyOptions): Promise<string> {
+/**
+ * Play the depth survey and return its report as Markdown. With `withTrials`
+ * false it plays the game as it is and leaves the what-if trials out (tables
+ * 1 to 6 only), and adds the terracing policy planned 8 deep, without and
+ * with a camp, to tables 1 to 4: that is `npm run sim -- --survey depth-now`,
+ * the quick measurement to make after a change to the numbers in src/data.
+ */
+export async function runDepthSurvey(options: SurveyOptions, withTrials = true): Promise<string> {
   const results = new Map<string, RunMetrics[]>();
   const problems: string[] = [];
 
@@ -543,7 +549,10 @@ export async function runDepthSurvey(options: SurveyOptions): Promise<string> {
     problems.push(...result.problems);
   }
 
-  for (const policy of MAIN_POLICIES) {
+  const mainPolicies = withTrials
+    ? MAIN_POLICIES
+    : [...MAIN_POLICIES, 'terrace:8', 'terrace:8:camp'];
+  for (const policy of mainPolicies) {
     await play(policy, policy, options.runs, null);
   }
   const terracePolicies = TERRACE_TARGETS.map((target) => `terrace:${target}`);
@@ -571,7 +580,7 @@ export async function runDepthSurvey(options: SurveyOptions): Promise<string> {
       whatIf: whatIf.id as string | null,
     })),
   ];
-  for (const trial of trials) {
+  for (const trial of withTrials ? trials : []) {
     for (const policy of WHAT_IF_POLICIES) {
       await play(`${trial.id} ${policy}`, policy, whatIfRuns, trial.whatIf);
     }
@@ -582,16 +591,16 @@ export async function runDepthSurvey(options: SurveyOptions): Promise<string> {
   const sections = [
     `Depth survey: engine ${ENGINE_VERSION}, seeds ${options.firstSeed} to ${lastSeed} (${options.runs} runs for each policy), standard loadout, shift cap ${options.maxShifts}.`,
     '### Table 1. How deep runs get',
-    'The deepest square is the most levels any one square went down by mining. 0 is untouched ground; the middle band, where water, gas, iron and copper begin, starts at 8.',
-    outcomesTable(results, MAIN_POLICIES),
+    `The deepest square is the most levels any one square went down by mining. 0 is untouched ground; the middle band, where water, gas, iron and copper begin, starts at ${middleNow}.`,
+    outcomesTable(results, mainPolicies),
     '### Table 2. How runs end',
-    endingsTable(results, MAIN_POLICIES),
+    endingsTable(results, mainPolicies),
     '### Table 3. The deepest square, run by run',
     'Each cell is the number of runs whose deepest square was at that depth.',
-    depthDistributionTable(results, MAIN_POLICIES),
+    depthDistributionTable(results, mainPolicies),
     '### Table 4. What runs met',
     'Each cell is the number of runs in which it happened at least once.',
-    metTable(results, MAIN_POLICIES),
+    metTable(results, mainPolicies),
     '### Table 5. The terracing policy, by the depth it plans for',
     `The terracing policy plans its pit for one target depth and closes the mine when the pit is finished, so no run goes deeper than its target. The \`terrace\` column of tables 1 to 4 is target ${TERRACE_POLICY.targetDepth}.`,
     terraceTable(results, terracePolicies),
@@ -599,13 +608,17 @@ export async function runDepthSurvey(options: SurveyOptions): Promise<string> {
     `A run starts with ${fuel} fuel: ${fuel} shifts of ${SHIFT.apPerShift} AP, ${fuel * SHIFT.apPerShift} AP in all. One coal block costs ${BLOCKS.coalSeam.mineCost} AP to mine and 1 AP to craft, and gives 3 more shifts. The table is arithmetic, not simulation: blocks in the cheapest pit that reaches each depth, and the AP to mine them at the mean cost of each layer's rock. It leaves out trees (2 AP each), supports (2 AP each, plus the timber and stone), and coal found on the way.`,
     costTable(),
     layerCostTable(),
-    '### Table 7. What each option would change: the best result of each trial',
-    `Each trial changes one set of numbers in the simulator's memory only (tools/whatIf.ts) and plays seeds ${options.firstSeed} to ${options.firstSeed + whatIfRuns - 1} (${whatIfRuns} runs) with each of the policies ${WHAT_IF_POLICIES.join(', ')}. Each cell is the share of runs for the policy that did best on that count, with its name. "Reached the middle band" means the deepest square reached the first layer of the middle band as that trial has it.`,
-    whatIfSummaryTable(results, trials),
-    '### Table 8. What each option would change: every policy',
-    `The same trials, one row for each policy (${whatIfRuns} runs a row).`,
-    whatIfTable(results, trials),
   ];
+  if (withTrials) {
+    sections.push(
+      '### Table 7. What each option would change: the best result of each trial',
+      `Each trial changes one set of numbers in the simulator's memory only (tools/whatIf.ts) and plays seeds ${options.firstSeed} to ${options.firstSeed + whatIfRuns - 1} (${whatIfRuns} runs) with each of the policies ${WHAT_IF_POLICIES.join(', ')}. Each cell is the share of runs for the policy that did best on that count, with its name. "Reached the middle band" means the deepest square reached the first layer of the middle band as that trial has it.`,
+      whatIfSummaryTable(results, trials),
+      '### Table 8. What each option would change: every policy',
+      `The same trials, one row for each policy (${whatIfRuns} runs a row).`,
+      whatIfTable(results, trials),
+    );
+  }
   if (problems.length > 0) {
     sections.push('### Problems', ...problems.map((problem) => `- ${problem}`));
   }

@@ -73,11 +73,11 @@ The surface is the open air above `z = 0`, one cell per square. It is mostly for
 
 | Band | Layers | Materials | Hazards introduced |
 |---|---|---|---|
-| Upper | 0–7 | Dirt, stone, coal, timber-root | Slumping dirt, small caverns |
-| Middle | 8–19 | Stone and hard rock, iron, copper | Water pockets, gas pockets, caverns |
-| Deep | 20–31 | Hard rock, crystal, rare ore, relics | Lava, unstable ore, large caverns |
+| Upper | 0–3 | Dirt, stone, coal, timber-root | Slumping dirt, small caverns |
+| Middle | 4–11 | Stone and hard rock, iron, copper | Water pockets, gas pockets, caverns |
+| Deep | 12–31 | Hard rock, crystal, rare ore, relics | Lava, unstable ore, large caverns |
 
-How deep a run can reach under the level rule is measured before anything is tuned (owner, question 85: "Measure first"): see section 12.
+The bands were brought shallower after the depth survey (owner, 2026-11-20, issue #108): the middle band began at layer 8 and the deep band at 20, and no run reached either. See section 12.
 
 ### 3.4 What the player knows
 
@@ -134,7 +134,7 @@ A run is a sequence of **shifts**. Each shift has three phases.
 
 1. **Player phase.** The player spends **action points (AP)**. [Default] 5 AP per shift.
 2. **Cube phase.** Hazards advance one step, in a fixed order: (a) slumps: cracked blocks whose countdown has ended fall, then newly unstable squares crack (6.1); (b) water and lava flow (6.3, 6.4); (c) gas spreads, vents act, then charges and armed unstable ore go off, then ignition (6.5, 6.6); (d) countdowns tick; (e) damage to the crew is applied, then rest. Structures and camps are destroyed at the moment of the event that destroys them. After the cube phase, stumps regrow (3.2).
-3. **Upkeep.** Fuel is consumed. [Default] 1 fuel per shift, plus 1 per active camp every 4 shifts. If fuel is already 0 when upkeep comes, the run ends; otherwise the shift's fuel is taken. So a crew whose fuel reaches 0 has one last shift to craft fuel (owner, question 19).
+3. **Upkeep.** Fuel is consumed. [Default] 1 fuel per shift, plus 1 per active camp every 8 shifts (owner, issue #108; it was every 4). If fuel is already 0 when upkeep comes, the run ends; otherwise the shift's fuel is taken. So a crew whose fuel reaches 0 has one last shift to craft fuel (owner, question 19).
 
 The player may end the player phase early. [Default] Unspent AP is lost when the shift ends: it does not carry over and does not become fuel (owner, question 23).
 
@@ -308,7 +308,7 @@ Torches and lamp oil are removed (no light).
 
 - **Founding [Default]:** a camp kit and a flat 3×3 patch of squares: all at the same depth, none with a tree, water, lava, gas or a structure on it. It costs the rest of the shift. The standard loadout carries one camp kit (owner, question 63).
 - **Functions:** smelter and workbench (camp recipes), and rest (crew health back to full). A camp's functions are available from anywhere on the map: the crew is abstract.
-- **Mining near a camp is cheaper [Default]** (owner, question 90: "Mining near it is cheaper"): mining a square costs 1 AP less (never below 1) when the square is within 4 steps of a camp square and no more than 4 levels deeper than the camp. So as the pit deepens, the discount runs out and the next camp goes further down: that is what "camps at depth" means without a miner. In practice distance is the limit that binds: under the level rule a square k steps from a camp is at most k levels deeper, so the depth limit matters only where a hazard has broken the rule, and the discount runs out because the pit spreads away from the camp.
+- **Mining near a camp is cheaper [Default]** (owner, question 90: "Mining near it is cheaper"): mining a square costs 1 AP less (never below 1) when the square is within 8 steps of a camp square and no more than 4 levels deeper than the camp (8 steps and upkeep every 8 shifts are the owner's choice after the depth survey, issue #108: "make camps worth founding"; both were 4, and a camp then cost more fuel than it saved). So as the pit deepens, the discount runs out and the next camp goes further down: that is what "camps at depth" means without a miner. In practice distance is the limit that binds: under the level rule a square k steps from a camp is at most k levels deeper, so the depth limit matters only where a hazard has broken the rule, and the discount runs out because the pit spreads away from the camp.
 - **While a camp stands** its 9 squares cannot be mined.
 - **Vulnerability:** a camp is destroyed when water or lava enters one of its squares, an explosion includes or is beside one, or a block slumps from or onto one. A destroyed camp is lost.
 - **Upkeep:** active camps consume fuel (section 4). The player can decommission a camp to stop the upkeep; its squares can then be mined.
@@ -370,11 +370,12 @@ Payouts are **credits**, spent between runs. Unlocks add options; they never rai
 
   | Depth | Pit in the middle | Pit against a side | Pit in a corner |
   |---|---|---|---|
-  | 8 (middle band) | 344 | 204 | 120 |
-  | 12 | 1,156 | 650 | 364 |
-  | 20 (deep band) | 5,252 | 2,840 | 1,540 |
+  | 4 (middle band) | 44 | 30 | 20 |
+  | 8 | 344 | 204 | 120 |
+  | 12 (deep band) | 1,156 | 650 | 364 |
+  | 20 | 5,252 | 2,840 | 1,540 |
 
-  At 5 AP a shift and 1–3 AP a block, 250 shifts mine roughly 500–800 blocks. So on paper the middle band is within reach, and the deep band (crystal, relics, the keystone) is not, with today's numbers. Benches for slump safety (6.1) make pits wider still; explosives (6.6) and the camp discount (section 8) make them cheaper. The owner chose to measure first: the bands stay as they are, a depth survey in the simulator measures how deep runs actually get, and the numbers are tuned after that.
+  Benches for slump safety (6.1) make pits wider still; supports, explosives (6.6) and the camp discount (section 8) make them cheaper. The owner chose to measure first. The depth survey (`docs/surveys/depth-survey.md`) found that with 24 starting fuel and the middle band at layer 8 no run met water, gas, lava or ore: the most careful scripted player got 6 levels down. The owner then chose the survey's candidate C (2026-11-20, issue #108): the middle band starts at layer 4 and the deep band at 12; the standard loadout starts with 72 fuel; the generator places six times as many water and gas pockets and three times as many iron and copper veins. Measured after the change (decision note 0040; 300 seeds), a careful scripted player whose pit is planned 8 deep finishes it in 89% of runs, mines iron or copper in 57%, releases water in 24% and gas in 20%, and loses its crew in 11%, always to gas; a greedy player is buried every time. (Before the change the survey's table 9 gave 60%, 75% and 24% for a pit planned 10 deep, which few runs finish.) The deep band (lava, unstable ore, crystal, relics, the keystone) is still out of reach of every scripted run: that is for M4 to settle with the contracts.
 - A run can be suspended and resumed at any point (autosave every shift).
 
 ## 13. Open questions

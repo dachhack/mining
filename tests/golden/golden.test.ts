@@ -14,6 +14,7 @@ import {
   actionKey,
   endShift,
   hashState,
+  knownSquare,
   legalActions,
   mayMine,
   mineCheck,
@@ -68,7 +69,11 @@ function replayFrom(state: GameState, decision: string): GameState {
   return applyAction(state, action).state;
 }
 
-describe('golden runs', () => {
+// Every test here replays whole runs, some of several hundred decisions. They
+// take a second or two on an idle machine and can pass vitest's default limit
+// of 5 seconds on a busy one, so the whole group gets the limit of a whole-run
+// test. (`{ timeout }` as the second argument applies to every test inside.)
+describe('golden runs', { timeout: 30000 }, () => {
   it('there are at least five', () => {
     expect(files.length).toBeGreaterThanOrEqual(5);
   });
@@ -117,8 +122,8 @@ describe('golden runs', () => {
   // On this seed a square turns out unstable that the policy cannot mine
   // down, so it crafts a support and places it. The hash pins the place
   // action, the stored support, and a crack whose countdown the support stops.
-  it('pit-seed-4-support.json crafts a support and places it on a cracked square', () => {
-    const golden = loadGolden('pit-seed-4-support.json');
+  it('pit-seed-7-support.json crafts a support and places it on a cracked square', () => {
+    const golden = loadGolden('pit-seed-7-support.json');
     expect(golden.decisions.some((decision) => decision.startsWith('craft support'))).toBe(true);
     const places = golden.decisions.filter((decision) => decision.startsWith('placeSupport'));
     expect(places.length).toBeGreaterThan(0);
@@ -160,8 +165,8 @@ describe('golden runs', () => {
   // Camps (design doc 8; issue #100). The camp policy founds a camp with the
   // starting kit and rests there when the crew is hurt. The hash pins the
   // founding, the camp in the state, the cheaper mines, the upkeep and the rest.
-  it('camp-seed-10-rest.json founds a camp, mines more cheaply near it, and rests', () => {
-    const golden = loadGolden('camp-seed-10-rest.json');
+  it('camp-seed-12-rest.json founds a camp, mines more cheaply near it, and rests', () => {
+    const golden = loadGolden('camp-seed-12-rest.json');
     const founded = golden.decisions.filter((decision) => decision.startsWith('foundCamp'));
     expect(founded).toHaveLength(1);
     expect(
@@ -169,7 +174,7 @@ describe('golden runs', () => {
     ).toBeGreaterThan(1);
     expect(golden.decisions[golden.decisions.length - 1]).toBe('closeMine ap 0');
 
-    const state = replayFile('camp-seed-10-rest.json');
+    const state = replayFile('camp-seed-12-rest.json');
     const centre = squareOf(founded[0] ?? '');
     expect(state.camps.map((camp) => ({ x: camp.pos.x, y: camp.pos.y }))).toEqual([centre]);
     expect(state.stockpile['campKit']).toBe(0);
@@ -234,11 +239,11 @@ describe('golden runs', () => {
   // The surface forest (issue #70; design doc 3.2): this run cuts trees. A
   // stump left alone grows a tree again; a stump whose square is mined never
   // does. The hash pins cutting, stumps, regrowth and "no regrowth once mined".
-  it('random-seed-22-forest.json cuts trees; some grow back, and none on a mined square', () => {
-    const golden = loadGolden('random-seed-22-forest.json');
+  it('random-seed-4-forest.json cuts trees; some grow back, and none on a mined square', () => {
+    const golden = loadGolden('random-seed-4-forest.json');
     const cuts = golden.decisions.filter((decision) => decision.startsWith('cutTree'));
     expect(cuts.length).toBeGreaterThan(0);
-    const state = replayFile('random-seed-22-forest.json');
+    const state = replayFile('random-seed-4-forest.json');
     let stumps = 0;
     let regrown = 0;
     let minedAfterCut = 0;
@@ -272,11 +277,11 @@ describe('golden runs', () => {
   // The terracing policy (issue #108): a planned pit in a corner, held by
   // supports. The hash pins supports that are placed in time, on a pit dug
   // to its plan.
-  it('terrace-seed-4.json finishes a pit 6 deep in a corner, with supports and no slump', () => {
-    const golden = loadGolden('terrace-seed-4.json');
+  it('terrace-seed-1.json finishes a pit 6 deep in a corner, with supports and no slump', () => {
+    const golden = loadGolden('terrace-seed-1.json');
     expect(golden.expectedStatus).toBe('ended: salvage, mineClosed');
     expect(typesIn(golden)).toContain('placeSupport');
-    const state = replayFile('terrace-seed-4.json');
+    const state = replayFile('terrace-seed-1.json');
     // One of the four corner squares is 6 down.
     const lastX = state.size.x - 1;
     const lastY = state.size.y - 1;
@@ -303,24 +308,43 @@ describe('golden runs', () => {
     expect(supports).toBeGreaterThan(5);
   });
 
-  // Mineral traces (decision note 0012) are back in a golden run: this pit
-  // reaches layer 8, where the middle band and its ore begin. It is the
-  // deepest any golden run goes, and still it meets no water and no gas:
-  // see docs/surveys/depth-survey.md.
-  it('terrace-8-seed-8-traces.json reaches the middle band and sees mineral traces', () => {
-    const golden = loadGolden('terrace-8-seed-8-traces.json');
+  // Water on a generated cube (design doc 6.2, 6.3): since the bands came
+  // shallower and pockets more numerous (owner, issue #108), a careful pit
+  // meets them. The hash pins the breach, the flow from shift to shift, and
+  // the crew's damage from water entering a worked square.
+  it('terrace-8-seed-4-flood.json breaks into a water pocket, is hurt by the water, and finishes', () => {
+    const golden = loadGolden('terrace-8-seed-4-flood.json');
     expect(golden.expectedStatus).toBe('ended: salvage, mineClosed');
-    const state = replayFile('terrace-8-seed-8-traces.json');
-    const middleBand = WORLD.depthBands.find((band) => band.id === 'middle');
+    const state = replayFile('terrace-8-seed-4-flood.json');
     let deepest = 0;
+    let water = 0;
     for (let y = 0; y < state.size.y; y += 1) {
       for (let x = 0; x < state.size.x; x += 1) {
         deepest = Math.max(deepest, depthAt(state, x, y));
+        water += knownSquare(state, x, y).contents.water;
       }
     }
-    expect(deepest).toBe(middleBand?.firstLayer);
+    expect(deepest).toBe(8);
+    // Water still stands in the pit at the end, and it cost the crew health.
+    expect(water).toBeGreaterThan(0);
+    expect(state.crew.health).toBeLessThan(CREW.startHealth);
     expect(visibleMineralTraces(state).length).toBeGreaterThan(0);
-    expect(state.crew.health).toBe(CREW.startHealth);
+  });
+
+  // Gas on a generated cube (design doc 6.5): the first golden run that ends
+  // with the crew lost to something other than a slump.
+  it('terrace-8-seed-10-poisoned.json digs on in gas until the crew is poisoned', () => {
+    const golden = loadGolden('terrace-8-seed-10-poisoned.json');
+    expect(golden.expectedStatus).toBe('ended: lost, poisoned');
+    const state = replayFile('terrace-8-seed-10-poisoned.json');
+    expect(state.crew.health).toBe(0);
+    let gas = 0;
+    for (let y = 0; y < state.size.y; y += 1) {
+      for (let x = 0; x < state.size.x; x += 1) {
+        gas += knownSquare(state, x, y).contents.gas;
+      }
+    }
+    expect(gas).toBeGreaterThan(0);
   });
 
   // The camp-made tools on a generated cube (issue #108). No run with the
@@ -328,14 +352,14 @@ describe('golden runs', () => {
   // starts with the sim-only tool kit (tools/simKit.ts). The hash pins a
   // charge's blast, the crew's 6 damage from it, pumps, vents, sealant and
   // scans as the dispatcher runs them.
-  it('random-kit-seed-27-blast.json uses every camp-made tool and is hurt by its own blast', () => {
-    const golden = loadGolden('random-kit-seed-27-blast.json');
+  it('random-kit-seed-2-blast.json uses every camp-made tool and is hurt by its own blast', () => {
+    const golden = loadGolden('random-kit-seed-2-blast.json');
     expect(golden.extraItems).toBeDefined();
     const types = typesIn(golden);
     for (const type of ['placeExplosive', 'placePump', 'placeVent', 'seal', 'scan']) {
       expect(types, type).toContain(type);
     }
-    const state = replayFile('random-kit-seed-27-blast.json');
+    const state = replayFile('random-kit-seed-2-blast.json');
     expect(state.crew.health).toBeLessThan(CREW.startHealth);
     // Every charge went off in the shift it was placed: none is still armed.
     expect(state.armed).toEqual([]);

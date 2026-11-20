@@ -933,7 +933,7 @@ describe('a generated run that uses a camp-made tool', () => {
       { type: 'foundCamp', x: 17, y: 12 },
       'endShift',
       { type: 'mine', x: 16, y: 10 },
-      { type: 'mine', x: 14, y: 14 },
+      { type: 'mine', x: 14, y: 15 },
       { type: 'craft', recipe: 'sealant' },
       { type: 'seal', x: 16, y: 10 },
       'endShift',
@@ -944,6 +944,6 @@ describe('a generated run that uses a camp-made tool', () => {
     expect(depthAt(state, 16, 10)).toBe(0);
     expect(blockAt(state, { x: 16, y: 10, z: 0 })).toBe(BLOCKS.sealed.code);
     expect(countItem(state, 'sealant')).toBe(0);
-    expect(hashState(state)).toBe('6f1d000500676c14');
+    expect(hashState(state)).toBe('94b77867c729415f');
   });
 });

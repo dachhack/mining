@@ -4,13 +4,29 @@
 // and the two zoom buttons.
 //
 // Seed 110 (see `npm run play -- --seed 110`): the map opens on the coal in
-// sight that is nearest its middle, x17 y18 (issue #110), so it shows the
-// squares x10..x23, y11..y24. x12..x16 of row y16 are dirt on open ground,
-// x17 y16 is stone, and a tree stands on x19 y15.
+// sight that is nearest its middle (issue #110). The squares the test taps
+// are not written here by hand: squares.ts finds them on the seed's cube, so
+// a change to the generation numbers does not break the test.
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
+import { LOADOUTS } from '../../src/data';
+import { findDirtRowThenStone, findTree, key, openingView, startOf } from './squares';
 
 test.use({ viewport: { width: 390, height: 844 } });
+
+const SEED = 110;
+const START = startOf(SEED);
+/** The squares on screen when the run starts. */
+const VIEW = openingView(START);
+/** Five dirt squares in a row on open ground, and the stone square east of them. */
+const ROW = findDirtRowThenStone(START, VIEW);
+/** The last dirt square of the row: the one the tests dig, with stone to its east. */
+const DIRT = ROW.dirt[4] as { x: number; y: number };
+/** The dirt square west of it. */
+const WEST = ROW.dirt[3] as { x: number; y: number };
+const STONE = ROW.stone;
+const TREE = findTree(START, VIEW);
+const START_FUEL = LOADOUTS.standard.fuel;
 
 async function startRun(page: Page, seed: number): Promise<void> {
   await page.getByRole('button', { name: 'New run' }).click();
@@ -53,7 +69,7 @@ test.beforeEach(async ({ page }) => {
     window.localStorage.clear();
   });
   await page.reload();
-  await startRun(page, 110);
+  await startRun(page, SEED);
 });
 
 test('the map opens on the nearest coal in sight, with squares big enough to tap', async ({
@@ -63,9 +79,9 @@ test('the map opens on the nearest coal in sight, with squares big enough to tap
   const cam = await camera(canvas);
   expect(cam.cellPx).toBeGreaterThanOrEqual(24);
   await expect(canvas).toHaveAttribute('data-cells', '14');
-  // Centred on x17 y18: 7 squares to its left and above it.
-  expect(cam.x).toBe(10);
-  expect(cam.y).toBe(11);
+  // Centred on the opening square: 7 squares to its left and above it.
+  expect(cam.x).toBe(VIEW.left);
+  expect(cam.y).toBe(VIEW.top);
   await expect(page.getByTestId('map-label')).toContainText('14 of 32 squares across');
   // The legend names what is on screen; nothing is said of layers or a miner.
   await expect(page.getByTestId('map-legend')).toContainText('Dirt');
@@ -80,14 +96,14 @@ test('a tap mines the square: AP drops, the square is 1 deep, the yield arrives'
   const gauges = page.getByTestId('gauges');
   await expect(gauges).toContainText('AP 5/5');
 
-  await tapSquare(page, canvas, 16, 16); // dirt: 1 AP, gives nothing
+  await tapSquare(page, canvas, DIRT.x, DIRT.y); // dirt: 1 AP, gives nothing
   await expect(gauges).toContainText('AP 4/5');
   await expect(page.getByTestId('outcome')).toContainText('Mined Dirt');
   await expect(page.getByTestId('outcome')).toContainText('(depth 1)');
   await expect(gauges).toContainText('Deepest square so far: depth 1');
   await expect(page.getByTestId('map-legend')).toContainText('deeper is darker');
 
-  await tapSquare(page, canvas, 17, 16); // stone: 2 AP, gives 1 stone
+  await tapSquare(page, canvas, STONE.x, STONE.y); // stone: 2 AP, gives 1 stone
   await expect(gauges).toContainText('AP 2/5');
   await expect(gauges).toContainText('1 Stone');
   // Nothing is marked after a tap that was taken.
@@ -97,22 +113,24 @@ test('a tap mines the square: AP drops, the square is 1 deep, the yield arrives'
 test('a tap the level rule refuses says why and marks the higher neighbours', async ({ page }) => {
   const canvas = page.getByTestId('map-canvas');
   const gauges = page.getByTestId('gauges');
-  await tapSquare(page, canvas, 16, 16);
+  await tapSquare(page, canvas, DIRT.x, DIRT.y);
   await expect(gauges).toContainText('AP 4/5');
 
   // The same square again: all four neighbours are higher.
-  await tapSquare(page, canvas, 16, 16);
+  await tapSquare(page, canvas, DIRT.x, DIRT.y);
   const outcome = page.getByTestId('outcome');
-  await expect(outcome).toContainText('x16 y16, depth 1');
+  await expect(outcome).toContainText(`x${DIRT.x} y${DIRT.y}, depth 1`);
   await expect(outcome).toContainText('The level rule');
-  await expect(outcome).toContainText('x17 y16 (east, depth 0)');
-  await expect(canvas).toHaveAttribute('data-selected', '16,16');
-  await expect(canvas).toHaveAttribute('data-too-high', '16,15 17,16 16,17 15,16');
+  await expect(outcome).toContainText(`x${STONE.x} y${STONE.y} (east, depth 0)`);
+  await expect(canvas).toHaveAttribute('data-selected', key(DIRT));
+  // North, east, south, west.
+  const tooHigh = [{ x: DIRT.x, y: DIRT.y - 1 }, STONE, { x: DIRT.x, y: DIRT.y + 1 }, WEST];
+  await expect(canvas).toHaveAttribute('data-too-high', tooHigh.map(key).join(' '));
   // Nothing was done.
   await expect(gauges).toContainText('AP 4/5');
 
   // The next tap clears the marks (here: a mine of one of those neighbours).
-  await tapSquare(page, canvas, 15, 16);
+  await tapSquare(page, canvas, WEST.x, WEST.y);
   await expect(gauges).toContainText('AP 3/5');
   await expect(canvas).toHaveAttribute('data-selected', '');
   await expect(canvas).toHaveAttribute('data-too-high', '');
@@ -124,7 +142,7 @@ test('a tap on a tree cuts it: timber goes up and the ground shows', async ({ pa
   await expect(gauges).toContainText('Stockpile: 1 Camp kit, 2 Timber');
   await expect(page.getByTestId('map-legend')).not.toContainText('stump');
 
-  await tapSquare(page, canvas, 19, 15);
+  await tapSquare(page, canvas, TREE.x, TREE.y);
   await expect(gauges).toContainText('AP 3/5');
   await expect(gauges).toContainText('Stockpile: 1 Camp kit, 4 Timber');
   await expect(page.getByTestId('outcome')).toContainText('cut down the tree');
@@ -136,17 +154,17 @@ test('a tap with too little AP says so, and End shift brings the AP back', async
   const canvas = page.getByTestId('map-canvas');
   const gauges = page.getByTestId('gauges');
   // Five dirt squares in a row: 5 AP.
-  for (const x of [12, 13, 14, 15, 16]) {
-    await tapSquare(page, canvas, x, 16);
+  for (const square of ROW.dirt) {
+    await tapSquare(page, canvas, square.x, square.y);
   }
   await expect(gauges).toContainText('AP 0/5');
-  await tapSquare(page, canvas, 17, 16);
+  await tapSquare(page, canvas, STONE.x, STONE.y);
   await expect(page.getByTestId('outcome')).toContainText('costs 2 AP and you have 0 left');
-  await expect(canvas).toHaveAttribute('data-selected', '17,16');
+  await expect(canvas).toHaveAttribute('data-selected', key(STONE));
   await expect(canvas).toHaveAttribute('data-too-high', '');
 
   await page.getByTestId('end-shift').click();
-  await expect(gauges).toContainText('Shift 2 | AP 5/5 | Fuel 23');
+  await expect(gauges).toContainText(`Shift 2 | AP 5/5 | Fuel ${START_FUEL - 1}`);
   await expect(canvas).toHaveAttribute('data-selected', '');
 });
 
@@ -175,8 +193,8 @@ test('a drag pans the map and is not a tap; the zoom buttons show the whole map 
   await expect(canvas).toHaveAttribute('data-cells', '32');
   await expect(page.getByTestId('map-label')).toContainText('The whole map');
   // Zoomed right out a tap still lands on the right square.
-  await tapSquare(page, canvas, 16, 16);
-  await expect(page.getByTestId('outcome')).toContainText('Mine x16 y16');
+  await tapSquare(page, canvas, DIRT.x, DIRT.y);
+  await expect(page.getByTestId('outcome')).toContainText(`Mine x${DIRT.x} y${DIRT.y}`);
 
   await page.getByTestId('zoom-in').click();
   await expect(canvas).toHaveAttribute('data-cells', '14');
