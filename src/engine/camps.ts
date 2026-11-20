@@ -7,6 +7,7 @@
 //   campAtSquare     the camp standing on a square, if any
 //   foundCampCheck   may a camp be founded round this centre square, and if
 //                    not, why not?
+//   foundCampSites   every centre square where it may
 //   mineDiscountAt   how much cheaper is a mine on this square?
 //   campFuelDue      what the camps burn at this shift's upkeep
 //   applyRest        the rest itself, in step (e) of the cube phase
@@ -21,7 +22,7 @@ import { CAMPS, CREW, NO_STRUCTURE } from '../data';
 import type { Vec3 } from '../data';
 import { contentsOn } from './breach';
 import type { GameEvent } from './events';
-import { depthAt, isSquare } from './heightmap';
+import { depthAt, depthIn, depthMapOf, isSquare } from './heightmap';
 import type { Square } from './heightmap';
 import { countItem, structureAt } from './state';
 import type { Camp, GameState } from './state';
@@ -206,6 +207,53 @@ export function foundCampCheck(state: GameState, x: number, y: number): FoundCam
     return refuseFounding('camp', taken);
   }
   return { allowed: true, refusal: null, squares: [] };
+}
+
+/**
+ * Every centre square a camp could be founded round now, row by row (y, then
+ * x): exactly the squares for which `foundCampCheck` answers "allowed".
+ *
+ * `legalActions` asks this on every step, for about a thousand centres. So
+ * the two commonest reasons for a refusal (a tree on the patch, a patch that
+ * is not flat) are ruled out first from two tables made once, and only the
+ * patches that pass are given to `foundCampCheck`, which has the last word.
+ * The quick test only ever says "no" where `foundCampCheck` would too.
+ */
+export function foundCampSites(state: GameState): Square[] {
+  const sites: Square[] = [];
+  if (countItem(state, CAMPS.kitItem) < 1) {
+    return sites; // the same answer for every centre
+  }
+  const depths = depthMapOf(state);
+  // One entry per square, row by row: true if a tree stands on it.
+  const trees: boolean[] = [];
+  for (let y = 0; y < state.size.y; y += 1) {
+    for (let x = 0; x < state.size.x; x += 1) {
+      trees.push(hasTree(state, surfaceCellAbove({ x, y, z: 0 })));
+    }
+  }
+
+  const half = CAMPS.halfWidth;
+  // Centres nearer the edge than `half` have a patch that leaves the map.
+  for (let y = half; y < state.size.y - half; y += 1) {
+    for (let x = half; x < state.size.x - half; x += 1) {
+      const depth = depthIn(depths, x, y);
+      let clearAndFlat = true;
+      for (let dy = -half; dy <= half && clearAndFlat; dy += 1) {
+        for (let dx = -half; dx <= half; dx += 1) {
+          const isTree = trees[x + dx + state.size.x * (y + dy)] === true;
+          if (isTree || depthIn(depths, x + dx, y + dy) !== depth) {
+            clearAndFlat = false;
+            break;
+          }
+        }
+      }
+      if (clearAndFlat && foundCampCheck(state, x, y).allowed) {
+        sites.push({ x, y });
+      }
+    }
+  }
+  return sites;
 }
 
 // ---------------------------------------------------------------------------

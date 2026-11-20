@@ -7,7 +7,7 @@
 
 import { ACTION_COSTS, CAMPS, SURFACE } from '../../data';
 import type { CampAction } from '../actionTypes';
-import { campCentredAt, campSquares, foundCampCheck } from '../camps';
+import { campCentredAt, campSquares, foundCampSites } from '../camps';
 import { markWorked } from '../crew';
 import type { GameEvent } from '../events';
 import { depthAt } from '../heightmap';
@@ -20,7 +20,7 @@ import { hasStump, setStumpAge, setSurfaceKind, surfaceCellAbove } from '../surf
  * take now, in that order.
  *
  * - `foundCamp`: one for each centre square `foundCampCheck` allows, row by
- *   row (y, then x). It costs the rest of the shift, so its `ap` is all the
+ *   row (y, then x): `foundCampSites` in camps.ts. It costs the rest of the shift, so its `ap` is all the
  *   AP left, and it is offered only with at least `CAMPS.foundMinAp` left.
  * - `rest`: one for each active camp, in the order of `state.camps`. It also
  *   costs all the AP left, and needs at least `CAMPS.restMinAp`. It is not
@@ -33,12 +33,8 @@ export function legalCampActions(state: GameState): CampAction[] {
   const actions: CampAction[] = [];
 
   if (state.ap >= CAMPS.foundMinAp) {
-    for (let y = 0; y < state.size.y; y += 1) {
-      for (let x = 0; x < state.size.x; x += 1) {
-        if (foundCampCheck(state, x, y).allowed) {
-          actions.push({ type: 'foundCamp', x, y, ap: state.ap });
-        }
-      }
+    for (const site of foundCampSites(state)) {
+      actions.push({ type: 'foundCamp', x: site.x, y: site.y, ap: state.ap });
     }
   }
 

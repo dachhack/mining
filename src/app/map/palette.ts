@@ -144,6 +144,14 @@ export const MARK_COLOURS = {
   tooHigh: '#ff4a3a',
   /** The outline of a square a mine would make unstable. */
   unstable: '#ff9a2e',
+  /** The outline of a square that stops a camp being founded on its patch. */
+  blocked: '#ff4a3a',
+  /** A camp square: the tent, and the wash under it. */
+  camp: '#ffe9a8',
+  campOutline: 'rgba(0, 0, 0, 0.8)',
+  campWash: 'rgba(255, 233, 168, 0.28)',
+  /** The corner tick on a square where mining is cheaper near a camp. */
+  cheaper: '#7dff9a',
   /** A crack on a top block, and the countdown beside it. */
   crack: '#ff5a3c',
   /** A crack whose countdown has stopped (the square is stable or held). */

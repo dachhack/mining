@@ -63,6 +63,7 @@ describe('a tap that would make squares unstable', () => {
       selected: { x: 2, y: 0 },
       tooHigh: [],
       unstable: [{ x: 0, y: 0 }],
+      blocked: [],
     });
     expect(outcome.lines[1]).toContain('Mining x2 y0 would make x0 y0');
     expect(outcome.lines[2]).toBe('Tap the square again to mine it all the same.');
@@ -111,7 +112,12 @@ describe('the support tool', () => {
     expect(outcome.lines[1]).toBe(
       'You have no support to place: craft one first ("craft-support").',
     );
-    expect(outcome.marks).toEqual({ selected: { x: 1, y: 0 }, tooHigh: [], unstable: [] });
+    expect(outcome.marks).toEqual({
+      selected: { x: 1, y: 0 },
+      tooHigh: [],
+      unstable: [],
+      blocked: [],
+    });
   });
 
   it('a tap on a tree is refused: nothing is placed on a tree', () => {

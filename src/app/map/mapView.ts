@@ -305,9 +305,40 @@ export function drawTile(
   }
 }
 
-/** The marks drawn over a tile: mineral traces, a structure and a crack. */
+/** The marks drawn over a tile: a camp, cheaper mining, mineral traces, a structure and a crack. */
 function drawMarks(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number, c: number) {
   const mid = c / 2;
+  if (tile.camp) {
+    // A camp square: a pale wash and a tent (a triangle with a door), dark
+    // underneath so that it shows on any rock.
+    ctx.fillStyle = MARK_COLOURS.campWash;
+    ctx.fillRect(x, y, c, c);
+    ctx.beginPath();
+    ctx.moveTo(x + mid, y + 0.2 * c);
+    ctx.lineTo(x + 0.84 * c, y + 0.8 * c);
+    ctx.lineTo(x + 0.16 * c, y + 0.8 * c);
+    ctx.closePath();
+    ctx.fillStyle = MARK_COLOURS.camp;
+    ctx.fill();
+    ctx.lineWidth = Math.max(1, c / 14);
+    ctx.strokeStyle = MARK_COLOURS.campOutline;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + mid, y + 0.5 * c);
+    ctx.lineTo(x + mid, y + 0.8 * c);
+    ctx.stroke();
+  }
+  if (tile.cheaper) {
+    // Mining is cheaper here (a camp is near): a green tick in the bottom-left
+    // corner, where neither the depth number nor a crack's countdown is.
+    ctx.lineWidth = Math.max(1.5, c / 10);
+    ctx.strokeStyle = MARK_COLOURS.cheaper;
+    ctx.beginPath();
+    ctx.moveTo(x + 0.1 * c, y + 0.72 * c);
+    ctx.lineTo(x + 0.22 * c, y + 0.88 * c);
+    ctx.lineTo(x + 0.42 * c, y + 0.6 * c);
+    ctx.stroke();
+  }
   if (tile.traced) {
     // Three small gold dots along the top edge: mineral traces seen on this rock.
     ctx.fillStyle = MARK_COLOURS.traces;
@@ -389,6 +420,8 @@ function sampleTile(overrides: Partial<Tile>): Tile {
     crackRunning: false,
     surface: null,
     higher: { north: false, east: false, south: false, west: false },
+    camp: false,
+    cheaper: false,
     ...overrides,
   };
 }
@@ -425,7 +458,11 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
   let traced = false;
   let cracked = false;
   let stoppedCrack = false;
+  let camp = false;
+  let cheaper = false;
   for (const tile of tiles) {
+    if (tile.camp) camp = true;
+    if (tile.cheaper) cheaper = true;
     if (tile.crack !== null && tile.crackRunning) cracked = true;
     if (tile.crack !== null && !tile.crackRunning) stoppedCrack = true;
     if (tile.kind === 'block' && tile.block !== null) blocks.add(tile.block);
@@ -478,6 +515,14 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
   }
   if (structures.has('other')) {
     entries.push(legendEntry(sampleTile({ structure: 'other' }), 'other structure'));
+  }
+  if (camp) {
+    entries.push(legendEntry(sampleTile({ camp: true }), 'camp square (cannot be mined)'));
+  }
+  if (cheaper) {
+    entries.push(
+      legendEntry(sampleTile({ cheaper: true }), 'green tick: mining costs less (a camp is near)'),
+    );
   }
   if (cracked) {
     entries.push(
@@ -634,6 +679,10 @@ export function createTapMap(onTap: (x: number, y: number) => void): TapMap {
     for (const square of marks.unstable) {
       outline(ctx, square.x, square.y, c, MARK_COLOURS.unstable);
     }
+    // The squares that stop a camp being founded on the tapped patch, in red.
+    for (const square of marks.blocked) {
+      outline(ctx, square.x, square.y, c, MARK_COLOURS.blocked);
+    }
     if (marks.selected !== null) {
       outline(ctx, marks.selected.x, marks.selected.y, c, MARK_COLOURS.selected);
     }
@@ -655,6 +704,7 @@ export function createTapMap(onTap: (x: number, y: number) => void): TapMap {
     canvas.dataset['unstable'] = marks.unstable
       .map((square) => `${square.x},${square.y}`)
       .join(' ');
+    canvas.dataset['blocked'] = marks.blocked.map((square) => `${square.x},${square.y}`).join(' ');
   }
 
   /** A tap (not a drag) at (px, py) pixels from the map's top-left corner. */

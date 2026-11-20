@@ -11,11 +11,13 @@ import {
   applyAction,
   campAtSquare,
   campSquares,
+  createRun,
   endShift,
   foundCampCheck,
   hasStump,
   hasTree,
   isWorked,
+  legalActions,
   mineCheck,
   mineDiscountAt,
   previewCubePhase,
@@ -763,5 +765,30 @@ describe('nothing hidden decides a camp action', () => {
     expect(findActions(richCamp, { type: 'mine' })).toEqual(
       findActions(plainCamp, { type: 'mine' }),
     );
+  });
+});
+
+describe('the list of camp sites and the check for one centre agree', () => {
+  it('on generated cubes, before and after some digging and cutting', () => {
+    // `foundCampSites` rules most centres out with a quick test of its own;
+    // this pins that it never disagrees with `foundCampCheck`.
+    for (const seed of [3, 11, 24]) {
+      let state = createRun(seed, 'none', 'standard');
+      for (let round = 0; round < 3; round += 1) {
+        const offered = new Set(foundable(state));
+        for (let y = 0; y < state.size.y; y += 1) {
+          for (let x = 0; x < state.size.x; x += 1) {
+            expect(offered.has(`${x},${y}`)).toBe(foundCampCheck(state, x, y).allowed);
+          }
+        }
+        // Change the map a little: take the first few mines and cuts on offer.
+        const changes = legalActions(state).filter(
+          (action) => action.type === 'mine' || action.type === 'cutTree',
+        );
+        for (const action of changes.slice(round * 7, round * 7 + 2)) {
+          state = applyAction({ ...state, ap: 5 }, { ...action }).state;
+        }
+      }
+    }
   });
 });

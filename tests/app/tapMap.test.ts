@@ -95,6 +95,8 @@ describe('tiles', () => {
       crackRunning: false,
       surface: 'meadow',
       higher: NO_HIGHER,
+      camp: false,
+      cheaper: false,
     });
   });
 
@@ -238,6 +240,7 @@ describe('a tap', () => {
         { x: 1, y: 2 }, // south
       ],
       unstable: [],
+      blocked: [],
     });
     expect(outcome.lines[0]).toBe('x1 y1, depth 1: Stone, gives 1 Stone.');
     expect(outcome.lines[1]).toContain('The level rule');
@@ -252,7 +255,12 @@ describe('a tap', () => {
     const outcome = tapOutcome(state, 0, 0);
     expect(outcome.entry).toBeNull();
     expect(outcome.lines[1]).toContain('costs 2 AP and you have 1 left');
-    expect(outcome.marks).toEqual({ selected: { x: 0, y: 0 }, tooHigh: [], unstable: [] });
+    expect(outcome.marks).toEqual({
+      selected: { x: 0, y: 0 },
+      tooHigh: [],
+      unstable: [],
+      blocked: [],
+    });
   });
 
   it('a tree with too little AP is refused as a cut, with no neighbour marked', () => {

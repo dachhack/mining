@@ -110,7 +110,7 @@ test('a tap the level rule refuses says why and marks the higher neighbours', as
 test('a tap on a tree cuts it: timber goes up and the ground shows', async ({ page }) => {
   const canvas = page.getByTestId('map-canvas');
   const gauges = page.getByTestId('gauges');
-  await expect(gauges).toContainText('Stockpile: 2 Timber');
+  await expect(gauges).toContainText('Stockpile: 1 Camp kit, 2 Timber');
   await expect(page.getByTestId('map-legend')).not.toContainText('stump');
 
   await tapSquare(page, canvas, 19, 15);

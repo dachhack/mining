@@ -9,7 +9,7 @@
 
 import { BLOCKS, STRUCTURES, SURFACE } from '../../data';
 import type { BlockId } from '../../data';
-import { isSquare, knownSquare, slumpCheck } from '../../engine';
+import { campAtSquare, isSquare, knownSquare, mineDiscountAt, slumpCheck } from '../../engine';
 import type { GameState } from '../../engine';
 import { PREVIEW_MAP } from './palette';
 import type { SurfaceMark } from './palette';
@@ -63,6 +63,14 @@ export interface Tile {
    */
   surface: SurfaceMark | null;
   higher: HigherSides;
+  /** True if a camp stands on the square (design doc 8). Camps are always seen. */
+  camp: boolean;
+  /**
+   * True if mining this square is cheaper because a camp is near (design doc
+   * 8). False on a camp square itself, on a tree and on the bedrock floor:
+   * those cannot be mined.
+   */
+  cheaper: boolean;
 }
 
 /** A square window of the map: the squares x0..x0+size-1 and y0..y0+size-1. */
@@ -135,6 +143,8 @@ export function buildTile(state: GameState, x: number, y: number): Tile {
       crackRunning: false,
       surface: 'tree',
       higher,
+      camp: false,
+      cheaper: false,
     };
   }
   const atGroundLevel = square.depth === 0;
@@ -153,8 +163,12 @@ export function buildTile(state: GameState, x: number, y: number): Tile {
       crackRunning: false,
       surface: null,
       higher,
+      camp: false,
+      cheaper: false,
     };
   }
+  // Camps and depths are seen by the player, so neither mark tells anything hidden.
+  const camp = campAtSquare(state, x, y) !== null;
   return {
     x,
     y,
@@ -169,6 +183,8 @@ export function buildTile(state: GameState, x: number, y: number): Tile {
     crackRunning: square.top.crackTimer !== null && slumpCheck(state, x, y).unstable,
     surface,
     higher,
+    camp,
+    cheaper: !camp && mineDiscountAt(state, x, y) > 0,
   };
 }
 
