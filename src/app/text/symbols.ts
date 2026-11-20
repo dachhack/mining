@@ -15,6 +15,10 @@ export const SYMBOL_UNKNOWN = '?';
 export const SYMBOL_TREE = 'Y';
 /** A square with no block left: the bedrock floor of the cube. */
 export const SYMBOL_FLOOR = 'X';
+/** Water stands on the square (design doc 6.3). A note under the map names the block under it. */
+export const SYMBOL_WATER = '~';
+/** Lava stands on the square (design doc 6.4): it cannot be mined. */
+export const SYMBOL_LAVA = '!';
 /** Traced rock of a kind that has no character of its own in `TRACED_SYMBOLS`. */
 export const SYMBOL_TRACES = '%';
 

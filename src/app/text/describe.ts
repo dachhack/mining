@@ -244,7 +244,107 @@ const DAMAGE_CAUSES: Record<string, string> = {
 const DESTRUCTION_CAUSES: Record<string, string> = {
   rockfall: 'was buried or carried off by a slump and is lost',
   mined: 'went with the block and is lost',
+  lava: 'was destroyed by lava',
+  water: 'was destroyed by water',
 };
+
+/** The event types of step (b) of the cube phase that `describeFlows` words. */
+const FLOW_EVENT_TYPES = ['fluidMoved', 'fluidRemoved', 'lavaPoured', 'stoneFormed'];
+
+/** True for an event that `describeFlows` words. */
+function isFlowEvent(event: GameEvent): boolean {
+  return FLOW_EVENT_TYPES.includes(event.type);
+}
+
+/**
+ * What water and lava did in a cube phase, or will do in the coming one
+ * (design doc 6.3 and 6.4), as sentences. `events` are engine events:
+ * the ones a step emitted, or `ShiftForecast.flows`. `coming` is true for the
+ * forecast, which is worded as what will happen. Empty when nothing flows.
+ *
+ * One sentence for each fluid's moves ("Water flowed: x2 y3 to x2 y4 (2
+ * units); ..."), then what drained at ground level, what a source poured,
+ * and where water met lava.
+ */
+export function describeFlows(events: GameEvent[], coming: boolean): string[] {
+  const sentences: string[] = [];
+
+  // The moves, counted for each pair of squares, in the order first seen.
+  for (const fluid of ['water', 'lava'] as const) {
+    const counts = new Map<string, number>();
+    for (const event of events) {
+      if (event.type === 'fluidMoved' && event.fluid === fluid) {
+        const key =
+          `${squareText(event.from.x, event.from.y)} to ` + squareText(event.to.x, event.to.y);
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    }
+    if (counts.size === 0) {
+      continue;
+    }
+    const parts: string[] = [];
+    for (const [key, count] of counts) {
+      parts.push(count === 1 ? key : `${key} (${count} units)`);
+    }
+    const name = fluid === 'water' ? 'Water' : 'Lava';
+    const verb = coming ? `${name.toUpperCase()} WILL FLOW` : `${name} flowed`;
+    sentences.push(`${verb}: ${parts.join('; ')}.`);
+  }
+
+  // Stone: how many blocks formed on each square.
+  const stone = new Map<string, number>();
+  for (const event of events) {
+    if (event.type === 'stoneFormed') {
+      const key = squareText(event.pos.x, event.pos.y);
+      stone.set(key, (stone.get(key) ?? 0) + 1);
+    }
+  }
+
+  for (const event of events) {
+    if (event.type === 'lavaPoured') {
+      const where = squareText(event.pos.x, event.pos.y);
+      sentences.push(
+        coming
+          ? `The lava source on ${where} will pour ${event.units} more lava.`
+          : `The lava source on ${where} poured ${event.units} more lava.`,
+      );
+    } else if (event.type === 'fluidRemoved' && event.reason === 'reachedSurface') {
+      const where = squareText(event.pos.x, event.pos.y);
+      sentences.push(
+        coming
+          ? `${event.units} ${event.fluid} on ${where} stands above ground level and will drain away.`
+          : `${event.units} ${event.fluid} on ${where} stood above ground level and drained away.`,
+      );
+    }
+  }
+  for (const [where, blocks] of stone) {
+    const raised = blocks === 1 ? '1 level' : `${blocks} levels`;
+    sentences.push(
+      coming
+        ? `Water will meet lava on ${where}: they turn to stone, and the square comes up ${raised}.`
+        : `Water met lava on ${where}: they turned to stone, and the square came up ${raised}.`,
+    );
+  }
+  return sentences;
+}
+
+/**
+ * What the coming cube phase will do with water and lava, for the "If you
+ * end the shift now" line: `describeFlows`, and what the lava will destroy.
+ * `flows` is `ShiftForecast.flows`.
+ */
+export function describeForecastFlows(flows: GameEvent[]): string[] {
+  const sentences = describeFlows(flows, true);
+  for (const event of flows) {
+    if (event.type === 'structureDestroyed') {
+      sentences.push(
+        `The ${structureNameByCode(event.structure)} on ${squareText(event.pos.x, event.pos.y)} ` +
+          `will be destroyed by ${event.cause}.`,
+      );
+    }
+  }
+  return sentences;
+}
 
 /** "it falls at the end of this shift" / "... of the next shift" / "... in 3 shifts". */
 export function crackFallsText(shown: number): string {
@@ -333,7 +433,16 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
   const tracesLine = tracesSeenText(events);
   // A space that collapsed says what the new top is itself.
   const roofFell = events.some((event) => event.type === 'spaceCollapsed');
+  // Water and lava: all of a step's flow is said together, where it began.
+  let flowsSaid = false;
   for (const event of events) {
+    if (isFlowEvent(event)) {
+      if (!flowsSaid) {
+        lines.push(...describeFlows(events, false));
+        flowsSaid = true;
+      }
+      continue;
+    }
     switch (event.type) {
       case 'damageTaken':
         lines.push(

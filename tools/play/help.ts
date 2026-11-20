@@ -84,17 +84,18 @@ READING A VIEW
   The map is the whole surface seen from above: x grows to the east (right), y grows to the
   south (down the page). The two lines over it give each column's x (tens over ones); each row
   starts with its y. Every square is two characters:
-  - the first is what is on top: "Y" a tree, otherwise the square's top block ("d" dirt, "#"
-    stone, "c" coal, ...); the legend under the map names every character on it, with what the
-    block costs to mine;
+  - the first is what is on top: "Y" a tree, "~" water, "!" lava, otherwise the square's top
+    block ("d" dirt, "#" stone, "c" coal, ...); the legend under the map names every character
+    on it, with what the block costs to mine;
   - the second is the square's depth: how many blocks have been taken from it. Blank is ground
     level, then 1 to 9, then letters (a is 10, b is 11, ...). At ground level a "," there marks
     a stump. Straight after a tree's "Y" it is blank (the ground under it is hidden), or the
     block you saw there before the tree grew back.
   Under the map: the legend, then notes: what lies on a square that two characters cannot
-  show (a crack and its countdown, a support), and the stumps. Then "Hazards": every cracked
+  show (water or lava and the block under it, a crack and its countdown, a support), and
+  the stumps. Then "Hazards": every cracked
   square, when it falls and where its block will land. Then what ending the shift now would
-  do, including which blocks slump and which squares crack. A line starting "Not possible now:" says what costs more AP than you have left.
+  do, including which blocks slump, which squares crack, and where water and lava flow. A line starting "Not possible now:" says what costs more AP than you have left.
   Last comes how to mine, cut and place a support, with how many squares can be mined and
   trees cut now, and the list of everything else you may do, each with its number, its name and its cost in AP.
 
@@ -138,6 +139,8 @@ THE GAME
   - Harder rock and different ores lie deeper. Timber-root grows only in the upper layers;
     the trees on the surface are the other source of timber.
   - A square mined all the way down shows the bedrock floor and cannot be mined further.
+  - A square with water on it costs ${HAZARDS.water.floodedMineExtraAp} AP more to mine. A square with lava on it cannot be
+    mined at all. See "Water and lava".
   Pit walls slump
   - The level rule lets you dig a slope of 1-level steps, but a slope that is too tall for its
     material does not hold. Picture a loose block on a square: it slides to the lowest square
@@ -171,6 +174,30 @@ THE GAME
     thing you cannot know is what a mine or a cut uncovers: a weaker block than the one that
     was on top may turn out too weak for the slope it now tops, and the ground under a tree
     you cut may be too weak for the pit beside it.
+
+  Water and lava
+  - Water and lava stand on squares, in the open, where you see them: on the map "~" is a
+    square with water on it and "!" one with lava, and the notes under the map say how many
+    units, and which block is under them. Each unit raises the surface by one level: a
+    square 3 deep with 2 units on it has its surface 1 below ground level.
+  - WATER FLOWS when a shift ends. A square gives one unit to the lowest square beside it
+    (if several are equally low: north first, then east, south, west) when that square's
+    surface is at least ${HAZARDS.water.flowMinDrop} levels lower than its own, and goes on while that holds. A unit
+    moves one square a shift. So water runs downhill and spreads until the pit is level to
+    within 1; a single unit on a flat floor stays put. A sump dug lower than where you
+    work collects it.
+  - Nothing stands above ground level: what a square cannot hold drains away. Water never
+    flows onto a square at ground level, or off the map.
+  - LAVA flows by the same rule, but only at the end of even-numbered shifts. A big lava
+    pocket leaves a SOURCE on the square you broke in on: it gives ${HAZARDS.lava.sourceUnitsPerStep} more lava each time lava
+    flows, and that square always keeps lava on it.
+  - Lava destroys a support on a square it stands on, and nothing can be placed on lava.
+  - Where water and lava come onto the same square, one unit of each turns into a block of
+    stone, which raises the square by 1 (never above ground level). A source that turns to
+    stone stops.
+  - If rubble slumps onto a square with water or lava on it, they are pushed up on top of
+    the rubble: none is lost, unless it is then above ground level.
+  - The "If you end the shift now" line says where water and lava will flow.
 
   The forest
   - Most of the surface is forest. The rest is open ground (meadow, dirt paths, stone
@@ -225,6 +252,12 @@ ${recipes}
     comes to rest on one. Several slumps in one end of shift still take ${CREW.damage.slump} in all. The Hazards
     line says which squares are about to slump and where the blocks will land, so you can
     keep the crew off them in the shift they fall.
+  - Water takes ${CREW.damage.water} health if it flows onto a square the crew worked this shift. Water that
+    already stands on a square you mine does not hurt; it only costs AP.
+  - Lava takes ${CREW.damage.lavaOn} health if it stands on a square the crew worked this shift when the shift
+    ends, and ${CREW.damage.lavaBeside} if it stands on a square beside one. That is so at the end of every shift, not
+    only when lava flows. Breaking into a lava pocket puts lava on the square you just
+    worked.
   - At 0 crew health the run is lost.
 
   Closing the mine
@@ -233,10 +266,9 @@ ${recipes}
     finish alive, and a closed mine cannot be opened again.
 
   Not in this version of the game
-  - Water, lava and gas that come out of a pocket stay on the square they came out on: they do
-    not spread, and they do not hurt the crew or stop you mining yet. Unstable ore does not
-    explode yet: it is mined like any ore.
-  - Camps and contracts are not built yet. So a slumping pit wall is the only thing that
-    takes crew health today.
+  - Gas that comes out of a pocket stays on the square it came out on: it does not spread,
+    burn or hurt the crew yet. Unstable ore does not explode yet: it is mined like any ore.
+  - Pumps, sealant, camps and contracts are not built yet. Slumping pit walls, water and lava
+    are what takes crew health today.
 `;
 }

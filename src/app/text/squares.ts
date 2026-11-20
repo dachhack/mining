@@ -12,7 +12,7 @@
 // view.ts, a square is read only through `knownSquare`, so a sentence can
 // never tell something below a top block.
 
-import { ACTION_COSTS, SURFACE, blockDefByCode } from '../../data';
+import { ACTION_COSTS, HAZARDS, SURFACE, blockDefByCode } from '../../data';
 import {
   isRunActive,
   isSquare,
@@ -98,6 +98,12 @@ export function mineChoice(state: GameState, x: number, y: number): SquareChoice
   if (check.refusal === 'bottom') {
     return refused(`${where} has no block left: it is at the bedrock floor of the cube.`);
   }
+  if (check.refusal === 'lava') {
+    return refused(
+      `Lava stands on ${where}: a square with lava on it cannot be mined. ` +
+        'Lava flows on at the end of even-numbered shifts; water that meets it turns it to stone.',
+    );
+  }
   if (check.refusal === 'neighbourHigher') {
     const depth = knownSquare(state, x, y).depth;
     const higher = check.higherNeighbours.map(
@@ -114,8 +120,13 @@ export function mineChoice(state: GameState, x: number, y: number): SquareChoice
     return refused(`${where} cannot be mined.`);
   }
   if (check.ap > state.ap) {
+    // Say so when part of the cost is the water on the square.
+    const flooded =
+      knownSquare(state, x, y).contents.water > 0
+        ? ` (${FLOODED_EXTRA_AP} of it because water stands on the square)`
+        : '';
     return refused(
-      `Mining ${where} costs ${check.ap} AP and you have ${state.ap} left this shift.`,
+      `Mining ${where} costs ${check.ap} AP${flooded} and you have ${state.ap} left this shift.`,
     );
   }
   const entry: MineAction = { type: 'mine', x, y, ap: check.ap };
@@ -193,6 +204,9 @@ export function supportChoice(state: GameState, x: number, y: number): SquareCho
   if (check.refusal === 'occupied') {
     return refused(`Something is already placed on ${where}: a square holds one thing.`);
   }
+  if (check.refusal === 'lava') {
+    return refused(`Lava stands on ${where}: nothing is placed on lava.`);
+  }
   if (check.ap === null) {
     // `supportCheck` gives a cost whenever it gives no refusal.
     return refused(`A support cannot be placed on ${where}.`);
@@ -204,6 +218,9 @@ export function supportChoice(state: GameState, x: number, y: number): SquareCho
   }
   return allowed({ type: 'placeSupport', x, y, ap: check.ap });
 }
+
+/** The extra AP a mine costs on a square that water stands on (design doc 4.2). */
+export const FLOODED_EXTRA_AP = HAZARDS.water.floodedMineExtraAp;
 
 /** What placing a support costs in AP, for the lines that say how to. */
 export const SUPPORT_AP = ACTION_COSTS.placeSupport;

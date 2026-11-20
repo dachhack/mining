@@ -12,16 +12,18 @@
 // - a tree stands on the square (nothing is placed on a tree, and a tree
 //   holds its square anyway);
 // - the square has no block left (bedrock never slumps);
-// - the square already holds a structure (at most one a square).
+// - the square already holds a structure (at most one a square);
+// - lava stands on the square (design doc 4.1: nothing is placed on lava).
 //
-// Not here yet, because they are not built: nothing is placed on lava (task
-// T10) or on a camp square (T12).
+// Not here yet, because it is not built: nothing is placed on a camp square
+// (T12).
 
 import { ACTION_COSTS, NO_STRUCTURE, STRUCTURES } from '../../data';
 import type { PlaceSupportAction } from '../actionTypes';
 import { markWorked } from '../crew';
 import type { GameEvent } from '../events';
 import { structureOnSquare, topCellOf } from '../heightmap';
+import { lavaOn } from '../standing';
 import { countItem, removeItem, setStructure } from '../state';
 import type { GameState } from '../state';
 import { hasTree, surfaceCellAbove } from '../surface/state';
@@ -35,7 +37,9 @@ export type SupportRefusalReason =
   /** The square has no block left: it shows the bedrock floor. */
   | 'bottom'
   /** The square already holds a structure. */
-  | 'occupied';
+  | 'occupied'
+  /** Lava stands on the square. */
+  | 'lava';
 
 /** The answer of `supportCheck`. */
 export interface SupportCheck {
@@ -57,7 +61,8 @@ function refused(refusal: SupportRefusalReason): SupportCheck {
  * too much.
  *
  * Everything read here is something the player sees: the stockpile, the tree,
- * the square's depth and the structure on it. The top block is not read.
+ * the square's depth, the structure on it and the lava standing on it. The
+ * top block is not read.
  *
  * Throws if (x, y) is not a square. Does not change `state`.
  */
@@ -75,6 +80,9 @@ export function supportCheck(state: GameState, x: number, y: number): SupportChe
   }
   if (structureOnSquare(state, x, y) !== NO_STRUCTURE) {
     return refused('occupied');
+  }
+  if (lavaOn(state, x, y) > 0) {
+    return refused('lava');
   }
   return { allowed: true, refusal: null, ap: ACTION_COSTS.placeSupport };
 }

@@ -13,7 +13,7 @@
 
 import { isRunActive, isSquare, knownSquare, mineCheck } from '../../engine';
 import type { CutTreeAction, GameState, MineAction, PlaceSupportAction } from '../../engine';
-import { depthName, topBlockText } from '../text/describe';
+import { contentsNames, depthName, topBlockText } from '../text/describe';
 import { squareText, supportChoice, tapChoice } from '../text/squares';
 
 /** A square of the map. */
@@ -64,7 +64,8 @@ export interface TapOutcome {
 
 /**
  * One line about the square (x, y), as far as the player knows it:
- * "x12 y3, depth 2: Stone, gives 1 Stone" or "x4 y4, ground level: a tree".
+ * "x12 y3, depth 2: Stone, gives 1 Stone" or "x4 y4, ground level: a tree";
+ * with water on the square, "...; on it: 3 water".
  */
 export function squareSummary(state: GameState, x: number, y: number): string {
   const square = knownSquare(state, x, y);
@@ -72,7 +73,10 @@ export function squareSummary(state: GameState, x: number, y: number): string {
   if (square.tree) {
     return `${where}: a tree`;
   }
-  return `${where}: ${topBlockText(state, x, y)}`;
+  // What stands on the square (water, lava, gas), which the map draws too.
+  const standing = contentsNames(square);
+  const onIt = standing.length > 0 ? `; on it: ${standing.join(', ')}` : '';
+  return `${where}: ${topBlockText(state, x, y)}${onIt}`;
 }
 
 /**
