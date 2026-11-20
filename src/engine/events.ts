@@ -140,12 +140,21 @@ export type GameEvent =
   | { type: 'scanned'; centre: Vec3 }
   /** Crew health was restored by `amount` (resting at a camp) and is now `health`. */
   | { type: 'healthRestored'; amount: number; health: number }
-  /** A camp was founded; `pos` is its `Camp.pos`. */
+  /**
+   * A camp was founded; `pos` is its `Camp.pos`: the centre square (x, y) and
+   * the depth of the patch (z). The same goes for the three events below.
+   */
   | { type: 'campFounded'; pos: Vec3 }
-  /** The camp at `pos` was destroyed (0014 item 30). */
+  /** The camp at `pos` was destroyed by a hazard (design doc 8). */
   | { type: 'campDestroyed'; pos: Vec3; cause: DestructionCause }
-  /** The camp at `pos` was decommissioned (0014 item 28). */
+  /** The camp at `pos` was decommissioned by the player. */
   | { type: 'campDecommissioned'; pos: Vec3 }
+  /**
+   * The crew began to rest at the camp at `pos`, for the rest of the shift.
+   * `healthRestored` follows in the cube phase if the camp is still standing
+   * and the crew is hurt.
+   */
+  | { type: 'restStarted'; pos: Vec3 }
   // The surface forest (issue #70; decision note 0020).
   /** The tree in the surface cell `pos` was cut; a stump is left. */
   | { type: 'treeCut'; pos: Vec3 }

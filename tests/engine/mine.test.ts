@@ -179,6 +179,7 @@ describe('AP cost (0005 item 12)', () => {
       refusal: null,
       higherNeighbours: [],
       ap: costOf('stone'),
+      campDiscount: 0,
     });
   });
 });
@@ -196,6 +197,7 @@ describe('the level rule (design doc 4.2, [Decided]: after mining, at most 1 ste
         { direction: 'west', x: 0, y: 1, depth: 0 },
       ],
       ap: null,
+      campDiscount: null,
     });
     expect(findActions(state, { type: 'mine', x: 1, y: 1 })).toEqual([]);
   });
@@ -262,6 +264,7 @@ describe('the bottom of the cube', () => {
       refusal: 'bottom',
       higherNeighbours: [],
       ap: null,
+      campDiscount: null,
     });
     expect(findActions(state, { type: 'mine' })).toEqual([
       { type: 'mine', x: 1, y: 0, ap: costOf('stone') },
@@ -281,6 +284,7 @@ describe('trees (design doc 3.2 and 4.2)', () => {
       refusal: 'tree',
       higherNeighbours: [],
       ap: null,
+      campDiscount: null,
     });
     expect(findActions(state, { type: 'mine', x: 1, y: 1 })).toEqual([]);
     const cut = act(state, { type: 'cutTree', x: 1, y: 1 }).state;

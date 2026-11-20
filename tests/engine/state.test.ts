@@ -256,7 +256,7 @@ describe('cloneState', () => {
     copy.size.x = 99;
     copy.crew.health -= 1;
     copy.worked.fill(1);
-    copy.crew.resting = true;
+    copy.crew.restingAt = { x: 0, y: 0 };
     copy.armed.push({ pos: { x: 0, y: 0, z: 1 }, kind: 'unstableOre' });
     const firstCamp = copy.camps[0];
     if (firstCamp !== undefined) {

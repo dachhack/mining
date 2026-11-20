@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { BLOCKS, CAMPS } from '../../src/data';
-import { campCells, campsAt } from '../../src/engine/camps';
+import { campSquares, campsAt } from '../../src/engine/camps';
 import {
   addCamp,
   armCharge,
@@ -215,30 +215,23 @@ describe('camps', () => {
     expect(() => addCamp(state, { x: 1, y: 1, z: -1 })).toThrow('outside the cube');
   });
 
-  it('a camp covers 3 x 3 cells on 2 layers, the founding cell in the middle of the lower one', () => {
-    // The numbers this test is written for (design doc 8).
+  it('a camp covers the 3 x 3 squares round its centre', () => {
+    // The number this test is written for (design doc 8).
     expect(CAMPS.halfWidth).toBe(1);
-    expect(CAMPS.height).toBe(2);
     const camp = { pos: { x: 5, y: 6, z: 10 }, foundedShift: 1 };
-    const cells = campCells(camp);
-    expect(cells).toHaveLength(18);
-    expect(cells[0]).toEqual({ x: 4, y: 5, z: 9 }); // top layer first
-    expect(cells[17]).toEqual({ x: 6, y: 7, z: 10 });
-    for (const cell of cells) {
-      expect(Math.abs(cell.x - 5)).toBeLessThanOrEqual(1);
-      expect(Math.abs(cell.y - 6)).toBeLessThanOrEqual(1);
-      expect([9, 10]).toContain(cell.z);
-    }
-    expect(new Set(cells.map((cell) => `${cell.x},${cell.y},${cell.z}`)).size).toBe(18);
+    const squares = campSquares(camp);
+    expect(squares).toHaveLength(9);
+    expect(squares[0]).toEqual({ x: 4, y: 5 }); // row by row: y, then x
+    expect(squares[8]).toEqual({ x: 6, y: 7 });
+    expect(new Set(squares.map((square) => `${square.x},${square.y}`)).size).toBe(9);
   });
 
-  it('campsAt finds the camps a cell belongs to', () => {
+  it("campsAt finds the camp standing on a cell's square, whatever the layer", () => {
     const state = blankState({ x: 8, y: 8, z: 6 }, 1);
     const camp = addCamp(state, { x: 2, y: 2, z: 3 });
     expect(campsAt(state, { x: 2, y: 2, z: 3 })).toEqual([camp]);
-    expect(campsAt(state, { x: 3, y: 1, z: 2 })).toEqual([camp]); // a top corner
-    expect(campsAt(state, { x: 2, y: 2, z: 4 })).toEqual([]); // the floor under it
-    expect(campsAt(state, { x: 2, y: 2, z: 1 })).toEqual([]); // above its roof
+    expect(campsAt(state, { x: 3, y: 1, z: 2 })).toEqual([camp]); // a corner square
+    expect(campsAt(state, { x: 2, y: 2, z: 0 })).toEqual([camp]); // high above it
     expect(campsAt(state, { x: 4, y: 2, z: 3 })).toEqual([]); // beside it
   });
 });

@@ -71,10 +71,10 @@ describe('destroyCampsAt', () => {
     });
   }
 
-  it('destroys a camp when the event touches any of its cells', () => {
+  it('destroys a camp when the event touches any of its squares', () => {
     const state = campState();
     const events: GameEvent[] = [];
-    // A top corner of the camp.
+    // A corner square of the camp; the layer does not matter.
     expect(destroyCampsAt(state, { x: 1, y: 3, z: 1 }, 'water', events)).toBe(1);
     expect(state.camps).toEqual([]);
     expect(events).toEqual([{ type: 'campDestroyed', pos: { x: 2, y: 2, z: 2 }, cause: 'water' }]);
@@ -82,11 +82,11 @@ describe('destroyCampsAt', () => {
     expect(state.stockpile).toEqual({});
   });
 
-  it('leaves a camp alone when the cell is not one of its own', () => {
+  it('leaves a camp alone when the square is not one of its own', () => {
     const state = campState();
     const events: GameEvent[] = [];
     expect(destroyCampsAt(state, { x: 4, y: 2, z: 2 }, 'explosion', events)).toBe(0);
-    expect(destroyCampsAt(state, { x: 2, y: 2, z: 0 }, 'rockfall', events)).toBe(0);
+    expect(destroyCampsAt(state, { x: 2, y: 4, z: 2 }, 'rockfall', events)).toBe(0);
     expect(state.camps).toHaveLength(1);
     expect(events).toEqual([]);
   });

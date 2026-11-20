@@ -12,7 +12,7 @@ import { cellCount } from '../../src/engine/state';
 describe('createRun', () => {
   it('has a crew and no avatar: health, resting, and no air (issue #90)', () => {
     const state = createRun(1, 'none', 'standard');
-    expect(state.crew).toEqual({ health: CREW.startHealth, resting: false });
+    expect(state.crew).toEqual({ health: CREW.startHealth, restingAt: null });
     expect(Object.keys(state)).not.toContain('avatar');
   });
 
@@ -46,7 +46,8 @@ describe('createRun', () => {
     expect('inventory' in state).toBe(false);
     expect('looseItems' in state).toBe(false);
     // No ladders since issue #80.
-    expect(state.stockpile).toEqual({ timber: 2 });
+    // One camp kit: owner, question 63 (design doc 8).
+    expect(state.stockpile).toEqual({ timber: 2, campKit: 1 });
     expect(state.crew.health).toBe(10);
     expect(state.ap).toBe(5);
     expect(state.size).toEqual({ x: 32, y: 32, z: 32 });

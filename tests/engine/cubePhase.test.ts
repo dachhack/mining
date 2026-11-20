@@ -644,18 +644,18 @@ describe('worked squares (design doc 5.2)', () => {
 });
 
 describe('rest (only for a crew alive after damage)', () => {
-  it('the resting flag lasts one shift, whether or not the crew lives', () => {
+  it('the rest lasts one shift, whether or not the crew lives', () => {
     const alive = fieldState();
-    alive.crew.resting = true;
+    alive.crew.restingAt = { x: 1, y: 1 };
     stepCrewEffects(alive, [], newCubePhase());
-    expect(alive.crew.resting).toBe(false);
+    expect(alive.crew.restingAt).toBeNull();
 
     const dying = fieldState({ health: 1, worked: [MIDDLE] });
-    dying.crew.resting = true;
+    dying.crew.restingAt = { x: 1, y: 1 };
     const phase = newCubePhase();
     recordDamage(dying, phase, 'slump', 3, MIDDLE.x, MIDDLE.y);
     stepCrewEffects(dying, [], phase);
-    expect(dying.crew.resting).toBe(false);
+    expect(dying.crew.restingAt).toBeNull();
     expect(dying.status).toEqual({ kind: 'ended', outcome: 'lost', cause: 'buried' });
   });
 });

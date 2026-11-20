@@ -11,6 +11,10 @@
 import { BLOCKS, NO_STRUCTURE, WORLD, blockDefByCode } from '../data';
 import type { BlockDef, CubeSize, ItemStack, Vec3 } from '../data';
 import type { GameEvent, RunEndCause, RunOutcome } from './events';
+// A type-only import: heightmap.ts imports this file's functions, and a type
+// import the other way is erased when the code is compiled, so there is no
+// circle at run time.
+import type { Square } from './heightmap';
 import { createRng } from './rng';
 import type { RngState } from './rng';
 
@@ -40,11 +44,14 @@ export interface Crew {
   /** Crew health. Starts at `CREW.startHealth`; the run is lost at 0. */
   health: number;
   /**
-   * True from the moment the crew chooses to rest at a camp until step (e)
-   * of the cube phase that ends that shift, which applies the rest and clears
-   * the flag (0014 items 2 and 27).
+   * The camp the crew is resting at, named by its centre square, or `null`
+   * when the crew is not resting. Set by the `rest` action; step (e) of the
+   * cube phase that ends that shift applies the rest and sets it back to
+   * `null` (design doc 5.1 and 8).
+   *
+   * `Square | null` means "a square, or nothing", like `Optional[Square]`.
    */
-  resting: boolean;
+  restingAt: Square | null;
 }
 
 /** The two things that go off in step (c) of a cube phase (0014 items 15 and 17). */
@@ -56,11 +63,14 @@ export interface ArmedCharge {
   kind: ArmedKind;
 }
 
-/** An active camp (design doc 8; 0014 items 26 to 30). */
+/** An active camp (design doc v0.2 section 8). */
 export interface Camp {
   /**
-   * The cell the avatar stood in when it founded the camp: the middle of the
-   * lower of the camp's two layers. `campCells` in camps.ts lists all 18.
+   * The camp's centre square (`pos.x`, `pos.y`) and the depth of its patch
+   * when it was founded (`pos.z`). A camp stands on a flat 3 x 3 patch;
+   * `campSquares` in camps.ts lists the 9 squares. While the camp stands
+   * nothing changes the depth of its squares: they cannot be mined, and a
+   * slump from or onto one destroys the camp.
    */
   pos: Vec3;
   /** The number of the shift the camp was founded in; upkeep counts from it. */
@@ -537,8 +547,8 @@ export function canonicalCamps(list: Camp[]): Camp[] {
 }
 
 /**
- * Add an active camp founded at `pos` in the current shift, and return it.
- * `pos` must be inside the grid.
+ * Add an active camp founded in the current shift, and return it. `pos` is
+ * its centre square and the depth of its patch; it must be inside the grid.
  */
 export function addCamp(state: GameState, pos: Vec3): Camp {
   if (!inGrid(state.size, pos)) {
@@ -619,7 +629,7 @@ export function blankState(size: CubeSize, seed: number): GameState {
     surface: new Uint8Array(size.x * size.y),
     stumpAge: new Uint8Array(size.x * size.y),
     worked: new Uint8Array(size.x * size.y),
-    crew: { health: 0, resting: false },
+    crew: { health: 0, restingAt: null },
     ap: 0,
     fuel: 0,
     shift: 0,
@@ -659,7 +669,7 @@ export function cloneState(state: GameState): GameState {
     worked: state.worked.slice(),
     crew: {
       health: state.crew.health,
-      resting: state.crew.resting,
+      restingAt: state.crew.restingAt === null ? null : { ...state.crew.restingAt },
     },
     ap: state.ap,
     fuel: state.fuel,

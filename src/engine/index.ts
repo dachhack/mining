@@ -247,7 +247,20 @@ export type {
   ScanAction,
   SealAction,
 } from './actionTypes';
-export { campCells, campsAt } from './camps';
+// Camps (design doc 8). Camps are always seen, so a view may read all of
+// this: where a camp stands, why a patch is refused, and where mining is
+// cheaper.
+export {
+  campAtSquare,
+  campCentredAt,
+  campSquares,
+  campUpkeepIsDue,
+  campsAt,
+  foundCampCheck,
+  mineDiscountAt,
+  stepsFromCamp,
+} from './camps';
+export type { FoundCampCheck, FoundCampRefusal } from './camps';
 export type {
   DamageCause,
   DestructionCause,

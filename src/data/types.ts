@@ -293,16 +293,19 @@ export interface HazardData {
   forecast: ForecastData;
 }
 
-/** Camp numbers (design doc 8; 0014 items 25 to 30). See camps.ts for what each means. */
+/** Camp numbers (design doc v0.2 section 8). See camps.ts for what each means. */
 export interface CampData {
   /** An item id. */
   kitItem: string;
   halfWidth: number;
-  height: number;
   foundMinAp: number;
   restMinAp: number;
   upkeepFuel: number;
   upkeepEveryShifts: number;
+  mineDiscountAp: number;
+  mineMinAp: number;
+  mineDiscountSteps: number;
+  mineDiscountMaxDeeper: number;
 }
 
 /** Numbers of the camp-made tools (0014 item 31). See camps.ts. */

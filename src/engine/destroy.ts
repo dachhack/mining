@@ -44,13 +44,16 @@ export function destroyStructure(
 }
 
 /**
- * Destroy every active camp that the cell `pos` belongs to (0014 item 30):
- * the camp leaves `state.camps`. Emits `campDestroyed`
- * for each. Returns how many camps were destroyed.
+ * Destroy the active camp standing on the square of the cell `pos`, if there
+ * is one (design doc 8): the camp leaves `state.camps`, and with it its
+ * recipes, its discount and the rest of a crew resting there. Emits
+ * `campDestroyed`. Returns how many camps were destroyed (0 or 1: camps do
+ * not overlap). Only `pos.x` and `pos.y` are looked at.
  *
- * Call it for each cell the event touches: the cell water or lava enters,
- * each exploding cell and the cells beside it, each cell a falling block
- * passes through or rests in. It is cheap when there is no camp there.
+ * Call it for each square the event touches: the square water or lava
+ * enters, each exploding square and the squares beside it, the square a
+ * block slumps from and the square it comes to rest on. It is cheap when
+ * there is no camp there.
  */
 export function destroyCampsAt(
   state: GameState,

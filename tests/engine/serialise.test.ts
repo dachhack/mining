@@ -55,7 +55,7 @@ function busyState(): GameState {
       { pos: { x: 1, y: 1, z: 0 }, foundedShift: 3 },
     ],
   });
-  state.crew.resting = true;
+  state.crew.restingAt = { x: 1, y: 1 };
   state.revealed[0] = 1;
   state.revealed[4] = 1;
   nextUint32(state.rng); // so the RNG is no longer at its seed
@@ -100,7 +100,7 @@ describe('serialise and deserialise', () => {
   it('round-trips every field the M2 skeleton added', () => {
     const loaded = throughJson(busyState());
     expect(workedSquares(loaded)).toEqual([{ x: 2, y: 1 }]);
-    expect(loaded.crew.resting).toBe(true);
+    expect(loaded.crew.restingAt).toEqual({ x: 1, y: 1 });
     expect(waterAt(loaded, { x: 0, y: 2, z: 0 })).toBe(1);
     expect(lavaAt(loaded, { x: 1, y: 2, z: 1 })).toBe(1);
     expect(isLavaSource(loaded, { x: 1, y: 2, z: 1 })).toBe(false);
@@ -265,7 +265,8 @@ describe('hashState', () => {
       seed: (s) => (s.seed += 1),
       health: (s) => (s.crew.health -= 1),
       'a worked square': (s) => (s.worked[0] = 1),
-      resting: (s) => (s.crew.resting = false),
+      resting: (s) => (s.crew.restingAt = null),
+      'the camp rested at': (s) => (s.crew.restingAt = { x: 2, y: 1 }),
       'an armed charge gone': (s) => s.armed.pop(),
       'an armed charge of another kind': (s) => {
         (s.armed[0] as ArmedCharge).kind = 'unstableOre';

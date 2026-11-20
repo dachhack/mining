@@ -2,6 +2,7 @@
 
 import { SHIFT } from '../data';
 import type { Vec3 } from '../data';
+import { campFuelDue } from './camps';
 import { stepCaveIns } from './cube/caveIns';
 import { stepCrewEffects } from './cube/crewEffects';
 import { stepFluids } from './cube/fluids';
@@ -21,8 +22,15 @@ import type { GameState } from './state';
  * what `endShift` would produce if the player ended the shift now.
  */
 export interface UpkeepForecast {
-  /** Fuel consumed by the shift. */
+  /** Fuel consumed by the shift: the shift's own and the camps' together. */
   fuelConsumed: number;
+  /**
+   * The part of `fuelConsumed` that the camps burn (design doc 4: 1 per
+   * active camp every 4 shifts). 0 on a shift when no camp is due. A camp
+   * that the cube phase destroys first burns nothing, so this can turn out
+   * lower.
+   */
+  campFuelConsumed: number;
   /** Fuel after upkeep. */
   fuelAfter: number;
   /** If ending the shift will end the run, why; otherwise `null`. */
@@ -130,17 +138,23 @@ function computeUpkeep(state: GameState): UpkeepForecast {
   if (state.fuel <= 0) {
     return {
       fuelConsumed: 0,
+      campFuelConsumed: 0,
       fuelAfter: state.fuel,
       runEnds: 'outOfFuel',
     };
   }
 
-  // 2. The shift's fuel. Never more than there is, so the gauge cannot go
-  //    below 0 if `fuelPerShift` is ever tuned above 1.
-  const fuelConsumed = Math.min(SHIFT.fuelPerShift, state.fuel);
+  // 2. The shift's fuel, then the fuel of each active camp whose turn it is
+  //    (`campFuelDue` in camps.ts). Never more than there is, so the gauge
+  //    cannot go below 0: a crew whose camps take the last of the fuel is at
+  //    0 and has one last shift, like any other (decision note 0017 item 8).
+  const shiftFuel = Math.min(SHIFT.fuelPerShift, state.fuel);
+  const campFuelConsumed = Math.min(campFuelDue(state), state.fuel - shiftFuel);
+  const fuelConsumed = shiftFuel + campFuelConsumed;
 
   return {
     fuelConsumed,
+    campFuelConsumed,
     fuelAfter: state.fuel - fuelConsumed,
     runEnds: null,
   };
@@ -155,7 +169,8 @@ function computeUpkeep(state: GameState): UpkeepForecast {
  *    and stop. The shift number and `state.ap` are left as they were. So a
  *    player may finish a shift on 0 fuel and survive only by crafting fuel
  *    before the next upkeep.
- * 2. Otherwise consume the shift's fuel (`fuelChanged`, reason `upkeep`).
+ * 2. Otherwise consume the shift's fuel and that of each active camp that is
+ *    due, as one amount (`fuelChanged`, reason `upkeep`).
  * 3. Start the next shift: add 1 to `state.shift`, reset `state.ap`, and emit
  *    `shiftEnded`. Unspent AP is lost: it does not carry over and does not
  *    become fuel.
