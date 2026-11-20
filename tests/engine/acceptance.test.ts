@@ -145,7 +145,7 @@ describe('the policies on other seeds', () => {
       const result = play('pit', seed, 150);
       expect(result.deepestSquare).toBeGreaterThanOrEqual(3);
     }
-  });
+  }, 30000); // three pit runs: about 2 seconds here, several times that on the CI machine
 
   it('random: takes only legal actions and keeps the level rule to the end of its fuel', () => {
     for (const seed of [2, 3]) {

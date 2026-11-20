@@ -32,13 +32,15 @@ import {
   actionKey,
   countItem,
   createRng,
+  depthIn,
+  depthMapOf,
   knownSquare,
   legalActions,
   nextInt,
   unstableAfterMine,
   unstableSquares,
 } from '../src/engine';
-import type { Action, CutTreeAction, GameState, MineAction } from '../src/engine';
+import type { Action, CutTreeAction, DepthMap, GameState, MineAction } from '../src/engine';
 
 /** What a policy chooses: a legal action, or the string 'endShift'. */
 export type Decision = Action | 'endShift';
@@ -157,16 +159,21 @@ function isBetterCandidate(a: PitCandidate, b: PitCandidate): boolean {
 /**
  * True if taking this candidate would make no square unstable (design doc
  * 6.1). A cut never does. `unstableAfterMine` reads only what the player
- * sees.
+ * sees. `depths` is `depthMapOf(state)`, read once for a whole decision.
  */
-function isSafeCandidate(state: GameState, candidate: PitCandidate, heedSlumps: boolean): boolean {
+function isSafeCandidate(
+  state: GameState,
+  candidate: PitCandidate,
+  heedSlumps: boolean,
+  depths: DepthMap,
+): boolean {
   if (!heedSlumps) {
     return true; // the greedy policy takes any legal square
   }
   if (candidate.action.type !== 'mine') {
     return true;
   }
-  return unstableAfterMine(state, candidate.action.x, candidate.action.y).length === 0;
+  return unstableAfterMine(state, candidate.action.x, candidate.action.y, depths).length === 0;
 }
 
 /**
@@ -178,6 +185,7 @@ function bestSafeCandidate(
   state: GameState,
   candidates: PitCandidate[],
   heedSlumps: boolean,
+  depths: DepthMap,
 ): PitCandidate | undefined {
   // `[...list]` copies the list; `sort` would otherwise reorder the caller's.
   // The sort is stable: equally good candidates stay in row order.
@@ -186,7 +194,7 @@ function bestSafeCandidate(
     if (isBetterCandidate(b, a)) return 1;
     return 0;
   });
-  return ranked.find((candidate) => isSafeCandidate(state, candidate, heedSlumps));
+  return ranked.find((candidate) => isSafeCandidate(state, candidate, heedSlumps, depths));
 }
 
 /**
@@ -290,8 +298,11 @@ export function makePitPolicy(heedSlumps = true, useCamp = false): Policy {
       }
     }
 
+    // Every square's depth, read once for this whole decision.
+    const depths = depthMapOf(state);
+
     // The squares there is a legal mine or cut for, with what the policy
-    // needs to rank them. `knownSquare` is what the player sees of a square.
+    // needs to rank them. A square's depth is always seen by the player.
     const candidates: PitCandidate[] = [];
     for (const action of legal) {
       if (action.type !== 'mine' && action.type !== 'cutTree') {
@@ -299,7 +310,7 @@ export function makePitPolicy(heedSlumps = true, useCamp = false): Policy {
       }
       candidates.push({
         action,
-        depth: knownSquare(state, action.x, action.y).depth,
+        depth: depthIn(depths, action.x, action.y),
         distance: Math.abs(action.x - centreX) + Math.abs(action.y - centreY),
       });
     }
@@ -315,7 +326,7 @@ export function makePitPolicy(heedSlumps = true, useCamp = false): Policy {
             candidate.action.type === 'mine' &&
             candidate.action.x === square.x &&
             candidate.action.y === square.y &&
-            isSafeCandidate(state, candidate, heedSlumps),
+            isSafeCandidate(state, candidate, heedSlumps, depths),
         );
         if (mine !== undefined) {
           return mine.action;
@@ -349,14 +360,14 @@ export function makePitPolicy(heedSlumps = true, useCamp = false): Policy {
         const top = knownSquare(state, candidate.action.x, candidate.action.y).top;
         return top !== null && top.block === BLOCKS.coalSeam.code;
       });
-      const bestCoal = bestSafeCandidate(state, coal, heedSlumps);
+      const bestCoal = bestSafeCandidate(state, coal, heedSlumps, depths);
       if (bestCoal !== undefined) {
         return bestCoal.action;
       }
     }
 
     // 5. Dig the pit.
-    const best = bestSafeCandidate(state, candidates, heedSlumps);
+    const best = bestSafeCandidate(state, candidates, heedSlumps, depths);
     if (best !== undefined) {
       return best.action;
     }

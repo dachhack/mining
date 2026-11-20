@@ -790,5 +790,5 @@ describe('the list of camp sites and the check for one centre agree', () => {
         }
       }
     }
-  });
+  }, 30000); // three generated cubes, checked square by square: slow on the CI machine
 });

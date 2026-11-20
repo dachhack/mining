@@ -187,7 +187,9 @@ describe('golden runs', () => {
       current = replayFrom(current, decision);
     }
     expect(cheaperMines).toBeGreaterThan(0);
-  });
+    // This test replays the run a second time, one decision at a time, which
+    // is slow on the CI machine: give it the limit of a whole-run test.
+  }, 30000);
 
   // On this seed the greedy pit reaches the camp: a slump destroys it. The
   // hash pins `destroyCampsAt` from the slump step, and a crew that then has
