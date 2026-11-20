@@ -446,7 +446,7 @@ describe('the forecast says what each hazard takes off crew health (issue #112)'
     setWaterOn(state, 4, 0, 3);
     const view = buildView(state, { deepestDepth: 3 });
     expect(view.forecastLines.slice(0, 4)).toEqual([
-      'THE RUN WILL BE LOST if you end the shift now: the crew has 6 health and loses 6.',
+      'THE RUN WILL BE LOST if you end the shift now: the crew has 6 health; it loses 6.',
       'THE CREW LOSES 5 health: lava on x0 y0, where it worked this shift.',
       'THE CREW LOSES 1 health: water flowing onto x3 y0, where it worked this shift.',
       'Crew health 6 -> 0: 6 damage in all.',
@@ -470,9 +470,9 @@ describe('the forecast says what each hazard takes off crew health (issue #112)'
     setWaterOn(state, 0, 1, 1);
     const view = buildView(state, { deepestDepth: 4 });
     expect(view.forecastLines.slice(0, 4)).toEqual([
-      'THE RUN MAY BE LOST if you end the shift now: the crew has 1 health and may lose 1.',
+      'THE RUN MAY BE LOST if you end the shift now: the crew has 1 health; it may lose 1.',
       'THE CREW MAY LOSE 1 health: water flowing onto x1 y1, where it worked this shift.',
-      'Crew health 1 -> 0: 1 damage in all (0 of it is certain).',
+      'Crew health 1 -> 1 for certain, 0 if all that may happen does: 0 damage is certain, 1 in all.',
       'A block you have not seen will be uncovered: if a pocket is under it, ' +
         'its water, lava or gas may hurt the crew more than this says.',
     ]);

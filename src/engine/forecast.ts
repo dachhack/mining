@@ -105,6 +105,8 @@ export function forecastCountdowns(state: GameState): CountdownForecast[] {
  * - `atLeast`: it deals this or more. A blast will uncover a block the player
  *   has not seen (or may destroy a relic or keystone, which is decided by
  *   chance): if a pocket is under it, more gas burns or stands in the pit.
+ *   (If the blast opens a space the player has scanned, gas damage is `may`
+ *   instead: see `certaintyOf`.)
  * - `may`: this is what happens if nothing hidden comes out. A slump will
  *   uncover a block the player has not seen, before the water, lava and gas
  *   move: if a pocket is under it, its water, lava or gas can change what
@@ -234,11 +236,18 @@ function uncoversHidden(state: GameState, events: GameEvent[]): boolean {
  * - If only a blast uncovers one, steps (a) and (b) are over. The blasts
  *   themselves do not depend on it. Gas that comes out can only add to what
  *   burns: gas and gas explosions are 'atLeast'.
+ * - Unless a blast collapses a space the player has scanned
+ *   (`blastCollapsesSpace`): then gas and gas explosions are 'may'. A space
+ *   collapses once, through whichever roof goes first. If another blast
+ *   square is a roof of the same space that the player has NOT seen, the gas
+ *   really comes out there, not where the forecast puts it, and the
+ *   forecast's gas explosion may not happen at all (review of PR #114).
  */
 function certaintyOf(
   cause: DamageCause,
   slumpUncovers: boolean,
   blastUncovers: boolean,
+  blastCollapsesSpace: boolean,
 ): DamageCertainty {
   if (cause === 'slump') {
     return 'exact';
@@ -246,8 +255,13 @@ function certaintyOf(
   if (slumpUncovers) {
     return 'may';
   }
-  if (blastUncovers && (cause === 'gas' || cause === 'gasExplosion')) {
-    return 'atLeast';
+  if (cause === 'gas' || cause === 'gasExplosion') {
+    if (blastCollapsesSpace) {
+      return 'may';
+    }
+    if (blastUncovers) {
+      return 'atLeast';
+    }
   }
   return 'exact';
 }
@@ -305,12 +319,14 @@ export function forecastHazards(state: GameState): HazardForecast {
   // instead of applied. (The worked squares are the player's own actions.)
   const slumpUncovers = uncoversHidden(state, slumps);
   const blastUncovers = uncoversHidden(state, gas);
+  // A scanned space that a blast opens: where its gas comes out is not certain.
+  const blastCollapsesSpace = gas.some((event) => event.type === 'spaceCollapsed');
   const damage: CrewDamageForecast[] = [];
   let total = 0;
   let totalAtLeast = 0;
   let lossCause: RunEndCause | null = null;
   for (const entry of phase.damage) {
-    const certainty = certaintyOf(entry.cause, slumpUncovers, blastUncovers);
+    const certainty = certaintyOf(entry.cause, slumpUncovers, blastUncovers, blastCollapsesSpace);
     const squares: CrewDamageSquare[] = [];
     for (const square of phase.damageSquares) {
       if (square.cause === entry.cause) {

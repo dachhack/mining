@@ -45,7 +45,6 @@ import {
   shiftsUntilRegrowth,
   slumpCheck,
   stockpileEntries,
-  workedSquares,
 } from '../../engine';
 import type { GameState, KnownSquare } from '../../engine';
 import {
@@ -707,7 +706,7 @@ export function buildView(state: GameState, options: ViewOptions): PlayerView {
   // and whether the run would be lost. All of it is the engine's forecast
   // (`ShiftForecast.crew`; issue #112); the cube phase comes before upkeep,
   // so these lines hold even when the fuel has run out.
-  ranked.push(...forecastCrewLines(preview.crew, workedSquares(state).length > 0));
+  ranked.push(...forecastCrewLines(preview.crew));
   if (upkeep.runEnds !== null) {
     ranked.push({
       rank: FORECAST_RANK.runEnds,

@@ -42,11 +42,15 @@ test('a shift that would lose the run: amounts, red frames, and a second tap to 
   // The forecast opens with the lost run, then one line for each hazard, the
   // largest amount first, then the total.
   await expect(lines.nth(0)).toContainText('THE RUN');
-  await expect(lines.nth(0)).toContainText('the crew has 8 health');
+  await expect(lines.nth(0)).toContainText(
+    'THE RUN MAY BE LOST if you end the shift now: the crew has 8 health; it will lose 3 and may lose 7 more.',
+  );
   await expect(forecast).toContainText('5 health: lava on x20 y20');
   await expect(forecast).toContainText('3 health: the slump at x20 y12');
   await expect(forecast).toContainText('1 health: water flowing onto x13 y17');
-  await expect(forecast).toContainText('Crew health 8 -> 0');
+  await expect(forecast).toContainText(
+    'Crew health 8 -> 5 for certain, 0 if all that may happen does',
+  );
 
   // The map frames the worked squares where the crew will be hurt.
   const canvas = page.getByTestId('map-canvas');
@@ -54,7 +58,7 @@ test('a shift that would lose the run: amounts, red frames, and a second tap to 
   await expect(canvas).toHaveAttribute('data-crew-hurt', /13,17/);
   await expect(canvas).toHaveAttribute('data-crew-hurt', /20,20/);
   await expect(page.getByTestId('map-legend')).toContainText(
-    'red frame: the crew worked here and WILL BE HURT',
+    'red frame: the crew worked here and will or may be hurt',
   );
 
   // The button says so before any tap, and the first tap only asks.
@@ -92,7 +96,9 @@ test('a shift that hurts the crew but does not lose the run ends at one tap', as
   await openShowcase(page);
   const button = page.getByTestId('end-shift');
   await expect(button).toHaveText('End shift');
-  await expect(page.getByTestId('forecast')).toContainText('Crew health 8 -> 2');
+  await expect(page.getByTestId('forecast')).toContainText(
+    'Crew health 8 -> 8 for certain, 2 if all that may happen does',
+  );
   await expect(page.getByTestId('map-canvas')).toHaveAttribute('data-crew-hurt', /15,15/);
   await button.click();
   await expect(page.getByTestId('end-shift-warning')).toBeHidden();

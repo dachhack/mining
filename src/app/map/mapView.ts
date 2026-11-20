@@ -1156,7 +1156,7 @@ function legendFor(tiles: Tile[]): HTMLElement[] {
   add(
     (t) => t.crewHurt,
     { worked: true, crewHurt: true },
-    'red frame: the crew worked here and WILL BE HURT when the shift ends (the list under End shift says by what)',
+    'red frame: the crew worked here and will or may be hurt when the shift ends (the list under End shift says by what)',
   );
   add((t) => t.structure === 'support', { structure: 'support' }, 'support: holds the square');
   add(

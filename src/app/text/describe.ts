@@ -711,13 +711,16 @@ export function crewLostWarning(crew: CrewForecast): string | null {
   if (crew.runLost === 'no' || crew.lossCause === null) {
     return null;
   }
-  const how = `the crew has ${crew.health} health and ${
-    crew.runLost === 'yes' ? 'loses' : 'may lose'
-  } ${crew.total}`;
-  if (crew.runLost === 'yes') {
-    return `THE RUN WILL BE LOST if you end the shift now: ${how}.`;
+  // What is certain and what only may happen are said apart (review of PR #114).
+  const more = crew.total - crew.totalAtLeast;
+  let how = `it loses ${crew.total}`;
+  if (more > 0 && crew.totalAtLeast > 0) {
+    how = `it will lose ${crew.totalAtLeast} and may lose ${more} more`;
+  } else if (more > 0) {
+    how = `it may lose ${crew.total}`;
   }
-  return `THE RUN MAY BE LOST if you end the shift now: ${how}.`;
+  const headline = crew.runLost === 'yes' ? 'THE RUN WILL BE LOST' : 'THE RUN MAY BE LOST';
+  return `${headline} if you end the shift now: the crew has ${crew.health} health; ${how}.`;
 }
 
 /**
@@ -729,9 +732,10 @@ export function crewLostWarning(crew: CrewForecast): string | null {
  *   amount first, with the worked squares where it deals that amount. An
  *   amount the engine marks "at least" or "may" is worded so.
  * - The total and the health left, when anything hurts.
- * - If something hidden may add to it, a line that says so.
+ * - If something hidden may add to it, a line that says so (only when
+ *   something seen already hurts the crew).
  */
-export function forecastCrewLines(crew: CrewForecast, anyWorked: boolean): RankedLine[] {
+export function forecastCrewLines(crew: CrewForecast): RankedLine[] {
   const lines: RankedLine[] = [];
   const lost = crewLostWarning(crew);
   if (lost !== null) {
@@ -754,19 +758,31 @@ export function forecastCrewLines(crew: CrewForecast, anyWorked: boolean): Ranke
     });
   }
   if (crew.damage.length > 0) {
-    const sure = crew.total === crew.totalAtLeast ? '' : ` (${crew.totalAtLeast} of it is certain)`;
-    lines.push({
-      rank: FORECAST_RANK.crewOrCamp,
-      text: `Crew health ${crew.health} -> ${crew.healthAfter}: ${crew.total} damage in all${sure}.`,
-    });
-  }
-  if (!crew.exact && anyWorked) {
-    lines.push({
-      rank: FORECAST_RANK.crewOrCamp,
-      text:
-        'A block you have not seen will be uncovered: if a pocket is under it, ' +
-        'its water, lava or gas may hurt the crew more than this says.',
-    });
+    if (crew.total === crew.totalAtLeast) {
+      lines.push({
+        rank: FORECAST_RANK.crewOrCamp,
+        text: `Crew health ${crew.health} -> ${crew.healthAfter}: ${crew.total} damage in all.`,
+      });
+    } else {
+      const afterCertain = Math.max(0, crew.health - crew.totalAtLeast);
+      lines.push({
+        rank: FORECAST_RANK.crewOrCamp,
+        text:
+          `Crew health ${crew.health} -> ${afterCertain} for certain, ${crew.healthAfter} if all that ` +
+          `may happen does: ${crew.totalAtLeast} damage is certain, ${crew.total} in all.`,
+      });
+    }
+    // Only when a hazard already reaches the crew: a slump uncovers an
+    // unseen block on nearly half of all shifts, and a line on each of them
+    // would be noise (review of PR #114).
+    if (!crew.exact) {
+      lines.push({
+        rank: FORECAST_RANK.crewOrCamp,
+        text:
+          'A block you have not seen will be uncovered: if a pocket is under it, ' +
+          'its water, lava or gas may hurt the crew more than this says.',
+      });
+    }
   }
   return lines;
 }

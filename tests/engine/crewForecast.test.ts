@@ -469,6 +469,37 @@ describe('the forecast of crew damage: "at least" and "may" (issue #112)', () =>
     checkForecast(withPocket, 'hidden gas');
   });
 
+  it('a blast opens a partly scanned gas pocket: gas kinds are "may", and the run is not said to be lost', () => {
+    // The reviewer's case (PR #114). One row, five squares at depth 1. A gas
+    // pocket two cells long under x2 and x3; only the cell under x3 is
+    // scanned. A charge on x2. The crew worked x4 and has 3 health.
+    const state = pit(['11111'], { health: 3, worked: [{ x: 4, y: 0 }] }, undefined, 4);
+    for (const x of [2, 3]) {
+      hidePocket(state, { x, y: 0, z: 2 }, { gas: 6 });
+    }
+    setRevealed(state, { x: 3, y: 0, z: 2 }, true);
+    placeExplosive(state, 2, 0);
+
+    // The forecast opens the pocket through x3 (the roof it knows), so it
+    // sees gas burn on x3, beside the crew.
+    const { crew } = checkForecast(state, 'partly scanned pocket');
+    expect(crew.damage).toEqual([
+      {
+        cause: 'gasExplosion',
+        amount: CREW.damage.gasExplosion,
+        certainty: 'may',
+        squares: [{ x: 4, y: 0, amount: CREW.damage.gasExplosion }],
+      },
+    ]);
+    expect(crew.totalAtLeast).toBe(0);
+    expect(crew.runLost).toBe('may');
+    // In fact the hidden roof under x2 goes first: all the gas comes out and
+    // burns there, two squares from the crew, and nothing hurts it.
+    const after = endShift(state).state;
+    expect(after.status.kind).toBe('active');
+    expect(after.crew.health).toBe(3);
+  });
+
   it('a relic in a blast: chance decides, so the forecast is not exact', () => {
     const state = pit(['111', '111'], { worked: [{ x: 2, y: 1 }] }, ['#r#', '###']);
     placeExplosive(state, 0, 0);
@@ -539,6 +570,29 @@ function randomScene(seed: number): GameState {
     shift: NO_LAVA_SHIFT + nextInt(rng, 2),
     health: 1 + nextInt(rng, CREW.startHealth),
   });
+
+  // Pockets several cells long under neighbouring squares, some of them
+  // partly scanned: a space collapses once, through whichever roof goes first.
+  for (let count = nextInt(rng, 4); count > 0; count -= 1) {
+    const y = nextInt(rng, FUZZ_SIZE);
+    const z = 1 + nextInt(rng, FUZZ_LAYERS - 2);
+    const startX = nextInt(rng, FUZZ_SIZE - 1);
+    const length = 2 + nextInt(rng, 2);
+    const kind = nextInt(rng, 3);
+    for (let x = startX; x < Math.min(FUZZ_SIZE, startX + length); x += 1) {
+      if (z <= depthAt(state, x, y)) {
+        continue; // not under this square's top
+      }
+      hidePocket(
+        state,
+        { x, y, z },
+        { water: kind === 0 ? 1 : 0, lava: kind === 1 ? 1 : 0, gas: kind === 2 ? 6 : 0 },
+      );
+      if (oneIn(rng, 2)) {
+        setRevealed(state, { x, y, z }, true);
+      }
+    }
+  }
 
   for (let y = 0; y < FUZZ_SIZE; y += 1) {
     for (let x = 0; x < FUZZ_SIZE; x += 1) {
