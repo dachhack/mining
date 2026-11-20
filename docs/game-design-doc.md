@@ -90,9 +90,9 @@ How deep a run can reach under the level rule is measured before anything is tun
 
 | Block | Mine cost (AP) | Yields | Slump limit | Notes |
 |---|---|---|---|---|
-| Dirt | 1 | — | 1 | Weak: slumps on any slope of 2 levels within 3 squares |
+| Dirt | 1 | — | 1 | Weak: slumps at the top of any slope that falls 2 levels or more |
 | Stone | 2 | Stone | 2 | Standard |
-| Hard rock | 3 | Stone | 3 | 2 AP with a drill. Never slumps from mining alone |
+| Hard rock | 3 | Stone | 3 | 2 AP with a drill. Holds a slope that falls up to 3 levels |
 | Coal seam | 2 | Coal | 2 | Fuel source |
 | Timber-root | 1 | Timber | 2 | Upper band only; trees on the surface are the other source |
 | Iron / copper ore | 2 | Raw iron / raw copper | 2 | Smelt at a camp |
@@ -188,7 +188,7 @@ A **worked square** is a square the player mined, cut, or placed a support, pump
 
 | Hazard | Hurts the crew when | Damage | v0.1 source |
 |---|---|---|---|
-| Slump (6.1) | A block falls from or onto a worked square | 3 | Rockfall 4 |
+| Slump (6.1) | A block slumps from a worked square, or comes to rest on one | 3 | Rockfall 4 |
 | Water (6.3) | Water enters a worked square | 1 | Air loss in water |
 | Lava (6.4) | Lava is on a worked square / beside one | 5 / 1 | Lava 5 / 1 |
 | Gas (6.5) | Gas is on a worked square | 1 | Air loss in gas |
@@ -220,17 +220,18 @@ All hazards are deterministic and advance only in the cube phase. Each active ha
 
 Owner: "Pit walls slump. A steep or tall pit wall of weak material can slump into the pit. A support placed on a wall square stops it."
 
-- **A square's drop** is how much deeper the deepest square within 3 steps of it is (a step is to a face neighbour; [Default] 3 is `slumpReach`). Under the level rule a drop over 3 steps is at most 3.
+- **Slide path.** From a square, the path a loose block would take: step to the square's lowest face neighbour (ties broken north, east, south, west) if that neighbour is deeper than the square the path is on, and repeat; the path ends at its **foot**, the first square with no deeper neighbour. A square's **fall** is how much deeper its foot is than the square itself. Each step goes at least 1 level down, so a path always ends.
 - **Unstable.** A square is unstable when either:
-  - *tall:* its drop is more than the **slump limit** of its top block (3.5): dirt and rubble 1, most rock 2, hard rock and crystal 3; or
+  - *tall:* its fall is more than the **slump limit** of its top block (3.5): dirt and rubble 1, most rock 2, hard rock and crystal 3; or
   - *steep:* it is 2 or more levels higher than a face neighbour, whatever its material. Only a hazard can make such a step (4.2).
   
-  Trees, supported squares and bedrock are never unstable: a tree's roots and a support hold the square.
+  Either way its fall is at least 2. Trees, supported squares and bedrock are never unstable: a tree's roots and a support hold the square.
 - **Warning.** In step (a) an unstable square's top block **cracks** and shows a countdown: [Default] 2, so it falls at the end of the shift after next. The countdown runs only while the square stays unstable and unsupported; otherwise it stops, and goes on from where it stopped if the square becomes unstable again.
-- **The slump.** When the countdown ends, the top block falls onto the square's lowest face neighbour (ties broken north, east, south, west) and becomes rubble there. The square drops 1 level and the neighbour rises 1. Whatever the block was (ore included) is lost as rubble; a support, pump or vent on the receiving square is buried and destroyed.
-- **Cascades.** A slump can make other squares unstable; each cracks with its own warning. Every slump moves a block downhill, so a cascade always ends.
+- **The slump.** When the countdown ends, the top block slides down the square's slide path (worked out at that moment) and comes to rest on its foot as rubble. The square goes down 1 level and the foot comes up 1. Whatever the block was (ore included) is lost as rubble; a support, pump or vent on the foot is buried and destroyed.
+- **Why it always ends, and never rises above ground.** The block starts in layer d (the square's depth) and the foot is at least 2 levels deeper, at depth d + 2 or more, so the block comes to rest in layer d + 1 or lower: strictly lower than where it started. The foot ends at depth 1 or deeper, never above ground level. Every slump moves one block at least one layer down and nothing moves a block up, and no block can go below the bottom, so a cascade always ends, even with no player action.
+- **Cascades.** A slump can make other squares unstable; each cracks with its own warning.
 - **Supports.** A support placed on a square holds its top block: it does not crack, and a crack already on it stops counting down. Mining the square takes the support away with the block; the support is lost (question 82).
-- **What this means in play [Default numbers]:** a pit in dirt needs a slope of no more than 1 level in 3 squares or supports; stone holds a terraced slope with a level bench every third square; hard rock holds a straight 1-step staircase. Everything the rule reads (depths, top blocks, supports) is visible, so the player can always see a slump coming before choosing a mine.
+- **What this means in play [Default numbers]:** a run of 1-level steps falls as far as its last step, so slopes need level benches: in dirt a bench after every step, in stone after every second step, in hard rock after every third; or supports on the squares at the top of a run. Everything the rule reads (depths, top blocks, supports) is visible, so the player can always see a slump coming before choosing a mine.
 - The exact rule is question 81.
 
 ### 6.2 Breaking into an underground space [Default]
@@ -370,7 +371,7 @@ Payouts are **credits**, spent between runs. Unlocks add options; they never rai
   |---|---|---|---|
   | 8 (middle band) | 344 | 204 | 120 |
   | 12 | 1,156 | 650 | 364 |
-  | 20 (deep band) | 5,340 | 2,870 | 1,540 |
+  | 20 (deep band) | 5,252 | 2,840 | 1,540 |
 
   At 5 AP a shift and 1–3 AP a block, 250 shifts mine roughly 500–800 blocks. So on paper the middle band is within reach, and the deep band (crystal, relics, the keystone) is not, with today's numbers. Benches for slump safety (6.1) make pits wider still; explosives (6.6) and the camp discount (section 8) make them cheaper. The owner chose to measure first: the bands stay as they are, a depth survey in the simulator measures how deep runs actually get, and the numbers are tuned after that.
 - A run can be suspended and resumed at any point (autosave every shift).
