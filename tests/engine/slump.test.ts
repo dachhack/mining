@@ -29,7 +29,8 @@ import {
   unstableSquares,
 } from '../../src/engine';
 import type { GameEvent, GameState } from '../../src/engine';
-import { blockAt, crackTimerAt, setBlock } from '../../src/engine/state';
+import { contentsOn } from '../../src/engine/breach';
+import { blockAt, crackTimerAt, setBlock, setWater, waterAt } from '../../src/engine/state';
 import { act, buildState, depthText, findActions, terrainLayers } from './helpers';
 import type { BuildStateOptions } from './helpers';
 
@@ -331,17 +332,55 @@ describe('cracks and the slump (design doc 6.1)', () => {
     expect(surfaceKindAt(after, { x: 0, y: 0, z: -1 })).toBe(SURFACE.kinds.meadow.code);
   });
 
-  it('a block that slumps off the roof of an open space leaves rubble, 1 level down', () => {
-    // Under the top block of x=0 is an open cell (z=1), then stone.
-    const layers = [['d.'], ['..'], ['#.'], ['##']];
-    const state = buildState({ layers, cracks: [{ pos: { x: 0, y: 0, z: 0 }, timer: 0 }] });
-    expect(depthText(state)).toEqual(['03']);
+  it('a block that slumps off the roof of an underground space collapses it, as a mine does', () => {
+    // x=0 is a hole 3 deep. Under the top blocks of x=1 and x=2 is a pocket
+    // of two water cells (z=1). The block on x=1 is due and slides into the hole.
+    const state = buildState({
+      layers: [['.dd'], ['...'], ['.##'], ['###']],
+      water: [
+        { x: 1, y: 0, z: 1 },
+        { x: 2, y: 0, z: 1 },
+      ],
+      cracks: [{ pos: { x: 1, y: 0, z: 0 }, timer: 0 }],
+    });
+    expect(depthText(state)).toEqual(['300']);
     const { state: after, events } = endShift(state);
-    expect(eventsOf(events, 'roofCollapsed')).toEqual([
-      { type: 'roofCollapsed', pos: { x: 0, y: 0, z: 1 } },
+    expect(eventsOf(events, 'blockFell')).toHaveLength(1);
+    expect(eventsOf(events, 'spaceCollapsed')).toEqual([
+      {
+        type: 'spaceCollapsed',
+        pos: { x: 1, y: 0, z: 1 },
+        water: 2,
+        lava: 0,
+        gas: 0,
+        lavaSource: false,
+      },
     ]);
-    expect(blockAt(after, { x: 0, y: 0, z: 1 })).toBe(BLOCKS.rubble.code);
-    expect(depthText(after)).toEqual(['12']);
+    // The whole space is rubble, the square went down exactly 1, and the
+    // water stands on it.
+    expect(blockAt(after, { x: 1, y: 0, z: 1 })).toBe(BLOCKS.rubble.code);
+    expect(blockAt(after, { x: 2, y: 0, z: 1 })).toBe(BLOCKS.rubble.code);
+    expect(depthText(after)).toEqual(['210']);
+    expect(contentsOn(after, 1, 0).water).toBe(2);
+  });
+
+  it('water, lava and gas on the square a block lands on rise with the rubble', () => {
+    // On the foot (x=1, depth 2) stand 3 water, 1 lava (a source) and 4 gas,
+    // in the cell the rubble lands in.
+    const state = pit(['02'], ['dd'], {
+      cracks: [{ pos: { x: 0, y: 0, z: 0 }, timer: 0 }],
+      gas: [{ pos: { x: 1, y: 0, z: 1 }, units: 4 }],
+      lavaSources: [{ x: 1, y: 0, z: 1 }],
+    });
+    setWater(state, { x: 1, y: 0, z: 1 }, 3);
+    const before = contentsOn(state, 1, 0);
+    expect(before).toEqual({ water: 3, lava: 1, lavaSource: true, gas: 4 });
+    const after = endShift(state).state;
+    expect(depthText(after)).toEqual(['11']);
+    // Nothing is buried: the same contents stand on the square, one level up.
+    expect(contentsOn(after, 1, 0)).toEqual(before);
+    // The cell the rubble is in holds none.
+    expect(waterAt(after, { x: 1, y: 0, z: 1 })).toBe(0);
   });
 });
 

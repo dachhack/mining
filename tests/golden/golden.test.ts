@@ -93,12 +93,21 @@ describe('golden runs', () => {
   // On this seed a square turns out unstable that the policy cannot mine
   // down, so it crafts a support and places it. The hash pins the place
   // action, the stored support, and a crack whose countdown the support stops.
-  it('pit-seed-42-support.json crafts a support and places it on a cracked square', () => {
-    const golden = loadGolden('pit-seed-42-support.json');
+  it('pit-seed-4-support.json crafts a support and places it on a cracked square', () => {
+    const golden = loadGolden('pit-seed-4-support.json');
     expect(golden.decisions.some((decision) => decision.startsWith('craft support'))).toBe(true);
     const places = golden.decisions.filter((decision) => decision.startsWith('placeSupport'));
     expect(places.length).toBeGreaterThan(0);
-    const state = replayFile('pit-seed-42-support.json');
+    // Replay up to and including the first placement: the support stands on
+    // the square it names and holds it. (Later in the run the pit reaches
+    // that square and mines it, and the support goes with the block.)
+    const placedAt = golden.decisions.indexOf(places[0] ?? '');
+    const state = replayDecisions(
+      golden.seed,
+      golden.contractId,
+      golden.loadoutId,
+      golden.decisions.slice(0, placedAt + 1),
+    );
     const square = squareOf(places[0] ?? '');
     expect(structureOnSquare(state, square.x, square.y)).toBe(STRUCTURES.support.code);
     expect(slumpCheck(state, square.x, square.y).heldBy).toBe('support');
@@ -122,6 +131,22 @@ describe('golden runs', () => {
       }
     }
     expect(rubbleTops).toBeGreaterThan(0);
+  });
+
+  // Breaking into an underground space (design doc 6.2; issue #88 item 2):
+  // this run's pit takes the roof off caverns. The hash pins the collapse to
+  // rubble; rubble comes from nothing else in a pit-policy run today.
+  it('pit-seed-24-caverns.json breaks into a cavern, and the level rule still holds', () => {
+    const state = replayFile('pit-seed-24-caverns.json');
+    expect(state.blocks.includes(BLOCKS.rubble.code)).toBe(true);
+    for (let y = 0; y < state.size.y; y += 1) {
+      for (let x = 0; x < state.size.x; x += 1) {
+        const depth = depthAt(state, x, y);
+        for (const higher of mayMine(state, x, y).higherNeighbours) {
+          expect(depth - higher.depth).toBe(1);
+        }
+      }
+    }
   });
 
   // The surface forest (issue #70; design doc 3.2): this run cuts trees. A

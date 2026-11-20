@@ -10,13 +10,14 @@ import {
   createRun,
   deserialise,
   hashState,
+  knownSquare,
   serialise,
   showsMineralTraces,
   visibleMineralTraces,
 } from '../../src/engine';
 import type { GameEvent, GameState } from '../../src/engine';
 import { cloneState } from '../../src/engine/state';
-import { carriesMineralTraces, updateMineralTraces } from '../../src/engine/tells';
+import { carriesMineralTraces, hazardTellsAt, updateMineralTraces } from '../../src/engine/tells';
 import { act, buildState } from './helpers';
 
 // A flat 5 x 1 x 3 cube with one special block (`ore`) at (1, 0, 1), under
@@ -229,6 +230,142 @@ describe('mineral traces in generated cubes', () => {
       const state = createRun(seed, 'none', 'standard');
       expect(visibleMineralTraces(state)).toEqual([]);
       expect(state.blocks.includes(BLOCKS.ironOre.code)).toBe(true);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Hazard tells (design doc v0.2 section 3.7; issue #95)
+// ---------------------------------------------------------------------------
+
+describe('hazard tells on top blocks (design doc 3.7)', () => {
+  const NONE = { dampStone: false, pittedRock: false, warmGlow: false, hairlineGlow: false };
+
+  // One row of five squares over a pocket cell at (2, 0, z):
+  //        x  0 1 2 3 4
+  //   z=0     # # # # #
+  //   z=1     # # P # #      P is the pocket cell when it is "one block under"
+  //   z=2     # # # # #
+  //   z=3     # # # # #
+  function rowWithCellAt(z: number): string[][] {
+    const layers = [['#####'], ['#####'], ['#####'], ['#####']];
+    layers[z] = ['##.##'];
+    return layers;
+  }
+
+  it('damp stone: a water pocket one block under a top block shows on that block only', () => {
+    const state = buildState({ layers: rowWithCellAt(1), water: [{ x: 2, y: 0, z: 1 }] });
+    expect(knownSquare(state, 2, 0).tells).toEqual({ ...NONE, dampStone: true });
+    // The squares beside it are 2 steps from the pocket (1 across, 1 down).
+    expect(knownSquare(state, 1, 0).tells).toEqual(NONE);
+    expect(knownSquare(state, 3, 0).tells).toEqual(NONE);
+  });
+
+  it('damp stone: not from a pocket two blocks under', () => {
+    const state = buildState({ layers: rowWithCellAt(2), water: [{ x: 2, y: 0, z: 2 }] });
+    expect(knownSquare(state, 2, 0).tells).toEqual(NONE);
+  });
+
+  it('damp stone: on a top block beside the pocket, once the pit is that deep', () => {
+    // Squares 0 and 1 dug to depth 1: the top block of square 1 is at z = 1,
+    // right beside the pocket cell.
+    const state = buildState({
+      layers: [['..###'], ['##.##'], ['#####']],
+      water: [{ x: 2, y: 0, z: 1 }],
+    });
+    expect(knownSquare(state, 1, 0).tells.dampStone).toBe(true);
+    expect(knownSquare(state, 0, 0).tells.dampStone).toBe(false);
+  });
+
+  it('pitted rock: a gas pocket one block under', () => {
+    const state = buildState({
+      layers: rowWithCellAt(1),
+      gas: [{ pos: { x: 2, y: 0, z: 1 }, units: 4 }],
+    });
+    expect(knownSquare(state, 2, 0).tells).toEqual({ ...NONE, pittedRock: true });
+    expect(knownSquare(state, 1, 0).tells).toEqual(NONE);
+  });
+
+  it('warm glow: lava within 2 steps, down as well as sideways', () => {
+    const under1 = buildState({ layers: rowWithCellAt(1), lava: [{ x: 2, y: 0, z: 1 }] });
+    // Directly over it (1 step), and the squares beside that (2 steps).
+    expect(knownSquare(under1, 2, 0).tells).toEqual({ ...NONE, warmGlow: true });
+    expect(knownSquare(under1, 1, 0).tells.warmGlow).toBe(true);
+    expect(knownSquare(under1, 3, 0).tells.warmGlow).toBe(true);
+    expect(knownSquare(under1, 0, 0).tells.warmGlow).toBe(false);
+
+    const under2 = buildState({ layers: rowWithCellAt(2), lava: [{ x: 2, y: 0, z: 2 }] });
+    expect(knownSquare(under2, 2, 0).tells.warmGlow).toBe(true);
+    expect(knownSquare(under2, 1, 0).tells.warmGlow).toBe(false);
+
+    const under3 = buildState({ layers: rowWithCellAt(3), lava: [{ x: 2, y: 0, z: 3 }] });
+    expect(knownSquare(under3, 2, 0).tells.warmGlow).toBe(false);
+  });
+
+  it('hairline glow: on unstable ore itself, when it is a known top block', () => {
+    const state = buildState({ layers: [['#U#'], ['#U#']] });
+    expect(knownSquare(state, 1, 0).tells).toEqual({ ...NONE, hairlineGlow: true });
+    // Not on the blocks beside it, and not for the ore one block under.
+    expect(knownSquare(state, 0, 0).tells).toEqual(NONE);
+    const dug = buildState({ layers: [['###'], ['#U#']] });
+    expect(knownSquare(dug, 1, 0).tells).toEqual(NONE);
+  });
+
+  it('an empty cavern gives no tell', () => {
+    const state = buildState({ layers: rowWithCellAt(1) });
+    for (let x = 0; x < 5; x += 1) {
+      expect(knownSquare(state, x, 0).tells).toEqual(NONE);
+    }
+  });
+
+  it('a block under a tree that was never cut shows no tell; cutting the tree shows it', () => {
+    const state = buildState({
+      layers: rowWithCellAt(1),
+      water: [{ x: 2, y: 0, z: 1 }],
+      surface: ['..T..'],
+    });
+    expect(knownSquare(state, 2, 0).top).toBeNull();
+    expect(knownSquare(state, 2, 0).tells).toEqual(NONE);
+    const cut = act(state, { type: 'cutTree', x: 2, y: 0 }).state;
+    expect(knownSquare(cut, 2, 0).tells.dampStone).toBe(true);
+  });
+
+  it('the tell is there before the mine that breaks in, and gone once the pocket has collapsed', () => {
+    const state = buildState({ layers: rowWithCellAt(1), water: [{ x: 2, y: 0, z: 1 }] });
+    expect(knownSquare(state, 2, 0).tells.dampStone).toBe(true);
+    const { state: after, events } = act(state, { type: 'mine', x: 2, y: 0 });
+    expect(events.map((event) => event.type)).toContain('spaceCollapsed');
+    // The water now stands on the square in the open: it is seen as water,
+    // and is no longer a tell on any block.
+    expect(knownSquare(after, 2, 0).contents.water).toBe(1);
+    for (let x = 0; x < 5; x += 1) {
+      expect(knownSquare(after, x, 0).tells).toEqual(NONE);
+    }
+  });
+
+  it('hazardTellsAt reads the true cube; open space carries no tell', () => {
+    const state = buildState({ layers: rowWithCellAt(1), water: [{ x: 2, y: 0, z: 1 }] });
+    // Hidden blocks round the pocket carry the tell too (for scans, task T13).
+    expect(hazardTellsAt(state, { x: 2, y: 0, z: 2 }).dampStone).toBe(true);
+    expect(hazardTellsAt(state, { x: 1, y: 0, z: 1 }).dampStone).toBe(true);
+    expect(hazardTellsAt(state, { x: 2, y: 0, z: 1 })).toEqual(NONE);
+    expect(hazardTellsAt(state, { x: 9, y: 9, z: 9 })).toEqual(NONE);
+  });
+
+  it('a fresh generated cube shows no hazard tell: pockets lie in the middle and deep bands', () => {
+    // Water and gas start at layer 8, lava and unstable ore at layer 20, so
+    // no top block of an untouched surface is within reach of one. (The
+    // tells on a generated cube once a pit is dug down to a pocket are
+    // checked in breach.test.ts.)
+    for (let seed = 1; seed <= 30; seed += 1) {
+      const state = createRun(seed, 'none', 'standard');
+      for (let y = 0; y < state.size.y; y += 1) {
+        for (let x = 0; x < state.size.x; x += 1) {
+          const tells = knownSquare(state, x, y).tells;
+          expect(tells.dampStone || tells.pittedRock || tells.warmGlow, `seed ${seed}`).toBe(false);
+          expect(tells.hairlineGlow).toBe(false);
+        }
+      }
     }
   });
 });

@@ -4,10 +4,6 @@ import type { WorldData } from './types';
 export const WORLD: WorldData = {
   size: { x: 32, y: 32, z: 32 },
   surfaceZ: -1,
-  // No miner starts here any more (issue #86). Until the generation task
-  // (T7) it is only the middle the surface's clearing and paths are laid out
-  // from (src/engine/surface/generation.ts).
-  startPosition: { x: 16, y: 16, z: -1 },
   depthBands: [
     { id: 'upper', firstLayer: 0, lastLayer: 7 },
     { id: 'middle', firstLayer: 8, lastLayer: 19 },

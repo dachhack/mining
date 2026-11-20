@@ -47,19 +47,6 @@ export function validateData(data: GameData): string[] {
     // The engine treats the layer directly above z = 0 as the surface.
     problems.push(`world.surfaceZ must be -1, but is ${world.surfaceZ}`);
   }
-  const start = world.startPosition;
-  const startInside =
-    isWholeNumber(start.x) &&
-    isWholeNumber(start.y) &&
-    start.x >= 0 &&
-    start.x < world.size.x &&
-    start.y >= 0 &&
-    start.y < world.size.y;
-  if (!startInside || start.z !== world.surfaceZ) {
-    problems.push(
-      `world.startPosition (${start.x}, ${start.y}, ${start.z}) must be on the surface layer, above the cube`,
-    );
-  }
   // Depth bands must cover every layer exactly once, in order.
   let nextLayer = 0;
   const bandIds = new Set<string>();
@@ -158,6 +145,16 @@ export function validateData(data: GameData): string[] {
   // --- Generation ---
   const generation = data.generation;
   requireWholeAtLeast(generation.veinPlacementTries, 1, 'generation.veinPlacementTries');
+  requireWholeAtLeast(generation.spacePlacementTries, 1, 'generation.spacePlacementTries');
+  // What one cell of each kind of pocket holds. When a pocket is broken into,
+  // everything it holds is put on one square, and a cell of the state stores
+  // one byte (0 to 255): so the largest pocket must not hold more than that.
+  const unitsPerSpaceCell: Record<string, number> = {
+    cavern: 0,
+    water: data.hazards.water.unitsPerCell,
+    lava: data.hazards.lava.unitsPerCell,
+    gas: data.hazards.gas.pocketUnitsPerCell,
+  };
   // A generated block must be one the avatar can dig through: solid and mineable.
   function requireDiggableBlock(blockId: string, where: string): void {
     const block = Object.hasOwn(data.blocks, blockId) ? data.blocks[blockId] : undefined;
@@ -221,6 +218,37 @@ export function validateData(data: GameData): string[] {
         Math.max(1, vein.minSize),
         `${veinWhere}: maxSize (at least minSize)`,
       );
+    }
+    const spaceKindsInBand = new Set<string>();
+    for (const space of bandDef.spaces) {
+      const spaceWhere = `${where}: space "${space.kind}"`;
+      const unitsPerCell = Object.hasOwn(unitsPerSpaceCell, space.kind)
+        ? unitsPerSpaceCell[space.kind]
+        : undefined;
+      if (unitsPerCell === undefined) {
+        problems.push(`${spaceWhere}: the kind must be cavern, water, lava or gas`);
+        continue;
+      }
+      if (spaceKindsInBand.has(space.kind)) {
+        problems.push(`${spaceWhere}: the kind is listed more than once`);
+      }
+      spaceKindsInBand.add(space.kind);
+      if (!Number.isFinite(space.spacesPer1000Cells) || space.spacesPer1000Cells <= 0) {
+        problems.push(
+          `${spaceWhere}: spacesPer1000Cells must be more than 0, but is ${space.spacesPer1000Cells}`,
+        );
+      }
+      requireWholeAtLeast(space.minSize, 1, `${spaceWhere}: minSize`);
+      requireWholeAtLeast(
+        space.maxSize,
+        Math.max(1, space.minSize),
+        `${spaceWhere}: maxSize (at least minSize)`,
+      );
+      if (space.maxSize * unitsPerCell > 255) {
+        problems.push(
+          `${spaceWhere}: a space of maxSize ${space.maxSize} would hold ${space.maxSize * unitsPerCell} units, more than the 255 one square can store`,
+        );
+      }
     }
   }
   for (const band of world.depthBands) {

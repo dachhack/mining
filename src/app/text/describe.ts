@@ -16,7 +16,7 @@ import {
 } from '../../data';
 import type { ItemStack } from '../../data';
 import { isSquare, knownSquare } from '../../engine';
-import type { Action, GameEvent, GameState } from '../../engine';
+import type { Action, GameEvent, GameState, KnownSquare } from '../../engine';
 import type { LogEntry } from './log';
 import { squareText } from './squares';
 import { tracedSymbolsText } from './symbols';
@@ -52,6 +52,44 @@ export function runEndText(cause: string): string {
 }
 
 /**
+ * The hazard tells a square's top block shows (design doc 3.7), as short
+ * names: "damp", "pitted", "warm glow", "hairline glow". Empty for most
+ * squares. The words are the minimum that lets a player read a tell; task
+ * T14 gives them marks on the map.
+ */
+export function tellNames(square: KnownSquare): string[] {
+  const names: string[] = [];
+  if (square.tells.dampStone) names.push('damp');
+  if (square.tells.pittedRock) names.push('pitted');
+  if (square.tells.warmGlow) names.push('warm glow');
+  if (square.tells.hairlineGlow) names.push('hairline glow');
+  return names;
+}
+
+/**
+ * What stands on a square in the open, as a short list: "6 water",
+ * "9 lava (a source: it keeps pouring)", "8 gas". Empty for most squares.
+ */
+export function contentsNames(square: KnownSquare): string[] {
+  const names: string[] = [];
+  const contents = square.contents;
+  if (contents.water > 0) names.push(`${contents.water} water`);
+  if (contents.lava > 0) {
+    names.push(
+      `${contents.lava} lava${contents.lavaSource ? ' (a source: it keeps pouring)' : ''}`,
+    );
+  }
+  if (contents.gas > 0) names.push(`${contents.gas} gas`);
+  return names;
+}
+
+/** ", mineral traces, damp": what a top block shows besides itself, or "". */
+function tellsSuffix(square: KnownSquare): string {
+  const shown = [...(square.traces ? ['mineral traces'] : []), ...tellNames(square)];
+  return shown.map((name) => `, ${name}`).join('');
+}
+
+/**
  * What the top block of the square (x, y) is and gives, as far as the player
  * knows: "Stone, mineral traces, gives 1 Stone". "ground you have not seen"
  * under a tree that was never cut.
@@ -62,8 +100,7 @@ export function topBlockText(state: GameState, x: number, y: number): string {
     return square.depth >= state.size.z ? 'the bedrock floor' : 'ground you have not seen';
   }
   const block = blockDefByCode(square.top.block);
-  const traces = square.traces ? ', mineral traces' : '';
-  return `${block.name}${traces}, gives ${stackListText(block.yields)}`;
+  return `${block.name}${tellsSuffix(square)}, gives ${stackListText(block.yields)}`;
 }
 
 function describeAction(state: GameState, action: Action): string {
@@ -259,8 +296,29 @@ function newTopText(after: GameState, x: number, y: number): string {
     return `Nothing is left there: ${squareText(x, y)} is at the bedrock floor.`;
   }
   const block = blockDefByCode(square.top.block);
-  const traces = square.traces ? ', with mineral traces' : '';
-  return `The top block there is now ${block.name}${traces} (${depthName(square.depth)}).`;
+  const shown = [...(square.traces ? ['mineral traces'] : []), ...tellNames(square)];
+  const withTells = shown.length > 0 ? `, with ${shown.join(', ')}` : '';
+  return `The top block there is now ${block.name}${withTells} (${depthName(square.depth)}).`;
+}
+
+/**
+ * The sentence for a mine that broke into a cavern or a pocket (design doc
+ * 6.2). `event` is the engine's `spaceCollapsed` event. `Extract<...>` picks
+ * that one shape out of the list of all events.
+ */
+function spaceCollapsedText(event: Extract<GameEvent, { type: 'spaceCollapsed' }>): string {
+  const out: string[] = [];
+  if (event.water > 0) out.push(`${event.water} water`);
+  if (event.lava > 0) out.push(`${event.lava} lava`);
+  if (event.gas > 0) out.push(`${event.gas} gas`);
+  if (out.length === 0) {
+    return "It was the roof of an empty cavern, which fell in: the square's new top is rubble.";
+  }
+  const source = event.lavaSource ? ' The lava is a source: it keeps pouring.' : '';
+  return (
+    `It was the roof of a pocket, which fell in: the square's new top is rubble, and ` +
+    `${out.join(', ')} came out and now stands on the square.${source}`
+  );
 }
 
 /**
@@ -273,8 +331,8 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
   // Said once for a step, however many blocks it was seen on.
   let tracesSaid = false;
   const tracesLine = tracesSeenText(events);
-  // A roof that fell in says what the new top is itself.
-  const roofFell = events.some((event) => event.type === 'roofCollapsed');
+  // A space that collapsed says what the new top is itself.
+  const roofFell = events.some((event) => event.type === 'spaceCollapsed');
   for (const event of events) {
     switch (event.type) {
       case 'damageTaken':
@@ -288,10 +346,8 @@ export function describeEvents(after: GameState, events: GameEvent[]): string[] 
           lines.push(newTopText(after, event.pos.x, event.pos.y));
         }
         break;
-      case 'roofCollapsed':
-        lines.push(
-          "It was the roof of an open space, which fell in: the square's new top is rubble.",
-        );
+      case 'spaceCollapsed':
+        lines.push(spaceCollapsedText(event));
         break;
       case 'blockRevealed':
         // The map shows what is newly known.

@@ -12,7 +12,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { ACTION_COSTS, BLOCKS, CREW, SHIFT, SURFACE, WORLD } from '../../src/data';
+import { ACTION_COSTS, BLOCKS, CREW, SHIFT, SURFACE, TELLS, WORLD } from '../../src/data';
 import type { BlockId } from '../../src/data';
 import { ENGINE_VERSION, applyAction, createRun, endShift, hashState } from '../../src/engine';
 import type { GameState } from '../../src/engine';
@@ -337,6 +337,30 @@ describe('mine and cut by name', () => {
     expect(result.lines[0]).toContain('> Cut the tree on x1 y1: gives 2 Timber');
     expect(result.lines[0]).toContain('The top block there is now Stone (ground level).');
     expect(result.lines[0]).toContain('Got 2 Timber.');
+  });
+
+  it('says what came out of a pocket, and lists it and the tells under the map', () => {
+    // A water pocket of 2 cells under the middle square of a row of three.
+    //        x  0 1 2
+    //   z=0     # # #
+    //   z=1     # ~ #
+    //   z=2     # ~ #
+    //   z=3     # # #
+    const state = makeState([['###'], ['#.#'], ['#.#'], ['###']]);
+    state.water[4] = 1;
+    state.water[7] = 1;
+    const session = sessionOn(state);
+    // Before the mine: the tell on the block over the pocket.
+    expect(viewText(session.state, 0)).toContain('Tells on top blocks');
+    expect(viewText(session.state, 0)).toContain('x1 y0 damp');
+    const line = takeTurn(session, { type: 'mine', x: 1, y: 0, ap: 2 });
+    expect(line).toContain(
+      "It was the roof of a pocket, which fell in: the square's new top is rubble, and 2 water came out and now stands on the square.",
+    );
+    // After it: the water is on the square, and the tell is gone.
+    const after = viewText(session.state, 1);
+    expect(after).toContain('On x1 y0: 2 water');
+    expect(after).not.toContain('Tells on top blocks');
   });
 
   it('says that a roof fell in', () => {
@@ -707,6 +731,14 @@ describe('the help text', () => {
     expect(help).toContain(`Cut any tree (${SURFACE.cutTree.ap} AP) for 2 Timber`);
     expect(help).toContain('A tree hides the ground under it');
     expect(help).toContain('the roof of one');
+    // Breaking into a pocket, the tells, and what is not built yet (issue #95).
+    expect(help).toContain('What a pocket held comes out and stands on');
+    expect(help).toContain('damp           a water pocket lies directly under or beside the block');
+    expect(help).toContain(
+      `warm glow      a lava pocket lies within ${TELLS.hazards.warmGlowDistance} steps`,
+    );
+    expect(help).toContain('they do\n    not spread, and they do not hurt the crew');
+    expect(help).toContain('Camps and contracts are not built yet');
     expect(help).toContain('goes straight into the stockpile');
     expect(help).toContain('The stockpile has no limit');
     expect(help).toContain('close-mine               close the mine (ends the run alive)');
@@ -723,7 +755,7 @@ describe('the help text', () => {
     expect(help).toContain('shows a countdown of 2');
     expect(help).toContain('A SUPPORT holds the square it is placed on, and only that square');
     expect(help).toContain(`A slump takes ${CREW.damage.slump} health`);
-    expect(help).toContain('Water, lava, gas, explosives, camps and contracts are not built yet');
+    expect(help).toContain('Camps and contracts are not built yet');
     // Nothing of the miner is left in it.
     for (const gone of [
       'mine-down',

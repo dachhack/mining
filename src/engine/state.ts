@@ -93,9 +93,13 @@ export interface GameState {
   blocks: Uint8Array;
   /** 1 if the player has seen what the cell holds, otherwise 0. */
   revealed: Uint8Array;
-  /** Units of water in each cell: 0 or 1 (0014 item 12). Read it with `waterAt`. */
+  /**
+   * Units of water in each cell. 1 in each cell of a generated pocket; the
+   * open cell above a square's top block holds what stands on the square,
+   * which can be more (breach.ts). Read it with `waterAt`.
+   */
   water: Uint8Array;
-  /** Units of lava in each cell: 0 or 1 (0014 item 16). Read it with `lavaAt`. */
+  /** Units of lava in each cell, stored like water. Read it with `lavaAt`. */
   lava: Uint8Array;
   /** 1 if the cell is a lava source, which never runs dry (0014 item 16), otherwise 0. */
   lavaSource: Uint8Array;
@@ -301,7 +305,7 @@ export function isRevealed(state: GameState, pos: Vec3): boolean {
 // any water, lava, gas or crack. These read the TRUE cube. Code that decides
 // what the player is shown or offered must go through known.ts instead.
 
-/** Units of water in the cell `pos`: 0 or 1. */
+/** Units of water in the cell `pos`. */
 export function waterAt(state: GameState, pos: Vec3): number {
   if (!inGrid(state.size, pos)) {
     return 0;
@@ -309,7 +313,7 @@ export function waterAt(state: GameState, pos: Vec3): number {
   return state.water[cellIndex(state.size, pos)] as number;
 }
 
-/** Units of lava in the cell `pos`: 0 or 1. */
+/** Units of lava in the cell `pos`. */
 export function lavaAt(state: GameState, pos: Vec3): number {
   if (!inGrid(state.size, pos)) {
     return 0;

@@ -22,6 +22,7 @@ import { legalPlaceExplosiveActions, applyPlaceExplosive } from './actions/place
 import { legalPlaceSupportActions, applyPlaceSupport } from './actions/placeSupport';
 import type { GameEvent } from './events';
 import { generateCube } from './generation/cube';
+import { generateSpaces } from './generation/spaces';
 import { updateReveal } from './reveal';
 import { isValidSeed } from './rng';
 import { forecastShift, runCubePhase, runUpkeep } from './shift';
@@ -72,6 +73,9 @@ export function createRun(seed: number, contractId: string, loadoutId: string): 
   state.contractId = contractId;
   state.loadoutId = loadoutId;
   state.blocks = generateCube(state.size, state.rng);
+  // Caverns and pockets under the surface (design doc 3.6), from the same
+  // generator.
+  generateSpaces(state);
   // The forest on the surface (issue #70), drawn from the same generator.
   generateSurface(state);
 
@@ -265,6 +269,10 @@ export type { SerialisedState } from './serialise';
 // `knownCell`, which answers `null` for a cell the player has not seen.
 export { knownCell, knownSquare } from './known';
 export type { KnownCell, KnownSquare } from './known';
+// What stands on a square in the open (water, lava, gas), and the hazard
+// tells a known block shows. Views read both through `knownSquare`.
+export type { SquareContents } from './breach';
+export type { HazardTells } from './tells';
 // The mine action's own check, with the reason for a refusal: what a tap on
 // a square the rules forbid shows the player (design doc 4.2).
 export { mineCheck } from './actions/mine';

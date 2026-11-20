@@ -9,6 +9,9 @@
 //   npm run ascii -- --seed 7 --layers 8-11 --traces
 //                                             also mark rock that carries mineral traces
 //
+// Underground spaces are always drawn: `.` an empty cavern cell, `~` water,
+// `!` lava, `*` gas.
+//
 // Each layer is drawn from above: one character per block, x across (x = 0 on
 // the left) and y down (y = 0 at the top). Layer 0 is the top of the cube.
 
@@ -22,6 +25,8 @@ import {
 } from '../src/data';
 import type { BlockId } from '../src/data';
 import { blockAt, createRun } from '../src/engine';
+// Not on the public surface either: these read hidden cells.
+import { gasAt, lavaAt, waterAt } from '../src/engine/state';
 // Not on the engine's public surface: it reads hidden blocks, which only a
 // debugging tool like this one may do.
 import { carriesMineralTraces } from '../src/engine/tells';
@@ -64,6 +69,11 @@ interface Options {
 
 /** The character for rock that carries mineral traces, with `--traces`. */
 const TRACES_CHAR = '%';
+
+// What a pocket's cells are drawn as (an empty cavern cell is `.`, open space).
+const WATER_CHAR = '~';
+const LAVA_CHAR = '!';
+const GAS_CHAR = '*';
 
 function fail(message: string): never {
   console.error(`ascii: ${message}`);
@@ -142,12 +152,32 @@ function main(): void {
   // How many of each block the printed layers hold, for the legend.
   const counts = new Map<number, number>();
   let tracedCount = 0;
+  let waterCount = 0;
+  let lavaCount = 0;
+  let gasCount = 0;
   for (let z = options.firstLayer; z <= lastLayer; z += 1) {
     lines.push('', `layer z=${z}`);
     for (let y = 0; y < state.size.y; y += 1) {
       let row = '';
       for (let x = 0; x < state.size.x; x += 1) {
         const code = blockAt(state, { x, y, z });
+        // A pocket's cell is drawn by what it holds, and counted apart from
+        // the empty open cells.
+        if (waterAt(state, { x, y, z }) > 0) {
+          waterCount += 1;
+          row += WATER_CHAR;
+          continue;
+        }
+        if (lavaAt(state, { x, y, z }) > 0) {
+          lavaCount += 1;
+          row += LAVA_CHAR;
+          continue;
+        }
+        if (gasAt(state, { x, y, z }) > 0) {
+          gasCount += 1;
+          row += GAS_CHAR;
+          continue;
+        }
         if (options.traces && carriesMineralTraces(state, { x, y, z })) {
           // Counted apart from the rock it is drawn over.
           tracedCount += 1;
@@ -168,6 +198,9 @@ function main(): void {
       lines.push(`  ${char}  ${blockDefByCode(code).name} (${count})`);
     }
   }
+  if (waterCount > 0) lines.push(`  ${WATER_CHAR}  water pocket cell (${waterCount})`);
+  if (lavaCount > 0) lines.push(`  ${LAVA_CHAR}  lava pocket cell (${lavaCount})`);
+  if (gasCount > 0) lines.push(`  ${GAS_CHAR}  gas pocket cell (${gasCount})`);
   if (options.traces) {
     lines.push(
       `  ${TRACES_CHAR}  rock with mineral traces: dirt, stone or hard rock near ore (${tracedCount})`,

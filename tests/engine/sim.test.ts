@@ -142,7 +142,7 @@ describe('playRun', () => {
     expect(pit11.tracesSeenBeforeFirstOre).toBe(false);
     // Seed 31 saw traces before pit walls slumped (issue #94). Now the pit's
     // level benches keep it to 3 to 5 levels, too far above the ore (layer 8
-    // and below) on every seed tried (1 to 300). So no scripted run reaches
+    // and below) on every seed tried (1 to 150 on the cubes of issue #95). So no scripted run reaches
     // the "true" answer today; task T15's terracing policy should, and this
     // line is where to check it.
     expect(pit31.oreBlocksMined).toBe(0);

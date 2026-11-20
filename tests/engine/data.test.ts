@@ -177,16 +177,33 @@ describe('validateData', () => {
     expect(short.some((p) => p.includes('the cube has 32 layers'))).toBe(true);
   });
 
-  it('reports a start position that is not on the surface', () => {
-    const underground = problemsAfter((data) => {
-      data.world.startPosition.z = 0;
+  it('reports bad numbers for underground spaces', () => {
+    const problems = problemsAfter((data) => {
+      const middle = data.generation.bands[1];
+      const deep = data.generation.bands[2];
+      if (middle === undefined || deep === undefined) throw new Error('test setup');
+      data.generation.spacePlacementTries = 0;
+      // The middle band lists water, gas and caverns, in that order.
+      (middle.spaces[0] as { kind: string }).kind = 'acid';
+      (middle.spaces[1] as { maxSize: number }).maxSize = 100; // 400 units of gas
+      (middle.spaces[2] as { spacesPer1000Cells: number }).spacesPer1000Cells = 0;
+      // A second entry for lava in the deep band, smaller than its own minimum.
+      deep.spaces.push({ kind: 'lava', spacesPer1000Cells: 1, minSize: 5, maxSize: 4 });
     });
-    expect(underground.some((p) => p.includes('startPosition'))).toBe(true);
-
-    const outside = problemsAfter((data) => {
-      data.world.startPosition.x = data.world.size.x;
-    });
-    expect(outside.some((p) => p.includes('startPosition'))).toBe(true);
+    for (const part of [
+      'generation.spacePlacementTries',
+      'space "acid": the kind must be cavern, water, lava or gas',
+      'would hold 400 units',
+      'space "cavern": spacesPer1000Cells must be more than 0',
+      'space "lava": the kind is listed more than once',
+      'space "lava": maxSize (at least minSize)',
+    ]) {
+      expect(
+        problems.some((p) => p.includes(part)),
+        `no problem mentions ${part}`,
+      ).toBe(true);
+    }
+    expect(problems).toHaveLength(6);
   });
 
   it('reports a structure placed from an unknown item, or using code 0', () => {
@@ -573,8 +590,11 @@ describe('M2 data (decision note 0014)', () => {
       data.hazards.forecast.unseenBlock = 'air';
       data.tells.hazards.warmGlowDistance = 0;
     });
-    expect(problems).toHaveLength(7);
+    // 7 bad numbers; the gas one is reported twice, the second time because a
+    // generated gas pocket would then hold more than one square can store.
+    expect(problems).toHaveLength(8);
     for (const part of [
+      'space "gas": a space of maxSize',
       'hazards.slump.crackCountdown',
       'hazards.slump.steepStep',
       'hazards.water.unitsPerCell',

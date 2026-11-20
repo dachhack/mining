@@ -148,7 +148,7 @@ describe('generateCube', () => {
     // change here must be meant and must be said in the PR description.
     // Only the block array is hashed, so other parts of the state cannot move it.
     const blocks = generate(FULL_SIZE, 7);
-    expect(hashString(Array.from(blocks).join(','))).toBe('aa65d74363adb60a');
+    expect(hashString(Array.from(blocks).join(','))).toBe('b9a479dbba9b7464');
   });
 
   it('gives different cubes for different seeds', () => {
@@ -178,7 +178,7 @@ describe('generateCube', () => {
     // list stone and hard rock for the middle band, or stone for the deep band.
     const upper = [BLOCKS.dirt, BLOCKS.stone, BLOCKS.coalSeam, BLOCKS.timberRoot];
     const middle = [BLOCKS.stone, BLOCKS.hardRock, BLOCKS.ironOre, BLOCKS.copperOre];
-    const deep = [BLOCKS.stone, BLOCKS.hardRock, BLOCKS.crystal];
+    const deep = [BLOCKS.stone, BLOCKS.hardRock, BLOCKS.crystal, BLOCKS.unstableOre];
     for (const seed of SEEDS) {
       const blocks = generate(FULL_SIZE, seed);
       for (let z = 0; z < FULL_SIZE.z; z += 1) {
@@ -192,9 +192,9 @@ describe('generateCube', () => {
   });
 
   it('never generates open space or the blocks of later milestones', () => {
+    // Open space comes afterwards, from `generateSpaces` (spaces.test.ts).
     const excluded = [
       BLOCKS.air.code,
-      BLOCKS.unstableOre.code,
       BLOCKS.relic.code,
       BLOCKS.keystone.code,
       BLOCKS.bedrock.code,

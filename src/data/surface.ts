@@ -36,28 +36,18 @@ export interface SurfaceKinds {
 
 /** The numbers surface generation uses (src/engine/surface/generation.ts). */
 export interface SurfaceGenerationData {
-  /**
-   * The start clearing: every surface cell within this many steps of the start
-   * cell, diagonals counting as one step, is meadow. 1 is the start cell and
-   * its eight neighbours (issue #70).
-   */
-  startClearingRadius: number;
   /** How many round meadows (clearings) there are: from `meadowsMin` to `meadowsMax`. */
   meadowsMin: number;
   meadowsMax: number;
   /** A meadow's radius in cells: from `meadowRadiusMin` to `meadowRadiusMax`. */
   meadowRadiusMin: number;
   meadowRadiusMax: number;
-  /**
-   * A meadow's centre is at least this many steps from the start cell
-   * (counted through the grid) and at least `meadowEdgeMargin` cells in from
-   * every edge.
-   */
-  meadowMinDistanceFromStart: number;
+  /** A meadow's centre is at least this many cells in from every edge. */
   meadowEdgeMargin: number;
-  /** How many tries to find a centre for one meadow before giving that meadow up. */
-  meadowPlacementTries: number;
-  /** How many edges of the cube a path runs to from the start clearing (at least 2). */
+  /**
+   * How many edges of the cube a path runs to (at least 2). The paths start
+   * from the middle of the first meadow and also run to each other meadow.
+   */
   pathEdges: number;
   /**
    * How a path winds. At each step it turns aside (a step that does not bring
@@ -66,12 +56,6 @@ export interface SurfaceGenerationData {
    */
   pathWanderChance: number;
   pathWanderSteps: number;
-  /**
-   * The block a path is worn into. A path cell's layer-0 block becomes this
-   * if it is one of `pathWearsBlocks` (plain rock); ore is left as it is.
-   */
-  pathGround: string;
-  pathWearsBlocks: string[];
   /** The block an outcrop stands over, and the chance each such cell under the forest becomes one. */
   outcropBlock: string;
   outcropChance: number;
@@ -113,21 +97,16 @@ export const SURFACE: SurfaceData = {
   // Owner, issue #70: "10 shifts".
   regrowShifts: 10,
   generation: {
-    startClearingRadius: 1,
     // With the numbers below about 65% of the surface starts as trees
     // (issue #70: "mostly trees"); the PR for issue #70 gives the measured mean.
     meadowsMin: 4,
     meadowsMax: 6,
     meadowRadiusMin: 2,
     meadowRadiusMax: 4,
-    meadowMinDistanceFromStart: 6,
     meadowEdgeMargin: 2,
-    meadowPlacementTries: 20,
     pathEdges: 2,
     pathWanderChance: 0.3,
     pathWanderSteps: 6,
-    pathGround: 'dirt',
-    pathWearsBlocks: ['stone'],
     outcropBlock: 'stone',
     outcropChance: 0.3,
     // Owner's decision on PR #72.
@@ -203,24 +182,17 @@ export function validateSurfaceData(
   }
 
   const gen = data.generation;
-  wholeAtLeast(gen.startClearingRadius, 1, 'generation.startClearingRadius');
   wholeAtLeast(gen.meadowsMin, 0, 'generation.meadowsMin');
   wholeAtLeast(gen.meadowsMax, gen.meadowsMin, 'generation.meadowsMax');
   wholeAtLeast(gen.meadowRadiusMin, 1, 'generation.meadowRadiusMin');
   wholeAtLeast(gen.meadowRadiusMax, gen.meadowRadiusMin, 'generation.meadowRadiusMax');
-  wholeAtLeast(gen.meadowMinDistanceFromStart, 0, 'generation.meadowMinDistanceFromStart');
   wholeAtLeast(gen.meadowEdgeMargin, 0, 'generation.meadowEdgeMargin');
-  wholeAtLeast(gen.meadowPlacementTries, 1, 'generation.meadowPlacementTries');
   wholeAtLeast(gen.pathEdges, 2, 'generation.pathEdges');
   if (gen.pathEdges > 4) {
     problems.push(`generation.pathEdges must be at most 4, but is ${gen.pathEdges}`);
   }
   chance(gen.pathWanderChance, 'generation.pathWanderChance');
   wholeAtLeast(gen.pathWanderSteps, 0, 'generation.pathWanderSteps');
-  knownBlock(gen.pathGround, 'generation.pathGround');
-  for (const id of gen.pathWearsBlocks) {
-    knownBlock(id, 'generation.pathWearsBlocks');
-  }
   knownBlock(gen.outcropBlock, 'generation.outcropBlock');
   chance(gen.outcropChance, 'generation.outcropChance');
   knownBlock(gen.coalInSightBlock, 'generation.coalInSightBlock');

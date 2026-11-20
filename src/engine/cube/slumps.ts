@@ -27,6 +27,8 @@
 // or more: nothing rises above ground level.
 
 import { BLOCKS, CREW, HAZARDS, SURFACE } from '../../data';
+import type { Vec3 } from '../../data';
+import { collapseSpaceUnder } from '../breach';
 import { destroyCampsAt, destroyStructure } from '../destroy';
 import type { GameEvent } from '../events';
 import { depthAt, depthIn, depthMapOf, setDepthIn, topCellOf } from '../heightmap';
@@ -36,15 +38,57 @@ import {
   blockAt,
   clearCrack,
   crackTimerAt,
+  gasAt,
   inGrid,
-  isOpen,
+  isLavaSource,
+  lavaAt,
   setBlock,
   setCrackTimer,
+  setGas,
+  setLava,
+  setWater,
+  waterAt,
 } from '../state';
 import type { GameState } from '../state';
 import { hasStump, setStumpAge, setSurfaceKind, surfaceCellAbove } from '../surface/state';
 import { recordDamage } from './phase';
 import type { CubePhase } from './phase';
+
+/**
+ * Rubble is about to land in the open cell `cell`, the lowest open cell of
+ * its square. Water, lava and gas standing on a square are stored in the open
+ * cells above its top block (breach.ts), often in this very cell. Left there
+ * they would end up inside the rubble: still in the state, but out of the
+ * player's sight and out of reach of every rule. So whatever `cell` holds is
+ * moved to the cell above it, where it stands on the rubble: the square's
+ * contents rise with its top ([Default]; owner question 100).
+ *
+ * The cell above always exists and is open: rubble lands at least one layer
+ * below ground level, and everything above a square's top block is open.
+ */
+function liftContents(state: GameState, cell: Vec3): void {
+  const above = { x: cell.x, y: cell.y, z: cell.z - 1 };
+  const water = waterAt(state, cell);
+  const lava = lavaAt(state, cell);
+  const gas = gasAt(state, cell);
+  // `Math.min` only guards the byte a cell stores, as in breach.ts.
+  if (water > 0) {
+    setWater(state, above, Math.min(BYTE_MAX, waterAt(state, above) + water));
+    setWater(state, cell, 0);
+  }
+  if (lava > 0) {
+    const source = isLavaSource(state, cell) || isLavaSource(state, above);
+    setLava(state, above, Math.min(BYTE_MAX, lavaAt(state, above) + lava), source);
+    setLava(state, cell, 0);
+  }
+  if (gas > 0) {
+    setGas(state, above, Math.min(BYTE_MAX, gasAt(state, above) + gas));
+    setGas(state, cell, 0);
+  }
+}
+
+/** The most one cell can store of water, lava or gas: one byte. Not a gameplay number. */
+const BYTE_MAX = 255;
 
 /**
  * The top block of square `from` slumps: it slides to `foot` (the foot of the
@@ -58,11 +102,12 @@ import type { CubePhase } from './phase';
  * - A camp on either square is destroyed (design doc section 8).
  * - A stump on `from` is gone for good, as when the square is mined.
  * - The crew is hurt if either square was worked this shift (design doc 5.2).
- * - If the cell under the fallen block is open (the roof of an underground
- *   space), the temporary rule of decision note 0026 applies, as for a mine:
- *   the open cells directly below fill with rubble, so the square still goes
- *   down exactly 1 level. Task T9 replaces that rule for mining; what a slump
- *   does there is owner question 96.
+ * - Water, lava and gas standing on `foot` are not buried: they are lifted
+ *   onto the rubble (`liftContents`; owner question 100).
+ * - If the fallen block was the roof of an underground space, the space
+ *   collapses exactly as under a mine (`collapseSpaceUnder` in breach.ts;
+ *   design doc 6.2): the square still goes down exactly 1 level, and what the
+ *   space held is pushed out onto it.
  */
 function slumpBlock(
   state: GameState,
@@ -103,17 +148,12 @@ function slumpBlock(
     clearCrack(state, buriedCell);
   }
   destroyCampsAt(state, toCell, 'rockfall', events);
+  liftContents(state, toCell);
   setBlock(state, toCell, BLOCKS.rubble.code);
   events.push({ type: 'blockFell', from: fromCell, to: toCell, block, rubble: true });
 
-  // The roof of an open space (see above).
-  const below = { x: from.x, y: from.y, z: fromCell.z + 1 };
-  if (inGrid(state.size, below) && isOpen(state, below)) {
-    for (let z = below.z; z < state.size.z && isOpen(state, { x: from.x, y: from.y, z }); z += 1) {
-      setBlock(state, { x: from.x, y: from.y, z }, BLOCKS.rubble.code);
-    }
-    events.push({ type: 'roofCollapsed', pos: below });
-  }
+  // The roof of an underground space: it collapses, as under a mine.
+  collapseSpaceUnder(state, fromCell, events);
 
   setDepthIn(map, from.x, from.y, depthAt(state, from.x, from.y));
   setDepthIn(map, foot.x, foot.y, footDepth - 1);
