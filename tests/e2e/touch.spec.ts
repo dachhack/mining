@@ -27,7 +27,7 @@ async function touch(
 }
 
 async function startRun(page: Page, seed: number): Promise<void> {
-  await page.goto('/');
+  await page.goto('/#game');
   await page.evaluate(() => {
     window.localStorage.clear();
   });

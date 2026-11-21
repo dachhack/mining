@@ -1,9 +1,10 @@
 import './preview.css';
-import { mountPreview } from './preview';
+import './lab/lab.css';
+import { mountLauncher } from './launcher';
 
-// Until M3's real screens arrive, the page is the early phone preview
-// (issue #64): a tap version of `npm run play`.
+// The start screen (issue #116) leads to the early phone preview (issue
+// #64), the game, and to the UI labs beside it.
 const root = document.querySelector<HTMLDivElement>('#app');
 if (root) {
-  mountPreview(root);
+  mountLauncher(root);
 }

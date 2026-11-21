@@ -11,7 +11,7 @@ export async function openShowcase(page: Page): Promise<void> {
 
 /** Open the page on any prepared state: `text` is `JSON.stringify(serialise(state))`. */
 export async function openPrepared(page: Page, text: string): Promise<void> {
-  await page.goto('/');
+  await page.goto('/#game');
   await page.evaluate((prepared) => {
     window.localStorage.clear();
     window.localStorage.setItem('mining-game.preview.prepared', prepared);
