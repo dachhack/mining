@@ -632,6 +632,18 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     }
     const { px, py } = toPx(target.x, target.y);
     ctx.save();
+    if (blocked) {
+      // A dark band under the red dashes, so the outline reads over clay's
+      // reddish ground too (review of PR #122).
+      ctx.strokeStyle = CAMP_MARKS.notLevelHalo;
+      ctx.lineWidth = Math.max(4, c * 0.17);
+      ctx.strokeRect(
+        px - c + ctx.lineWidth / 2,
+        py - c + ctx.lineWidth / 2,
+        c * 3 - ctx.lineWidth,
+        c * 3 - ctx.lineWidth,
+      );
+    }
     ctx.globalAlpha = pulse;
     ctx.strokeStyle = blocked ? CAMP_MARKS.notLevel : CAMP_MARKS.target;
     ctx.lineWidth = Math.max(2, c * 0.09);
@@ -751,15 +763,42 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       );
       chips.push(made);
     };
+    // Every item collected: the lab's own (with their icons), then the game's.
+    const all: { item: string; count: number; icon: () => HTMLCanvasElement | null }[] = [];
     for (const item of Object.keys(LAB_ITEMS)) {
-      const count = counts.get(item) ?? 0;
-      const icon = labItemIcon(item, 'lab-chip-icon');
-      if (count > 0 && icon !== null) {
-        chip(item, count, icon);
-      }
+      all.push({
+        item,
+        count: counts.get(item) ?? 0,
+        icon: () => labItemIcon(item, 'lab-chip-icon'),
+      });
     }
     for (const entry of resourceEntries(counts)) {
-      chip(entry.item, entry.count, blockIcon(entry.iconBlock, 'lab-chip-icon'));
+      all.push({
+        item: entry.item,
+        count: entry.count,
+        icon: () => blockIcon(entry.iconBlock, 'lab-chip-icon'),
+      });
+    }
+    // What the next steps cost comes first, so it never hides off the right
+    // edge (review of PR #122): the lowest camp's next upgrade, then a new
+    // camp. (Wood and grass come early, when they are the only chips anyway.)
+    // The rest keeps its order after them.
+    const lowest = Math.min(...world.camps.map((c) => c.level));
+    const wanted: string[] = [];
+    for (const stack of [...(upgradeCostFrom(lowest) ?? []), ...LAB_NEW_CAMP_COST]) {
+      if (!wanted.includes(stack.item)) wanted.push(stack.item);
+    }
+    const rank = (item: string): number => {
+      const at = wanted.indexOf(item);
+      return at === -1 ? wanted.length : at;
+    };
+    // `sort` keeps equal ranks in their order (it is stable), so the rest stays as it was.
+    all.sort((a, b) => rank(a.item) - rank(b.item));
+    for (const entry of all) {
+      const icon = entry.count > 0 ? entry.icon() : null;
+      if (icon !== null) {
+        chip(entry.item, entry.count, icon);
+      }
     }
     counter.replaceChildren(...chips);
   }

@@ -430,6 +430,16 @@ test('clay, stone and an animal pay for level 2, and the ring grows', async ({ p
   await expect(canvas).toHaveAttribute('data-shown', String(shownOf(plan.world)));
   await expect.poll(() => counts(page)).toEqual(expectedCounts(plan.world));
 
+  // The counter puts what the upgrade costs first, right after "Dug", so
+  // clay, stone and animals never hide off its right edge.
+  const order = await page
+    .getByTestId('lab-counter')
+    .evaluate((el) => Array.from(el.children).map((c) => (c as HTMLElement).dataset['testid']));
+  expect(order.slice(0, 4)).toEqual([
+    'lab-dug',
+    ...(upgradeCostFrom(1) ?? []).map((stack) => `lab-res-${stack.item}`),
+  ]);
+
   // The camp's panel: level 1, ring 5, and the upgrade's cost all green.
   const cost = upgradeCostFrom(1) ?? [];
   await tapSquare(page, canvas, plan.camp);

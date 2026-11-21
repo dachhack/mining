@@ -21,7 +21,7 @@ Date: 2026-11-21. Status: implemented (issue #121). Builds on 0042 (Lab 2). No g
   | Level 2  | 10 clay + 15 stone + 1 animal              |
   | Level 3  | 20 clay + 40 stone + 3 animals + 10 apples |
 
-- **Counter and key.** Wood, grass, apples, animals and clay have their own icons in the counter (still one row at a fixed height) and in the cost chips. The key adds clay, grass, trees and apple trees when they are in sight.
+- **Counter and key.** Wood, grass, apples, animals and clay have their own icons in the counter (still one row at a fixed height) and in the cost chips. The counter puts what the lowest camp's next upgrade costs first, then what a new camp costs, so those never hide off its right edge. The key adds clay, grass, trees and apple trees when they are in sight, drawn with the map's own art. It takes two rows and scrolls sideways when there are more kinds, so the tray's fixed height never cuts an entry (review of PR #122).
 - **The three optional fixes from the review of PR #120:**
   - the would-be camp's gold ring and wash are hidden when the target is refused;
   - "Ground not level" (and the other refusals) are said once, in the panel;
