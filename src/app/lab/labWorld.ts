@@ -11,7 +11,7 @@
 // starts another.
 
 import { CONTRACT_IDS, DEFAULT_LOADOUT_ID } from '../../data';
-import { createRun, depthIn, depthMapOf, labMine } from '../../engine';
+import { createRun, depthIn, depthMapOf, labMine, topBlockAt } from '../../engine';
 import type { DepthMap, GameState, LabMineResult } from '../../engine';
 
 export interface LabWorld {
@@ -75,4 +75,15 @@ export function labTap(world: LabWorld, x: number, y: number): LabTap {
     world: { seed: world.seed, state: result.state, depths, counts, mined: world.mined + 1 },
     result,
   };
+}
+
+/** The top block of every square of a cube, row by row (y = 0 first). Trees are ignored. */
+export function topBlocksOf(state: GameState): number[] {
+  const codes: number[] = [];
+  for (let y = 0; y < state.size.y; y += 1) {
+    for (let x = 0; x < state.size.x; x += 1) {
+      codes.push(topBlockAt(state, x, y));
+    }
+  }
+  return codes;
 }

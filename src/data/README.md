@@ -17,6 +17,7 @@ Every gameplay number and recipe from the design doc lives here, as plain TypeSc
 | `tells.ts`      | Tells: how near ore or a pocket must be for a block to show | Design doc 3.7; 0012    |
 | `shift.ts`      | AP per shift, fuel upkeep, fixed action costs               | Design doc 4, 4.1; 0005 |
 | `loadouts.ts`   | Starting kits; the placeholder contract id                  | 0005 items 22, 23       |
+| `labCamps.ts`   | UI lab 2 only: camp rings, costs, what each level mines     | Issue #118; 0042        |
 | `types.ts`      | The shape of each table                                     |                         |
 | `validate.ts`   | `validateData()`: checks the tables against each other      | 0005 item 24            |
 | `index.ts`      | Re-exports everything, plus `GAME_DATA` and lookups by id   |                         |
