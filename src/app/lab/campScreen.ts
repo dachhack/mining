@@ -712,7 +712,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       const up = camp.level + 1;
       next.textContent = `Level ${up}: ring ${campRadius(up)}, adds ${addedNamesAt(up).join(', ')}`;
       actions.append(costRow(cost));
-      const upgrade = button('lab2-button lab2-button-main', `Upgrade to ${up}`);
+      const upgrade = button('lab2-button lab2-button-main', 'Upgrade');
       upgrade.dataset['testid'] = 'lab2-upgrade';
       upgrade.disabled = !canAfford(world.lab.counts, cost);
       upgrade.addEventListener('click', () => confirmUpgrade(camp.id));

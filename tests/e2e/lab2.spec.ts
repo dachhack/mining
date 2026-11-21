@@ -4,7 +4,7 @@
 // What each tap should do is worked out here with the same lab code the
 // build runs (campWorld.ts): the engine is deterministic, so the page and
 // this file play the same world. Seed 110 opens with its first camp near
-// the middle of the screen.
+// the middle of the screen, its whole ring and a little fog in view.
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { LAB_NEW_CAMP_COST } from '../../src/data/labCamps';
@@ -183,9 +183,9 @@ test('mining enough pays for a second camp, and the fog recedes round it', async
   }
   await expect.poll(() => counts(page)).toEqual(expectedCounts(plan.world));
 
-  // The new camp goes on the east edge of the ring; a square past it is fog now.
+  // The new camp goes on the east edge of the ring; the square past it is fog now.
   const target = { x: camp.x + campRadius(1), y: camp.y };
-  const beyond = { x: target.x + 2, y: target.y };
+  const beyond = { x: target.x + 1, y: target.y };
   expect(await brightness(canvas, beyond)).toBeLessThan(30);
   const fresh = newlyCovered(plan.world, target.x, target.y).length;
 

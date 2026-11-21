@@ -441,7 +441,7 @@ body[data-screen='lab2'] {
 .lab2-cost {
   display: flex;
   flex-wrap: nowrap;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
   overflow: hidden;
 }
@@ -450,11 +450,11 @@ body[data-screen='lab2'] {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   height: 28px;
-  padding: 0 8px 0 4px;
-  border-radius: 13px;
-  font-size: 0.78rem;
+  padding: 0 7px 0 3px;
+  border-radius: 14px;
+  font-size: 0.74rem;
   background: rgba(120, 200, 120, 0.12);
   border: 1px solid rgba(140, 210, 140, 0.45);
   color: #cfeccc;
@@ -467,8 +467,8 @@ body[data-screen='lab2'] {
 }
 
 .lab2-cost-icon {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 4px;
 }
 

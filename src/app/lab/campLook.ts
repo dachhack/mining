@@ -4,7 +4,7 @@
 
 export const CAMP_LOOK = {
   /** Squares across the map when a world opens: the first camp's ring and a little fog around it. */
-  startCells: 11,
+  startCells: 14,
   /** How far the soft edge of the lit ring reaches into a lit square, as a part of the square. */
   edgeWidth: 0.55,
   /** How dark the soft edge is, right at the border. */

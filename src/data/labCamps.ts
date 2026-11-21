@@ -26,29 +26,26 @@ export interface LabCampLevel {
  */
 export const LAB_CAMP_LEVELS: LabCampLevel[] = [
   {
-    radius: 3,
-    // Timber-root is here too: timber pays for new camps.
+    radius: 5,
+    // Timber-root is here too: timber pays for the level-3 upgrade.
     addsBlocks: ['dirt', 'rubble', 'stone', 'coalSeam', 'timberRoot'],
     upgradeCost: [],
   },
   {
-    radius: 5,
+    radius: 8,
     addsBlocks: ['hardRock'],
-    upgradeCost: [
-      { item: 'stone', count: 12 },
-      { item: 'timber', count: 2 },
-    ],
+    upgradeCost: [{ item: 'stone', count: 30 }],
   },
   {
-    radius: 8,
+    radius: 12,
     addsBlocks: ['ironOre', 'copperOre', 'crystal', 'unstableOre', 'relic', 'keystone'],
     upgradeCost: [
-      { item: 'stone', count: 30 },
-      { item: 'timber', count: 6 },
-      { item: 'coal', count: 3 },
+      { item: 'stone', count: 150 },
+      { item: 'timber', count: 20 },
+      { item: 'coal', count: 20 },
     ],
   },
 ];
 
 /** What a new camp costs. The first camp is free. */
-export const LAB_NEW_CAMP_COST: ItemStack[] = [{ item: 'stone', count: 8 }];
+export const LAB_NEW_CAMP_COST: ItemStack[] = [{ item: 'stone', count: 12 }];

@@ -130,7 +130,7 @@ export function planUpgrade(seed: number, maxCamps = 12): UpgradePlan | null {
     }
     // Is there an ore block next to the first camp's screen that a level-2 camp covers?
     for (const camp of world.camps) {
-      if (camp.level !== 2 || !near(camp, first, 4, 6) || upgradeRefusal(world, camp.id) !== null) {
+      if (camp.level !== 2 || !near(camp, first, 6, 9) || upgradeRefusal(world, camp.id) !== null) {
         continue;
       }
       for (let y = 0; y < size.y; y += 1) {
@@ -146,7 +146,7 @@ export function planUpgrade(seed: number, maxCamps = 12): UpgradePlan | null {
           const dy = y - camp.y;
           const r = campRadius(2);
           if (
-            !near(ore, first, 4, 6) ||
+            !near(ore, first, 6, 9) ||
             campAt(world, x, y) !== null ||
             dx * dx + dy * dy > r * r + r ||
             coverLevelAt(world, x, y) !== 2 ||

@@ -371,3 +371,51 @@ describe('a new world', () => {
     expect(again.lab.mined).toBe(w.lab.mined);
   });
 });
+
+/**
+ * Mine everything the camps of `start` let a player mine, square by square,
+ * until nothing more can be: what a player could collect without placing or
+ * upgrading anything. Only lit squares are tried.
+ */
+function mineEverything(start: CampWorld): CampWorld {
+  let w = start;
+  const width = w.lab.depths.width;
+  const lit: number[] = [];
+  sightMap(w).forEach((sight, i) => {
+    if (sight === 'shown') lit.push(i);
+  });
+  let mined = true;
+  while (mined) {
+    mined = false;
+    for (const i of lit) {
+      const tap = campTap(w, i % width, Math.floor(i / width));
+      if (tap.kind === 'mined') {
+        w = tap.world;
+        mined = true;
+      }
+    }
+  }
+  return w;
+}
+
+/** `a` and `b` added together, item by item. */
+function together(a: ItemStack[], b: ItemStack[]): ItemStack[] {
+  const sum = new Map<string, number>();
+  for (const s of [...a, ...b]) sum.set(s.item, (sum.get(s.item) ?? 0) + s.count);
+  return [...sum].map(([item, count]) => ({ item, count }));
+}
+
+describe('the starting ring pays for the next steps (owner, issue #118)', () => {
+  // 200 generated worlds take a few seconds, so this test has a longer time limit.
+  it('in each of 200 seeds, the first camp’s ring alone holds a second camp and the first upgrade', () => {
+    const both = together(LAB_NEW_CAMP_COST, upgradeCostFrom(1) ?? []);
+    const short: string[] = [];
+    for (let seed = 1; seed <= 200; seed += 1) {
+      const w = mineEverything(newCampWorld(seed));
+      if (!canAfford(w.lab.counts, both)) {
+        short.push(`seed ${seed}: ${JSON.stringify([...w.lab.counts])}`);
+      }
+    }
+    expect(short).toEqual([]);
+  }, 60_000);
+});
