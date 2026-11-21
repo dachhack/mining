@@ -208,6 +208,40 @@ describe('taps', () => {
     expect(tap.world).toBe(w);
   });
 
+  it('says "too steep" before "too hard", so an upgrade never breaks a promise', () => {
+    // Hard rock 1 level down at `pit`, under open space: its four neighbours
+    // are higher, so the level rule refuses it whatever the camp's level.
+    const pit = { x: MID + 2, y: MID };
+    const rows = (char: string, at: string): string[] => {
+      const out: string[] = [];
+      for (let y = 0; y < SIDE; y += 1) {
+        let row = '';
+        for (let x = 0; x < SIDE; x += 1) row += x === pit.x && y === pit.y ? at : char;
+        out.push(row);
+      }
+      return out;
+    };
+    const state = buildState({ layers: [rows('d', '.'), rows('#', 'H'), rows('#', '#')] });
+    let w = campWorldFromState(1, state, MID, MID);
+    const steep = campTap(w, pit.x, pit.y);
+    expect(steep.kind).toBe('refused');
+    expect(steep.tap?.result.refusal).toBe('neighbourHigher');
+    expect(steep.tap?.result.higherNeighbours).toHaveLength(4);
+    expect(steep.world).toBe(w);
+    // Dig its four neighbours level with it: now it is only too hard.
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const) {
+      w = campTap(w, pit.x + dx, pit.y + dy).world;
+    }
+    const hard = campTap(w, pit.x, pit.y);
+    expect(hard.kind).toBe('tooHard');
+    expect(hard.needs).toBe(2);
+  });
+
   it('never mines the square a camp stands on', () => {
     const w = world();
     const tap = campTap(w, MID, MID);
