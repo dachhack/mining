@@ -40,7 +40,7 @@ async function tapSquare(page: Page, canvas: Locator, x: number, y: number): Pro
 test('a risky mine needs a second tap; cracks show; the support tool places a support', async ({
   page,
 }) => {
-  await page.goto('/');
+  await page.goto('/#game');
   await page.evaluate(() => {
     window.localStorage.clear();
   });

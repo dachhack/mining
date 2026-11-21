@@ -47,7 +47,7 @@ async function tapSquare(page: Page, canvas: Locator, x: number, y: number): Pro
 test('sealant is crafted and used from the tool bar; look and hold list a square', async ({
   page,
 }) => {
-  await page.goto('/');
+  await page.goto('/#game');
   await page.evaluate(() => {
     window.localStorage.clear();
   });

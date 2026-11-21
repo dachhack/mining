@@ -63,7 +63,7 @@ async function tapSquare(page: Page, canvas: Locator, x: number, y: number): Pro
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/#game');
   // Each test starts with no saved run and no saved zoom.
   await page.evaluate(() => {
     window.localStorage.clear();

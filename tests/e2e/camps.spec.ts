@@ -37,7 +37,7 @@ async function tapSquare(page: Page, canvas: Locator, x: number, y: number): Pro
 }
 
 test('the camp tool founds a camp; mining near it is cheaper; the crew rests', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/#game');
   await page.evaluate(() => {
     window.localStorage.clear();
   });

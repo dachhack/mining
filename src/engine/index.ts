@@ -458,4 +458,7 @@ export type {
   SquareDirection,
   SquareStep,
 } from './heightmap';
+// UI lab 1 (issue #116): a mine with no turns, beside the real game.
+export { labMine } from './lab';
+export type { LabMineResult } from './lab';
 export type { RngState } from './rng';
