@@ -21,6 +21,10 @@ export const CAMP_LOOK = {
   tooHardMs: 1100,
   /** How long the ring that spreads from a new or upgraded camp takes, in milliseconds. */
   ringMs: 900,
+  /** How often the lab clock moves the animals and regrows apples, in milliseconds. */
+  clockTickMs: 250,
+  /** How long an animal takes to slide from one square to the next, in milliseconds. */
+  animalSlideMs: 400,
   /** How long the pulse on the square a new camp would go on takes, once round, in milliseconds. */
   targetPulseMs: 1200,
 };

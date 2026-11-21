@@ -20,12 +20,28 @@
 // returns a new world.
 
 import { BLOCKS, blockDefByCode } from '../../data';
-import { LAB_CAMP_LEVELS, LAB_NEW_CAMP_COST, LAB_START_REACH } from '../../data/labCamps';
+import {
+  LAB_CAMP_LEVELS,
+  LAB_NEW_CAMP_COST,
+  LAB_START_REACH,
+  LAB_SURFACE,
+} from '../../data/labCamps';
 import type { BlockId, ItemStack } from '../../data';
-import { depthIn, mayMine, topBlockAt } from '../../engine';
+import { depthAt, depthIn, mayMine, topBlockAt } from '../../engine';
 import type { GameState } from '../../engine';
 import { labTap, labWorldFromState, newLabWorld } from './labWorld';
 import type { LabTap, LabWorld } from './labWorld';
+import {
+  APPLE_TREE,
+  GRASS,
+  TREE,
+  advanceSurface,
+  clearFeatures,
+  generateSurface,
+  harvest,
+  isClay,
+} from './surface';
+import type { Harvest, Surface } from './surface';
 
 export interface Camp {
   /** A number that names the camp; new camps get the next one. */
@@ -47,6 +63,8 @@ export interface CampWorld {
   seen: boolean[];
   /** The id the next camp will get. */
   nextCampId: number;
+  /** The surface (issue #121): grass, trees, apple trees, animals, clay, and the lab's clock. */
+  surface: Surface;
 }
 
 /** What one square looks like to the player. */
@@ -223,12 +241,36 @@ export function isLevelPatch(lab: LabWorld, x: number, y: number): boolean {
 
 // ----- Making a world -----
 
-/** A camp world on any cube, with one level-1 camp at (x, y). The tests pass a small hand-made cube. */
-export function campWorldFromLab(lab: LabWorld, x: number, y: number): CampWorld {
+/** A bare surface for a cube: no grass, trees, animals or clay. Hand-made test worlds start with it. */
+export function bareSurface(state: GameState): Surface {
+  const squares = state.size.x * state.size.y;
+  return {
+    features: new Array<0>(squares).fill(0),
+    apples: new Array<number>(squares).fill(0),
+    regrowAt: new Array<number>(squares).fill(-1),
+    clay: new Set<number>(),
+    animals: [],
+    nextAnimalId: 1,
+    nextSpawnAt: Infinity,
+    rng: 1,
+    time: 0,
+  };
+}
+
+/**
+ * A camp world on any cube, with one level-1 camp at (x, y), and `surface`
+ * (bare if not given). The tests pass a small hand-made cube.
+ */
+export function campWorldFromLab(
+  lab: LabWorld,
+  x: number,
+  y: number,
+  surface: Surface = bareSurface(lab.state),
+): CampWorld {
   const camps: Camp[] = [{ id: 1, x, y, level: 1 }];
   const { width, height } = lab.depths;
   const seen = seenWith(new Array<boolean>(width * height).fill(false), camps, width, height);
-  return { lab, camps, seen, nextCampId: 2 };
+  return { lab, camps, seen, nextCampId: 2, surface };
 }
 
 /** A camp world on a hand-made cube, with the first camp at (x, y). */
@@ -237,35 +279,83 @@ export function campWorldFromState(
   state: GameState,
   x: number,
   y: number,
+  surface?: Surface,
 ): CampWorld {
-  return campWorldFromLab(labWorldFromState(seed, state), x, y);
+  return campWorldFromLab(labWorldFromState(seed, state), x, y, surface);
+}
+
+/**
+ * What the surface inside a ring of `radius` around (x, y) gives when all
+ * of it is taken, leaving out the 3 x 3 a camp would stand on: wood from
+ * trees and apple trees, grass from tufts. For choosing the first camp.
+ */
+function surfaceGains(
+  surface: Surface,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  radius: number,
+): Map<string, number> {
+  let trees = 0;
+  let tufts = 0;
+  for (let sy = Math.max(0, y - radius); sy <= Math.min(height - 1, y + radius); sy += 1) {
+    for (let sx = Math.max(0, x - radius); sx <= Math.min(width - 1, x + radius); sx += 1) {
+      if (!inCircle(x, y, radius, sx, sy) || inFootprint(x, y, sx, sy)) {
+        continue;
+      }
+      const feature = surface.features[sx + width * sy];
+      if (feature === TREE || feature === APPLE_TREE) trees += 1;
+      if (feature === GRASS) tufts += 1;
+    }
+  }
+  return new Map([
+    ['wood', trees * LAB_SURFACE.woodPerTree],
+    ['grass', tufts * LAB_SURFACE.grassPerTuft],
+  ]);
 }
 
 /**
  * Where the free first camp goes: among the 3 x 3 patches centred within
- * `LAB_START_REACH` squares of the middle of the map, the one with the most
- * dirt on top (open ground), and of those the nearest the middle. A new
- * world is level everywhere, so every patch is level. Ties go to the patch met
- * first, row by row, so the choice is the same every time.
+ * `LAB_START_REACH` squares of the middle of the map, first those whose
+ * ring holds enough wood and grass for a new camp (issue #121), then the one
+ * with the most dirt on top (open ground), then the nearest the middle. A
+ * new world is level everywhere, so every patch is level. Ties go to the
+ * patch met first, row by row, so the choice is the same every time.
  */
-export function startSquare(state: GameState): { x: number; y: number } {
+export function startSquare(state: GameState, surface?: Surface): { x: number; y: number } {
   const midX = (state.size.x - 1) / 2;
   const midY = (state.size.y - 1) / 2;
   const h = CAMP_HALF_SIZE;
+  const radius = campRadius(1);
   let best = { x: Math.floor(midX), y: Math.floor(midY) };
+  let bestPays = -1;
   let bestDirt = -1;
   let bestDistance = Infinity;
   for (let y = h; y < state.size.y - h; y += 1) {
     for (let x = h; x < state.size.x - h; x += 1) {
-      const dirt = footprintOf(x, y).filter(
-        (s) => topBlockAt(state, s.x, s.y) === BLOCKS.dirt.code,
-      ).length;
       const distance = (x - midX) ** 2 + (y - midY) ** 2;
       if (distance > LAB_START_REACH ** 2) {
         continue; // only patches near the middle
       }
-      if (dirt > bestDirt || (dirt === bestDirt && distance < bestDistance)) {
+      const pays =
+        surface === undefined ||
+        canAfford(
+          surfaceGains(surface, state.size.x, state.size.y, x, y, radius),
+          LAB_NEW_CAMP_COST,
+        )
+          ? 1
+          : 0;
+      const dirt = footprintOf(x, y).filter(
+        (s) => topBlockAt(state, s.x, s.y) === BLOCKS.dirt.code,
+      ).length;
+      // Better means: pays for a camp; then more dirt; then nearer the middle.
+      const better =
+        pays > bestPays ||
+        (pays === bestPays && (dirt > bestDirt || (dirt === bestDirt && distance < bestDistance)));
+      if (better) {
         best = { x, y };
+        bestPays = pays;
         bestDirt = dirt;
         bestDistance = distance;
       }
@@ -274,11 +364,31 @@ export function startSquare(state: GameState): { x: number; y: number } {
   return best;
 }
 
-/** A new Lab 2 world on `seed`: the game's cube, with one free level-1 camp near the middle. */
+/**
+ * A new Lab 2 world on `seed`: the game's cube, its surface (grass, trees,
+ * apple trees, animals, clay), and one free level-1 camp near the middle on
+ * a patch whose ring pays for the next camp.
+ */
 export function newCampWorld(seed: number): CampWorld {
   const lab = newLabWorld(seed);
-  const start = startSquare(lab.state);
-  return campWorldFromLab(lab, start.x, start.y);
+  const start = startSquare(lab.state, generateSurface(lab.state, seed));
+  // Generate again, keeping the camp's 3 x 3 clear of features and animals,
+  // and starting the first animal inside the camp's ring.
+  const ring: { x: number; y: number }[] = [];
+  const r = campRadius(1);
+  for (let y = start.y - r; y <= start.y + r; y += 1) {
+    for (let x = start.x - r; x <= start.x + r; x += 1) {
+      if (inCircle(start.x, start.y, r, x, y)) ring.push({ x, y });
+    }
+  }
+  const surface = generateSurface(lab.state, seed, footprintOf(start.x, start.y), ring);
+  return campWorldFromLab(lab, start.x, start.y, surface);
+}
+
+/** The world at lab time `now` (milliseconds): animals have moved, apples have regrown. */
+export function advanceWorld(world: CampWorld, now: number): CampWorld {
+  const surface = advanceSurface(world.surface, world.lab.state, now);
+  return surface === world.surface ? world : { ...world, surface };
 }
 
 // ----- Costs -----
@@ -312,6 +422,8 @@ function withCounts(lab: LabWorld, counts: Map<string, number>): LabWorld {
 /**
  * What a tap on the map did:
  * - 'mined': the top block was mined (`tap` has the details);
+ * - 'harvested': something on the surface was taken: an animal caught, grass
+ *   cut, an apple picked or a tree felled (`harvest` has the details);
  * - 'fog': the square is fog, so nothing happened;
  * - 'greyed': the square is outside every camp's circle now, so nothing happened;
  * - 'camp': the square holds a camp, which is never mined;
@@ -319,7 +431,7 @@ function withCounts(lab: LabWorld, counts: Map<string, number>): LabWorld {
  * - 'tooHard': the level rule allows it, but the camps covering the square
  *   cannot mine its top block (`needs` says which level can).
  */
-export type CampTapKind = 'mined' | 'fog' | 'greyed' | 'camp' | 'tooHard' | 'refused';
+export type CampTapKind = 'mined' | 'harvested' | 'fog' | 'greyed' | 'camp' | 'tooHard' | 'refused';
 
 export interface CampTap {
   kind: CampTapKind;
@@ -328,6 +440,8 @@ export interface CampTap {
   tap: LabTap | null;
   /** For 'tooHard': the lowest camp level that could mine the block, or `null` if none can. */
   needs: number | null;
+  /** For 'harvested': what was taken and what it gave; `null` otherwise. */
+  harvest: Harvest | null;
 }
 
 /**
@@ -342,13 +456,23 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
     world,
     tap: null,
     needs,
+    harvest: null,
   });
   const sight = sightAt(world, x, y);
   if (sight !== 'shown') {
     return unchanged(sight);
   }
+  // An animal is caught wherever it stands, even on a camp's ground.
+  const caught = harvest(world.surface, world.lab.state, x, y);
+  if (caught !== null && caught.kind === 'caught') {
+    return harvested(world, caught);
+  }
   if (campAt(world, x, y) !== null) {
     return unchanged('camp');
+  }
+  // Grass, a tree or an apple tree must be taken before the block under it can be mined.
+  if (caught !== null) {
+    return harvested(world, caught);
   }
   // The level rule is checked before the hardness gate: a block that is too
   // steep to mine says so, rather than promising that an upgrade would let
@@ -366,18 +490,56 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
         higherNeighbours: check.higherNeighbours,
       },
     };
-    return { kind: 'refused', world, tap: refusal, needs: null };
+    return { kind: 'refused', world, tap: refusal, needs: null, harvest: null };
   }
+  // A clay cell (a lab-only block) is as soft as dirt: any camp can mine it.
+  const z = depthAt(world.lab.state, x, y);
+  const clay = isClay(world.surface, world.lab.state, x, y, z);
   const code = topBlockAt(world.lab.state, x, y);
-  const needs = levelNeededFor(code);
+  const needs = clay ? 1 : levelNeededFor(code);
   if (needs === null || needs > coverLevelAt(world, x, y)) {
     return unchanged('tooHard', needs);
   }
   const tap = labTap(world.lab, x, y);
   if (!tap.result.mined) {
-    return { kind: 'refused', world, tap, needs: null };
+    return { kind: 'refused', world, tap, needs: null, harvest: null };
   }
-  return { kind: 'mined', world: { ...world, lab: tap.world }, tap, needs: null };
+  const mined = clay ? asClay(world.lab, tap) : tap;
+  return {
+    kind: 'mined',
+    world: { ...world, lab: mined.world },
+    tap: mined,
+    needs: null,
+    harvest: null,
+  };
+}
+
+/** A tap that took something from the surface: its gain is added to the counts. */
+function harvested(world: CampWorld, taken: Harvest): CampTap {
+  const counts = new Map(world.lab.counts);
+  counts.set(taken.gain.item, (counts.get(taken.gain.item) ?? 0) + taken.gain.count);
+  return {
+    kind: 'harvested',
+    world: { ...world, lab: { ...world.lab, counts }, surface: taken.surface },
+    tap: null,
+    needs: null,
+    harvest: taken,
+  };
+}
+
+/**
+ * Lab 1's tap on a clay cell, with clay in place of what the cube's block
+ * gave (the cube still holds the game's block there: clay lives only in the
+ * lab's surface, so the game's data is unchanged).
+ */
+function asClay(before: LabWorld, tap: LabTap): LabTap {
+  const clay = { item: 'clay', count: LAB_SURFACE.clayPerBlock };
+  const counts = new Map(before.counts);
+  counts.set(clay.item, (counts.get(clay.item) ?? 0) + clay.count);
+  return {
+    world: { ...tap.world, counts },
+    result: { ...tap.result, yields: [clay] },
+  };
 }
 
 // ----- New camps -----
@@ -450,6 +612,8 @@ export function placeCamp(world: CampWorld, x: number, y: number): CampWorld {
     camps,
     seen: seenWith(world.seen, camps, width, height),
     nextCampId: world.nextCampId + 1,
+    // The camp is built over whatever grew on its 3 x 3: that is cleared, and gives nothing.
+    surface: clearFeatures(world.surface, width, footprintOf(x, y)),
   };
 }
 
@@ -482,6 +646,7 @@ export function upgradeCamp(world: CampWorld, id: number): CampWorld {
     camps,
     seen: seenWith(world.seen, camps, width, height),
     nextCampId: world.nextCampId,
+    surface: world.surface,
   };
 }
 
@@ -549,7 +714,9 @@ export type CampStep =
   | { kind: 'tap'; x: number; y: number }
   | { kind: 'place'; x: number; y: number }
   | { kind: 'upgrade'; id: number }
-  | { kind: 'demolish'; id: number };
+  | { kind: 'demolish'; id: number }
+  // Let the lab clock run to `until` milliseconds: animals move, apples regrow.
+  | { kind: 'wait'; until: number };
 
 /** The world after one step. A step that is not allowed changes nothing, as on screen. */
 export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
@@ -561,6 +728,9 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   }
   if (step.kind === 'upgrade') {
     return upgradeCamp(world, step.id);
+  }
+  if (step.kind === 'wait') {
+    return advanceWorld(world, step.until);
   }
   return demolishCamp(world, step.id);
 }
