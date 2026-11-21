@@ -16,7 +16,7 @@ export const CAMP_LOOK = {
   /** Greyed squares (seen once, out of range now): how much darker than lit ones. */
   greyedDim: 0.5,
   /** The camp marker's radius, as a part of the square. */
-  markerRadius: 0.4,
+  markerRadius: 0.62,
   /** How long the "needs a level 2 camp" cue lasts, in milliseconds. */
   tooHardMs: 1100,
   /** How long the ring that spreads from a new or upgraded camp takes, in milliseconds. */
@@ -41,6 +41,11 @@ export const CAMP_MARKS = {
   tentDoor: '#2b1d12',
   levelTag: '#f1b85a',
   levelText: '#1b1209',
+  /** A camp's 3 x 3 base. */
+  baseWash: 'rgba(241, 184, 90, 0.16)',
+  /** "Ground not level": the footprint's outline, and the wash on the squares at another depth. */
+  notLevel: '#ff6b4a',
+  notLevelWash: 'rgba(255, 107, 74, 0.35)',
   /** The ring drawn round a selected camp, or round where a new camp would go. */
   ring: 'rgba(255, 204, 120, 0.95)',
   /** The wash over squares a new camp would light up. */

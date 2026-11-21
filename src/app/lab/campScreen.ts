@@ -7,7 +7,7 @@
 //
 // - fog: only squares inside a camp's ring are lit and can be mined; squares
 //   lit once but out of range now are greyed; the rest is dark;
-// - camps: a marker on their square; tap one to see its level, ring and what
+// - camps: a 3 x 3 base with a tent on it; tap one to see its level, ring and what
 //   it mines, and to upgrade it;
 // - a camp tool (or a long press on a lit square) to place a new camp,
 //   showing its cost and the ring it would light before you confirm.
@@ -34,7 +34,9 @@ import {
   minesText,
   newCampWorld,
   newlyCovered,
-  packUpCamp,
+  demolishCamp,
+  demolishRefusal,
+  footprintOf,
   placeCamp,
   PREPARED_LAB2_KEY,
   placeRefusal,
@@ -43,7 +45,7 @@ import {
   upgradeCamp,
   upgradeCostFrom,
 } from './campWorld';
-import type { Camp, CampStep, CampWorld, Sight } from './campWorld';
+import type { Camp, CampStep, CampWorld, PlaceRefusal, Sight } from './campWorld';
 import { centredLabCamera, clampLabCamera, rowsOf } from './labCamera';
 import type { LabCamera, ViewSize } from './labCamera';
 import {
@@ -76,7 +78,17 @@ const HINT = 'Tap to mine in the lit ring · tap a camp to upgrade it';
 const STEEP_HINT = 'Too steep: mine the higher blocks around it first.';
 const BOTTOM_HINT = 'Nothing left to mine here: this is the bottom.';
 const GREYED_HINT = 'Out of range now: put a camp nearby to mine here.';
-const PLACE_HINT = 'Tap a lit square to put the new camp there.';
+const PLACE_HINT = 'Tap the middle of a flat, lit 3 × 3 patch for the new camp.';
+const NOT_LEVEL_TEXT = 'Ground not level: a camp needs a flat 3 × 3.';
+const DEMOLISH_FIRST = 'Build another camp that covers this one first.';
+
+/** What the place-camp tool says about a target the rules refuse. */
+function placeRefusalText(refusal: PlaceRefusal): string {
+  if (refusal === 'notShown') return 'The 3 × 3 must be lit, inside a camp’s ring.';
+  if (refusal === 'occupied') return 'It overlaps another camp.';
+  if (refusal === 'notLevel') return NOT_LEVEL_TEXT;
+  return 'Not enough to build it yet: mine more first.';
+}
 
 /** Something drawn over the map for a short while. */
 interface Effect {
@@ -386,7 +398,11 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
   }
 
-  /** A camp: a dark disc with a gold ring, a tent on it, and a tag with its level. */
+  /**
+   * A camp: its 3 x 3 base (a warm wash with a gold edge over the nine
+   * squares), and on the middle square a dark disc with a gold ring, a tent,
+   * and a tag with its level.
+   */
   function drawCampMarker(
     ctx: CanvasRenderingContext2D,
     camp: Camp,
@@ -396,6 +412,13 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     const { px, py } = toPx(camp.x, camp.y);
     const cx = px + c / 2;
     const cy = py + c / 2;
+    // The base: the footprint, one square either side of the middle.
+    const base = { x: px - c + c * 0.06, y: py - c + c * 0.06, size: c * 3 - c * 0.12 };
+    ctx.fillStyle = CAMP_MARKS.baseWash;
+    ctx.fillRect(base.x, base.y, base.size, base.size);
+    ctx.lineWidth = Math.max(2, c * (selected ? 0.09 : 0.06));
+    ctx.strokeStyle = CAMP_MARKS.markerRing;
+    ctx.strokeRect(base.x, base.y, base.size, base.size);
     const r = c * CAMP_LOOK.markerRadius;
     ctx.save();
     ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
@@ -486,18 +509,35 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     const pulse =
       0.6 +
       0.4 * Math.cos(((now % CAMP_LOOK.targetPulseMs) / CAMP_LOOK.targetPulseMs) * Math.PI * 2);
+    // The 3 x 3 footprint: gold if a camp can stand there, red if not. On
+    // uneven ground, the squares not at the middle square's depth are washed red.
+    const refusal = placeRefusal(world, target.x, target.y);
+    const blocked = refusal !== null && refusal !== 'cost';
+    const middleDepth = world.lab.depths.depths[target.x + width * target.y] ?? 0;
+    for (const sq of footprintOf(target.x, target.y)) {
+      const depth = world.lab.depths.depths[sq.x + width * sq.y];
+      if (refusal === 'notLevel' && depth !== undefined && depth !== middleDepth) {
+        const at = toPx(sq.x, sq.y);
+        ctx.fillStyle = CAMP_MARKS.notLevelWash;
+        ctx.fillRect(at.px, at.py, c, c);
+      }
+    }
     const { px, py } = toPx(target.x, target.y);
     ctx.save();
     ctx.globalAlpha = pulse;
-    ctx.strokeStyle = CAMP_MARKS.target;
+    ctx.strokeStyle = blocked ? CAMP_MARKS.notLevel : CAMP_MARKS.target;
     ctx.lineWidth = Math.max(2, c * 0.09);
+    ctx.setLineDash(blocked ? [c * 0.25, c * 0.15] : []);
     ctx.strokeRect(
-      px + ctx.lineWidth / 2,
-      py + ctx.lineWidth / 2,
-      c - ctx.lineWidth,
-      c - ctx.lineWidth,
+      px - c + ctx.lineWidth / 2,
+      py - c + ctx.lineWidth / 2,
+      c * 3 - ctx.lineWidth,
+      c * 3 - ctx.lineWidth,
     );
     ctx.restore();
+    if (blocked) {
+      return; // no tent where no camp can stand
+    }
     // A faint tent where the camp would stand.
     ctx.save();
     ctx.globalAlpha = 0.55;
@@ -659,8 +699,14 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     if (target === null) {
       body.textContent = PLACE_HINT;
     } else {
-      const fresh = preview.size;
-      body.textContent = `At ${target.x}, ${target.y} · ring ${campRadius(1)} · lights ${fresh} new ${fresh === 1 ? 'square' : 'squares'}`;
+      const refusal = placeRefusal(world, target.x, target.y);
+      if (refusal !== null && refusal !== 'cost') {
+        body.textContent = placeRefusalText(refusal);
+        body.classList.add('lab2-panel-warn');
+      } else {
+        const fresh = preview.size;
+        body.textContent = `At ${target.x}, ${target.y} · level ground · lights ${fresh} new ${fresh === 1 ? 'square' : 'squares'}`;
+      }
     }
     const actions = element('div', 'lab2-actions');
     const cancel = button('lab2-button lab2-button-quiet', 'Cancel');
@@ -684,12 +730,15 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     const title = element('span', 'lab2-panel-title', `⛺ Camp ${camp.id} · Level ${camp.level}`);
     title.dataset['testid'] = 'lab2-camp-title';
     head.append(title);
-    if (world.camps.length > 1) {
-      const pack = button('lab2-pack', 'Pack up');
-      pack.dataset['testid'] = 'lab2-pack-up';
-      pack.addEventListener('click', () => confirmPackUp(camp.id));
-      head.append(pack);
+    // Demolish: only once other camps cover all of this one's base. Otherwise
+    // the button stays, quieter, and a tap on it says what to do first.
+    const demolish = button('lab2-pack', 'Demolish');
+    demolish.dataset['testid'] = 'lab2-demolish';
+    if (demolishRefusal(world, camp.id) !== null) {
+      demolish.classList.add('lab2-pack-short');
     }
+    demolish.addEventListener('click', () => confirmDemolish(camp.id));
+    head.append(demolish);
     const close = button('lab2-close', '×');
     close.setAttribute('aria-label', 'Close');
     close.dataset['testid'] = 'lab2-camp-close';
@@ -792,14 +841,15 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     });
   }
 
-  function confirmPackUp(id: number): void {
-    const next = packUpCamp(world, id);
+  function confirmDemolish(id: number): void {
+    const next = demolishCamp(world, id);
     if (next === world) {
+      setHint(DEMOLISH_FIRST, true);
       return;
     }
     mode = { kind: 'idle' };
     setWorld(next);
-    setHint('Camp packed up: what only it lit is greyed now.', false);
+    setHint('Camp demolished: its ground can be mined now.', false);
   }
 
   // ----- A tap -----
@@ -885,18 +935,19 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
 
   function tapWhilePlacing(x: number, y: number): void {
     canvas.dataset['lastTap'] = `place ${x},${y}`;
-    const refusal = placeRefusal(world, x, y);
-    if (refusal === 'notShown') {
-      setHint('Camps go on lit squares, inside a camp’s ring.', true);
+    if (sightOf(x, y) !== 'shown') {
+      setHint(placeRefusalText('notShown'), true);
       return;
     }
-    if (refusal === 'occupied') {
+    if (campAt(world, x, y) !== null) {
       setHint('A camp already stands there.', true);
       return;
     }
+    // Any other target is chosen, so the preview can show why it fails, if it does.
     setMode({ kind: 'placing', target: { x, y } });
-    if (refusal === 'cost') {
-      setHint('Not enough to build it yet: mine more first.', true);
+    const refusal = placeRefusal(world, x, y);
+    if (refusal !== null) {
+      setHint(placeRefusalText(refusal), true);
     }
   }
 

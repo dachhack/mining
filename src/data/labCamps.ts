@@ -34,7 +34,7 @@ export const LAB_CAMP_LEVELS: LabCampLevel[] = [
   {
     radius: 8,
     addsBlocks: ['hardRock'],
-    upgradeCost: [{ item: 'stone', count: 30 }],
+    upgradeCost: [{ item: 'stone', count: 25 }],
   },
   {
     radius: 12,
@@ -48,4 +48,11 @@ export const LAB_CAMP_LEVELS: LabCampLevel[] = [
 ];
 
 /** What a new camp costs. The first camp is free. */
-export const LAB_NEW_CAMP_COST: ItemStack[] = [{ item: 'stone', count: 12 }];
+export const LAB_NEW_CAMP_COST: ItemStack[] = [{ item: 'stone', count: 10 }];
+
+/**
+ * The free first camp's 3 x 3 patch is centred no further than this many
+ * squares from the middle of the map (the most open ground among those
+ * patches wins).
+ */
+export const LAB_START_REACH = 4;

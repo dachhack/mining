@@ -17,7 +17,10 @@ import {
   levelNeededFor,
   newCampWorld,
   newlyCovered,
-  packUpCamp,
+  demolishCamp,
+  demolishRefusal,
+  footprintOf,
+  isLevelPatch,
   placeCamp,
   placeRefusal,
   replayCampSteps,
@@ -34,6 +37,12 @@ import { buildState } from '../engine/helpers';
 /** The side of the square test cube: wide enough for a level-2 ring, and then some. */
 const SIDE = 25;
 const MID = Math.floor(SIDE / 2);
+/**
+ * How far east of the first camp a second camp is placed in these tests: its
+ * whole 3 x 3 footprint is then inside the first camp's ring, and its ring
+ * covers the first camp's footprint.
+ */
+const NEXT = campRadius(1) - 1;
 
 /**
  * A SIDE x SIDE cube, 3 layers deep: the top layer is `top` everywhere
@@ -151,9 +160,9 @@ describe('fog and sight', () => {
   it('shows the union of every camp’s ring, at the best level over each square', () => {
     let w = rich(world());
     const r = campRadius(1);
-    w = placeCamp(w, MID + r, MID);
+    w = placeCamp(w, MID + NEXT, MID);
     expect(w.camps).toHaveLength(2);
-    expect(sightAt(w, MID + 2 * r, MID)).toBe('shown');
+    expect(sightAt(w, MID + NEXT + r, MID)).toBe('shown');
     expect(sightAt(w, MID - r, MID)).toBe('shown');
     // Upgrade the new camp: the overlap is now level 2, the far side of the first ring still 1.
     w = upgradeCamp(w, 2);
@@ -161,30 +170,25 @@ describe('fog and sight', () => {
     expect(coverLevelAt(w, MID - r, MID)).toBe(1);
   });
 
-  it('greys squares that were lit once when their camp is packed up', () => {
+  it('greys squares that only a demolished camp lit', () => {
     const r = campRadius(1);
-    let w = placeCamp(rich(world()), MID + r, MID);
-    const far = { x: MID + 2 * r, y: MID };
-    expect(sightAt(w, far.x, far.y)).toBe('shown');
-    w = packUpCamp(w, 2);
-    expect(w.camps).toHaveLength(1);
-    expect(sightAt(w, far.x, far.y)).toBe('greyed');
-    expect(sightAt(w, MID, MID)).toBe('shown');
+    let w = placeCamp(rich(world()), MID + NEXT, MID);
+    const west = { x: MID - r, y: MID }; // lit by the first camp only
+    expect(sightAt(w, west.x, west.y)).toBe('shown');
+    w = demolishCamp(w, 1);
+    expect(w.camps.map((c) => c.id)).toEqual([2]);
+    expect(sightAt(w, west.x, west.y)).toBe('greyed');
+    expect(sightAt(w, MID, MID)).toBe('shown'); // the second camp covers the old base
     expect(sightAt(w, 0, 0)).toBe('fog');
-  });
-
-  it('never packs up the last camp', () => {
-    const w = world();
-    expect(packUpCamp(w, 1)).toBe(w);
   });
 });
 
 describe('taps', () => {
   it('mines a lit square and adds its yield', () => {
     const w = world('#');
-    const tap = campTap(w, MID + 1, MID);
+    const tap = campTap(w, MID + 2, MID);
     expect(tap.kind).toBe('mined');
-    expect(depthAt(tap.world.lab.state, MID + 1, MID)).toBe(1);
+    expect(depthAt(tap.world.lab.state, MID + 2, MID)).toBe(1);
     expect(tap.world.lab.counts.get('stone')).toBe(1);
     expect(tap.world.camps).toBe(w.camps);
   });
@@ -202,10 +206,44 @@ describe('taps', () => {
 
   it('refuses a tap on a greyed square and changes nothing', () => {
     const r = campRadius(1);
-    const w = packUpCamp(placeCamp(rich(world()), MID + r, MID), 2);
-    const tap = campTap(w, MID + 2 * r, MID);
+    const w = demolishCamp(placeCamp(rich(world()), MID + NEXT, MID), 1);
+    const tap = campTap(w, MID - r, MID);
     expect(tap.kind).toBe('greyed');
     expect(tap.world).toBe(w);
+  });
+
+  it('says "too steep" before "too hard", so an upgrade never breaks a promise', () => {
+    // Hard rock 1 level down at `pit`, under open space: its four neighbours
+    // are higher, so the level rule refuses it whatever the camp's level.
+    const pit = { x: MID + 3, y: MID };
+    const rows = (char: string, at: string): string[] => {
+      const out: string[] = [];
+      for (let y = 0; y < SIDE; y += 1) {
+        let row = '';
+        for (let x = 0; x < SIDE; x += 1) row += x === pit.x && y === pit.y ? at : char;
+        out.push(row);
+      }
+      return out;
+    };
+    const state = buildState({ layers: [rows('d', '.'), rows('#', 'H'), rows('#', '#')] });
+    let w = campWorldFromState(1, state, MID, MID);
+    const steep = campTap(w, pit.x, pit.y);
+    expect(steep.kind).toBe('refused');
+    expect(steep.tap?.result.refusal).toBe('neighbourHigher');
+    expect(steep.tap?.result.higherNeighbours).toHaveLength(4);
+    expect(steep.world).toBe(w);
+    // Dig its four neighbours level with it: now it is only too hard.
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const) {
+      w = campTap(w, pit.x + dx, pit.y + dy).world;
+    }
+    const hard = campTap(w, pit.x, pit.y);
+    expect(hard.kind).toBe('tooHard');
+    expect(hard.needs).toBe(2);
   });
 
   it('never mines the square a camp stands on', () => {
@@ -216,7 +254,7 @@ describe('taps', () => {
   });
 
   it('refuses a block too hard for the camps over it, saying which level can', () => {
-    const square = { x: MID + 1, y: MID };
+    const square = { x: MID + 2, y: MID }; // just outside the first camp's 3 x 3
     const w = rich(world('d', [{ ...square, char: 'H' }]));
     const tap = campTap(w, square.x, square.y);
     expect(tap.kind).toBe('tooHard');
@@ -230,11 +268,10 @@ describe('taps', () => {
   });
 
   it('uses the best camp over a square: a level-2 ring lets a level-1 ring’s hard rock be mined', () => {
-    const r = campRadius(1);
-    // Hard rock between the first camp and a second one placed r to the east.
-    const square = { x: MID + 1, y: MID };
+    // Hard rock between the first camp and a second one placed NEXT to the east.
+    const square = { x: MID + 2, y: MID }; // just outside the first camp's 3 x 3
     let w = rich(world('d', [{ ...square, char: 'H' }]));
-    w = placeCamp(w, MID + r, MID);
+    w = placeCamp(w, MID + NEXT, MID);
     expect(campTap(w, square.x, square.y).kind).toBe('tooHard');
     w = upgradeCamp(w, 2);
     expect(campTap(w, square.x, square.y).kind).toBe('mined');
@@ -242,8 +279,8 @@ describe('taps', () => {
 
   it('passes the level rule’s refusal through, unchanged', () => {
     let w = world('#');
-    w = campTap(w, MID + 1, MID).world;
-    const tap = campTap(w, MID + 1, MID); // now 1 down with higher neighbours
+    w = campTap(w, MID + 2, MID).world;
+    const tap = campTap(w, MID + 2, MID); // now 1 down with higher neighbours
     expect(tap.kind).toBe('refused');
     expect(tap.tap?.result.refusal).toBe('neighbourHigher');
     expect(tap.world).toBe(w);
@@ -252,15 +289,14 @@ describe('taps', () => {
 
 describe('placing camps', () => {
   it('places a camp on a lit square, pays for it, and lights its ring', () => {
-    const r = campRadius(1);
     const w = rich(world());
     const before = new Map(w.lab.counts);
-    const fresh = newlyCovered(w, MID + r, MID);
+    const fresh = newlyCovered(w, MID + NEXT, MID);
     expect(fresh.length).toBeGreaterThan(0);
-    const next = placeCamp(w, MID + r, MID);
+    const next = placeCamp(w, MID + NEXT, MID);
     expect(next.camps.map((c) => [c.x, c.y, c.level])).toEqual([
       [MID, MID, 1],
-      [MID + r, MID, 1],
+      [MID + NEXT, MID, 1],
     ]);
     expect(shownCount(next)).toBe(shownCount(w) + fresh.length);
     for (const stack of LAB_NEW_CAMP_COST) {
@@ -280,9 +316,11 @@ describe('placing camps', () => {
     expect(placeCamp(w, MID + r + 1, MID)).toBe(w);
     expect(placeRefusal(w, MID, MID)).toBe('occupied');
     expect(placeCamp(w, MID, MID)).toBe(w);
+    // A footprint that only overlaps the first camp's 3 x 3 is refused too.
+    expect(placeRefusal(w, MID + 2, MID)).toBe('occupied');
     const poor = holding(world(), {});
-    expect(placeRefusal(poor, MID + 1, MID)).toBe('cost');
-    expect(placeCamp(poor, MID + 1, MID)).toBe(poor);
+    expect(placeRefusal(poor, MID + NEXT, MID)).toBe('cost');
+    expect(placeCamp(poor, MID + NEXT, MID)).toBe(poor);
   });
 
   it('can afford exactly the cost, and not one short of it', () => {
@@ -290,14 +328,90 @@ describe('placing camps', () => {
     for (const s of LAB_NEW_CAMP_COST) exact[s.item] = s.count;
     const w = holding(world(), exact);
     expect(canAfford(w.lab.counts, LAB_NEW_CAMP_COST)).toBe(true);
-    const placed = placeCamp(w, MID + 1, MID);
+    const placed = placeCamp(w, MID + NEXT, MID);
     expect(placed.camps).toHaveLength(2);
     expect(placed.lab.counts.size).toBe(0); // only items above 0 are kept
     const [first] = LAB_NEW_CAMP_COST;
     if (first !== undefined) {
       const short = holding(world(), { ...exact, [first.item]: first.count - 1 });
-      expect(placeRefusal(short, MID + 1, MID)).toBe('cost');
+      expect(placeRefusal(short, MID + NEXT, MID)).toBe('cost');
     }
+  });
+});
+
+describe('3 x 3 camps on level ground (owner, question 134)', () => {
+  it('a camp stands on 3 x 3 squares, none of which can be mined', () => {
+    const w = world('#');
+    for (const sq of footprintOf(MID, MID)) {
+      expect(campTap(w, sq.x, sq.y).kind).toBe('camp');
+    }
+    expect(campTap(w, MID + 2, MID).kind).toBe('mined');
+  });
+
+  it('refuses a patch that is not level, and takes one dug level all over', () => {
+    const at = { x: MID + NEXT, y: MID };
+    let w = rich(world('#'));
+    expect(isLevelPatch(w.lab, at.x, at.y)).toBe(true);
+    // Dig one square of the patch: the nine are no longer at one depth.
+    w = campTap(w, at.x, at.y).world;
+    expect(isLevelPatch(w.lab, at.x, at.y)).toBe(false);
+    expect(placeRefusal(w, at.x, at.y)).toBe('notLevel');
+    expect(placeCamp(w, at.x, at.y)).toBe(w);
+    // Dig the other eight once each: level again, 1 down, and a camp may stand there.
+    for (const sq of footprintOf(at.x, at.y)) {
+      if (sq.x !== at.x || sq.y !== at.y) {
+        const tap = campTap(w, sq.x, sq.y);
+        expect(tap.kind).toBe('mined');
+        w = tap.world;
+      }
+    }
+    expect(isLevelPatch(w.lab, at.x, at.y)).toBe(true);
+    expect(placeRefusal(w, at.x, at.y)).toBeNull();
+    expect(placeCamp(w, at.x, at.y).camps).toHaveLength(2);
+  });
+
+  it('refuses a patch partly outside every ring', () => {
+    const r = campRadius(1);
+    const w = rich(world());
+    // The middle square is lit, but the east column of its 3 x 3 is not.
+    expect(sightAt(w, MID + r, MID)).toBe('shown');
+    expect(placeRefusal(w, MID + r, MID)).toBe('notShown');
+  });
+
+  it('demolishes a camp only when other camps cover its whole footprint', () => {
+    // On its own, the first camp cannot be demolished.
+    const alone = rich(world());
+    expect(demolishRefusal(alone, 1)).toBe('notCovered');
+    expect(demolishCamp(alone, 1)).toBe(alone);
+    // A level-2 first camp and a level-1 camp near the edge of its ring: the
+    // big ring covers the small camp's base, but not the other way round.
+    let w = upgradeCamp(rich(world()), 1);
+    const far = campRadius(2) - 1;
+    w = placeCamp(w, MID + far, MID);
+    expect(w.camps).toHaveLength(2);
+    expect(demolishRefusal(w, 1)).toBe('notCovered');
+    expect(demolishCamp(w, 1)).toBe(w);
+    expect(demolishRefusal(w, 2)).toBeNull();
+    expect(demolishCamp(w, 2).camps.map((c) => c.id)).toEqual([1]);
+    expect(demolishRefusal(w, 99)).toBe('missing');
+  });
+
+  it('gives nothing back, and the old base can then be mined', () => {
+    let w = placeCamp(rich(world('#')), MID + NEXT, MID);
+    const counts = new Map(w.lab.counts);
+    expect(campTap(w, MID, MID).kind).toBe('camp');
+    w = demolishCamp(w, 1);
+    expect(w.lab.counts).toEqual(counts);
+    // Every square of the old 3 x 3 can be dug now...
+    for (const sq of footprintOf(MID, MID)) {
+      const tap = campTap(w, sq.x, sq.y);
+      expect(tap.kind, `${sq.x},${sq.y}`).toBe('mined');
+      w = tap.world;
+    }
+    // ...and then deeper: the middle goes down again, under where the camp stood.
+    const tap = campTap(w, MID, MID);
+    expect(tap.kind).toBe('mined');
+    expect(depthAt(tap.world.lab.state, MID, MID)).toBe(2);
   });
 });
 
@@ -331,13 +445,16 @@ describe('upgrades', () => {
 });
 
 describe('a new world', () => {
-  it('puts the free first camp on the dirt square nearest the middle', () => {
+  it('puts the free first camp on an all-dirt 3 x 3 nearest the middle', () => {
     const special = [{ x: MID, y: MID, char: '#' }];
     const state = cube('d', special);
-    // The middle is stone, so the camp goes on a dirt square next to it.
+    // The middle is stone, so the camp's 3 x 3 goes just clear of it.
     const start = startSquare(state);
-    expect(topBlockAt(state, start.x, start.y)).toBe(BLOCKS.dirt.code);
-    expect(Math.abs(start.x - MID) + Math.abs(start.y - MID)).toBe(1);
+    for (const sq of footprintOf(start.x, start.y)) {
+      expect(topBlockAt(state, sq.x, sq.y)).toBe(BLOCKS.dirt.code);
+    }
+    expect(Math.max(Math.abs(start.x - MID), Math.abs(start.y - MID))).toBe(2);
+    expect(Math.abs(start.x - MID) + Math.abs(start.y - MID)).toBe(2);
   });
 
   it('is the same every time for a seed, with one level-1 camp on dirt', () => {

@@ -6,11 +6,10 @@ import type { ItemStack } from '../../src/data';
 import { topBlockAt } from '../../src/engine';
 import {
   applyCampStep,
-  campAt,
-  campRadius,
+  upgradeCostFrom,
   campTap,
   canAfford,
-  coverLevelAt,
+  footprintOf,
   newCampWorld,
   newlyCovered,
   placeRefusal,
@@ -41,17 +40,19 @@ function mineable(world: CampWorld): Square[] {
 /**
  * Taps that mine, one after another, until `cost` is affordable. Squares
  * nearest `near` go first, so every tap stays near the middle of the screen.
+ * Squares in `avoid` are never tapped (to keep a patch level for a camp).
  * `null` if everything mineable is mined first.
  */
 export function tapsUntil(
   start: CampWorld,
   cost: ItemStack[],
   near: Square,
+  avoid: Square[] = [],
 ): { taps: Square[]; world: CampWorld } | null {
   let world = start;
   const taps: Square[] = [];
   while (!canAfford(world.lab.counts, cost)) {
-    const options = mineable(world);
+    const options = mineable(world).filter((s) => !avoid.some((a) => a.x === s.x && a.y === s.y));
     options.sort(
       (a, b) =>
         Math.abs(a.x - near.x) +
@@ -69,10 +70,10 @@ export function tapsUntil(
 }
 
 /** Mine everything that can be mined, recording each tap as a step. */
-function exhaust(start: CampWorld, steps: CampStep[]): CampWorld {
+function exhaust(start: CampWorld, steps: CampStep[], avoid: Square[] = []): CampWorld {
   let world = start;
   for (;;) {
-    const options = mineable(world);
+    const options = mineable(world).filter((s) => !avoid.some((a) => a.x === s.x && a.y === s.y));
     if (options.length === 0) {
       return world;
     }
@@ -91,26 +92,26 @@ export interface UpgradePlan {
   seed: number;
   steps: CampStep[];
   world: CampWorld;
-  /** The camp to upgrade from 2 to 3. */
+  /** The camp to upgrade from 2 to 3: the first camp. */
   campId: number;
   camp: Square;
   /** The ore block that needs level 3, and can be mined once the camp is level 3. */
   ore: Square;
 }
 
-/** True if (x, y) is within `across` squares across and `down` squares down of `centre`. */
-function near(square: Square, centre: Square, across: number, down: number): boolean {
-  return Math.abs(square.x - centre.x) <= across && Math.abs(square.y - centre.y) <= down;
-}
-
 /**
- * Play `seed` the simple way (mine everything, upgrade every camp to level 2
- * when it can, place the next camp where it lights the most new squares)
- * until a level-2 camp and an ore block it cannot mine yet are both near
- * the first camp (so both are on screen when the page opens), and the
- * upgrade to level 3 is affordable. `null` if that never happens.
+ * Play `seed` the simple way, as a player who keeps the next camp's ground
+ * level would:
+ * 1. Leapfrog level-1 camps: each round chooses the next camp's 3 x 3 patch
+ *    first (where it lights the most new squares), keeps it undug, mines
+ *    everything else, then places the camp there. Stop once the counts pay
+ *    for both upgrades, level 2 and level 3.
+ * 2. Upgrade the first camp to level 2 and mine everything again.
+ * 3. Find an ore block near the first camp (on screen when the page opens)
+ *    that level 2 cannot mine but level 3 can.
+ * `null` if any step fails.
  */
-export function planUpgrade(seed: number, maxCamps = 12): UpgradePlan | null {
+export function planUpgrade(seed: number, maxCamps = 25): UpgradePlan | null {
   const steps: CampStep[] = [];
   let world = newCampWorld(seed);
   const first = world.camps[0];
@@ -118,54 +119,19 @@ export function planUpgrade(seed: number, maxCamps = 12): UpgradePlan | null {
     return null;
   }
   const size = world.lab.state.size;
-  for (let round = 0; round < maxCamps; round += 1) {
-    world = exhaust(world, steps);
-    for (const camp of world.camps) {
-      if (camp.level === 1 && upgradeRefusal(world, camp.id) === null) {
-        const step: CampStep = { kind: 'upgrade', id: camp.id };
-        world = applyCampStep(world, step);
-        steps.push(step);
-        world = exhaust(world, steps);
-      }
-    }
-    // Is there an ore block next to the first camp's screen that a level-2 camp covers?
-    for (const camp of world.camps) {
-      if (camp.level !== 2 || !near(camp, first, 6, 9) || upgradeRefusal(world, camp.id) !== null) {
-        continue;
-      }
-      for (let y = 0; y < size.y; y += 1) {
-        for (let x = 0; x < size.x; x += 1) {
-          const ore = { x, y };
-          if (
-            topBlockAt(world.lab.state, x, y) !== BLOCKS.ironOre.code &&
-            topBlockAt(world.lab.state, x, y) !== BLOCKS.copperOre.code
-          ) {
-            continue;
-          }
-          const dx = x - camp.x;
-          const dy = y - camp.y;
-          const r = campRadius(2);
-          if (
-            !near(ore, first, 6, 9) ||
-            campAt(world, x, y) !== null ||
-            dx * dx + dy * dy > r * r + r ||
-            coverLevelAt(world, x, y) !== 2 ||
-            campTap(world, x, y).kind !== 'tooHard'
-          ) {
-            continue;
-          }
-          const upgraded = applyCampStep(world, { kind: 'upgrade', id: camp.id });
-          if (campTap(upgraded, x, y).kind === 'mined') {
-            return { seed, steps, world, campId: camp.id, camp: { x: camp.x, y: camp.y }, ore };
-          }
-        }
-      }
-    }
-    // Place the next camp where it lights the most new squares.
+  // Enough for four level-2 upgrades and one level-3 upgrade.
+  const level2Cost = upgradeCostFrom(1) ?? [];
+  const bothUpgrades = together(
+    together(together(level2Cost, level2Cost), together(level2Cost, level2Cost)),
+    upgradeCostFrom(2) ?? [],
+  );
+  const pays = (w: CampWorld): boolean => canAfford(w.lab.counts, bothUpgrades);
+  for (let round = 0; round < maxCamps && !pays(world); round += 1) {
     let best: { x: number; y: number; fresh: number } | null = null;
     for (let y = 0; y < size.y; y += 1) {
       for (let x = 0; x < size.x; x += 1) {
-        if (placeRefusal(world, x, y) === null) {
+        const refusal = placeRefusal(world, x, y);
+        if (refusal === null || refusal === 'cost') {
           const fresh = newlyCovered(world, x, y).length;
           if (best === null || fresh > best.fresh) {
             best = { x, y, fresh };
@@ -173,12 +139,71 @@ export function planUpgrade(seed: number, maxCamps = 12): UpgradePlan | null {
         }
       }
     }
-    if (best === null || best.fresh === 0) {
+    world = exhaust(world, steps, best === null ? [] : footprintOf(best.x, best.y));
+    if (pays(world)) {
+      break;
+    }
+    if (best === null || best.fresh === 0 || placeRefusal(world, best.x, best.y) !== null) {
       return null;
     }
     const step: CampStep = { kind: 'place', x: best.x, y: best.y };
     world = applyCampStep(world, step);
     steps.push(step);
   }
+  if (!pays(world)) {
+    return null;
+  }
+  // Upgrade camps to level 2, the first camp first, as long as one level-3
+  // upgrade can still be paid for afterwards: overlapping level-2 rings dig deeper.
+  const level2 = upgradeCostFrom(1) ?? [];
+  const level3 = upgradeCostFrom(2) ?? [];
+  for (const camp of world.camps) {
+    if (camp.level === 1 && canAfford(world.lab.counts, together(level2, level3))) {
+      const step: CampStep = { kind: 'upgrade', id: camp.id };
+      world = applyCampStep(world, step);
+      steps.push(step);
+    }
+  }
+  world = exhaust(world, steps);
+  // An ore block near the first camp that a level-2 camp over it cannot mine,
+  // and can once that camp is level 3.
+  for (const camp of world.camps) {
+    if (camp.level !== 2 || !near(camp, first, 6, 9) || upgradeRefusal(world, camp.id) !== null) {
+      continue;
+    }
+    const upgraded = applyCampStep(world, { kind: 'upgrade', id: camp.id });
+    for (let y = 0; y < size.y; y += 1) {
+      for (let x = 0; x < size.x; x += 1) {
+        const top = topBlockAt(world.lab.state, x, y);
+        if (
+          (top === BLOCKS.ironOre.code || top === BLOCKS.copperOre.code) &&
+          near({ x, y }, first, 6, 9) &&
+          campTap(world, x, y).kind === 'tooHard' &&
+          campTap(upgraded, x, y).kind === 'mined'
+        ) {
+          return {
+            seed,
+            steps,
+            world,
+            campId: camp.id,
+            camp: { x: camp.x, y: camp.y },
+            ore: { x, y },
+          };
+        }
+      }
+    }
+  }
   return null;
+}
+
+/** `a` and `b` added together, item by item. */
+function together(a: ItemStack[], b: ItemStack[]): ItemStack[] {
+  const sum = new Map<string, number>();
+  for (const s of [...a, ...b]) sum.set(s.item, (sum.get(s.item) ?? 0) + s.count);
+  return [...sum].map(([item, count]) => ({ item, count }));
+}
+
+/** True if (x, y) is within `across` squares across and `down` squares down of `centre`. */
+function near(square: Square, centre: Square, across: number, down: number): boolean {
+  return Math.abs(square.x - centre.x) <= across && Math.abs(square.y - centre.y) <= down;
 }
