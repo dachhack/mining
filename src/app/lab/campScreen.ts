@@ -71,6 +71,7 @@ import {
   drawAppleTree,
   drawGrass,
   drawTree,
+  featureSwatch,
   labItemIcon,
 } from './surfaceArt';
 import { resourceEntries } from './resources';
@@ -858,14 +859,27 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     const seenFeatures = new Set(
       world.surface.features.filter((_, i) => (sights[i] ?? 'fog') !== 'fog'),
     );
-    const extras: { show: boolean; icon: string; name: string }[] = [
-      { show: clayInSight, icon: 'clay', name: 'Clay' },
-      { show: seenFeatures.has(GRASS), icon: 'grass', name: 'Grass' },
-      { show: seenFeatures.has(TREE), icon: 'wood', name: 'Tree' },
-      { show: seenFeatures.has(APPLE_TREE), icon: 'apple', name: 'Apple tree' },
+    // Clay's swatch is its texture; the features' are drawn with the map's own art.
+    const extras: { show: boolean; swatch: () => HTMLCanvasElement | null; name: string }[] = [
+      { show: clayInSight, swatch: () => labItemIcon('clay', 'lab-key-icon'), name: 'Clay' },
+      {
+        show: seenFeatures.has(GRASS),
+        swatch: () => featureSwatch('grass', 'lab-key-icon'),
+        name: 'Grass',
+      },
+      {
+        show: seenFeatures.has(TREE),
+        swatch: () => featureSwatch('tree', 'lab-key-icon'),
+        name: 'Tree',
+      },
+      {
+        show: seenFeatures.has(APPLE_TREE),
+        swatch: () => featureSwatch('appleTree', 'lab-key-icon'),
+        name: 'Apple tree',
+      },
     ];
     for (const extra of extras) {
-      const icon = extra.show ? labItemIcon(extra.icon, 'lab-key-icon') : null;
+      const icon = extra.show ? extra.swatch() : null;
       if (icon !== null) {
         const entry = element('span', 'lab-key-entry');
         entry.append(icon, element('span', 'lab-key-name', extra.name));

@@ -176,6 +176,26 @@ test('the start screen leads to lab 2, which opens in fog round one camp', async
   await expect(page.getByTestId('launch-lab1')).toBeVisible();
 });
 
+test('the key fits the tray: no entry is cut by its fixed height', async ({ page }) => {
+  // Review of PR #122: with the surface's kinds added, a third row of the key
+  // was cut in half by the tray. Seed 110 opens with seven kinds in sight.
+  await openLab2(page);
+  const key = page.getByTestId('lab2-tray').locator('.lab-key');
+  await expect(key.locator('.lab-key-entry')).toHaveCount(7);
+  const fit = await key.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    const entries = Array.from(el.children).map((child) => child.getBoundingClientRect());
+    return {
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+      // Every entry lies fully inside the key, top to bottom.
+      inside: entries.every((e) => e.top >= box.top - 0.5 && e.bottom <= box.bottom + 0.5),
+    };
+  });
+  expect(fit.scrollHeight).toBeLessThanOrEqual(fit.clientHeight);
+  expect(fit.inside).toBe(true);
+});
+
 test('a tap inside the ring takes or mines; a tap in the fog does nothing', async ({ page }) => {
   const canvas = await openLab2(page);
   let world = newCampWorld(SEED);

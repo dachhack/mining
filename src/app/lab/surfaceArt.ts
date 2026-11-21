@@ -309,3 +309,29 @@ export function labItemIcon(item: string, className: string): HTMLCanvasElement 
   }
   return icon;
 }
+
+/**
+ * A key swatch for a surface feature, drawn with the map's own art on bare
+ * dirt, so the key matches what the map shows: 'grass', 'tree' or
+ * 'appleTree' (review of PR #122).
+ */
+export function featureSwatch(
+  kind: 'grass' | 'tree' | 'appleTree',
+  className: string,
+): HTMLCanvasElement {
+  const s = LAB_LOOK.texturePx;
+  const swatch = document.createElement('canvas');
+  swatch.className = className;
+  swatch.width = s;
+  swatch.height = s;
+  const ctx = swatch.getContext('2d');
+  if (ctx !== null) {
+    ctx.fillStyle = '#8b5a34'; // the dirt the features stand on
+    ctx.fillRect(0, 0, s, s);
+    const box = { left: 0, top: 0, inner: s };
+    if (kind === 'grass') drawGrass(ctx, box, 3, 5);
+    else if (kind === 'tree') drawTree(ctx, box);
+    else drawAppleTree(ctx, box, 3);
+  }
+  return swatch;
+}
