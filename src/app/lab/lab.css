@@ -111,7 +111,8 @@
   flex-direction: column;
 }
 
-body[data-screen='lab1'] {
+body[data-screen='lab1'],
+body[data-screen='lab2'] {
   overflow: hidden;
 }
 
@@ -343,4 +344,246 @@ body[data-screen='lab1'] {
   height: 20px;
   border-radius: 4px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+/* ----- Lab 2: camps and fog (issue #118) ----- */
+
+/* The tray under the map. Its height never changes, whatever it shows (the
+   key and the camp tool, the camp tool's confirm bar, or a camp's panel),
+   so opening or closing anything never moves the map. */
+.lab2-tray {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  height: 164px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #211b17, #1a1613);
+  border: 1px solid #3a322c;
+}
+
+.lab2-tray .lab-key {
+  /* Inside the tray the key needs no box of its own, and may take two rows. */
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  row-gap: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 8px 0 0;
+  border: 0;
+  border-top: 1px solid #2e2722;
+  border-radius: 0;
+  background: transparent;
+}
+
+.lab2-tray-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+}
+
+.lab .lab2-tool {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 52px;
+  padding: 0 16px 0 12px;
+  border-radius: 14px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1b1510;
+  background: linear-gradient(180deg, #f2c983, #cf9550);
+  border: 1px solid #f3d29c;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.lab .lab2-tool:active {
+  background: linear-gradient(180deg, #dfb26a, #b97e3d);
+}
+
+/* Not enough to build one: still tappable (it shows what is missing), but quieter. */
+.lab .lab2-tool.lab2-tool-short {
+  color: #e9dcc6;
+  background: linear-gradient(180deg, #3b3129, #2c241e);
+  border-color: #5a4a3c;
+}
+
+.lab2-tool-glyph {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.lab2-tray-side {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lab2-tray-note {
+  font-size: 0.75rem;
+  color: #8f8578;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The cost of a camp or an upgrade: what you have of each item, out of what it costs. */
+.lab2-cost {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.lab2-cost-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 28px;
+  padding: 0 7px 0 3px;
+  border-radius: 14px;
+  font-size: 0.74rem;
+  background: rgba(120, 200, 120, 0.12);
+  border: 1px solid rgba(140, 210, 140, 0.45);
+  color: #cfeccc;
+}
+
+.lab2-cost-chip.lab2-cost-short {
+  background: rgba(255, 120, 90, 0.1);
+  border-color: rgba(255, 130, 100, 0.5);
+  color: #ffc2b2;
+}
+
+.lab2-cost-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+.lab2-cost-count {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.lab2-cost-name {
+  opacity: 0.8;
+}
+
+/* The camp tool's confirm bar and a camp's panel. */
+.lab2-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  margin: -4px 0 -2px;
+}
+
+.lab2-panel-head .lab2-panel-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lab2-panel-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f6e3c0;
+}
+
+.lab .lab2-close {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  margin: 0 -8px 0 0;
+  padding: 0;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: #cfc3b1;
+  background: transparent;
+  border: 0;
+}
+
+.lab2-panel-line {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.3;
+  height: 1.3em;
+  color: #b3a898;
+  /* One line each, so a long list of blocks never grows the tray. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lab2-panel-next {
+  color: #d9c7a6;
+}
+
+.lab .lab2-pack {
+  margin-left: auto;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  color: #d8cbb6;
+  background: #26201b;
+  border: 1px solid #3f362f;
+}
+
+.lab2-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.lab2-actions .lab2-cost {
+  flex: 1 1 auto;
+}
+
+.lab .lab2-button {
+  flex: 0 0 auto;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.lab .lab2-button-main {
+  color: #1b1510;
+  background: linear-gradient(180deg, #f2c983, #cf9550);
+  border: 1px solid #f3d29c;
+}
+
+.lab .lab2-button-main:disabled {
+  color: #7d7266;
+  background: #2a231e;
+  border-color: #3f362f;
+}
+
+.lab .lab2-button-quiet {
+  color: #d8cbb6;
+  background: #26201b;
+  border: 1px solid #3f362f;
+}
+
+/* "Needs a level 2 camp": its own colour, unlike the yellow of "too steep". */
+.lab-hint.lab2-hint-hard {
+  color: #86c8ff;
 }

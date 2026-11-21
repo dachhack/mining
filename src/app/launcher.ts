@@ -6,11 +6,13 @@
 //   (none)       the start screen
 //   #game        the game (the phone preview, unchanged)
 //   #lab1        UI lab 1; #lab1/110 opens it on seed 110
+//   #lab2        UI lab 2 (camps and fog); #lab2/110 opens it on seed 110
 //
 // Changing screens reloads the page, so each screen starts clean and none of
 // them has to tidy up after itself. Later labs add a button and a hash here.
 
 import { ENGINE_VERSION } from '../engine';
+import { mountCampLab } from './lab/campScreen';
 import { mountLab } from './lab/labScreen';
 import { mountPreview } from './preview';
 import { parseSeed } from './previewSession';
@@ -35,6 +37,12 @@ const ENTRIES: LaunchEntry[] = [
     title: 'Lab 1',
     blurb: 'Plain blocks. Tap to mine, height shadows, no turns.',
     testid: 'launch-lab1',
+  },
+  {
+    hash: 'lab2',
+    title: 'Lab 2',
+    blurb: 'Fog of war around camps. Place camps, upgrade them to see further and dig harder rock.',
+    testid: 'launch-lab2',
   },
 ];
 
@@ -104,6 +112,9 @@ function show(root: HTMLElement): void {
   } else if (name === 'lab1') {
     const seed = seedText === undefined ? null : parseSeed(seedText);
     mountLab(root, seed, () => go(''));
+  } else if (name === 'lab2') {
+    const seed = seedText === undefined ? null : parseSeed(seedText);
+    mountCampLab(root, seed, () => go(''));
   } else {
     mountStart(root);
   }
