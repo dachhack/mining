@@ -19,7 +19,7 @@
 import { BLOCKS, blockDefByCode } from '../../data';
 import { LAB_CAMP_LEVELS, LAB_NEW_CAMP_COST } from '../../data/labCamps';
 import type { BlockId, ItemStack } from '../../data';
-import { topBlockAt } from '../../engine';
+import { mayMine, topBlockAt } from '../../engine';
 import type { GameState } from '../../engine';
 import { labTap, labWorldFromState, newLabWorld } from './labWorld';
 import type { LabTap, LabWorld } from './labWorld';
@@ -269,8 +269,9 @@ function withCounts(lab: LabWorld, counts: Map<string, number>): LabWorld {
  * - 'fog': the square is fog, so nothing happened;
  * - 'greyed': the square is outside every camp's circle now, so nothing happened;
  * - 'camp': the square holds a camp, which is never mined;
- * - 'tooHard': the camps covering the square cannot mine its top block (`needs` says which level can);
- * - 'refused': the level rule refused it (`tap.result.refusal` says why).
+ * - 'refused': the level rule refused it (`tap.result.refusal` says why);
+ * - 'tooHard': the level rule allows it, but the camps covering the square
+ *   cannot mine its top block (`needs` says which level can).
  */
 export type CampTapKind = 'mined' | 'fog' | 'greyed' | 'camp' | 'tooHard' | 'refused';
 
@@ -285,8 +286,9 @@ export interface CampTap {
 
 /**
  * Tap square (x, y). It is mined only if a camp covers it, no camp stands on
- * it, a covering camp's level can mine its top block, and the level rule
- * allows it. In every other case the very same world comes back.
+ * it, the level rule allows it, and a covering camp's level can mine its top
+ * block (checked in that order). In every other case the very same world
+ * comes back.
  */
 export function campTap(world: CampWorld, x: number, y: number): CampTap {
   const unchanged = (kind: CampTapKind, needs: number | null = null): CampTap => ({
@@ -301,6 +303,24 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
   }
   if (campAt(world, x, y) !== null) {
     return unchanged('camp');
+  }
+  // The level rule is checked before the hardness gate: a block that is too
+  // steep to mine says so, rather than promising that an upgrade would let
+  // it be mined (review of PR #119).
+  const check = mayMine(world.lab.state, x, y);
+  if (!check.allowed) {
+    const refusal = {
+      world: world.lab,
+      result: {
+        state: world.lab.state,
+        mined: false,
+        block: null,
+        yields: [],
+        refusal: check.refusal ?? 'bottom', // `refusal` is only null when `allowed` is true
+        higherNeighbours: check.higherNeighbours,
+      },
+    };
+    return { kind: 'refused', world, tap: refusal, needs: null };
   }
   const code = topBlockAt(world.lab.state, x, y);
   const needs = levelNeededFor(code);
