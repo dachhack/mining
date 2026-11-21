@@ -1,15 +1,21 @@
-// UI lab 2 (issue #118): fog around camps, placing and upgrading camps, at
-// phone size (390 x 844).
+// UI lab 2 (issues #118 and #121): fog around camps, placing and upgrading
+// camps, and the surface (grass, trees, animals, clay), at phone size
+// (390 x 844).
 //
 // What each tap should do is worked out here with the same lab code the
-// build runs (campWorld.ts): the engine is deterministic, so the page and
-// this file play the same world. Seed 110 opens with its first camp near
-// the middle of the screen, its whole ring and a little fog in view.
+// build runs (campWorld.ts): the engine and the surface are deterministic,
+// so the page and this file play the same world. The page's clock is
+// installed and paused (Playwright's `page.clock`), so the animals stand
+// still while a test taps, and a test moves them by running the clock.
+// Seed 110 opens with its first camp near the middle of the screen, its
+// whole ring and a little fog in view.
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
-import { LAB_NEW_CAMP_COST } from '../../src/data/labCamps';
+import { LAB_NEW_CAMP_COST, LAB_SURFACE } from '../../src/data/labCamps';
 import {
   PREPARED_LAB2_KEY,
+  advanceWorld,
+  upgradeCostFrom,
   campRadius,
   demolishCamp,
   footprintOf,
@@ -21,17 +27,13 @@ import {
   sightMap,
 } from '../../src/app/lab/campWorld';
 import type { CampWorld } from '../../src/app/lab/campWorld';
-import { planUpgrade, tapsUntil } from './campPlan';
+import { GRASS, TREE } from '../../src/app/lab/surface';
+import { planLevel2, tapsUntil } from './campPlan';
 import type { Square } from './campPlan';
 
 test.use({ viewport: { width: 390, height: 844 } });
 
 const SEED = 110;
-/**
- * The upgrade test's seed: there, leapfrogging camps and then upgrading
- * them to level 2 (see `planUpgrade`) uncovers ore next to the first camp.
- */
-const UPGRADE_SEED = 10;
 
 /** The square at the map's top-left corner and the size of a square, from the canvas's data- attributes. */
 async function camera(canvas: Locator): Promise<{ x: number; y: number; cellPx: number }> {
@@ -112,11 +114,46 @@ function shownOf(world: CampWorld): number {
   return sightMap(world).filter((s) => s === 'shown').length;
 }
 
-/** Open Lab 2 on `SEED` and wait for its map. */
+/**
+ * Stop the page's clock before it opens, so the lab clock reads 0 and the
+ * animals stand still until a test runs the clock on (`page.clock.runFor`).
+ */
+async function pauseClock(page: Page): Promise<void> {
+  await page.clock.install({ time: new Date('2026-11-21T12:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-11-21T12:00:01Z'));
+}
+
+/** Open Lab 2 on `SEED`, with its clock paused, and wait for its map. */
 async function openLab2(page: Page): Promise<Locator> {
+  await pauseClock(page);
   await page.goto(`/#lab2/${SEED}`);
   await expect(page.getByTestId('lab-seed')).toHaveText(`Seed ${SEED}`);
   return page.getByTestId('lab-map');
+}
+
+/**
+ * Tap `square` until it is mined: the first taps take whatever grows on it
+ * (grass, a tree, apples), as the page must. Each tap is checked against
+ * the same tap in `world`, which is returned as it is afterwards.
+ */
+async function digOnce(
+  page: Page,
+  canvas: Locator,
+  world: CampWorld,
+  square: Square,
+): Promise<CampWorld> {
+  let w = world;
+  for (let i = 0; i < 6; i += 1) {
+    const tap = campTap(w, square.x, square.y);
+    w = tap.world;
+    await tapSquare(page, canvas, square);
+    await expect(canvas).toHaveAttribute('data-last-tap', `${tap.kind} ${square.x},${square.y}`);
+    if (tap.kind === 'mined') {
+      return w;
+    }
+    expect(tap.kind).toBe('harvested');
+  }
+  throw new Error(`square ${square.x},${square.y} was never mined`);
 }
 
 /** A fog square on screen: straight east of the first camp, just past its ring. */
@@ -139,7 +176,27 @@ test('the start screen leads to lab 2, which opens in fog round one camp', async
   await expect(page.getByTestId('launch-lab1')).toBeVisible();
 });
 
-test('a tap inside the ring mines; a tap in the fog does nothing', async ({ page }) => {
+test('the key fits the tray: no entry is cut by its fixed height', async ({ page }) => {
+  // Review of PR #122: with the surface's kinds added, a third row of the key
+  // was cut in half by the tray. Seed 110 opens with seven kinds in sight.
+  await openLab2(page);
+  const key = page.getByTestId('lab2-tray').locator('.lab-key');
+  await expect(key.locator('.lab-key-entry')).toHaveCount(7);
+  const fit = await key.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    const entries = Array.from(el.children).map((child) => child.getBoundingClientRect());
+    return {
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+      // Every entry lies fully inside the key, top to bottom.
+      inside: entries.every((e) => e.top >= box.top - 0.5 && e.bottom <= box.bottom + 0.5),
+    };
+  });
+  expect(fit.scrollHeight).toBeLessThanOrEqual(fit.clientHeight);
+  expect(fit.inside).toBe(true);
+});
+
+test('a tap inside the ring takes or mines; a tap in the fog does nothing', async ({ page }) => {
   const canvas = await openLab2(page);
   let world = newCampWorld(SEED);
   const camp = world.camps[0] ?? { x: 0, y: 0 };
@@ -150,11 +207,7 @@ test('a tap inside the ring mines; a tap in the fog does nothing', async ({ page
   expect(await brightness(canvas, fog)).toBeLessThan(30);
   expect(await brightness(canvas, lit)).toBeGreaterThan(60);
 
-  const tap = campTap(world, lit.x, lit.y);
-  expect(tap.kind).toBe('mined');
-  world = tap.world;
-  await tapSquare(page, canvas, lit);
-  await expect(canvas).toHaveAttribute('data-last-tap', `mined ${lit.x},${lit.y}`);
+  world = await digOnce(page, canvas, world, lit);
   await expect.poll(() => counts(page)).toEqual(expectedCounts(world));
 
   const hintBefore = await page.getByTestId('lab-hint').textContent();
@@ -165,6 +218,78 @@ test('a tap inside the ring mines; a tap in the fog does nothing', async ({ page
   expect(await counts(page)).toEqual(before);
   await expect(page.getByTestId('lab-hint')).toHaveText(hintBefore ?? '');
   await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'idle');
+});
+
+test('grass is cut, a tree felled, and an animal caught as it wanders', async ({ page }) => {
+  const canvas = await openLab2(page);
+  let world = newCampWorld(SEED);
+  const camp = world.camps[0] ?? { x: 0, y: 0 };
+  const width = world.lab.state.size.x;
+  const sights = sightMap(world);
+  /** The lit square nearest the camp with `feature` on it, and no animal. */
+  const nearest = (feature: number): Square => {
+    let best: Square | null = null;
+    let bestDistance = Infinity;
+    for (let i = 0; i < sights.length; i += 1) {
+      const sq = { x: i % width, y: Math.floor(i / width) };
+      const free = !world.surface.animals.some((a) => a.x === sq.x && a.y === sq.y);
+      const distance = Math.abs(sq.x - camp.x) + Math.abs(sq.y - camp.y);
+      if (
+        sights[i] === 'shown' &&
+        world.surface.features[i] === feature &&
+        free &&
+        distance < bestDistance
+      ) {
+        best = sq;
+        bestDistance = distance;
+      }
+    }
+    if (best === null) throw new Error('nothing to harvest in the ring');
+    return best;
+  };
+
+  const grass = nearest(GRASS);
+  const tree = nearest(TREE);
+  for (const square of [grass, tree]) {
+    const tap = campTap(world, square.x, square.y);
+    expect(tap.kind).toBe('harvested');
+    world = tap.world;
+    await tapSquare(page, canvas, square);
+    await expect(canvas).toHaveAttribute('data-last-tap', `harvested ${square.x},${square.y}`);
+  }
+  await expect(page.getByTestId('lab-res-grass')).toHaveAttribute(
+    'data-count',
+    String(LAB_SURFACE.grassPerTuft),
+  );
+  await expect(page.getByTestId('lab-res-wood')).toHaveAttribute(
+    'data-count',
+    String(LAB_SURFACE.woodPerTree),
+  );
+
+  // Run the clock until an animal stands on lit ground, then tap it.
+  let time = 0;
+  let animal: Square | null = null;
+  while (animal === null) {
+    time += 2_000;
+    expect(time).toBeLessThan(120_000);
+    const later = advanceWorld(world, time);
+    const lit = sightMap(later);
+    animal = later.surface.animals.find((a) => lit[a.x + width * a.y] === 'shown') ?? null;
+  }
+  await page.clock.runFor(time);
+  await expect(canvas).toHaveAttribute('data-lab-time', String(time));
+  world = advanceWorld(world, time);
+  const animalsBefore = world.surface.animals.length;
+  await expect(canvas).toHaveAttribute(
+    'data-animals',
+    world.surface.animals.map((a) => `${a.x},${a.y}`).join(' '),
+  );
+  await tapSquare(page, canvas, animal);
+  await expect(canvas).toHaveAttribute('data-last-tap', `harvested ${animal.x},${animal.y}`);
+  await expect(page.getByTestId('lab-res-animal')).toHaveAttribute('data-count', '1');
+  await expect(page.getByTestId('lab-hint')).toContainText('Animal caught');
+  const left = (await canvas.getAttribute('data-animals')) ?? '';
+  expect(left.split(' ').filter((t) => t !== '')).toHaveLength(animalsBefore - 1);
 });
 
 test('a second camp on level ground lifts the fog; then the first is demolished and dug under', async ({
@@ -201,9 +326,13 @@ test('a second camp on level ground lifts the fog; then the first is demolished 
   await expect(page.getByTestId('lab2-place-confirm')).toBeDisabled();
   await page.getByTestId('lab2-place-cancel').click();
 
+  // Cutting, felling and digging: each tap either takes something or mines.
   for (const square of plan.taps) {
     await tapSquare(page, canvas, square);
-    await expect(canvas).toHaveAttribute('data-last-tap', `mined ${square.x},${square.y}`);
+    await expect(canvas).toHaveAttribute(
+      'data-last-tap',
+      new RegExp(`^(harvested|mined) ${square.x},${square.y}$`),
+    );
   }
   await expect.poll(() => counts(page)).toEqual(expectedCounts(plan.world));
 
@@ -244,16 +373,35 @@ test('a second camp on level ground lifts the fog; then the first is demolished 
     expect(paid[stack.item] ?? 0).toBe((plan.world.lab.counts.get(stack.item) ?? 0) - stack.count);
   }
 
+  // Dig for clay: the taps nearest the camp until one gives clay.
+  let world = placeCamp(plan.world, target.x, target.y);
+  const clayBefore = world.lab.counts.get('clay') ?? 0;
+  const forClay = tapsUntil(world, [{ item: 'clay', count: clayBefore + 1 }], camp);
+  expect(forClay).not.toBeNull();
+  if (forClay === null) return;
+  for (const square of forClay.taps) {
+    await tapSquare(page, canvas, square);
+    await expect(canvas).toHaveAttribute(
+      'data-last-tap',
+      new RegExp(`^(harvested|mined) ${square.x},${square.y}$`),
+    );
+  }
+  world = forClay.world;
+  await expect(page.getByTestId('lab-res-clay')).toHaveAttribute(
+    'data-count',
+    String(clayBefore + 1),
+  );
+  const paidAfterClay = await counts(page);
+
   // Now the second camp covers the first one's base: demolish the first...
   await tapSquare(page, canvas, camp);
   await expect(page.getByTestId('lab2-camp-title')).toContainText('Camp 1');
   await page.getByTestId('lab2-demolish').click();
   await expect(canvas).toHaveAttribute('data-camps', '1');
   await expect(page.getByTestId('lab-hint')).toContainText('Camp demolished');
-  expect(await counts(page)).toEqual(paid); // no refund
+  expect(await counts(page)).toEqual(paidAfterClay); // no refund
 
   // ...and dig where it stood: all nine squares, then the middle once more.
-  let world = placeCamp(plan.world, target.x, target.y);
   world = demolishCamp(world, 1);
   const digs = [...footprintOf(camp.x, camp.y), { x: camp.x, y: camp.y }];
   for (const square of digs) {
@@ -266,41 +414,55 @@ test('a second camp on level ground lifts the fog; then the first is demolished 
   await expect.poll(() => counts(page)).toEqual(expectedCounts(world));
 });
 
-test('upgrading a camp widens its ring and lets it mine a harder block', async ({ page }) => {
-  const plan = planUpgrade(UPGRADE_SEED);
+test('clay, stone and an animal pay for level 2, and the ring grows', async ({ page }) => {
+  const plan = planLevel2(SEED);
   expect(plan).not.toBeNull();
   if (plan === null) return;
+  await pauseClock(page);
   await page.goto('/#game');
   await page.evaluate(([key, text]) => window.localStorage.setItem(key, text), [
     PREPARED_LAB2_KEY,
     JSON.stringify({ seed: plan.seed, steps: plan.steps }),
   ] as const);
   await page.goto('/#lab2');
-  await expect(page.getByTestId('lab-seed')).toHaveText(`Seed ${UPGRADE_SEED} · prepared`);
+  await expect(page.getByTestId('lab-seed')).toHaveText(`Seed ${SEED} · prepared`);
   const canvas = page.getByTestId('lab-map');
   await expect(canvas).toHaveAttribute('data-shown', String(shownOf(plan.world)));
+  await expect.poll(() => counts(page)).toEqual(expectedCounts(plan.world));
 
-  // The ore is too hard for the level-2 camp over it: a cue unlike "too steep".
-  await tapSquare(page, canvas, plan.ore);
-  await expect(canvas).toHaveAttribute('data-last-tap', `tooHard ${plan.ore.x},${plan.ore.y}`);
-  await expect(page.getByTestId('lab-hint')).toContainText('needs a level 3 camp');
-  await expect(page.getByTestId('lab-hint')).toHaveClass(/lab2-hint-hard/);
+  // The counter puts what the upgrade costs first, right after "Dug", so
+  // clay, stone and animals never hide off its right edge.
+  const order = await page
+    .getByTestId('lab-counter')
+    .evaluate((el) => Array.from(el.children).map((c) => (c as HTMLElement).dataset['testid']));
+  expect(order.slice(0, 4)).toEqual([
+    'lab-dug',
+    ...(upgradeCostFrom(1) ?? []).map((stack) => `lab-res-${stack.item}`),
+  ]);
 
-  // Tap the camp: its panel, with its level, ring and the upgrade's cost.
+  // The camp's panel: level 1, ring 5, and the upgrade's cost all green.
+  const cost = upgradeCostFrom(1) ?? [];
   await tapSquare(page, canvas, plan.camp);
   await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'camp');
-  await expect(page.getByTestId('lab2-camp-title')).toContainText(`Camp ${plan.campId} · Level 2`);
-  await expect(page.getByTestId('lab2-camp-line')).toContainText(`Ring ${campRadius(2)}`);
+  await expect(page.getByTestId('lab2-camp-title')).toContainText(`Camp ${plan.camp.id} · Level 1`);
+  await expect(page.getByTestId('lab2-camp-line')).toContainText(`Ring ${campRadius(1)}`);
+  for (const stack of cost) {
+    await expect(page.getByTestId(`lab2-cost-${stack.item}`)).toContainText(
+      `${stack.count}/${stack.count}`,
+    );
+    await expect(page.getByTestId(`lab2-cost-${stack.item}`)).not.toHaveClass(/lab2-cost-short/);
+  }
+  await expect(page.getByTestId('lab2-upgrade')).toBeEnabled();
   await page.getByTestId('lab2-upgrade').click();
-  await expect(page.getByTestId('lab2-camp-title')).toContainText('Level 3');
-  await expect(page.getByTestId('lab2-camp-line')).toContainText(`Ring ${campRadius(3)}`);
-  await expect(page.getByTestId('lab2-camp-line')).toContainText('Iron ore');
-  expect(Number(await canvas.getAttribute('data-shown'))).toBeGreaterThan(shownOf(plan.world));
 
-  // Now the ore can be mined.
-  await tapSquare(page, canvas, plan.ore);
-  await expect(canvas).toHaveAttribute('data-last-tap', `mined ${plan.ore.x},${plan.ore.y}`);
-  await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'idle');
+  // Level 2: a wider ring, and the clay, stone and animal paid.
+  await expect(page.getByTestId('lab2-camp-title')).toContainText('Level 2');
+  await expect(page.getByTestId('lab2-camp-line')).toContainText(`Ring ${campRadius(2)}`);
+  expect(Number(await canvas.getAttribute('data-shown'))).toBeGreaterThan(shownOf(plan.world));
+  const after = await counts(page);
+  for (const stack of cost) {
+    expect(after[stack.item] ?? 0).toBe((plan.world.lab.counts.get(stack.item) ?? 0) - stack.count);
+  }
 });
 
 test('the map never moves while the tool and the panels open and close', async ({ page }) => {
@@ -347,8 +509,17 @@ test('the map never moves while the tool and the panels open and close', async (
   await tapFixed(fogSquare(world));
   await expect(canvas).toHaveAttribute('data-last-tap', /^fog /);
   const lit = { x: camp.x - 2, y: camp.y }; // just outside the camp's 3 x 3
-  await tapFixed(lit);
-  await expect(canvas).toHaveAttribute('data-last-tap', `mined ${lit.x},${lit.y}`);
+  // Whatever grows there is taken first, then the block is mined...
+  let w = world;
+  for (;;) {
+    const tap = campTap(w, lit.x, lit.y);
+    w = tap.world;
+    await tapFixed(lit);
+    await expect(canvas).toHaveAttribute('data-last-tap', `${tap.kind} ${lit.x},${lit.y}`);
+    if (tap.kind === 'mined') break;
+  }
+  await unmoved();
+  // ...and a second mine there is too steep.
   await tapFixed(lit);
   await expect(canvas).toHaveAttribute('data-last-tap', `refused ${lit.x},${lit.y}`);
   await page.waitForTimeout(400); // let the shake finish
@@ -363,7 +534,7 @@ test('holding a lit square opens the camp tool on it, and mines nothing', async 
   const at = await pointOf(canvas, square);
   await page.mouse.move(at.x, at.y);
   await page.mouse.down();
-  await page.waitForTimeout(800);
+  await page.clock.runFor(800); // the hold is a timer: the clock is paused, so run it
   await page.mouse.up();
   await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'placing');
   await expect(page.getByTestId('lab2-place-line')).toContainText(`At ${square.x}, ${square.y}`);

@@ -20,12 +20,13 @@
 
 import { blockDefByCode, ITEMS } from '../../data';
 import type { ItemId, ItemStack } from '../../data';
-import { LAB_NEW_CAMP_COST } from '../../data/labCamps';
+import { LAB_ITEMS, LAB_NEW_CAMP_COST } from '../../data/labCamps';
 import type { HigherNeighbour, SquareDirection } from '../../engine';
 import { SQUARE_STEPS } from '../../engine';
 import { randomSeed } from '../previewSession';
 import { CAMP_LOOK, CAMP_MARKS } from './campLook';
 import {
+  advanceWorld,
   campAt,
   campRadius,
   campTap,
@@ -48,17 +49,7 @@ import {
 import type { Camp, CampStep, CampWorld, PlaceRefusal, Sight } from './campWorld';
 import { centredLabCamera, clampLabCamera, rowsOf } from './labCamera';
 import type { LabCamera, ViewSize } from './labCamera';
-import {
-  blockIcon,
-  button,
-  element,
-  gainLabel,
-  labCounter,
-  labKey,
-  labTopBar,
-  showCounter,
-  showKey,
-} from './labDom';
+import { blockIcon, button, element, labCounter, labKey, labTopBar, showKey } from './labDom';
 import {
   cueLoop,
   drawBlockSquare,
@@ -68,15 +59,34 @@ import {
   prepareCanvas,
   squareBox,
 } from './labDraw';
+import type { SquareBox } from './labDraw';
 import { attachLabGestures } from './labGestures';
 import { LAB_LOOK } from './labLook';
 import { topBlocksOf } from './labWorld';
+import { APPLE_TREE, GRASS, TREE, isClay } from './surface';
+import type { Animal } from './surface';
+import {
+  clayTexture,
+  drawAnimal,
+  drawAppleTree,
+  drawGrass,
+  drawTree,
+  featureSwatch,
+  labItemIcon,
+} from './surfaceArt';
 import { resourceEntries } from './resources';
 import { shadowEdges } from './shadows';
 
-const HINT = 'Tap to mine in the lit ring · tap a camp to upgrade it';
+const HINT = 'Tap to gather and dig · tap a camp to upgrade it';
 const STEEP_HINT = 'Too steep: mine the higher blocks around it first.';
 const BOTTOM_HINT = 'Nothing left to mine here: this is the bottom.';
+/** What the line under the map says after a tap that took something from the surface. */
+const HARVEST_HINTS = {
+  grass: 'Grass cut. The ground under it can be dug now.',
+  felled: 'Tree felled. The ground under it can be dug now.',
+  apple: 'An apple picked. Empty trees regrow their apples after a while.',
+  caught: 'Animal caught!',
+};
 const GREYED_HINT = 'Out of range now: put a camp nearby to mine here.';
 const PLACE_HINT = 'Tap the middle of a flat, lit 3 × 3 patch for the new camp.';
 const NOT_LEVEL_TEXT = 'Ground not level: a camp needs a flat 3 × 3.';
@@ -121,7 +131,16 @@ function effectMs(kind: Effect['kind']): number {
 
 /** The display name of an item. */
 function itemName(item: string): string {
+  const lab = LAB_ITEMS[item];
+  if (lab !== undefined) {
+    return lab; // the lab's own items: wood, grass, apples, animals, clay
+  }
   return item in ITEMS ? ITEMS[item as ItemId].name : item;
+}
+
+/** The "+2 Wood" label for what a tap gave. */
+function gainText(gains: ItemStack[]): string {
+  return gains.map((g) => `+${g.count} ${itemName(g.item)}`).join('  ');
 }
 
 /** The prepared world in localStorage, or `null` if there is none or it cannot be read. */
@@ -161,6 +180,17 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   let camera: LabCamera = { x: 0, y: 0, cells: CAMP_LOOK.startCells };
   let effects: Effect[] = [];
   let mode: Mode = { kind: 'idle' };
+  /**
+   * The lab's clock, in milliseconds: it starts where the world's surface
+   * left off (0 for a new world), and runs with the screen's clock. Animals
+   * move and apples regrow by it (surface.ts).
+   */
+  let clockStart = performance.now() - world.surface.time;
+  function labNow(): number {
+    return performance.now() - clockStart;
+  }
+  /** Where each animal was before its last step, and when it stepped: to slide it across. */
+  const lastStep = new Map<number, { x: number; y: number; at: number; facing: number }>();
 
   // ----- The page -----
   const page = element('main', 'lab lab2');
@@ -257,7 +287,18 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
         // A gap-coloured backing, so lit and greyed squares keep Lab 1's thin grid.
         ctx.fillStyle = '#0d0b0a';
         ctx.fillRect(px, py, c, c);
-        drawBlockSquare(ctx, tops[i] ?? 0, depth, shadowEdges(world.lab.depths, x, y), x, y, box);
+        const clay = isClay(world.surface, world.lab.state, x, y, depth) ? clayTexture(x, y) : null;
+        drawBlockSquare(
+          ctx,
+          tops[i] ?? 0,
+          depth,
+          shadowEdges(world.lab.depths, x, y),
+          x,
+          y,
+          box,
+          clay,
+        );
+        drawFeature(ctx, i, box, x, y);
         if (sight === 'greyed') {
           drawGreyed(ctx, px, py, c);
         }
@@ -273,6 +314,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       }
     }
 
+    drawAnimals(ctx, c);
     if (mode.kind === 'placing' && mode.target !== null) {
       drawPlacePreview(ctx, mode.target, c, now);
     }
@@ -295,6 +337,63 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     canvas.dataset['greyed'] = String(sights.filter((s) => s === 'greyed').length);
     canvas.dataset['camps'] = String(world.camps.length);
     canvas.dataset['mode'] = mode.kind;
+    // For the e2e tests: the lab clock, and where the animals are.
+    canvas.dataset['labTime'] = String(world.surface.time);
+    canvas.dataset['animals'] = world.surface.animals.map((a) => `${a.x},${a.y}`).join(' ');
+  }
+
+  /** What grows on square `i` (grass, a tree, an apple tree), drawn over its block. */
+  function drawFeature(
+    ctx: CanvasRenderingContext2D,
+    i: number,
+    box: SquareBox,
+    x: number,
+    y: number,
+  ): void {
+    const feature = world.surface.features[i];
+    if (feature === GRASS) {
+      drawGrass(ctx, box, x, y);
+    } else if (feature === TREE) {
+      drawTree(ctx, box);
+    } else if (feature === APPLE_TREE) {
+      drawAppleTree(ctx, box, world.surface.apples[i] ?? 0);
+    }
+  }
+
+  /**
+   * The animals on lit squares (never in fog or on greyed ground). An animal
+   * that has just stepped slides across from where it was.
+   */
+  function drawAnimals(ctx: CanvasRenderingContext2D, c: number): void {
+    const now = world.surface.time;
+    for (const animal of world.surface.animals) {
+      if (sightOf(animal.x, animal.y) !== 'shown') {
+        continue;
+      }
+      const step = lastStep.get(animal.id);
+      let ax = animal.x;
+      let ay = animal.y;
+      let facing = 0;
+      if (step !== undefined) {
+        facing = step.facing;
+        const t = Math.min(1, Math.max(0, (now - step.at) / CAMP_LOOK.animalSlideMs));
+        ax = step.x + (animal.x - step.x) * t;
+        ay = step.y + (animal.y - step.y) * t;
+      }
+      const { px, py } = toPx(ax, ay);
+      drawAnimal(ctx, px + c / 2, py + c / 2, c, facing);
+    }
+  }
+
+  /** Note each animal that moved between `before` and the world now, for `drawAnimals`. */
+  function noteSteps(before: Animal[]): void {
+    for (const animal of world.surface.animals) {
+      const was = before.find((a) => a.id === animal.id);
+      if (was !== undefined && (was.x !== animal.x || was.y !== animal.y)) {
+        const facing = Math.atan2(animal.y - was.y, animal.x - was.x);
+        lastStep.set(animal.id, { x: was.x, y: was.y, at: world.surface.time, facing });
+      }
+    }
   }
 
   /** A greyed square: its colour drained, and darker. */
@@ -500,21 +599,30 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     now: number,
   ): void {
     const width = world.lab.state.size.x;
-    ctx.fillStyle = CAMP_MARKS.previewWash;
-    for (const i of preview) {
-      const { px, py } = toPx(i % width, Math.floor(i / width));
-      ctx.fillRect(px, py, c, c);
+    const height = world.lab.state.size.y;
+    const refusal = placeRefusal(world, target.x, target.y);
+    const blocked = refusal !== null && refusal !== 'cost';
+    // The new ring and the squares it would light, only where a camp can
+    // stand: on a refused target they would say the opposite of the red
+    // footprint (review of PR #120).
+    if (!blocked) {
+      ctx.fillStyle = CAMP_MARKS.previewWash;
+      for (const i of preview) {
+        const { px, py } = toPx(i % width, Math.floor(i / width));
+        ctx.fillRect(px, py, c, c);
+      }
+      drawRing(ctx, target.x, target.y, campRadius(1), c, 1, true);
     }
-    drawRing(ctx, target.x, target.y, campRadius(1), c, 1, true);
     const pulse =
       0.6 +
       0.4 * Math.cos(((now % CAMP_LOOK.targetPulseMs) / CAMP_LOOK.targetPulseMs) * Math.PI * 2);
     // The 3 x 3 footprint: gold if a camp can stand there, red if not. On
     // uneven ground, the squares not at the middle square's depth are washed red.
-    const refusal = placeRefusal(world, target.x, target.y);
-    const blocked = refusal !== null && refusal !== 'cost';
     const middleDepth = world.lab.depths.depths[target.x + width * target.y] ?? 0;
     for (const sq of footprintOf(target.x, target.y)) {
+      if (sq.x < 0 || sq.y < 0 || sq.x >= width || sq.y >= height) {
+        continue; // off the map: nothing to wash
+      }
       const depth = world.lab.depths.depths[sq.x + width * sq.y];
       if (refusal === 'notLevel' && depth !== undefined && depth !== middleDepth) {
         const at = toPx(sq.x, sq.y);
@@ -524,6 +632,18 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     }
     const { px, py } = toPx(target.x, target.y);
     ctx.save();
+    if (blocked) {
+      // A dark band under the red dashes, so the outline reads over clay's
+      // reddish ground too (review of PR #122).
+      ctx.strokeStyle = CAMP_MARKS.notLevelHalo;
+      ctx.lineWidth = Math.max(4, c * 0.17);
+      ctx.strokeRect(
+        px - c + ctx.lineWidth / 2,
+        py - c + ctx.lineWidth / 2,
+        c * 3 - ctx.lineWidth,
+        c * 3 - ctx.lineWidth,
+      );
+    }
     ctx.globalAlpha = pulse;
     ctx.strokeStyle = blocked ? CAMP_MARKS.notLevel : CAMP_MARKS.target;
     ctx.lineWidth = Math.max(2, c * 0.09);
@@ -613,6 +733,76 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     cues.start();
   }
 
+  // ----- The counter above the map -----
+
+  /**
+   * The counter: "Dug", then the lab's own items (wood, grass, apples,
+   * animals, clay) with their icons, then the game's items (stone, coal, ...).
+   * One row at a fixed height, as in Lab 1, so the map never moves.
+   */
+  function showCampCounter(): void {
+    const counts = world.lab.counts;
+    const dug = element('div', 'lab-chip lab-chip-dug');
+    dug.dataset['testid'] = 'lab-dug';
+    dug.dataset['count'] = String(world.lab.mined);
+    dug.append(
+      element('span', 'lab-chip-glyph', '⛏'),
+      element('span', 'lab-chip-count', String(world.lab.mined)),
+      element('span', 'lab-chip-name', 'Dug'),
+    );
+    const chips: HTMLElement[] = [dug];
+    const chip = (item: string, count: number, icon: HTMLCanvasElement): void => {
+      const made = element('div', 'lab-chip');
+      made.dataset['testid'] = `lab-res-${item}`;
+      made.dataset['count'] = String(count);
+      made.title = itemName(item);
+      made.append(
+        icon,
+        element('span', 'lab-chip-count', String(count)),
+        element('span', 'lab-chip-name', itemName(item)),
+      );
+      chips.push(made);
+    };
+    // Every item collected: the lab's own (with their icons), then the game's.
+    const all: { item: string; count: number; icon: () => HTMLCanvasElement | null }[] = [];
+    for (const item of Object.keys(LAB_ITEMS)) {
+      all.push({
+        item,
+        count: counts.get(item) ?? 0,
+        icon: () => labItemIcon(item, 'lab-chip-icon'),
+      });
+    }
+    for (const entry of resourceEntries(counts)) {
+      all.push({
+        item: entry.item,
+        count: entry.count,
+        icon: () => blockIcon(entry.iconBlock, 'lab-chip-icon'),
+      });
+    }
+    // What the next steps cost comes first, so it never hides off the right
+    // edge (review of PR #122): the lowest camp's next upgrade, then a new
+    // camp. (Wood and grass come early, when they are the only chips anyway.)
+    // The rest keeps its order after them.
+    const lowest = Math.min(...world.camps.map((c) => c.level));
+    const wanted: string[] = [];
+    for (const stack of [...(upgradeCostFrom(lowest) ?? []), ...LAB_NEW_CAMP_COST]) {
+      if (!wanted.includes(stack.item)) wanted.push(stack.item);
+    }
+    const rank = (item: string): number => {
+      const at = wanted.indexOf(item);
+      return at === -1 ? wanted.length : at;
+    };
+    // `sort` keeps equal ranks in their order (it is stable), so the rest stays as it was.
+    all.sort((a, b) => rank(a.item) - rank(b.item));
+    for (const entry of all) {
+      const icon = entry.count > 0 ? entry.icon() : null;
+      if (icon !== null) {
+        chip(entry.item, entry.count, icon);
+      }
+    }
+    counter.replaceChildren(...chips);
+  }
+
   // ----- The tray under the map -----
 
   /** A row of cost chips: each item's icon, what you have of it and what it costs. */
@@ -627,7 +817,10 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       const chip = element('span', enough ? 'lab2-cost-chip' : 'lab2-cost-chip lab2-cost-short');
       chip.dataset['testid'] = `lab2-cost-${stack.item}`;
       const icon = icons.get(stack.item);
-      if (icon !== undefined) {
+      const labIcon = labItemIcon(stack.item, 'lab2-cost-icon');
+      if (labIcon !== null) {
+        chip.append(labIcon);
+      } else if (icon !== undefined) {
         chip.append(blockIcon(icon, 'lab2-cost-icon'));
       }
       chip.title = itemName(stack.item);
@@ -688,6 +881,50 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     // The key lists the kinds you can see: lit and greyed squares, never what is under the fog.
     const seenTops = tops.filter((_, i) => (sights[i] ?? 'fog') !== 'fog');
     showKey(key, seenTops);
+    // Clay is a lab-only block, so the key adds it by hand when some seen square shows it.
+    const width = world.lab.state.size.x;
+    const clayInSight = sights.some(
+      (sight, i) =>
+        sight !== 'fog' &&
+        isClay(
+          world.surface,
+          world.lab.state,
+          i % width,
+          Math.floor(i / width),
+          world.lab.depths.depths[i] ?? 0,
+        ),
+    );
+    // So is the surface: grass, trees and apple trees on lit or greyed ground.
+    const seenFeatures = new Set(
+      world.surface.features.filter((_, i) => (sights[i] ?? 'fog') !== 'fog'),
+    );
+    // Clay's swatch is its texture; the features' are drawn with the map's own art.
+    const extras: { show: boolean; swatch: () => HTMLCanvasElement | null; name: string }[] = [
+      { show: clayInSight, swatch: () => labItemIcon('clay', 'lab-key-icon'), name: 'Clay' },
+      {
+        show: seenFeatures.has(GRASS),
+        swatch: () => featureSwatch('grass', 'lab-key-icon'),
+        name: 'Grass',
+      },
+      {
+        show: seenFeatures.has(TREE),
+        swatch: () => featureSwatch('tree', 'lab-key-icon'),
+        name: 'Tree',
+      },
+      {
+        show: seenFeatures.has(APPLE_TREE),
+        swatch: () => featureSwatch('appleTree', 'lab-key-icon'),
+        name: 'Apple tree',
+      },
+    ];
+    for (const extra of extras) {
+      const icon = extra.show ? extra.swatch() : null;
+      if (icon !== null) {
+        const entry = element('span', 'lab-key-entry');
+        entry.append(icon, element('span', 'lab-key-name', extra.name));
+        key.append(entry);
+      }
+    }
     tray.replaceChildren(head, key);
   }
 
@@ -777,7 +1014,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     world = next;
     tops = topBlocksOf(world.lab.state);
     sights = sightMap(world);
-    showCounter(counter, world.lab);
+    showCampCounter();
     showTray();
     draw();
   }
@@ -858,6 +1095,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       tapWhilePlacing(x, y);
       return;
     }
+    tick(); // bring the animals up to now first, so the tap lands where they are
     const result = campTap(world, x, y);
     canvas.dataset['lastTap'] = `${result.kind} ${x},${y}`;
     if (result.kind === 'fog') {
@@ -918,6 +1156,21 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       frame.classList.add('lab-shake');
       return;
     }
+    if (result.kind === 'harvested' && result.harvest !== null) {
+      effects = effects.filter((e) => !(e.x === x && e.y === y));
+      setWorld(result.world);
+      setHint(HARVEST_HINTS[result.harvest.kind], false);
+      addEffect({
+        kind: 'mined',
+        x,
+        y,
+        label: gainText([result.harvest.gain]),
+        higher: [],
+        fromRadius: 0,
+        toRadius: 0,
+      });
+      return;
+    }
     // Mined.
     effects = effects.filter((e) => !(e.x === x && e.y === y));
     setWorld(result.world);
@@ -926,7 +1179,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       kind: 'mined',
       x,
       y,
-      label: gainLabel(result.tap?.result.yields ?? []),
+      label: gainText(result.tap?.result.yields ?? []),
       higher: [],
       fromRadius: 0,
       toRadius: 0,
@@ -943,12 +1196,9 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       setHint('A camp already stands there.', true);
       return;
     }
-    // Any other target is chosen, so the preview can show why it fails, if it does.
+    // Any other target is chosen, so the preview can show why it fails, if it
+    // does. The reason is said once, in the panel (review of PR #120).
     setMode({ kind: 'placing', target: { x, y } });
-    const refusal = placeRefusal(world, x, y);
-    if (refusal !== null) {
-      setHint(placeRefusalText(refusal), true);
-    }
   }
 
   /** A long press on a lit square opens the camp tool with that square chosen. */
@@ -964,6 +1214,8 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     clearPrepared();
     isPrepared = false;
     world = newCampWorld(randomSeed(Math.random));
+    clockStart = performance.now();
+    lastStep.clear();
     effects = [];
     mode = { kind: 'idle' };
     preview = new Set();
@@ -994,7 +1246,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     tops = topBlocksOf(world.lab.state);
     sights = sightMap(world);
     centreOnFirstCamp();
-    showCounter(counter, world.lab);
+    showCampCounter();
     showTray();
     draw();
   }
@@ -1009,6 +1261,26 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     onTap: tap,
     onHold: hold,
   });
+
+  /**
+   * Bring the world up to the lab clock: animals step and apples regrow
+   * (surface.ts works out every step that is due, in time order, so how
+   * often this runs does not change where the animals end up).
+   */
+  function tick(): void {
+    const before = world.surface.animals;
+    const next = advanceWorld(world, labNow());
+    if (next === world) {
+      return;
+    }
+    world = next;
+    noteSteps(before);
+    if (next.surface.animals.length !== before.length) {
+      showCampCounter();
+    }
+    draw();
+  }
+  window.setInterval(tick, CAMP_LOOK.clockTickMs);
 
   showWorld();
 }

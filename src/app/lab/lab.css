@@ -366,20 +366,27 @@ body[data-screen='lab2'] {
 }
 
 .lab2-tray .lab-key {
-  /* Inside the tray the key needs no box of its own, and may take two rows. */
-  flex: 1 1 auto;
-  height: auto;
-  min-height: 0;
-  flex-wrap: wrap;
-  align-content: flex-start;
+  /* Inside the tray the key needs no box of its own. It takes two rows, filled
+     column by column, and scrolls sideways when there are more kinds than fit,
+     so an entry is never cut in half by the tray's fixed height (review of
+     PR #122). The right edge fades, as the counter's does. */
+  flex: 0 0 auto;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, 20px);
+  grid-auto-columns: max-content;
+  column-gap: 14px;
   row-gap: 8px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: 8px 0 0;
+  height: 48px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 8px 24px 0 0;
   border: 0;
   border-top: 1px solid #2e2722;
   border-radius: 0;
   background: transparent;
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
 }
 
 .lab2-tray-head {

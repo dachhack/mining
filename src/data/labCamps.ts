@@ -1,7 +1,8 @@
 import type { BlockId } from './blocks';
 import type { ItemStack } from './types';
 
-// UI lab 2 (issue #118): camps, their fog of war and their upgrades.
+// UI lab 2 (issues #118 and #121): camps, their fog of war and their upgrades,
+// and the surface: grass, trees, apple trees, roaming animals and clay.
 //
 // These numbers belong to the lab only. The real game never reads this file,
 // and it is not part of GAME_DATA, so changing it changes no rule of the game
@@ -27,28 +28,35 @@ export interface LabCampLevel {
 export const LAB_CAMP_LEVELS: LabCampLevel[] = [
   {
     radius: 5,
-    // Timber-root is here too: timber pays for the level-3 upgrade.
     addsBlocks: ['dirt', 'rubble', 'stone', 'coalSeam', 'timberRoot'],
     upgradeCost: [],
   },
   {
     radius: 8,
     addsBlocks: ['hardRock'],
-    upgradeCost: [{ item: 'stone', count: 25 }],
+    upgradeCost: [
+      { item: 'clay', count: 10 },
+      { item: 'stone', count: 15 },
+      { item: 'animal', count: 1 },
+    ],
   },
   {
     radius: 12,
     addsBlocks: ['ironOre', 'copperOre', 'crystal', 'unstableOre', 'relic', 'keystone'],
     upgradeCost: [
-      { item: 'stone', count: 150 },
-      { item: 'timber', count: 20 },
-      { item: 'coal', count: 20 },
+      { item: 'clay', count: 20 },
+      { item: 'stone', count: 40 },
+      { item: 'animal', count: 3 },
+      { item: 'apple', count: 10 },
     ],
   },
 ];
 
 /** What a new camp costs. The first camp is free. */
-export const LAB_NEW_CAMP_COST: ItemStack[] = [{ item: 'stone', count: 10 }];
+export const LAB_NEW_CAMP_COST: ItemStack[] = [
+  { item: 'wood', count: 5 },
+  { item: 'grass', count: 5 },
+];
 
 /**
  * The free first camp's 3 x 3 patch is centred no further than this many
@@ -56,3 +64,52 @@ export const LAB_NEW_CAMP_COST: ItemStack[] = [{ item: 'stone', count: 10 }];
  * patches wins).
  */
 export const LAB_START_REACH = 4;
+
+/**
+ * The lab's own items (issue #121): what the surface and clay give. The
+ * game's items (stone, coal, ...) keep their names from src/data/items.ts.
+ * Item id -> display name, in the order the counter shows them.
+ */
+export const LAB_ITEMS: Record<string, string> = {
+  wood: 'Wood',
+  grass: 'Grass',
+  apple: 'Apples',
+  animal: 'Animals',
+  clay: 'Clay',
+};
+
+/**
+ * The surface ("zero level", issue #121). Every number here is a starting
+ * value for the owner to try.
+ */
+export const LAB_SURFACE = {
+  /** Clumps of trees across the 32 x 32 map: each has a random middle... */
+  treeClumps: 22,
+  /** ...and puts a tree on each square within this many squares of it, with this chance. */
+  treeClumpRadius: 2,
+  treeChance: 0.55,
+  /** Apple trees, scattered one by one. */
+  appleTrees: 10,
+  /** Each square left over is grass with this chance; the rest is bare ground. */
+  grassChance: 0.65,
+  /** What a tap gives: 1 grass from a tuft, 2 wood from a felled tree (apple trees too, once empty). */
+  grassPerTuft: 1,
+  woodPerTree: 2,
+  /** An apple tree holds this many apples, 1 a tap; once empty it regrows them after this long. */
+  applesPerTree: 3,
+  appleRegrowMs: 60_000,
+  /** Roaming animals at the start, and the most there can be. */
+  animals: 8,
+  /** Each animal steps to a face neighbour every this many milliseconds (a random time in the range). */
+  animalStepMinMs: 2_000,
+  animalStepMaxMs: 3_000,
+  /** One new animal walks in at the map's edge this often, while there are fewer than `animals`. */
+  animalRespawnMs: 60_000,
+  /** Clay: blobs of it replace dirt and stone in these layers (1 is just under the surface). */
+  clayFirstLayer: 1,
+  clayLastLayer: 3,
+  clayBlobs: 70,
+  clayBlobRadius: 2,
+  /** What a clay block gives when mined. */
+  clayPerBlock: 1,
+};

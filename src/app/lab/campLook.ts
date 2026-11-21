@@ -21,6 +21,10 @@ export const CAMP_LOOK = {
   tooHardMs: 1100,
   /** How long the ring that spreads from a new or upgraded camp takes, in milliseconds. */
   ringMs: 900,
+  /** How often the lab clock moves the animals and regrows apples, in milliseconds. */
+  clockTickMs: 250,
+  /** How long an animal takes to slide from one square to the next, in milliseconds. */
+  animalSlideMs: 400,
   /** How long the pulse on the square a new camp would go on takes, once round, in milliseconds. */
   targetPulseMs: 1200,
 };
@@ -45,6 +49,8 @@ export const CAMP_MARKS = {
   baseWash: 'rgba(241, 184, 90, 0.16)',
   /** "Ground not level": the footprint's outline, and the wash on the squares at another depth. */
   notLevel: '#ff6b4a',
+  /** A dark band under the refused outline, so it stands out on any ground, clay's red included. */
+  notLevelHalo: 'rgba(20, 10, 6, 0.85)',
   notLevelWash: 'rgba(255, 107, 74, 0.35)',
   /** The ring drawn round a selected camp, or round where a new camp would go. */
   ring: 'rgba(255, 204, 120, 0.95)',

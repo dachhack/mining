@@ -34,9 +34,11 @@ export function drawBlockSquare(
   x: number,
   y: number,
   box: SquareBox,
+  /** A texture to draw in place of block `code`'s (Lab 2's clay); the block's own if left out. */
+  override?: HTMLCanvasElement | null,
 ): void {
   const { left, top, inner } = box;
-  const texture = textureFor(code, x, y);
+  const texture = override ?? textureFor(code, x, y);
   if (texture !== null) {
     ctx.drawImage(texture, left, top, inner, inner);
   }
