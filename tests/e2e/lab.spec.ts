@@ -192,8 +192,18 @@ test('the map never moves while the counter fills up', async ({ page }) => {
 
   const before = await canvas.boundingBox();
   const counterBefore = await page.getByTestId('lab-counter').boundingBox();
+  if (before === null) {
+    throw new Error('the map is not on screen');
+  }
+  // Every tap uses the map position read once, before the first tap, as a
+  // player's finger does: if the map had moved, the tap would land on
+  // another square and `data-last-tap` would name it.
   for (const [item, square] of firstOfItem) {
-    await tapSquare(page, canvas, square.x, square.y);
+    await page.touchscreen.tap(
+      before.x + (square.x - cam.x + 0.5) * cam.cellPx,
+      before.y + (square.y - cam.y + 0.5) * cam.cellPx,
+    );
+    await expect(canvas).toHaveAttribute('data-last-tap', `mined ${square.x},${square.y}`);
     await expect(page.getByTestId(`lab-res-${item}`)).toBeVisible();
     expect(await canvas.boundingBox()).toEqual(before);
   }
