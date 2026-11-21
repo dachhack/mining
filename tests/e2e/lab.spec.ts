@@ -5,6 +5,8 @@
 // (`labTap`): the engine is deterministic, so the cube is the same.
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
+import { BLOCKS, blockDefByCode } from '../../src/data';
+import { topBlockAt } from '../../src/engine';
 import { labTap, newLabWorld } from '../../src/app/lab/labWorld';
 import type { LabWorld } from '../../src/app/lab/labWorld';
 
@@ -163,4 +165,46 @@ test('shadows fall on the edges that face a higher square', async ({ page }) => 
   // The shaded edge is clearly darker than the open one, in both squares.
   expect(aWest).toBeLessThan(aEast * 0.85);
   expect(bEast).toBeLessThan(bWest * 0.85);
+});
+
+test('the map never moves while the counter fills up', async ({ page }) => {
+  // Review of PR #117: when the counter wrapped onto a second line the map
+  // moved down, so a tap aimed at one square mined the one above it.
+  const { canvas } = await openLab(page);
+  const cam = await camera(canvas);
+  const world = newLabWorld(SEED);
+
+  // On screen, one untouched square for each kind of item a top block yields
+  // (stone, coal, timber, ...), found with the engine.
+  const firstOfItem = new Map<string, { x: number; y: number }>();
+  for (let y = Math.ceil(cam.y); y < Math.floor(cam.y) + 10; y += 1) {
+    for (let x = Math.ceil(cam.x); x < Math.floor(cam.x) + 10; x += 1) {
+      const block = blockDefByCode(topBlockAt(world.state, x, y));
+      const item = block.yields[0]?.item;
+      if (item !== undefined && !firstOfItem.has(item) && labTap(world, x, y).result.mined) {
+        firstOfItem.set(item, { x, y });
+      }
+    }
+  }
+  // With "Dug", at least four chips: the number that used to wrap at 390 px.
+  expect(firstOfItem.size).toBeGreaterThanOrEqual(3);
+  expect(BLOCKS.dirt.yields).toEqual([]);
+
+  const before = await canvas.boundingBox();
+  const counterBefore = await page.getByTestId('lab-counter').boundingBox();
+  for (const [item, square] of firstOfItem) {
+    await tapSquare(page, canvas, square.x, square.y);
+    await expect(page.getByTestId(`lab-res-${item}`)).toBeVisible();
+    expect(await canvas.boundingBox()).toEqual(before);
+  }
+  expect(await page.getByTestId('lab-counter').boundingBox()).toEqual(counterBefore);
+
+  // A refused tap writes a longer hint; that must not move the map either.
+  const [first] = firstOfItem.values();
+  if (first !== undefined) {
+    await tapSquare(page, canvas, first.x, first.y);
+    await expect(canvas).toHaveAttribute('data-last-tap', `refused ${first.x},${first.y}`);
+  }
+  await page.waitForTimeout(400); // let the shake finish
+  expect(await canvas.boundingBox()).toEqual(before);
 });

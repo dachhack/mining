@@ -159,6 +159,56 @@ function wander(
   ctx.stroke();
 }
 
+/**
+ * Two thick roots that cross the whole tile from top to bottom, wobbling,
+ * each with a bright core line. Used for timber-root.
+ */
+function roots(ctx: CanvasRenderingContext2D, random: Random, paint: BlockPaint): void {
+  const s = LAB_LOOK.texturePx;
+  for (let r = 0; r < 2; r += 1) {
+    // Points down the tile, each nudged sideways a little.
+    const points: { x: number; y: number }[] = [];
+    let x = s * (0.25 + 0.5 * r) + (random() - 0.5) * 10;
+    for (let y = -4; y <= s + 4; y += 12) {
+      points.push({ x, y });
+      x += (random() - 0.5) * 14;
+    }
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const [colour, width] of [
+      [paint.accent, 9],
+      [paint.accentLight, 3],
+    ] as const) {
+      ctx.strokeStyle = colour;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.stroke();
+    }
+  }
+}
+
+/** Round copper beads, each with a verdigris ring and a bright spot. Used for copper ore. */
+function beads(ctx: CanvasRenderingContext2D, random: Random, paint: BlockPaint): void {
+  const s = LAB_LOOK.texturePx;
+  for (let i = 0; i < 4; i += 1) {
+    const radius = between(random, 5, 7);
+    const cx = between(random, radius + 5, s - radius - 5);
+    const cy = between(random, radius + 5, s - radius - 5);
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = paint.accent;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = paint.accentLight;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255, 240, 200, 0.7)';
+    ctx.beginPath();
+    ctx.arc(cx - radius * 0.35, cy - radius * 0.35, radius * 0.28, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 /** A crystal shard: a long thin diamond pointing up and to one side, with a white sparkle. */
 function shard(ctx: CanvasRenderingContext2D, random: Random, paint: BlockPaint): void {
   const s = LAB_LOOK.texturePx;
@@ -232,14 +282,17 @@ function paintTile(ctx: CanvasRenderingContext2D, id: BlockId, random: Random): 
       nuggets(ctx, random, 6, 7, paint.accent, paint.accentLight);
       break;
     case 'timberRoot':
-      // Earth threaded with green roots.
+      // Earth crossed by thick green roots, bold enough to tell from dirt when zoomed out.
       grain(ctx, random, paint.dark, 110, 2);
-      wander(ctx, random, paint.accent, 3, 12);
-      wander(ctx, random, paint.accent, 2, 10);
-      wander(ctx, random, paint.accentLight, 1, 8);
+      roots(ctx, random, paint);
+      break;
+    case 'copperOre':
+      // Copper: round beads with a verdigris ring, unlike iron's angular nuggets.
+      blotches(ctx, random, paint.light, 5, 0.45);
+      grain(ctx, random, paint.dark, 40, 1);
+      beads(ctx, random, paint);
       break;
     case 'ironOre':
-    case 'copperOre':
     case 'unstableOre':
     case 'relic':
       // Ore: stone with bright nuggets of the ore's colour.

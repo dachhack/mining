@@ -178,16 +178,31 @@ body[data-screen='lab1'] {
 }
 
 /* The resource counter: a row of chips that wraps. */
+/* One row that scrolls sideways, at a fixed height: the map under it must
+   never move while the player is tapping (review of PR #117). */
 .lab-counter {
   flex: 0 0 auto;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
-  min-height: 40px;
+  height: 38px;
   margin: 0 0 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  /* The right edge fades out, a hint that more chips are a swipe away. */
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  padding-right: 24px;
+}
+
+.lab-counter::-webkit-scrollbar {
+  display: none;
 }
 
 .lab-chip {
+  flex: 0 0 auto;
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -274,8 +289,14 @@ body[data-screen='lab1'] {
 }
 
 .lab-hint {
+  flex: 0 0 auto;
   margin: 8px 2px 8px;
-  min-height: 1.3em;
+  /* One line at a fixed height, so a longer message never resizes the map. */
+  height: 1.3em;
+  line-height: 1.3em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 0.85rem;
   color: #a89f92;
   text-align: center;
@@ -286,18 +307,30 @@ body[data-screen='lab1'] {
 }
 
 /* The key: which block is which. */
+/* The key is one row that scrolls sideways too: as kinds appear it must not
+   grow and shrink the map above it. */
 .lab-key {
   flex: 0 0 auto;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
+  flex-wrap: nowrap;
+  gap: 14px;
+  height: 20px;
   padding: 10px 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
   border-radius: 12px;
   background: #1a1613;
   border: 1px solid #2e2722;
 }
 
+.lab-key::-webkit-scrollbar {
+  display: none;
+}
+
 .lab-key-entry {
+  flex: 0 0 auto;
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 6px;
