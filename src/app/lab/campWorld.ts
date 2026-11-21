@@ -8,7 +8,10 @@
 //   the camps covering it has a level that can mine the square's top block;
 // - a square that was inside a circle once but is not any more is shown
 //   greyed, and cannot be mined; a square never inside one is fog;
-// - a new camp costs resources and goes on a square inside a circle;
+// - a camp stands on a 3 x 3 patch of level ground, which cannot be mined;
+// - a new camp costs resources and goes on a level 3 x 3 inside the circles;
+// - a camp can be demolished once other camps' circles cover its 3 x 3; its
+//   ground can then be mined;
 // - upgrading a camp costs resources and widens its circle and what it mines.
 //
 // No DOM code here, so the unit tests run it in plain Node. Every number
@@ -17,9 +20,9 @@
 // returns a new world.
 
 import { BLOCKS, blockDefByCode } from '../../data';
-import { LAB_CAMP_LEVELS, LAB_NEW_CAMP_COST } from '../../data/labCamps';
+import { LAB_CAMP_LEVELS, LAB_NEW_CAMP_COST, LAB_START_REACH } from '../../data/labCamps';
 import type { BlockId, ItemStack } from '../../data';
-import { mayMine, topBlockAt } from '../../engine';
+import { depthIn, mayMine, topBlockAt } from '../../engine';
 import type { GameState } from '../../engine';
 import { labTap, labWorldFromState, newLabWorld } from './labWorld';
 import type { LabTap, LabWorld } from './labWorld';
@@ -177,9 +180,45 @@ function seenWith(seen: boolean[], camps: Camp[], width: number, height: number)
   return seen.map((was, i) => was || (levels[i] ?? 0) > 0);
 }
 
-/** The camp on square (x, y), or `null`. */
+/** How far a camp's footprint reaches from its centre square: 1, so a camp covers 3 x 3 squares. */
+export const CAMP_HALF_SIZE = 1;
+
+/** The squares of a camp centred on (x, y): its 3 x 3 footprint, row by row. */
+export function footprintOf(x: number, y: number): { x: number; y: number }[] {
+  const squares: { x: number; y: number }[] = [];
+  for (let dy = -CAMP_HALF_SIZE; dy <= CAMP_HALF_SIZE; dy += 1) {
+    for (let dx = -CAMP_HALF_SIZE; dx <= CAMP_HALF_SIZE; dx += 1) {
+      squares.push({ x: x + dx, y: y + dy });
+    }
+  }
+  return squares;
+}
+
+/** True if square (x, y) is part of the footprint of the camp centred on (cx, cy). */
+function inFootprint(cx: number, cy: number, x: number, y: number): boolean {
+  return Math.abs(x - cx) <= CAMP_HALF_SIZE && Math.abs(y - cy) <= CAMP_HALF_SIZE;
+}
+
+/** The camp whose 3 x 3 footprint holds square (x, y), or `null`. */
 export function campAt(world: CampWorld, x: number, y: number): Camp | null {
-  return world.camps.find((camp) => camp.x === x && camp.y === y) ?? null;
+  return world.camps.find((camp) => inFootprint(camp.x, camp.y, x, y)) ?? null;
+}
+
+/**
+ * True if the 3 x 3 footprint centred on (x, y) is on the map and all nine
+ * squares are at the same depth: level ground, as a camp needs.
+ */
+export function isLevelPatch(lab: LabWorld, x: number, y: number): boolean {
+  const { width, height } = lab.depths;
+  const depth = depthIn(lab.depths, x, y);
+  return footprintOf(x, y).every(
+    (s) =>
+      s.x >= 0 &&
+      s.y >= 0 &&
+      s.x < width &&
+      s.y < height &&
+      depthIn(lab.depths, s.x, s.y) === depth,
+  );
 }
 
 // ----- Making a world -----
@@ -203,24 +242,31 @@ export function campWorldFromState(
 }
 
 /**
- * Where the free first camp goes: the dirt square nearest the middle of the
- * map (open ground). If there is no dirt on top anywhere, the middle itself.
- * Ties go to the square met first, row by row, so the choice is the same
- * every time.
+ * Where the free first camp goes: among the 3 x 3 patches centred within
+ * `LAB_START_REACH` squares of the middle of the map, the one with the most
+ * dirt on top (open ground), and of those the nearest the middle. A new
+ * world is level everywhere, so every patch is level. Ties go to the patch met
+ * first, row by row, so the choice is the same every time.
  */
 export function startSquare(state: GameState): { x: number; y: number } {
   const midX = (state.size.x - 1) / 2;
   const midY = (state.size.y - 1) / 2;
+  const h = CAMP_HALF_SIZE;
   let best = { x: Math.floor(midX), y: Math.floor(midY) };
+  let bestDirt = -1;
   let bestDistance = Infinity;
-  for (let y = 0; y < state.size.y; y += 1) {
-    for (let x = 0; x < state.size.x; x += 1) {
-      if (topBlockAt(state, x, y) !== BLOCKS.dirt.code) {
-        continue;
-      }
+  for (let y = h; y < state.size.y - h; y += 1) {
+    for (let x = h; x < state.size.x - h; x += 1) {
+      const dirt = footprintOf(x, y).filter(
+        (s) => topBlockAt(state, s.x, s.y) === BLOCKS.dirt.code,
+      ).length;
       const distance = (x - midX) ** 2 + (y - midY) ** 2;
-      if (distance < bestDistance) {
+      if (distance > LAB_START_REACH ** 2) {
+        continue; // only patches near the middle
+      }
+      if (dirt > bestDirt || (dirt === bestDirt && distance < bestDistance)) {
         best = { x, y };
+        bestDirt = dirt;
         bestDistance = distance;
       }
     }
@@ -337,20 +383,34 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
 // ----- New camps -----
 
 /**
- * Why a camp cannot go on a square:
- * - 'notShown': the square is not inside any camp's circle;
- * - 'occupied': a camp already stands there;
+ * Why a camp cannot be centred on a square:
+ * - 'notShown': some square of its 3 x 3 footprint is off the map or not lit by a camp;
+ * - 'occupied': its footprint overlaps another camp's;
+ * - 'notLevel': the nine squares are not all at the same depth;
  * - 'cost': the counts do not cover the cost.
  */
-export type PlaceRefusal = 'notShown' | 'occupied' | 'cost';
+export type PlaceRefusal = 'notShown' | 'occupied' | 'notLevel' | 'cost';
 
-/** Why a new camp cannot go on (x, y), or `null` if it can. */
+/** Why a new camp cannot be centred on (x, y), or `null` if it can. */
 export function placeRefusal(world: CampWorld, x: number, y: number): PlaceRefusal | null {
-  if (sightAt(world, x, y) !== 'shown') {
-    return 'notShown';
+  const { width, height } = mapSize(world);
+  const footprint = footprintOf(x, y);
+  for (const s of footprint) {
+    if (
+      s.x < 0 ||
+      s.y < 0 ||
+      s.x >= width ||
+      s.y >= height ||
+      sightAt(world, s.x, s.y) !== 'shown'
+    ) {
+      return 'notShown';
+    }
   }
-  if (campAt(world, x, y) !== null) {
+  if (footprint.some((s) => campAt(world, s.x, s.y) !== null)) {
     return 'occupied';
+  }
+  if (!isLevelPatch(world.lab, x, y)) {
+    return 'notLevel';
   }
   if (!canAfford(world.lab.counts, LAB_NEW_CAMP_COST)) {
     return 'cost';
@@ -393,7 +453,7 @@ export function placeCamp(world: CampWorld, x: number, y: number): CampWorld {
   };
 }
 
-// ----- Upgrades and packing up -----
+// ----- Upgrades and demolishing -----
 
 /** Why camp `id` cannot be upgraded ('missing', 'top' level, or 'cost'), or `null` if it can. */
 export function upgradeRefusal(world: CampWorld, id: number): 'missing' | 'top' | 'cost' | null {
@@ -426,12 +486,30 @@ export function upgradeCamp(world: CampWorld, id: number): CampWorld {
 }
 
 /**
- * Pack up camp `id`: it goes, and gives nothing back. The squares only it
- * covered turn grey. The last camp cannot be packed up (the same world comes
- * back), or nothing could ever be mined again.
+ * Why camp `id` cannot be demolished, or `null` if it can:
+ * - 'missing': there is no such camp;
+ * - 'notCovered': some square of its footprint is not inside another camp's ring
+ *   (owner, question 134: "your area would need to be covered by a second camp first").
  */
-export function packUpCamp(world: CampWorld, id: number): CampWorld {
-  if (world.camps.length <= 1 || !world.camps.some((c) => c.id === id)) {
+export function demolishRefusal(world: CampWorld, id: number): 'missing' | 'notCovered' | null {
+  const camp = world.camps.find((c) => c.id === id);
+  if (camp === undefined) {
+    return 'missing';
+  }
+  const others = world.camps.filter((c) => c.id !== id);
+  const covered = footprintOf(camp.x, camp.y).every((s) =>
+    others.some((o) => inCircle(o.x, o.y, campRadius(o.level), s.x, s.y)),
+  );
+  return covered ? null : 'notCovered';
+}
+
+/**
+ * Demolish camp `id`: it goes, and gives nothing back. Its footprint, which
+ * other camps cover, can then be mined; what only it lit turns grey. If
+ * `demolishRefusal` says no, the very same world comes back.
+ */
+export function demolishCamp(world: CampWorld, id: number): CampWorld {
+  if (demolishRefusal(world, id) !== null) {
     return world;
   }
   return { ...world, camps: world.camps.filter((c) => c.id !== id) };
@@ -471,7 +549,7 @@ export type CampStep =
   | { kind: 'tap'; x: number; y: number }
   | { kind: 'place'; x: number; y: number }
   | { kind: 'upgrade'; id: number }
-  | { kind: 'packUp'; id: number };
+  | { kind: 'demolish'; id: number };
 
 /** The world after one step. A step that is not allowed changes nothing, as on screen. */
 export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
@@ -484,7 +562,7 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   if (step.kind === 'upgrade') {
     return upgradeCamp(world, step.id);
   }
-  return packUpCamp(world, step.id);
+  return demolishCamp(world, step.id);
 }
 
 /** A new world on `seed` with `steps` applied in order. */

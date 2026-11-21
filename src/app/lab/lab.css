@@ -587,3 +587,14 @@ body[data-screen='lab2'] {
 .lab-hint.lab2-hint-hard {
   color: #86c8ff;
 }
+
+/* The place-camp tool's line when the target is refused ("Ground not level ..."). */
+.lab2-panel-line.lab2-panel-warn {
+  color: #ff9a7f;
+}
+
+/* Demolish while no other camp covers this one: still tappable (it says why), but quieter. */
+.lab .lab2-pack.lab2-pack-short {
+  color: #8f8578;
+  border-style: dashed;
+}
