@@ -18,7 +18,7 @@
 // The map never moves: the panel under it (the "tray") has a fixed height,
 // and opening the camp tool or a camp's panel only swaps what is inside it.
 
-import { blockDefByCode, ITEMS } from '../../data';
+import { BLOCKS, blockDefByCode, ITEMS } from '../../data';
 import type { ItemId, ItemStack } from '../../data';
 import { LAB_ITEMS, LAB_NEW_CAMP_COST } from '../../data/labCamps';
 import type { HigherNeighbour, SquareDirection } from '../../engine';
@@ -63,7 +63,7 @@ import type { SquareBox } from './labDraw';
 import { attachLabGestures } from './labGestures';
 import { LAB_LOOK } from './labLook';
 import { topBlocksOf } from './labWorld';
-import { APPLE_TREE, GRASS, TREE, isClay } from './surface';
+import { APPLE_TREE, GRASS, TREE } from './surface';
 import type { Animal } from './surface';
 import {
   clayTexture,
@@ -332,7 +332,8 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
         // A gap-coloured backing, so lit and greyed squares keep Lab 1's thin grid.
         ctx.fillStyle = '#0d0b0a';
         ctx.fillRect(px, py, c, c);
-        const clay = isClay(world.surface, world.lab.state, x, y, depth) ? clayTexture(x, y) : null;
+        // Clay is a real block now (plan A1): it is drawn with its own texture.
+        const clay = tops[i] === BLOCKS.clay.code ? clayTexture(x, y) : null;
         drawBlockSquare(
           ctx,
           tops[i] ?? 0,
@@ -961,20 +962,12 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     const key = labKey();
     // The key lists the kinds you can see: lit and greyed squares, never what is under the fog.
     const seenTops = tops.filter((_, i) => (sights[i] ?? 'fog') !== 'fog');
-    showKey(key, seenTops);
-    // Clay is a lab-only block, so the key adds it by hand when some seen square shows it.
-    const width = world.lab.state.size.x;
-    const clayInSight = sights.some(
-      (sight, i) =>
-        sight !== 'fog' &&
-        isClay(
-          world.surface,
-          world.lab.state,
-          i % width,
-          Math.floor(i / width),
-          world.lab.depths.depths[i] ?? 0,
-        ),
+    // Clay is listed below with its texture as the swatch, not with the blocks' plain icon.
+    showKey(
+      key,
+      seenTops.filter((code) => code !== BLOCKS.clay.code),
     );
+    const clayInSight = seenTops.includes(BLOCKS.clay.code);
     // So is the surface: grass, trees and apple trees on lit or greyed ground.
     const seenFeatures = new Set(
       world.surface.features.filter((_, i) => (sights[i] ?? 'fog') !== 'fog'),

@@ -63,6 +63,7 @@ export const BLOCK_CHARS: Record<string, BlockId> = {
   k: 'keystone',
   R: 'rubble',
   S: 'sealed',
+  C: 'clay',
 };
 
 /** The character that stands for each kind of surface cell in `surface` rows. */

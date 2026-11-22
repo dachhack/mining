@@ -28,19 +28,19 @@ import {
 } from '../../data/labCamps';
 import {
   CAMP_HALF_SIZE,
+  FRONTIER_STATE_VERSION,
+  createFrontier,
+  frontierTap,
   campAt as engineCampAt,
   campRadius,
   canAfford,
   coverLevelAt as engineCoverLevelAt,
   demolishCamp as engineDemolishCamp,
   demolishRefusal as engineDemolishRefusal,
-  depthAt,
   footprintOf,
   inCircle,
   inFootprint,
   isLevelPatch as engineIsLevelPatch,
-  levelNeededFor,
-  mayMine,
   newlyCovered as engineNewlyCovered,
   placeCamp as enginePlaceCamp,
   placeRefusal as enginePlaceRefusal,
@@ -55,22 +55,15 @@ import type {
   CampChange,
   CampGround,
   FrontierCamp,
+  FrontierState,
+  FrontierTap,
   GameState,
   PlaceRefusal,
   Sight,
 } from '../../engine';
-import { labTap, labWorldFromState, newLabWorld } from './labWorld';
+import { labWorldFromState } from './labWorld';
 import type { LabTap, LabWorld } from './labWorld';
-import {
-  APPLE_TREE,
-  GRASS,
-  TREE,
-  advanceSurface,
-  clearFeatures,
-  generateSurface,
-  harvest,
-  isClay,
-} from './surface';
+import { APPLE_TREE, GRASS, TREE, advanceSurface, clearFeatures, generateSurface } from './surface';
 import type { Harvest, Surface } from './surface';
 
 /** A camp: id, centre square and level. The engine's own record (plan A2). */
@@ -288,41 +281,24 @@ export function startSquare(state: GameState, surface?: Surface): { x: number; y
 }
 
 /**
-/**
- * Lab 2's own cube, made from the game's (Lab 2 only: the cube is copied, so
- * the game's own generation, and Lab 1, are not changed): no timber-root
- * anywhere (owner: "Let's get rid of the roots square"). Every timber-root
- * cell, in any layer, is `LAB_SURFACE.timberRootBecomes` (dirt) instead. In
- * Lab 2, wood comes from trees ("Wood is timber").
- *
- * (Lab 2 used to turn surface coal into stone here too. The game's own
- * generation now does that, question 140, so Lab 2 no longer needs to.)
- */
-export function labCube(lab: LabWorld): LabWorld {
-  const state = lab.state;
-  const root = BLOCKS.timberRoot.code;
-  const rootBecomes = BLOCKS[LAB_SURFACE.timberRootBecomes].code;
-  // `slice()` copies the typed array, like `list[:]` in Python.
-  const blocks = state.blocks.slice();
-  for (let i = 0; i < blocks.length; i += 1) {
-    if (blocks[i] === root) {
-      blocks[i] = rootBecomes;
-    }
-  }
-  return labWorldFromState(lab.seed, { ...state, blocks });
-}
 
 /**
  * A new Lab 2 world on `seed`: the game's cube (no coal at the surface,
- * question 140; no timber-root in Lab 2, `labCube`), its surface (grass, trees,
+ * question 140; no timber-root, `createFrontier`), its surface (grass, trees,
  * apple trees, animals, clay), and one free level-1 camp near the middle on
  * a patch whose ring pays for the next camp.
  */
 export function newCampWorld(seed: number): CampWorld {
-  const lab = labCube(newLabWorld(seed));
-  const start = startSquare(lab.state, generateSurface(lab.state, seed));
-  // Generate again, keeping the camp's 3 x 3 clear of features and animals,
-  // and starting the first animal inside the camp's ring.
+  // The world is the engine's (plans A1 and A3): its cube, with clay as real
+  // blocks, and its first camp.
+  const frontier = createFrontier(seed);
+  const lab = labWorldFromState(seed, frontier.cube);
+  const start = frontier.camps[0] ?? { x: 0, y: 0 }; // a new world always has its first camp
+  // Lab 2's surface keeps its clock (animals' step times, apples regrowing)
+  // until shifts come (A4), so it is drawn here as before: on the same cube
+  // and seed, in the same order, it has the engine's plants and animals
+  // (tests/app/frontierMatchesLab.test.ts). Clay is in the cube now, so its
+  // own clay set is left empty.
   const ring: { x: number; y: number }[] = [];
   const r = campRadius(1);
   for (let y = start.y - r; y <= start.y + r; y += 1) {
@@ -330,8 +306,8 @@ export function newCampWorld(seed: number): CampWorld {
       if (inCircle(start.x, start.y, r, x, y)) ring.push({ x, y });
     }
   }
-  const surface = generateSurface(lab.state, seed, footprintOf(start.x, start.y), ring);
-  return campWorldFromLab(lab, start.x, start.y, surface);
+  const drawn = generateSurface(lab.state, seed, footprintOf(start.x, start.y), ring);
+  return campWorldFromLab(lab, start.x, start.y, { ...drawn, clay: new Set<number>() });
 }
 
 /** The world at lab time `now` (milliseconds): animals have moved, apples have regrown. */
@@ -374,94 +350,108 @@ export interface CampTap {
  * comes back.
  */
 export function campTap(world: CampWorld, x: number, y: number): CampTap {
-  const unchanged = (kind: CampTapKind, needs: number | null = null): CampTap => ({
+  // The rules are the engine's (plan A3): `frontierTap` on the fields of
+  // this world. What follows only turns its answer back into Lab 2's world.
+  const tap = frontierTap(frontierView(world), x, y);
+  const answer = (kind: CampTapKind): CampTap => ({
     kind,
     world,
     tap: null,
-    needs,
+    needs: tap.needs,
     harvest: null,
   });
-  const sight = sightAt(world, x, y);
-  if (sight !== 'shown') {
-    return unchanged(sight);
-  }
-  // An animal is caught wherever it stands, even on a camp's ground.
-  const caught = harvest(world.surface, world.lab.state, x, y);
-  if (caught !== null && caught.kind === 'caught') {
-    return harvested(world, caught);
-  }
-  if (campAt(world, x, y) !== null) {
-    return unchanged('camp');
-  }
-  // Grass, a tree or an apple tree must be taken before the block under it can be mined.
-  if (caught !== null) {
-    return harvested(world, caught);
-  }
-  // The level rule is checked before the hardness gate: a block that is too
-  // steep to mine says so, rather than promising that an upgrade would let
-  // it be mined (review of PR #119).
-  const check = mayMine(world.lab.state, x, y);
-  if (!check.allowed) {
-    const refusal = {
-      world: world.lab,
-      result: {
-        state: world.lab.state,
-        mined: false,
-        block: null,
-        yields: [],
-        refusal: check.refusal ?? 'bottom', // `refusal` is only null when `allowed` is true
-        higherNeighbours: check.higherNeighbours,
-      },
+  if (tap.kind === 'refused') {
+    const result = {
+      state: world.lab.state,
+      mined: false,
+      block: null,
+      yields: [],
+      refusal: tap.refusal ?? 'bottom', // `refusal` is set for every 'refused' tap
+      higherNeighbours: tap.higherNeighbours,
     };
-    return { kind: 'refused', world, tap: refusal, needs: null, harvest: null };
+    return { ...answer('refused'), tap: { world: world.lab, result } };
   }
-  // A clay cell (a lab-only block) is as soft as dirt: any camp can mine it.
-  const z = depthAt(world.lab.state, x, y);
-  const clay = isClay(world.surface, world.lab.state, x, y, z);
-  const code = topBlockAt(world.lab.state, x, y);
-  const needs = clay ? 1 : levelNeededFor(code);
-  if (needs === null || needs > coverLevelAt(world, x, y)) {
-    return unchanged('tooHard', needs);
+  if (tap.kind === 'harvested') {
+    return harvested(world, tap, x, y);
   }
-  const tap = labTap(world.lab, x, y);
-  if (!tap.result.mined) {
-    return { kind: 'refused', world, tap, needs: null, harvest: null };
+  if (tap.kind === 'mined') {
+    // Only the mined square's depth changed, and by exactly 1 (a cavern
+    // under it collapses to rubble, so it never drops further).
+    const depths = { ...world.lab.depths, depths: [...world.lab.depths.depths] };
+    const i = x + depths.width * y;
+    depths.depths[i] = (depths.depths[i] ?? 0) + 1;
+    const lab: LabWorld = {
+      seed: world.lab.seed,
+      state: tap.state.cube,
+      depths,
+      counts: tap.state.inventory,
+      mined: tap.state.mined,
+    };
+    const result = {
+      state: tap.state.cube,
+      mined: true,
+      block: tap.block,
+      yields: tap.gain,
+      refusal: null,
+      higherNeighbours: [],
+    };
+    return { ...answer('mined'), world: { ...world, lab }, tap: { world: lab, result } };
   }
-  const mined = clay ? asClay(world.lab, tap) : tap;
-  return {
-    kind: 'mined',
-    world: { ...world, lab: mined.world },
-    tap: mined,
-    needs: null,
-    harvest: null,
-  };
+  return answer(tap.kind); // 'fog', 'greyed', 'camp' or 'tooHard': nothing changes
 }
 
-/** A tap that took something from the surface: its gain is added to the counts. */
-function harvested(world: CampWorld, taken: Harvest): CampTap {
-  const counts = new Map(world.lab.counts);
-  counts.set(taken.gain.item, (counts.get(taken.gain.item) ?? 0) + taken.gain.count);
+/**
+ * The fields of a Lab 2 world as an engine state, for `frontierTap`. Lab 2's
+ * animals also carry their step times; the engine ignores them.
+ */
+function frontierView(world: CampWorld): FrontierState {
   return {
-    kind: 'harvested',
-    world: { ...world, lab: { ...world.lab, counts }, surface: taken.surface },
-    tap: null,
-    needs: null,
-    harvest: taken,
+    version: FRONTIER_STATE_VERSION,
+    seed: world.lab.seed,
+    cube: world.lab.state,
+    features: world.surface.features,
+    apples: world.surface.apples,
+    animals: world.surface.animals,
+    nextAnimalId: world.surface.nextAnimalId,
+    rng: { s: world.surface.rng },
+    camps: world.camps,
+    nextCampId: world.nextCampId,
+    seen: world.seen,
+    inventory: world.lab.counts,
+    mined: world.lab.mined,
   };
 }
 
 /**
- * Lab 1's tap on a clay cell, with clay in place of what the cube's block
- * gave (the cube still holds the game's block there: clay lives only in the
- * lab's surface, so the game's data is unchanged).
+ * The engine took something from the surface of (x, y): Lab 2's world with
+ * its counts and surface after it. Lab 2's clock is kept here until shifts
+ * come (A4): an apple tree picked bare regrows its apples after a while,
+ * and a felled tree regrows nothing.
  */
-function asClay(before: LabWorld, tap: LabTap): LabTap {
-  const clay = { item: 'clay', count: LAB_SURFACE.clayPerBlock };
-  const counts = new Map(before.counts);
-  counts.set(clay.item, (counts.get(clay.item) ?? 0) + clay.count);
+function harvested(world: CampWorld, tap: FrontierTap, x: number, y: number): CampTap {
+  const i = x + world.lab.state.size.x * y;
+  const kind = tap.harvest ?? 'grass'; // `harvest` is set for every 'harvested' tap
+  const regrowAt = [...world.surface.regrowAt];
+  if (kind === 'apple' && (tap.state.apples[i] ?? 0) === 0) {
+    regrowAt[i] = world.surface.time + LAB_SURFACE.appleRegrowMs;
+  } else if (kind === 'felled') {
+    regrowAt[i] = -1;
+  }
+  const kept = new Set(tap.state.animals.map((a) => a.id));
+  const surface: Surface = {
+    ...world.surface,
+    features: tap.state.features,
+    apples: tap.state.apples,
+    regrowAt,
+    animals: world.surface.animals.filter((a) => kept.has(a.id)),
+  };
+  const gain = tap.gain[0] ?? { item: 'grass', count: 0 };
   return {
-    world: { ...tap.world, counts },
-    result: { ...tap.result, yields: [clay] },
+    kind: 'harvested',
+    world: { ...world, lab: { ...world.lab, counts: tap.state.inventory }, surface },
+    tap: null,
+    needs: null,
+    harvest: { surface, gain, kind },
   };
 }
 

@@ -17,7 +17,7 @@ import type { RngState } from '../rng';
  * not loaded into a new shape. Separate from the old game's STATE_VERSION
  * while the two rule sets live side by side.
  */
-export const FRONTIER_STATE_VERSION = 2; // 2: `inventory` (plan A2)
+export const FRONTIER_STATE_VERSION = 3; // 2: `inventory` (A2); 3: `mined` (A3)
 
 /** What grows on a square: nothing, grass, a tree or an apple tree. */
 export const NO_FEATURE = 0;
@@ -67,4 +67,6 @@ export interface FrontierState {
   seen: boolean[];
   /** Items held: item id -> count (a Python dict). Only items with a count above 0 are in it. */
   inventory: Map<string, number>;
+  /** How many blocks have been mined in this world (Lab 2's "Dug"). */
+  mined: number;
 }

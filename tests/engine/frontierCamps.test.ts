@@ -4,8 +4,7 @@
 // (tests/app/campWorld.test.ts) check the same rules through Lab 2's screen code.
 import { describe, expect, it } from 'vitest';
 import { BLOCKS } from '../../src/data';
-import type { ItemStack } from '../../src/data';
-import { FRONTIER_CAMP_LEVELS, FRONTIER_NEW_CAMP_COST } from '../../src/data/frontier';
+import { FRONTIER_NEW_CAMP_COST } from '../../src/data/frontier';
 import {
   MAX_CAMP_LEVEL,
   blocksMinedAt,
@@ -29,62 +28,15 @@ import {
   upgradeRefusal,
 } from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
-import { FRONTIER_STATE_VERSION, GRASS, NO_FEATURE } from '../../src/engine/frontier/state';
-import { seenWith } from '../../src/engine/frontier/camps';
-import { buildState } from './helpers';
+import { GRASS, NO_FEATURE } from '../../src/engine/frontier/state';
+import { MID, NEXT, SIDE, rich, world as baseWorld } from './frontierHelpers';
 
-/** The side of the square test cube: wide enough for a level-2 ring, and then some. */
-const SIDE = 25;
-const MID = Math.floor(SIDE / 2);
-/** A second camp this far east of the first stands inside its ring, and its ring covers the first's 3 x 3. */
-const NEXT = campRadius(1) - 1;
-
-/**
- * A frontier world on a hand-made SIDE x SIDE cube, 3 layers deep: dirt on
- * top except the squares in `special` (characters of BLOCK_CHARS in
- * tests/engine/helpers.ts), stone under it; grass everywhere; one level-1
- * camp in the middle; holding `inventory`.
- */
+/** A world with grass everywhere, holding `inventory`, and `special` squares. */
 function world(
   inventory: Record<string, number> = {},
   special: { x: number; y: number; char: string }[] = [],
 ): FrontierState {
-  const top: string[] = [];
-  for (let y = 0; y < SIDE; y += 1) {
-    let row = '';
-    for (let x = 0; x < SIDE; x += 1) {
-      row += special.find((s) => s.x === x && s.y === y)?.char ?? 'd';
-    }
-    top.push(row);
-  }
-  const stone = new Array<string>(SIDE).fill('#'.repeat(SIDE));
-  const cube = buildState({ layers: [top, stone, stone] });
-  const camps = [{ id: 1, x: MID, y: MID, level: 1 }];
-  return {
-    version: FRONTIER_STATE_VERSION,
-    seed: 1,
-    cube,
-    features: new Array<typeof GRASS>(SIDE * SIDE).fill(GRASS),
-    apples: new Array<number>(SIDE * SIDE).fill(0),
-    animals: [],
-    nextAnimalId: 1,
-    rng: { s: 1 },
-    camps,
-    nextCampId: 2,
-    seen: seenWith(new Array<boolean>(SIDE * SIDE).fill(false), camps, SIDE, SIDE),
-    inventory: new Map(Object.entries(inventory)),
-  };
-}
-
-/** Enough of everything for any camp or upgrade in the data. */
-function rich(): Record<string, number> {
-  const counts: Record<string, number> = {};
-  const add = (stacks: ItemStack[]): void => {
-    for (const s of stacks) counts[s.item] = (counts[s.item] ?? 0) + s.count * 10;
-  };
-  add(FRONTIER_NEW_CAMP_COST);
-  for (const level of FRONTIER_CAMP_LEVELS) add(level.upgradeCost);
-  return counts;
+  return baseWorld({ everywhere: GRASS, inventory, special });
 }
 
 describe('camp levels (plan A2)', () => {

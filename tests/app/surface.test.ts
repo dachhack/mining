@@ -136,18 +136,16 @@ describe('the surface', () => {
 });
 
 describe('clay', () => {
-  it('a clay cell gives clay, not what the game block under it gives', () => {
+  it('a clay block gives clay, in any layer (clay is a real block now, plan A3)', () => {
     const P = { x: MID + 3, y: MID }; // two squares clear of the camp, so all four neighbours can be dug
-    const w = world((s, state) => ({
-      ...s,
-      clay: new Set([cellIndex(state, P.x, P.y, 0), cellIndex(state, P.x, P.y, 1)]),
-    }));
-    // Layer 0 is dirt in the cube (it gives nothing in the game); here it is clay.
+    const w = world();
+    // The test cube is dirt on stone; make P clay in layers 0 and 1.
+    w.lab.state.blocks[cellIndex(w.lab.state, P.x, P.y, 0)] = BLOCKS.clay.code;
+    w.lab.state.blocks[cellIndex(w.lab.state, P.x, P.y, 1)] = BLOCKS.clay.code;
     const first = campTap(w, P.x, P.y);
     expect(first.kind).toBe('mined');
     expect(first.tap?.result.yields).toEqual([{ item: 'clay', count: LAB_SURFACE.clayPerBlock }]);
     expect(first.world.lab.counts.get('clay')).toBe(LAB_SURFACE.clayPerBlock);
-    // Layer 1 is stone in the cube; here it is clay too, and gives no stone.
     let next = first.world;
     for (const [dx, dy] of [
       [1, 0],
@@ -163,15 +161,21 @@ describe('clay', () => {
     expect(second.world.lab.counts.get('stone') ?? 0).toBe(0);
   });
 
-  it('generation puts clay only in the layers just under the surface, only in dirt or stone', () => {
+  it('generation puts clay blocks only in the layers just under the surface', () => {
     const w = newCampWorld(110);
     const state = w.lab.state;
-    expect(w.surface.clay.size).toBeGreaterThan(0);
-    for (const index of w.surface.clay) {
-      const z = Math.floor(index / (state.size.x * state.size.y));
+    const layer = state.size.x * state.size.y;
+    let count = 0;
+    state.blocks.forEach((code, index) => {
+      if (code !== BLOCKS.clay.code) return;
+      count += 1;
+      const z = Math.floor(index / layer);
       expect(z).toBeGreaterThanOrEqual(LAB_SURFACE.clayFirstLayer);
       expect(z).toBeLessThanOrEqual(LAB_SURFACE.clayLastLayer);
-    }
+    });
+    expect(count).toBeGreaterThan(0);
+    // The lab's own clay set is left empty: the clay is in the cube.
+    expect(w.surface.clay.size).toBe(0);
   });
 });
 
@@ -444,7 +448,7 @@ describe('what grows where, and no coal at the surface (owner, after the PR #126
     }
   });
 
-  it('Lab 2 has no coal at the surface; its cube is the game’s, apart from timber-root (dirt)', () => {
+  it('Lab 2 has no coal at the surface; its cube is the game’s, apart from timber-root (dirt) and clay', () => {
     // No coal at the surface is now the game's own rule (question 140), so
     // Lab 2 no longer swaps it; it only turns timber-root into dirt.
     const coal = BLOCKS.coalSeam.code;
@@ -458,8 +462,12 @@ describe('what grows where, and no coal at the surface (owner, after the PR #126
         const before = game.blocks[i];
         const after = lab.blocks[i];
         if (before === root) {
-          expect(after).toBe(rootBecomes);
+          // Timber-root becomes dirt, and that dirt may then become clay.
+          expect([rootBecomes, BLOCKS.clay.code]).toContain(after);
           rootsSwapped += 1;
+        } else if (after === BLOCKS.clay.code) {
+          // Clay replaces dirt or stone just under the surface (plan A1).
+          expect([BLOCKS.dirt.code, BLOCKS.stone.code]).toContain(before);
         } else if (after !== before) {
           expect.fail(`seed ${seed}, cell ${i}: ${before} became ${after}`);
         }

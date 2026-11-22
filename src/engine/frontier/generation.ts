@@ -314,5 +314,6 @@ export function createFrontier(seed: number): FrontierState {
       cube.size.y,
     ),
     inventory: new Map(),
+    mined: 0,
   };
 }
