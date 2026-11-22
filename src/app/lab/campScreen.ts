@@ -75,7 +75,7 @@ import {
   labItemIcon,
 } from './surfaceArt';
 import { resourceEntries } from './resources';
-import { FIRST_PINS, labRecipes, recipeById } from './recipes';
+import { PINS_KEY, labRecipes, parsePins, recipeById } from './recipes';
 import type { Recipe } from './recipes';
 import { emptyHistory, recordAction, undoCount, undoLast } from './undoHistory';
 import type { UndoHistory } from './undoHistory';
@@ -176,6 +176,24 @@ function clearPrepared(): void {
   }
 }
 
+/** The pinned recipes saved last time, or the first pins (recipes.ts). */
+function loadPins(): string[] {
+  try {
+    return parsePins(window.localStorage.getItem(PINS_KEY));
+  } catch {
+    return parsePins(null); // no storage: the first pins
+  }
+}
+
+/** Save the pinned recipes, so they come back next time (owner, question 143). */
+function savePins(pins: string[]): void {
+  try {
+    window.localStorage.setItem(PINS_KEY, JSON.stringify(pins));
+  } catch {
+    // No storage, or it is full: the pins still work until Lab 2 closes.
+  }
+}
+
 /** Build Lab 2 inside `root`. `seed` opens that world; `null` picks a random one. */
 export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () => void): void {
   const prepared = loadPrepared();
@@ -189,9 +207,14 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   let mode: Mode = { kind: 'idle' };
   /**
    * The recipes pinned to the tray's top row, by id, in the order they were
-   * pinned. They stay pinned through New world and Undo.
+   * pinned. They stay pinned through New world and Undo, and are saved, so
+   * they come back when Lab 2 opens again (question 143).
    */
-  let pins: string[] = [...FIRST_PINS];
+  let pins: string[] = loadPins();
+  function setPins(next: string[]): void {
+    pins = next;
+    savePins(pins);
+  }
   /** What the player did, to undo it (undoHistory.ts). A new world starts with none. */
   let history: UndoHistory = emptyHistory();
   /**
@@ -1018,7 +1041,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       unpin.dataset['testid'] = `lab2-unpin-${recipe.id}`;
       unpin.setAttribute('aria-label', `Unpin ${recipe.name}`);
       unpin.addEventListener('click', () => {
-        pins = pins.filter((id) => id !== recipe.id);
+        setPins(pins.filter((id) => id !== recipe.id));
         showTray();
       });
       card.append(go, unpin);
@@ -1064,7 +1087,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       pin.dataset['testid'] = `lab2-recipe-pin-${recipe.id}`;
       pin.setAttribute('aria-pressed', String(pinned));
       pin.addEventListener('click', () => {
-        pins = pinned ? pins.filter((id) => id !== recipe.id) : [...pins, recipe.id];
+        setPins(pinned ? pins.filter((id) => id !== recipe.id) : [...pins, recipe.id]);
         const scroll = list.scrollTop;
         showTray();
         // Keep the list where it was, so pinning does not jump it.
