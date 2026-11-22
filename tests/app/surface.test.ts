@@ -128,7 +128,8 @@ describe('the surface', () => {
     const placed = placeCamp(w, at.x, at.y);
     expect(placed.camps).toHaveLength(2);
     expect(placed.surface.features[at.x + SIDE * at.y]).toBe(0);
-    expect(placed.lab.counts.get('wood')).toBe(99 - 5);
+    const woodCost = LAB_NEW_CAMP_COST.find((stack) => stack.item === 'wood')?.count ?? 0;
+    expect(placed.lab.counts.get('wood')).toBe(99 - woodCost);
   });
 });
 
@@ -325,6 +326,32 @@ describe('the starting ring pays for the next steps (issue #121), in 200 seeds',
     }
     expect(short).toEqual([]);
   }, 120_000);
+
+  it('the first ring pays for a second camp even with that camp’s 3 x 3 left undug (15 wood + 15 grass, question 139)', () => {
+    const short: string[] = [];
+    for (let seed = 1; seed <= 200; seed += 1) {
+      const start = newCampWorld(seed);
+      // The farthest-reaching spot for the second camp, one radius east if it
+      // is level, else wherever lights the most; only its grass and trees are
+      // taken, so it stays level.
+      let best: { x: number; y: number; fresh: number } | null = null;
+      for (let y = 0; y < start.lab.state.size.y; y += 1) {
+        for (let x = 0; x < start.lab.state.size.x; x += 1) {
+          const refusal = placeRefusal(start, x, y);
+          if (refusal === null || refusal === 'cost') {
+            const fresh = newlyCovered(start, x, y).length;
+            if (best === null || fresh > best.fresh) best = { x, y, fresh };
+          }
+        }
+      }
+      const keep = best === null ? [] : footprintOf(best.x, best.y);
+      const w = takeEverything(start, keep);
+      if (best === null || !canAfford(w.lab.counts, LAB_NEW_CAMP_COST)) {
+        short.push(`seed ${seed}: ${JSON.stringify([...w.lab.counts])}`);
+      }
+    }
+    expect(short).toEqual([]);
+  }, 240_000);
 
   it('the first ring and one more camp hold the clay and stone for level 2, and an animal comes by', () => {
     const level2 = upgradeCostFrom(1) ?? [];
