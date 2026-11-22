@@ -196,7 +196,7 @@ describe('the surface data (src/data/surface.ts)', () => {
     bad.kinds.tree.open = true;
     bad.kinds.stump.code = bad.kinds.path.code;
     bad.cutTree.ap = 0;
-    bad.cutTree.yields = [{ item: 'wood', count: 2 }];
+    bad.cutTree.yields = [{ item: 'plank', count: 2 }];
     bad.regrowShifts = 300;
     bad.generation.pathEdges = 1;
     bad.generation.outcropBlock = 'granite';
@@ -207,7 +207,7 @@ describe('the surface data (src/data/surface.ts)', () => {
         'a tree must not be open ground',
         'surface kind codes must all differ',
         'cutTree.ap must be a whole number of at least 1, but is 0',
-        'cutTree.yields names an unknown item "wood"',
+        'cutTree.yields names an unknown item "plank"',
         'regrowShifts must be at most 255, but is 300',
         'generation.pathEdges must be a whole number of at least 2, but is 1',
         'generation.outcropBlock names an unknown block "granite"',

@@ -49,6 +49,13 @@ export const BLOCK_PAINT: Record<BlockId, BlockPaint> = {
     accent: '#000000',
     accentLight: '#000000',
   },
+  clay: {
+    base: '#b8673f',
+    dark: '#97502f',
+    light: '#cf8458',
+    accent: '#a95c38',
+    accentLight: '#d9946a',
+  },
   dirt: {
     base: '#8b5a34',
     dark: '#6a4223',

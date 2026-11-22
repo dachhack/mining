@@ -846,6 +846,9 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       });
     }
     for (const entry of resourceEntries(counts)) {
+      if (entry.item in LAB_ITEMS) {
+        continue; // clay is a game item now too (plan A1): shown once, with the lab's icon
+      }
       all.push({
         item: entry.item,
         count: entry.count,
