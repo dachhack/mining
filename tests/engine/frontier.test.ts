@@ -8,7 +8,7 @@ import {
   FRONTIER_SURFACE,
 } from '../../src/data/frontier';
 import { ENGINE_VERSION, blockAt, createFrontier, hashState } from '../../src/engine';
-import { inCircle } from '../../src/engine/frontier/generation';
+import { inCircle } from '../../src/engine/frontier/camps';
 import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from '../../src/engine/frontier/state';
 import type { FrontierState } from '../../src/engine/frontier/state';
 
@@ -149,5 +149,5 @@ describe('the frontier world (plan A1)', () => {
         );
       }
     }
-  });
+  }, 60_000); // 200 whole worlds: about 2 s alone, but over 5 s on CI with every suite running at once
 });

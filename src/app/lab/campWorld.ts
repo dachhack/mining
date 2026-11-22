@@ -26,9 +26,39 @@ import {
   LAB_START_REACH,
   LAB_SURFACE,
 } from '../../data/labCamps';
-import type { BlockId, ItemStack } from '../../data';
-import { depthAt, depthIn, mayMine, topBlockAt } from '../../engine';
-import type { GameState } from '../../engine';
+import {
+  CAMP_HALF_SIZE,
+  campAt as engineCampAt,
+  campRadius,
+  canAfford,
+  coverLevelAt as engineCoverLevelAt,
+  demolishCamp as engineDemolishCamp,
+  demolishRefusal as engineDemolishRefusal,
+  depthAt,
+  footprintOf,
+  inCircle,
+  inFootprint,
+  isLevelPatch as engineIsLevelPatch,
+  levelNeededFor,
+  mayMine,
+  newlyCovered as engineNewlyCovered,
+  placeCamp as enginePlaceCamp,
+  placeRefusal as enginePlaceRefusal,
+  seenWith,
+  sightAt as engineSightAt,
+  sightMap as engineSightMap,
+  topBlockAt,
+  upgradeCamp as engineUpgradeCamp,
+  upgradeRefusal as engineUpgradeRefusal,
+} from '../../engine';
+import type {
+  CampChange,
+  CampGround,
+  FrontierCamp,
+  GameState,
+  PlaceRefusal,
+  Sight,
+} from '../../engine';
 import { labTap, labWorldFromState, newLabWorld } from './labWorld';
 import type { LabTap, LabWorld } from './labWorld';
 import {
@@ -43,14 +73,8 @@ import {
 } from './surface';
 import type { Harvest, Surface } from './surface';
 
-export interface Camp {
-  /** A number that names the camp; new camps get the next one. */
-  id: number;
-  x: number;
-  y: number;
-  /** 1 is the lowest level. */
-  level: number;
-}
+/** A camp: id, centre square and level. The engine's own record (plan A2). */
+export type Camp = FrontierCamp;
 
 export interface CampWorld {
   /** Lab 1's world: the cube, the depths, the counts. */
@@ -67,159 +91,67 @@ export interface CampWorld {
   surface: Surface;
 }
 
-/** What one square looks like to the player. */
-export type Sight = 'shown' | 'greyed' | 'fog';
+// ----- Levels, circles and sight -----
+//
+// The rules live in the engine now (src/engine/frontier/camps.ts, plan A2).
+// These keep Lab 2's names and take a Lab 2 world, so the screen and its
+// tests read as before.
 
-// ----- Levels -----
+export {
+  CAMP_HALF_SIZE,
+  MAX_CAMP_LEVEL,
+  blocksMinedAt,
+  campRadius,
+  canAfford,
+  coverLevels,
+  footprintOf,
+  inCircle,
+  levelNeededFor,
+  upgradeCostFrom,
+} from '../../engine';
+/** What one square looks like to the player: 'shown', 'greyed' or 'fog'. */
+export type { PlaceRefusal, Sight };
 
-/** The highest camp level in the data. */
-export const MAX_CAMP_LEVEL = LAB_CAMP_LEVELS.length;
-
-/** The data for camp level `level` (1 is the first). Throws for a level the data does not have. */
-function levelData(level: number): (typeof LAB_CAMP_LEVELS)[number] {
-  const data = LAB_CAMP_LEVELS[level - 1];
-  if (data === undefined) {
-    throw new Error(`no camp level ${level} in the data`);
-  }
-  return data;
+/** The fields of a Lab 2 world that the engine's camp rules read. Nothing is copied. */
+function ground(world: CampWorld): CampGround {
+  return {
+    cube: world.lab.state,
+    camps: world.camps,
+    seen: world.seen,
+    nextCampId: world.nextCampId,
+    inventory: world.lab.counts,
+  };
 }
 
-/** How far a camp of `level` sees, in squares. */
-export function campRadius(level: number): number {
-  return levelData(level).radius;
-}
-
-/** The block kinds a camp of `level` can mine: its own level's list and every level's below it. */
-export function blocksMinedAt(level: number): BlockId[] {
-  const blocks: BlockId[] = [];
-  for (let l = 1; l <= level; l += 1) {
-    blocks.push(...levelData(l).addsBlocks);
-  }
-  return blocks;
-}
-
-/**
- * The lowest camp level that can mine a block (by its code), or `null` if
- * no level can (bedrock, sealed rock, open space).
- */
-export function levelNeededFor(code: number): number | null {
-  for (let level = 1; level <= MAX_CAMP_LEVEL; level += 1) {
-    for (const id of levelData(level).addsBlocks) {
-      if (BLOCKS[id].code === code) {
-        return level;
-      }
-    }
-  }
-  return null;
-}
-
-/** What upgrading a camp of `level` to the next level costs, or `null` at the top level. */
-export function upgradeCostFrom(level: number): ItemStack[] | null {
-  if (level >= MAX_CAMP_LEVEL) {
-    return null;
-  }
-  return levelData(level + 1).upgradeCost;
-}
-
-// ----- Circles and sight -----
-
-/**
- * True if square (x, y) is inside a circle of `radius` around (cx, cy).
- *
- * `r * r + r` rather than `r * r` rounds the circle out a little (it is the
- * circle of radius about r + 0.5), so its edge has no lone squares sticking
- * out at the four points. A radius of 3 covers 37 squares (7 across).
- */
-export function inCircle(cx: number, cy: number, radius: number, x: number, y: number): boolean {
-  const dx = x - cx;
-  const dy = y - cy;
-  return dx * dx + dy * dy <= radius * radius + radius;
-}
-
-/** The size of the map, in squares. */
-function mapSize(world: CampWorld): { width: number; height: number } {
-  return { width: world.lab.depths.width, height: world.lab.depths.height };
-}
-
-/**
- * The best level among the camps whose circle covers each square, row by row
- * (index x + width * y); 0 where no camp covers it.
- */
-export function coverLevels(camps: Camp[], width: number, height: number): number[] {
-  const levels = new Array<number>(width * height).fill(0);
-  for (const camp of camps) {
-    const r = campRadius(camp.level);
-    for (let y = Math.max(0, camp.y - r); y <= Math.min(height - 1, camp.y + r); y += 1) {
-      for (let x = Math.max(0, camp.x - r); x <= Math.min(width - 1, camp.x + r); x += 1) {
-        const i = x + width * y;
-        if (inCircle(camp.x, camp.y, r, x, y) && camp.level > (levels[i] ?? 0)) {
-          levels[i] = camp.level;
-        }
-      }
-    }
-  }
-  return levels;
+/** `world` after a camp change from the engine: new camps, sight and counts. */
+function withChange(world: CampWorld, change: CampChange): CampWorld {
+  return {
+    ...world,
+    lab: { ...world.lab, counts: change.inventory },
+    camps: change.camps,
+    seen: change.seen,
+    nextCampId: change.nextCampId,
+  };
 }
 
 /** The best level of the camps covering square (x, y); 0 if none covers it. */
 export function coverLevelAt(world: CampWorld, x: number, y: number): number {
-  let best = 0;
-  for (const camp of world.camps) {
-    if (camp.level > best && inCircle(camp.x, camp.y, campRadius(camp.level), x, y)) {
-      best = camp.level;
-    }
-  }
-  return best;
+  return engineCoverLevelAt(world.camps, x, y);
 }
 
 /** How square (x, y) looks: shown inside a circle, greyed if it was once, fog if never. */
 export function sightAt(world: CampWorld, x: number, y: number): Sight {
-  if (coverLevelAt(world, x, y) > 0) {
-    return 'shown';
-  }
-  return world.seen[x + mapSize(world).width * y] === true ? 'greyed' : 'fog';
+  return engineSightAt(ground(world), x, y);
 }
 
 /** Every square's sight, row by row, worked out in one pass (for drawing). */
 export function sightMap(world: CampWorld): Sight[] {
-  const { width, height } = mapSize(world);
-  const levels = coverLevels(world.camps, width, height);
-  return levels.map((level, i) => {
-    if (level > 0) {
-      return 'shown';
-    }
-    return world.seen[i] === true ? 'greyed' : 'fog';
-  });
-}
-
-/** `seen` with every square inside the camps' circles added. */
-function seenWith(seen: boolean[], camps: Camp[], width: number, height: number): boolean[] {
-  const levels = coverLevels(camps, width, height);
-  return seen.map((was, i) => was || (levels[i] ?? 0) > 0);
-}
-
-/** How far a camp's footprint reaches from its centre square: 1, so a camp covers 3 x 3 squares. */
-export const CAMP_HALF_SIZE = 1;
-
-/** The squares of a camp centred on (x, y): its 3 x 3 footprint, row by row. */
-export function footprintOf(x: number, y: number): { x: number; y: number }[] {
-  const squares: { x: number; y: number }[] = [];
-  for (let dy = -CAMP_HALF_SIZE; dy <= CAMP_HALF_SIZE; dy += 1) {
-    for (let dx = -CAMP_HALF_SIZE; dx <= CAMP_HALF_SIZE; dx += 1) {
-      squares.push({ x: x + dx, y: y + dy });
-    }
-  }
-  return squares;
-}
-
-/** True if square (x, y) is part of the footprint of the camp centred on (cx, cy). */
-function inFootprint(cx: number, cy: number, x: number, y: number): boolean {
-  return Math.abs(x - cx) <= CAMP_HALF_SIZE && Math.abs(y - cy) <= CAMP_HALF_SIZE;
+  return engineSightMap(ground(world));
 }
 
 /** The camp whose 3 x 3 footprint holds square (x, y), or `null`. */
 export function campAt(world: CampWorld, x: number, y: number): Camp | null {
-  return world.camps.find((camp) => inFootprint(camp.x, camp.y, x, y)) ?? null;
+  return engineCampAt(world.camps, x, y);
 }
 
 /**
@@ -227,16 +159,7 @@ export function campAt(world: CampWorld, x: number, y: number): Camp | null {
  * squares are at the same depth: level ground, as a camp needs.
  */
 export function isLevelPatch(lab: LabWorld, x: number, y: number): boolean {
-  const { width, height } = lab.depths;
-  const depth = depthIn(lab.depths, x, y);
-  return footprintOf(x, y).every(
-    (s) =>
-      s.x >= 0 &&
-      s.y >= 0 &&
-      s.x < width &&
-      s.y < height &&
-      depthIn(lab.depths, s.x, s.y) === depth,
-  );
+  return engineIsLevelPatch(lab.state, x, y);
 }
 
 // ----- Making a world -----
@@ -417,32 +340,6 @@ export function advanceWorld(world: CampWorld, now: number): CampWorld {
   return surface === world.surface ? world : { ...world, surface };
 }
 
-// ----- Costs -----
-
-/** True if `counts` holds at least every stack of `cost`. */
-export function canAfford(counts: Map<string, number>, cost: ItemStack[]): boolean {
-  return cost.every((stack) => (counts.get(stack.item) ?? 0) >= stack.count);
-}
-
-/** `counts` with `cost` taken away. Only call it when `canAfford` is true. */
-function pay(counts: Map<string, number>, cost: ItemStack[]): Map<string, number> {
-  const left = new Map(counts);
-  for (const stack of cost) {
-    const now = (left.get(stack.item) ?? 0) - stack.count;
-    if (now > 0) {
-      left.set(stack.item, now);
-    } else {
-      left.delete(stack.item); // the counts hold only items with a count above 0
-    }
-  }
-  return left;
-}
-
-/** `world.lab` with different counts. */
-function withCounts(lab: LabWorld, counts: Map<string, number>): LabWorld {
-  return { ...lab, counts };
-}
-
 // ----- A tap -----
 
 /**
@@ -568,42 +465,11 @@ function asClay(before: LabWorld, tap: LabTap): LabTap {
   };
 }
 
-// ----- New camps -----
-
-/**
- * Why a camp cannot be centred on a square:
- * - 'notShown': some square of its 3 x 3 footprint is off the map or not lit by a camp;
- * - 'occupied': its footprint overlaps another camp's;
- * - 'notLevel': the nine squares are not all at the same depth;
- * - 'cost': the counts do not cover the cost.
- */
-export type PlaceRefusal = 'notShown' | 'occupied' | 'notLevel' | 'cost';
+// ----- New camps, upgrades and demolishing (the engine's rules) -----
 
 /** Why a new camp cannot be centred on (x, y), or `null` if it can. */
 export function placeRefusal(world: CampWorld, x: number, y: number): PlaceRefusal | null {
-  const { width, height } = mapSize(world);
-  const footprint = footprintOf(x, y);
-  for (const s of footprint) {
-    if (
-      s.x < 0 ||
-      s.y < 0 ||
-      s.x >= width ||
-      s.y >= height ||
-      sightAt(world, s.x, s.y) !== 'shown'
-    ) {
-      return 'notShown';
-    }
-  }
-  if (footprint.some((s) => campAt(world, s.x, s.y) !== null)) {
-    return 'occupied';
-  }
-  if (!isLevelPatch(world.lab, x, y)) {
-    return 'notLevel';
-  }
-  if (!canAfford(world.lab.counts, LAB_NEW_CAMP_COST)) {
-    return 'cost';
-  }
-  return null;
+  return enginePlaceRefusal(ground(world), x, y);
 }
 
 /**
@@ -611,16 +477,7 @@ export function placeRefusal(world: CampWorld, x: number, y: number): PlaceRefus
  * grey: the part of its circle that no camp covers now. Row by row, as indexes.
  */
 export function newlyCovered(world: CampWorld, x: number, y: number): number[] {
-  const { width, height } = mapSize(world);
-  const now = coverLevels(world.camps, width, height);
-  const after = coverLevels([{ id: 0, x, y, level: 1 }], width, height);
-  const fresh: number[] = [];
-  for (let i = 0; i < after.length; i += 1) {
-    if ((after[i] ?? 0) > 0 && (now[i] ?? 0) === 0) {
-      fresh.push(i);
-    }
-  }
-  return fresh;
+  return engineNewlyCovered(ground(world), x, y);
 }
 
 /**
@@ -628,87 +485,46 @@ export function newlyCovered(world: CampWorld, x: number, y: number): number[] {
  * says no, the very same world comes back.
  */
 export function placeCamp(world: CampWorld, x: number, y: number): CampWorld {
-  if (placeRefusal(world, x, y) !== null) {
-    return world;
+  const change = enginePlaceCamp(ground(world), x, y);
+  if (change.camps === world.camps) {
+    return world; // refused
   }
-  const camps = [...world.camps, { id: world.nextCampId, x, y, level: 1 }];
-  const { width, height } = mapSize(world);
-  return {
-    lab: withCounts(world.lab, pay(world.lab.counts, LAB_NEW_CAMP_COST)),
-    camps,
-    seen: seenWith(world.seen, camps, width, height),
-    nextCampId: world.nextCampId + 1,
-    // The camp is built over whatever grew on its 3 x 3: that is cleared, and gives nothing.
-    surface: clearFeatures(world.surface, width, footprintOf(x, y)),
-  };
+  const placed = withChange(world, change);
+  // The camp is built over whatever grew on its 3 x 3: that is cleared, and gives nothing.
+  const width = world.lab.state.size.x;
+  return { ...placed, surface: clearFeatures(world.surface, width, footprintOf(x, y)) };
 }
-
-// ----- Upgrades and demolishing -----
 
 /** Why camp `id` cannot be upgraded ('missing', 'top' level, or 'cost'), or `null` if it can. */
 export function upgradeRefusal(world: CampWorld, id: number): 'missing' | 'top' | 'cost' | null {
-  const camp = world.camps.find((c) => c.id === id);
-  if (camp === undefined) {
-    return 'missing';
-  }
-  const cost = upgradeCostFrom(camp.level);
-  if (cost === null) {
-    return 'top';
-  }
-  return canAfford(world.lab.counts, cost) ? null : 'cost';
+  return engineUpgradeRefusal(ground(world), id);
 }
 
 /** Upgrade camp `id` one level and pay for it. If `upgradeRefusal` says no, the same world comes back. */
 export function upgradeCamp(world: CampWorld, id: number): CampWorld {
-  const camp = world.camps.find((c) => c.id === id);
-  const cost = camp === undefined ? null : upgradeCostFrom(camp.level);
-  if (camp === undefined || cost === null || upgradeRefusal(world, id) !== null) {
-    return world;
-  }
-  const camps = world.camps.map((c) => (c.id === id ? { ...c, level: c.level + 1 } : c));
-  const { width, height } = mapSize(world);
-  return {
-    lab: withCounts(world.lab, pay(world.lab.counts, cost)),
-    camps,
-    seen: seenWith(world.seen, camps, width, height),
-    nextCampId: world.nextCampId,
-    surface: world.surface,
-  };
+  const change = engineUpgradeCamp(ground(world), id);
+  return change.camps === world.camps ? world : withChange(world, change);
 }
 
-/**
- * Why camp `id` cannot be demolished, or `null` if it can:
- * - 'missing': there is no such camp;
- * - 'notCovered': some square of its footprint is not inside another camp's ring
- *   (owner, question 134: "your area would need to be covered by a second camp first").
- */
+/** Why camp `id` cannot be demolished ('missing' or 'notCovered'), or `null` if it can. */
 export function demolishRefusal(world: CampWorld, id: number): 'missing' | 'notCovered' | null {
-  const camp = world.camps.find((c) => c.id === id);
-  if (camp === undefined) {
-    return 'missing';
-  }
-  const others = world.camps.filter((c) => c.id !== id);
-  const covered = footprintOf(camp.x, camp.y).every((s) =>
-    others.some((o) => inCircle(o.x, o.y, campRadius(o.level), s.x, s.y)),
-  );
-  return covered ? null : 'notCovered';
+  return engineDemolishRefusal(ground(world), id);
 }
 
 /**
- * Demolish camp `id`: it goes, and gives nothing back. Its footprint, which
- * other camps cover, can then be mined; what only it lit turns grey. If
- * `demolishRefusal` says no, the very same world comes back.
+ * Demolish camp `id`: it goes, and gives nothing back. If `demolishRefusal`
+ * says no, the very same world comes back.
  */
 export function demolishCamp(world: CampWorld, id: number): CampWorld {
-  if (demolishRefusal(world, id) !== null) {
-    return world;
-  }
-  return { ...world, camps: world.camps.filter((c) => c.id !== id) };
+  const change = engineDemolishCamp(ground(world), id);
+  return change.camps === world.camps ? world : withChange(world, change);
 }
 
 /** The display names of the block kinds that level `level` adds to the level below it. */
 export function addedNamesAt(level: number): string[] {
-  return levelData(level).addsBlocks.map((id) => blockDefByCode(BLOCKS[id].code).name);
+  return (LAB_CAMP_LEVELS[level - 1]?.addsBlocks ?? []).map(
+    (id) => blockDefByCode(BLOCKS[id].code).name,
+  );
 }
 
 /**
