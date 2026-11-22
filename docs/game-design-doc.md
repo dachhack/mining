@@ -216,7 +216,7 @@ Each rule that comes back is its own small batch, playtested before the next.
 - **Primary view:** the ground from above. Lit squares show their top block and what grows on them, shaded by depth so the terraces read at a glance. Greyed squares are drained of colour, and the fog is dark. Animals slide to their new squares when a shift ends.
 - **Tap:** a tap on a lit square takes or mines (one action, no menu). A tap on a camp opens its panel (rest, upgrade, demolish). A refused tap says why.
 - **The camp tool** (⛺+) places a new camp. It previews the ring and the squares it would light, says what is missing, and shows the cost.
-- **The recipe book** (📖) and the pinned row are in the tray.
+- **The recipe book** (📖, in the tray) opens as a card over the whole screen, inside the system bars; × or the phone's back button closes it (owner, after the playtest of PR #146). The pinned row is in the tray.
 - **HUD**, over the map so it never moves it: shift, taps left, health. **End shift** at the bottom-left, by the thumb (Rest is in a camp's panel); **Undo** at the bottom-right; **Close mine** at the top-right, with a second tap to confirm.
 - **The resource counter** is one row above the map.
 - **Orientation:** portrait, with a landscape layout for phones on their side. One-handed play should be possible.
