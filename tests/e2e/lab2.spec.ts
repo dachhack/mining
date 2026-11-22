@@ -62,7 +62,18 @@ async function inView(canvas: Locator, square: Square): Promise<boolean> {
   }
   const point = await pointOf(canvas, square);
   const margin = (await camera(canvas)).cellPx;
+  // The Undo button floats over the map's corner: a square under it is
+  // covered, as it would be for a player, who drags the map a little.
+  const page = canvas.page();
+  const undo = await page.getByTestId('lab2-undo').boundingBox();
+  const underUndo =
+    undo !== null &&
+    point.x >= undo.x - margin / 2 &&
+    point.x <= undo.x + undo.width + margin / 2 &&
+    point.y >= undo.y - margin / 2 &&
+    point.y <= undo.y + undo.height + margin / 2;
   return (
+    !underUndo &&
     point.x >= box.x + margin &&
     point.x <= box.x + box.width - margin &&
     point.y >= box.y + margin &&
@@ -574,9 +585,10 @@ test('the map never moves while the tool and the panels open and close', async (
   await unmoved();
 
   // A refused tap (fog), a mine, and a too-steep refusal: still no movement.
-  // The fog square is on screen at the opening zoom: diagonally out from the
-  // camp, just past its ring (radius 9), not straight out, which is off screen.
-  const fog = { x: camp.x + 6, y: camp.y + 8 };
+  // The fog square is on screen at the opening zoom: diagonally up and out
+  // from the camp, just past its ring (radius 9), not straight out, which is
+  // off screen, nor down to the right, where the Undo button covers the map.
+  const fog = { x: camp.x + 6, y: camp.y - 8 };
   expect(sightMap(world)[fog.x + world.lab.state.size.x * fog.y]).toBe('fog');
   expect(await inView(canvas, fog)).toBe(true);
   await tapFixed(fog);
@@ -916,3 +928,99 @@ for (const phone of PHONES_WITH_BARS) {
     await expect(canvas).toHaveAttribute('data-camps', '2');
   });
 }
+
+// Undo (owner, after the PR #126 playtest: "Undo button").
+test('undo takes back taps one by one, exactly, back to the start; then it is off', async ({
+  page,
+}) => {
+  const canvas = await openLab2(page);
+  const undo = page.getByTestId('lab2-undo');
+  await expect(undo).toBeDisabled();
+
+  // Six useful taps (each cuts, fells, catches or mines), worked out here.
+  const start = newCampWorld(SEED);
+  const camp = start.camps[0] ?? { x: 0, y: 0 };
+  const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp);
+  expect(plan).not.toBeNull();
+  if (plan === null) return;
+  const taps = plan.taps.slice(0, 6);
+  const worlds: CampWorld[] = [start];
+  for (const square of taps) {
+    const before = worlds[worlds.length - 1] ?? start;
+    worlds.push(campTap(before, square.x, square.y).world);
+    await tapSquare(page, canvas, square);
+    await expect
+      .poll(() => counts(page))
+      .toEqual(expectedCounts(worlds[worlds.length - 1] ?? start));
+  }
+  await expect(undo).toBeEnabled();
+  await expect(undo).toHaveAttribute('data-count', '6');
+
+  // Undo three: each time, the counts and the lit squares are what they were.
+  for (let k = 5; k >= 3; k -= 1) {
+    await undo.click();
+    const was = worlds[k] ?? start;
+    await expect.poll(() => counts(page)).toEqual(expectedCounts(was));
+    await expect(canvas).toHaveAttribute('data-shown', String(shownOf(was)));
+    await expect(undo).toHaveAttribute('data-count', String(k));
+  }
+  await expect(page.getByTestId('lab-hint')).toContainText('Undone: the tap at');
+
+  // The blocks are back too: tapping the fourth square again does what it did the first time.
+  const fourth = taps[3] ?? { x: 0, y: 0 };
+  const again = campTap(worlds[3] ?? start, fourth.x, fourth.y);
+  await tapSquare(page, canvas, fourth);
+  await expect(canvas).toHaveAttribute('data-last-tap', `${again.kind} ${fourth.x},${fourth.y}`);
+  await expect.poll(() => counts(page)).toEqual(expectedCounts(again.world));
+
+  // Undo all the way: back at the start, and Undo is off.
+  for (let left = 4; left > 0; left -= 1) {
+    await undo.click();
+  }
+  await expect.poll(() => counts(page)).toEqual(expectedCounts(start));
+  await expect(canvas).toHaveAttribute('data-shown', String(shownOf(start)));
+  await expect(undo).toBeDisabled();
+  await expect(page.getByTestId('lab-hint')).toContainText('Back at the start');
+
+  // New world: nothing to undo.
+  await tapSquare(page, canvas, taps[0] ?? { x: 0, y: 0 });
+  await expect(undo).toBeEnabled();
+  await page.getByRole('button', { name: 'New world' }).click();
+  await expect(undo).toBeDisabled();
+});
+
+test('undo takes back a placed camp: the camp, its cost and its light', async ({ page }) => {
+  const start = newCampWorld(SEED);
+  const camp = start.camps[0] ?? { x: 0, y: 0 };
+  const target = { x: camp.x + campRadius(1) - 1, y: camp.y };
+  const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp, footprintOf(target.x, target.y));
+  expect(plan).not.toBeNull();
+  if (plan === null) return;
+  await pauseClock(page);
+  await page.goto('/#game');
+  await page.evaluate(([key, text]) => window.localStorage.setItem(key, text), [
+    PREPARED_LAB2_KEY,
+    JSON.stringify({ seed: SEED, steps: plan.taps.map((s) => ({ kind: 'tap', x: s.x, y: s.y })) }),
+  ] as const);
+  await page.goto('/#lab2');
+  await expect(page.getByTestId('lab-seed')).toHaveText(`Seed ${SEED} · prepared`);
+  const canvas = page.getByTestId('lab-map');
+  const undo = page.getByTestId('lab2-undo');
+  // The prepared steps are the world's start: nothing to undo yet.
+  await expect(undo).toBeDisabled();
+
+  await page.getByTestId('lab2-camp-tool').click();
+  await tapSquare(page, canvas, target);
+  await page.getByTestId('lab2-place-confirm').click();
+  await expect(canvas).toHaveAttribute('data-camps', '2');
+  await expect(undo).toBeEnabled();
+
+  await undo.click();
+  await expect(canvas).toHaveAttribute('data-camps', '1');
+  await expect(canvas).toHaveAttribute('data-shown', String(shownOf(plan.world)));
+  await expect.poll(() => counts(page)).toEqual(expectedCounts(plan.world));
+  await expect(page.getByTestId('lab-hint')).toHaveText(
+    'Undone: placing the camp. Back at the start.',
+  );
+  await expect(undo).toBeDisabled();
+});

@@ -693,3 +693,29 @@ body[data-screen='lab2'] {
     grid-row: 5;
   }
 }
+
+/* Undo (owner: "Undo button"): a pill over the map's bottom-right corner,
+   near the thumb. It sits over the map, so it takes no room from the tray
+   and never moves the map. Off, it fades but stays in place. */
+.lab2 .lab-map-frame {
+  position: relative;
+}
+
+.lab .lab2-undo {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 20px;
+  font-size: min(0.9rem, 17px);
+  font-weight: 650;
+  color: #f2e2c4;
+  background: rgba(24, 19, 15, 0.88);
+  border: 1px solid #7a6650;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.lab .lab2-undo:disabled {
+  opacity: 0.45;
+}
