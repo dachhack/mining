@@ -365,33 +365,13 @@ export function startSquare(state: GameState, surface?: Surface): { x: number; y
 }
 
 /**
- * `lab` with no coal at the surface (owner: "No coal at surface"): every coal
- * seam in the cube's top layer is `LAB_SURFACE.surfaceCoalBecomes` (stone)
- * instead. Coal deeper down stays. Lab 2 only: the cube is copied, so the
- * game's own generation, and Lab 1, are not changed.
- */
-export function withoutSurfaceCoal(lab: LabWorld): LabWorld {
-  const state = lab.state;
-  const coal = BLOCKS.coalSeam.code;
-  const replacement = BLOCKS[LAB_SURFACE.surfaceCoalBecomes].code;
-  // `slice()` copies the typed array, like `list[:]` in Python.
-  const blocks = state.blocks.slice();
-  // Layer 0 is the top layer: its cells are the first x * y entries of the cube.
-  for (let i = 0; i < state.size.x * state.size.y; i += 1) {
-    if (blocks[i] === coal) {
-      blocks[i] = replacement;
-    }
-  }
-  return labWorldFromState(lab.seed, { ...state, blocks });
-}
-
-/**
- * A new Lab 2 world on `seed`: the game's cube, its surface (grass, trees,
+ * A new Lab 2 world on `seed`: the game's cube (which has no coal at the
+ * surface since question 140, so Lab 2 no longer swaps it out), its surface (grass, trees,
  * apple trees, animals, clay), and one free level-1 camp near the middle on
  * a patch whose ring pays for the next camp.
  */
 export function newCampWorld(seed: number): CampWorld {
-  const lab = withoutSurfaceCoal(newLabWorld(seed));
+  const lab = newLabWorld(seed);
   const start = startSquare(lab.state, generateSurface(lab.state, seed));
   // Generate again, keeping the camp's 3 x 3 clear of features and animals,
   // and starting the first animal inside the camp's ring.

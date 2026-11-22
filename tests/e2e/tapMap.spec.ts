@@ -3,8 +3,8 @@
 // marks the neighbours that are too high, tap a tree to cut it; drag to pan,
 // and the two zoom buttons.
 //
-// Seed 110 (see `npm run play -- --seed 110`): the map opens on the coal in
-// sight that is nearest its middle (issue #110). The squares the test taps
+// Seed 110 (see `npm run play -- --seed 110`): the map opens on the open
+// ground nearest its middle (issue #110; no coal on top since question 140). The squares the test taps
 // are not written here by hand: squares.ts finds them on the seed's cube, so
 // a change to the generation numbers does not break the test.
 import { expect, test } from '@playwright/test';
@@ -72,7 +72,7 @@ test.beforeEach(async ({ page }) => {
   await startRun(page, SEED);
 });
 
-test('the map opens on the nearest coal in sight, with squares big enough to tap', async ({
+test('the map opens on the open ground nearest the middle, with squares big enough to tap', async ({
   page,
 }) => {
   const canvas = page.getByTestId('map-canvas');

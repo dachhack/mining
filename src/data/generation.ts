@@ -13,6 +13,7 @@ import type { GenerationData } from './types';
 // Not generated until a later milestone: relics and keystones (M4).
 //
 // How the numbers are used (src/engine/generation/cube.ts and spaces.ts):
+// - Surface coal. No coal on the top layer: see `surfaceCoal` at the end.
 // - Rock. Each cell first becomes one of the band's `rock` blocks, picked by
 //   weight. The weights slide evenly from `weightAtTop` in the band's first
 //   layer to `weightAtBottom` in its last. Only the ratio matters; they are
@@ -102,4 +103,17 @@ export const GENERATION: GenerationData = {
   ],
   veinPlacementTries: 20,
   spacePlacementTries: 20,
+  // Owner, 2026-11-22 (question 140): "No coal at surface in the real game,
+  // but make sure there is some coal at the first level after the surface."
+  // Stone, as in Lab 2 (decision note 0048): seams lie in rock, so a bare
+  // stone patch is where coal may lie beneath.
+  // 12 coal makes 36 fuel, half the standard loadout's 72. Before this rule,
+  // layer 1 held 25 coal on the median seed of 1 to 1,000 and fewer than 12
+  // on about 1 seed in 100 (the fewest was 4), so the minimum only tops up
+  // the poorest seeds (decision note 0050).
+  surfaceCoal: {
+    block: 'coalSeam',
+    surfaceBecomes: 'stone',
+    firstLayerMinimum: 12,
+  },
 };

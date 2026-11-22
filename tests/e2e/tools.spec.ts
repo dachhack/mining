@@ -5,19 +5,21 @@
 //
 // Seed 1 (see `npm run play -- --seed 1`). The squares the test taps are not
 // written here by hand: squares.ts finds, on the seed's cube, a clear flat
-// patch for the camp, a stone square beside it and a coal square near it.
+// patch for the camp, a stone square beside it and a square near it with
+// coal in layer 1. (The top layer holds no coal, question 140: the coal is
+// dug for.)
 // (A pump needs ingots and a scanner charge needs crystal, which no short
 // run reaches: those two tools are tested in tests/app/tapMapTools.test.ts.)
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
-import { findCampSpot, key, openingView, startOf } from './squares';
+import { findCampSpotWithCoal, key, openingView, startOf } from './squares';
 
 test.use({ viewport: { width: 390, height: 844 } });
 
 const SEED = 1;
 const START = startOf(SEED);
-/** A clear patch for the camp, stone beside it, coal near it, and a spare dirt square. */
-const SPOT = findCampSpot(START, openingView(START));
+/** A clear patch for the camp, stone beside it, coal to dig for, and a spare dirt square. */
+const SPOT = findCampSpotWithCoal(START, openingView(START));
 const CAMP = SPOT.centre;
 const STONE = SPOT.stoneBeside;
 const SPARE = SPOT.spare;
@@ -69,7 +71,8 @@ test('sealant is crafted and used from the tool bar; look and hold list a square
   await expect(page.getByTestId('tool-scan')).toBeHidden();
   await expect(lookTool).toHaveText('Inspect');
 
-  // Shift 1: found a camp. Shift 2: mine stone and coal near it.
+  // Shift 1: found a camp. Shift 2: dig round the coal square and take its
+  // top. Shift 3: mine the coal under it, and the stone square beside the camp.
   await page.getByTestId('tool-camp').click();
   await tapSquare(page, canvas, CAMP.x, CAMP.y);
   await expect(outcome).toContainText(
@@ -77,10 +80,19 @@ test('sealant is crafted and used from the tool bar; look and hold list a square
   );
   await page.getByTestId('end-shift').click();
   await expect(gauges).toContainText('Shift 2');
+  // Each of these mines costs 1 AP near the camp: the whole shift.
+  let apLeft = 5;
+  for (const square of [...SPOT.around, SPOT.coal]) {
+    await tapSquare(page, canvas, square.x, square.y);
+    apLeft -= 1;
+    await expect(gauges).toContainText(`AP ${apLeft}/5`);
+  }
+  await page.getByTestId('end-shift').click();
+  await expect(gauges).toContainText('Shift 3');
+  await tapSquare(page, canvas, SPOT.coal.x, SPOT.coal.y);
+  await expect(outcome).toContainText('Got 1 Coal');
   await tapSquare(page, canvas, STONE.x, STONE.y);
   await expect(outcome).toContainText('Got 1 Stone');
-  await tapSquare(page, canvas, SPOT.coalNear.x, SPOT.coalNear.y);
-  await expect(outcome).toContainText('Got 1 Coal');
 
   // Craft sealant at the camp: the seal tool appears.
   await page.locator('.actions-heading').click();

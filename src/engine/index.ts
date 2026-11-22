@@ -31,7 +31,7 @@ import { isValidSeed } from './rng';
 import { forecastShift, runCubePhase, runUpkeep } from './shift';
 import type { ShiftForecast } from './shift';
 import { addItem, blankState, cloneState, isRunActive } from './state';
-import { ensureCoalInSight, generateSurface } from './surface/generation';
+import { generateSurface } from './surface/generation';
 import { regrowTrees } from './surface/regrowth';
 import { hasTree } from './surface/state';
 import { updateMineralTraces } from './tells';
@@ -45,8 +45,11 @@ import type { GameState } from './state';
  * 0.3.0: milestone M2, hazards and camps (0014 item 35; set by issue #50).
  * 0.4.0: the top-down model of design doc v0.2 (decision note 0025; set by
  *        issue #86, mine by square). Covers the whole batch T2 to T15.
+ * 0.5.0: no coal at the surface, a minimum of coal in layer 1 (owner,
+ *        2026-11-22, question 140; decision note 0050). First PR of the
+ *        batch after the 2026-11-22 playtest.
  */
-export const ENGINE_VERSION = '0.4.0';
+export const ENGINE_VERSION = '0.5.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
@@ -90,10 +93,6 @@ export function createRun(seed: number, contractId: string, loadoutId: string): 
   for (const stack of loadout.items) {
     addItem(state, stack.item, stack.count);
   }
-  // Coal in sight at the start (design doc 3.2): reads the surface, so it
-  // comes after it.
-  ensureCoalInSight(state);
-
   // Reveal every top block that no tree hides. Nobody is watching yet, so
   // the events are dropped.
   updateReveal(state, []);

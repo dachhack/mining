@@ -430,42 +430,23 @@ describe('what grows where, and no coal at the surface (owner, after the PR #126
     }
   });
 
-  it('a coal seam on the top layer is stone in Lab 2; coal deeper down stays', () => {
+  it('Lab 2 has no coal at the surface, and its cube is the game’s cube', () => {
+    // No coal at the surface is now the game's own rule (question 140), so
+    // Lab 2 no longer changes the cube.
     const coal = BLOCKS.coalSeam.code;
-    const becomes = BLOCKS[LAB_SURFACE.surfaceCoalBecomes].code;
-    let swapped = 0;
     for (let seed = 1; seed <= 50; seed += 1) {
       const game = newLabWorld(seed).state;
       const lab = newCampWorld(seed).lab.state;
+      expect(Array.from(lab.blocks), `seed ${seed}`).toEqual(Array.from(game.blocks));
       // The cube's cells in order, the top layer (z = 0) first: x * y of them.
-      const topCells = game.size.x * game.size.y;
-      for (let i = 0; i < game.blocks.length; i += 1) {
-        const before = game.blocks[i];
-        const after = lab.blocks[i];
-        if (i < topCells && before === coal) {
-          expect(after).toBe(becomes);
-          swapped += 1;
-        } else if (after !== before) {
-          expect.fail(`seed ${seed}, cell ${i}: ${before} became ${after}`);
-        }
-      }
+      const top = Array.from(lab.blocks.subarray(0, lab.size.x * lab.size.y));
+      expect(top.includes(coal), `seed ${seed}`).toBe(false);
     }
-    // The game's cube does have surface coal, so the swap was tested.
-    expect(swapped).toBeGreaterThan(0);
   });
 
   it('leaves the game’s own cube alone: a run on the same seed is unchanged', () => {
     const before = hashState(newLabWorld(7).state);
     newCampWorld(7);
     expect(hashState(newLabWorld(7).state)).toBe(before);
-    // And Lab 1's world (the game's cube) still has its surface coal somewhere.
-    let coalOnTop = 0;
-    for (let seed = 1; seed <= 20; seed += 1) {
-      const s = newLabWorld(seed).state;
-      for (let i = 0; i < s.size.x * s.size.y; i += 1) {
-        if (s.blocks[i] === BLOCKS.coalSeam.code) coalOnTop += 1;
-      }
-    }
-    expect(coalOnTop).toBeGreaterThan(0);
   });
 });

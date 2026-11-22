@@ -5,7 +5,7 @@
   "loadoutId": "standard",
   "recordedWith": "camp",
   "expectedStatus": "ended: lost, buried",
-  "expectedHash": "cec1b9af1c124b26",
+  "expectedHash": "2e9385d13beca94b",
   "decisions": [
     "foundCamp 22,16 ap 5",
     "endShift",

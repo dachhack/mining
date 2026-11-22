@@ -206,14 +206,15 @@ describe('playRun', () => {
   });
 
   it('counts a shift that begins with no fuel', () => {
-    // The random policy on seed 9 crafts fuel once (3 fuel from 1 coal), and
-    // no camp of its stands long enough to burn any. So its 72 + 3 fuel last
-    // 75 shifts, the 76th begins at 0, and its upkeep ends the run.
+    // The random policy on seed 9 crafts no fuel (with no coal on the top
+    // layer since question 140 it never digs down to any), and no camp of
+    // its stands long enough to burn any. So its 72 fuel last 72 shifts, the
+    // 73rd begins at 0, and its upkeep ends the run.
     const metrics = run('random', 9);
     expect(metrics.cause).toBe('outOfFuel');
-    expect(metrics.recipesUsed['fuel']).toBe(1);
+    expect(metrics.recipesUsed['fuel']).toBe(0);
     expect(metrics.fuelAtEnd).toBe(0);
-    expect(metrics.shiftsPlayed).toBe(76);
+    expect(metrics.shiftsPlayed).toBe(73);
     expect(metrics.shiftsAtZeroFuel).toBe(1);
     // The random policy never closes the mine, and hardly ever goes a second level down.
     expect(metrics.deepestSquare).toBeGreaterThanOrEqual(1);

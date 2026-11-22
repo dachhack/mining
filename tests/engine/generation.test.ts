@@ -61,13 +61,21 @@ function countBlocks(blocks: Uint8Array, size: CubeSize, layers: number[]): Map<
   return counts;
 }
 
-/**
- * The sizes of the 6-connected groups of `code` in the cube: one number for
- * each group. A plain flood fill.
- */
+/** One 6-connected group of a block: how many cells, and its shallowest layer. */
+interface Group {
+  size: number;
+  topZ: number;
+}
+
+/** The sizes of the 6-connected groups of `code` in the cube: one number for each group. */
 function groupSizes(blocks: Uint8Array, size: CubeSize, code: number): number[] {
+  return groups(blocks, size, code).map((group) => group.size);
+}
+
+/** The 6-connected groups of `code` in the cube. A plain flood fill. */
+function groups(blocks: Uint8Array, size: CubeSize, code: number): Group[] {
   const seen = new Uint8Array(blocks.length);
-  const sizes: number[] = [];
+  const sizes: Group[] = [];
   for (let z = 0; z < size.z; z += 1) {
     for (let y = 0; y < size.y; y += 1) {
       for (let x = 0; x < size.x; x += 1) {
@@ -78,9 +86,11 @@ function groupSizes(blocks: Uint8Array, size: CubeSize, code: number): number[] 
         seen[startIndex] = 1;
         const toVisit = [{ x, y, z }];
         let groupSize = 0;
+        let topZ = z;
         while (toVisit.length > 0) {
           const pos = toVisit.pop() as { x: number; y: number; z: number };
           groupSize += 1;
+          topZ = Math.min(topZ, pos.z);
           for (const offset of NEIGHBOUR_OFFSETS) {
             const next = { x: pos.x + offset.x, y: pos.y + offset.y, z: pos.z + offset.z };
             if (!inGrid(size, next)) {
@@ -93,7 +103,7 @@ function groupSizes(blocks: Uint8Array, size: CubeSize, code: number): number[] 
             }
           }
         }
-        sizes.push(groupSize);
+        sizes.push({ size: groupSize, topZ });
       }
     }
   }
@@ -121,14 +131,23 @@ function expectCubeFollowsTheRules(blocks: Uint8Array, size: CubeSize): void {
     }
   }
 
-  // Veins: no group of an ore is smaller than that ore's smallest vein.
+  // Veins: no group of an ore is smaller than that ore's smallest vein. The
+  // one exception is coal that reached the top layer: it is stone there
+  // (question 140), so what is left below can be smaller. Every part left
+  // then reaches up to layer 1, where it was joined to the cut-off top.
   for (const def of GENERATION.bands) {
     for (const vein of def.veins) {
-      for (const groupSize of groupSizes(blocks, size, codeOf(vein.block))) {
-        expect(groupSize, `a group of ${vein.block}`).toBeGreaterThanOrEqual(vein.minSize);
+      for (const group of groups(blocks, size, codeOf(vein.block))) {
+        const cutAtTop = vein.block === GENERATION.surfaceCoal.block && group.topZ === 1;
+        if (!cutAtTop) {
+          expect(group.size, `a group of ${vein.block}`).toBeGreaterThanOrEqual(vein.minSize);
+        }
       }
     }
   }
+
+  // No coal on the top layer (question 140).
+  expect(countBlocks(blocks, size, [0]).get(codeOf(GENERATION.surfaceCoal.block)) ?? 0).toBe(0);
 }
 
 describe('generateCube', () => {
@@ -148,7 +167,8 @@ describe('generateCube', () => {
     // change here must be meant and must be said in the PR description.
     // Only the block array is hashed, so other parts of the state cannot move it.
     const blocks = generate(FULL_SIZE, 7);
-    expect(hashString(Array.from(blocks).join(','))).toBe('63f474fde3121066');
+    // Changed for question 140 (no coal on the top layer; decision note 0050).
+    expect(hashString(Array.from(blocks).join(','))).toBe('a48ca59c93d2453b');
   });
 
   it('gives different cubes for different seeds', () => {
@@ -266,10 +286,16 @@ describe('generateCube', () => {
       for (const seed of SEEDS) {
         const blocks = generate(size, seed);
         expectCubeFollowsTheRules(blocks, size);
-        // Each band lists at least one ore, and gets at least one vein of it.
+        // Each band lists at least one ore, and gets at least one vein of it
+        // (except coal in a band that is only the top layer).
         for (const band of bandLayersForDepth(size.z)) {
           const counts = countBlocks(blocks, size, band.layers);
           for (const vein of bandDef(band.bandId).veins) {
+            // A band that is only the top layer holds no coal (question 140).
+            const onlyTopLayer = band.layers.length === 1 && band.layers[0] === 0;
+            if (onlyTopLayer && vein.block === GENERATION.surfaceCoal.block) {
+              continue;
+            }
             expect(
               counts.get(codeOf(vein.block)) ?? 0,
               `${vein.block} in ${band.bandId}`,

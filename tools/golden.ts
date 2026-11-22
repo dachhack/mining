@@ -49,13 +49,13 @@ interface RecordSpec {
  */
 const STANDARD_RUNS: RecordSpec[] = [
   {
-    name: 'pit-seed-11',
-    seed: 11,
+    name: 'pit-seed-2',
+    seed: 2,
     policyName: 'pit',
     maxDecisions: undefined,
     kit: false,
     description:
-      'The pit policy on seed 11: digs a terraced pit round the middle of the map under the level rule, with the level benches that keep its walls from slumping, cutting the trees in its way, crafts fuel from the coal it finds, and closes the mine (salvage) when the fuel is about to run out.',
+      'The pit policy on seed 2: digs a terraced pit round the middle of the map under the level rule, with the level benches that keep its walls from slumping, cutting the trees in its way, crafts fuel from the coal it finds, and closes the mine (salvage) when the fuel is about to run out.',
   },
   {
     name: 'pit-seed-7-support',
@@ -103,8 +103,8 @@ const STANDARD_RUNS: RecordSpec[] = [
       'The camp policy on a seed where the pit reaches the camp: the crew rests there twice, then a slump destroys the camp, there is nowhere left to rest, and the crew is buried.',
   },
   {
-    name: 'random-seed-4-forest',
-    seed: 4,
+    name: 'random-seed-6-forest',
+    seed: 6,
     policyName: 'random',
     maxDecisions: undefined,
     kit: false,
@@ -147,8 +147,8 @@ const STANDARD_RUNS: RecordSpec[] = [
       'The terracing policy with a pit planned 8 deep, on a seed where it breaks into gas pockets and goes on digging in the gas: the crew loses health shift after shift and is poisoned. The script does not heed pitted rock; a careful person would.',
   },
   {
-    name: 'random-kit-seed-2-blast',
-    seed: 2,
+    name: 'random-kit-seed-24-blast',
+    seed: 24,
     policyName: 'random',
     maxDecisions: undefined,
     kit: true,

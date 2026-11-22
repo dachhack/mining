@@ -8,8 +8,7 @@ import { blockAt, createRun, isRevealed, surfaceKindAt } from '../../src/engine'
 import type { GameState } from '../../src/engine';
 import { generateCube } from '../../src/engine/generation/cube';
 import { generateSpaces } from '../../src/engine/generation/spaces';
-import { blankState, cloneState } from '../../src/engine/state';
-import { ensureCoalInSight, generateSurface } from '../../src/engine/surface/generation';
+import { blankState } from '../../src/engine/state';
 
 const SEEDS = Array.from({ length: 150 }, (_, index) => index + 1);
 const KINDS = SURFACE.kinds;
@@ -132,23 +131,15 @@ describe('surface generation (issue #70 item 2)', () => {
     expect(pathsOverStone).toBeGreaterThan(0);
   });
 
-  it('changes no block of the cube, apart from at most one block of coal in sight', () => {
+  it('changes no block of the cube', () => {
     // The surface is laid over the cube `generateCube` and `generateSpaces`
-    // made: only `ensureCoalInSight` may change a block, and only in layer 0.
+    // made. Coal in sight is gone (question 140), so nothing changes a block.
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
       const state = createRun(seed, 'none', 'standard');
       const bare = blankState(WORLD.size, seed);
       bare.blocks = generateCube(bare.size, bare.rng);
       generateSpaces(bare);
-      let changed = 0;
-      for (let index = 0; index < bare.blocks.length; index += 1) {
-        if (bare.blocks[index] !== state.blocks[index]) {
-          changed += 1;
-          expect(index).toBeLessThan(WORLD.size.x * WORLD.size.y);
-          expect(state.blocks[index]).toBe(BLOCKS.coalSeam.code);
-        }
-      }
-      expect(changed).toBeLessThanOrEqual(1);
+      expect(Array.from(state.blocks), `seed ${seed}`).toEqual(Array.from(bare.blocks));
     }
   });
 
@@ -176,65 +167,6 @@ describe('surface generation (issue #70 item 2)', () => {
       expect(Array.from(state.stumpAge).every((age) => age === 0)).toBe(true);
     }
   });
-
-  it('coal in sight never depends on a hidden cell (issue #88 item 1)', () => {
-    // Change everything the player does not see at the start (every block
-    // below layer 0, and the layer-0 block under every tree) and run the rule
-    // again from the same generator: it must pick the same block.
-    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
-      const base = blankState(WORLD.size, seed);
-      base.blocks = generateCube(base.size, base.rng);
-      generateSpaces(base);
-      generateSurface(base);
-      // Take the coal off the open ground, so that the rule has to add some.
-      const layerCells = WORLD.size.x * WORLD.size.y;
-      for (let index = 0; index < layerCells; index += 1) {
-        if (base.blocks[index] === BLOCKS.coalSeam.code) {
-          base.blocks[index] = BLOCKS.stone.code;
-        }
-      }
-      const other = cloneState(base);
-      for (let index = 0; index < other.blocks.length; index += 1) {
-        const underTree = index < layerCells && other.surface[index] === KINDS.tree.code;
-        if (index >= layerCells) {
-          other.blocks[index] = index % 3 === 0 ? BLOCKS.air.code : BLOCKS.hardRock.code;
-        } else if (underTree) {
-          other.blocks[index] = BLOCKS.coalSeam.code;
-        }
-      }
-      ensureCoalInSight(base);
-      ensureCoalInSight(other);
-      const topLayer = (state: GameState) => Array.from(state.blocks.subarray(0, layerCells));
-      const coalAt = (state: GameState) =>
-        topLayer(state).findIndex(
-          (code, index) =>
-            code === BLOCKS.coalSeam.code && state.surface[index] !== KINDS.tree.code,
-        );
-      expect(coalAt(base), `seed ${seed}`).toBeGreaterThanOrEqual(0);
-      expect(coalAt(other), `seed ${seed}`).toBe(coalAt(base));
-      expect(other.rng.s, `seed ${seed}`).toBe(base.rng.s);
-    }
-  });
-
-  it('shows coal at the start on every seed (owner, PR #72)', () => {
-    // 1,000 seeds. Some coal is among the top blocks the player sees at the
-    // start: the layer-0 blocks on open ground (design doc 3.2).
-    for (let seed = 1; seed <= 1000; seed += 1) {
-      const state =
-        seed <= runs.length ? (runs[seed - 1] as GameState) : createRun(seed, 'none', 'standard');
-      let coalSeen = false;
-      for (let y = 0; y < state.size.y && !coalSeen; y += 1) {
-        for (let x = 0; x < state.size.x; x += 1) {
-          const ground = { x, y, z: 0 };
-          if (isRevealed(state, ground) && blockAt(state, ground) === BLOCKS.coalSeam.code) {
-            coalSeen = true;
-            break;
-          }
-        }
-      }
-      expect(coalSeen, `seed ${seed}`).toBe(true);
-    }
-  }, 60000);
 
   it('at the start every top block is known, except under a tree', () => {
     // Owner, issue #82: "Whole surface". Design doc v0.2 section 3.4.
@@ -269,7 +201,6 @@ describe('the surface data (src/data/surface.ts)', () => {
     bad.generation.pathEdges = 1;
     bad.generation.outcropBlock = 'granite';
     bad.generation.outcropChance = 2;
-    bad.generation.coalInSightBlock = 'peat';
     const problems = validateSurfaceData(bad, blockIds, itemIds);
     expect(problems).toEqual(
       expect.arrayContaining([
@@ -281,7 +212,6 @@ describe('the surface data (src/data/surface.ts)', () => {
         'generation.pathEdges must be a whole number of at least 2, but is 1',
         'generation.outcropBlock names an unknown block "granite"',
         'generation.outcropChance must be from 0 to 1, but is 2',
-        'generation.coalInSightBlock names an unknown block "peat"',
       ]),
     );
   });
