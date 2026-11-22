@@ -1,6 +1,6 @@
 # Plan: Lab 2 becomes the game
 
-Status: agreed with the owner (2026-11-22). No code has changed yet. The owner answered questions 145 to 148 and 153; 149 to 152 and 154 follow the defaults below, and the owner has been told (`docs/owner-questions.md`).
+Status: agreed with the owner (2026-11-22). The owner answered questions 145 to 148 and 153; 149 to 152 and 154 follow the defaults below, and the owner has been told (`docs/owner-questions.md`). Phases A and B are done (A1–A5, B1–B4: PRs #136 to #144 and the design doc v0.3); Phase C, removing the old game, is next.
 
 ## What you asked for
 

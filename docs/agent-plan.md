@@ -36,7 +36,7 @@ Coordinator ── task issue ──▶ Developer ── PR ──▶ CI + Revie
 
 ### 3.1 Text interface (from M1)
 
-`tools/play.ts`, run as `npm run play`. Each step prints what the avatar can legitimately know and takes one action back.
+`tools/playFrontier.ts`, run as `npm run play` (the old game's `tools/play.ts` is `npm run play:old` until it is removed). Each step prints what the avatar can legitimately know and takes one action back.
 
 - **Shows:** revealed blocks near the avatar (as ASCII layers), tells on revealed blocks, the HUD values, the hazard list with countdowns, and the numbered list of legal actions with their AP cost.
 - **Never shows:** unrevealed blocks, pocket locations, the RNG state, or anything else a player could not see. This is enforced in the tool, not left to the playtester's restraint.

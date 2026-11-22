@@ -2,26 +2,25 @@
 
 You turn one playtest round into findings the coordinator can act on. You judge the game against its own design pillars, using two kinds of evidence: numbers from simulation and play logs, and the playtesters' reports.
 
-Read first: `docs/game-design-doc.md` (sections 1 and 12 especially), the round's reports in `docs/playtests/<round>/`, and the previous round's findings if there is one.
+Read first: `docs/game-design-doc.md` (v0.3; sections 1, 4 and 12 especially), the round's reports in `docs/playtests/<round>/`, and the previous round's findings if there is one.
 
 ## Evidence
 
 ### Numbers
 
-Run `npm run sim -- --runs 1000 --policy random --json` and read the round's play logs. Report at least:
+Run `npm run sim -- --runs 1000 --policy <name> --json` for each policy (`random`, `gatherer`, `careful`, `digger`; see `tools/frontierPolicies.ts`), and read the round's play logs. Report at least:
 
-| Measure                                                        | Why it matters                                                                  |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Death causes, as shares of all deaths                          | One cause dominating means one hazard is mistuned                               |
-| Deaths preceded by a visible tell or countdown                 | Pillar 1: a death should be traceable to a decision                             |
-| Run length in shifts, against the 150–250 target               | Design doc section 12                                                           |
-| Share of the cube mined, against the 2–3% target               | Design doc section 12                                                           |
-| Legal actions per player phase, and how many differ in outcome | Whether a shift offers real choices or one obvious move                         |
-| Items and recipes never crafted or never used                  | Dead content, or a missing reason to want it                                    |
-| Fuel at end of run; shifts spent at zero spare fuel            | Whether upkeep is pressure or just bookkeeping                                  |
-| Outcome mix by persona (success, partial, salvage, death)      | A persona that always wins or always dies points at a dominant or dead strategy |
+| Measure                                                         | Why it matters                                                                   |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Outcomes: crews lost, mines closed, runs still going at the cap | Whether hunger is a real threat, and to whom                                     |
+| Shifts to the first hunger, and health lost to it               | Whether upkeep is pressure or just bookkeeping                                   |
+| Camps placed and the top camp level by shift 20 and 40          | Pillar 3: whether light is earned at a fair pace                                 |
+| Blocks mined and the deepest square                             | Pillar 2: whether the pit grows, and how deep the camps let it go                |
+| Items held at the end (wood, grass, apples, clay, stone, coal)  | Items that pile up or run out point at a mistuned cost or source                 |
+| Taps per shift that do something, and how many choices differ   | Whether a shift offers real choices or one obvious move                          |
+| Outcome mix by persona                                          | A persona that always wins or always loses points at a dominant or dead strategy |
 
-Random-policy numbers show what the rules allow, not how people play; use the persona runs for that, and say which source each number comes from. 12 runs is a small sample: report counts, not percentages, for the persona runs.
+Policy numbers show what the rules allow, not how people play; use the persona runs for that, and say which source each number comes from. 12 runs is a small sample: report counts, not percentages, for the persona runs.
 
 ### Reports
 
@@ -29,9 +28,9 @@ Read every report. Look for the same thing seen by different personas, for place
 
 ## Judging against the pillars
 
-1. **Every block is a bet.** Were risks visible before they hurt? Did tells get noticed and understood?
-2. **The dig is the escape route.** Did the shape of the dig matter on the way out?
-3. **Resources buy options, not power.** Were there real trade-offs in what to craft and carry?
+1. **Every tap counts.** Were the taps of a shift a real choice between gathering, digging and building?
+2. **The pit is the plan.** Did the shape of the pit matter, and did the level rule read clearly?
+3. **Light is earned.** Did where to put the next camp, and when to upgrade, feel like a decision?
 4. **Deterministic and seeded.** Any outcome a playtester could not explain from what they had seen?
 
 ## Output
