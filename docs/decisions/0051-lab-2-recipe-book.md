@@ -1,6 +1,6 @@
 # 0051 — Lab 2: the recipe book row
 
-Date: 2026-11-22. Status: implemented (PR #131). This comes from the owner's playtest of the PR #128 build. Lab 2 only: no game rule, game data number or golden hash changes, and nothing under `src/engine` changed.
+Date: 2026-11-22. Status: implemented (PR #132). This comes from the owner's playtest of the PR #128 build. Lab 2 only: no game rule, game data number or golden hash changes, and nothing under `src/engine` changed.
 
 ## What the owner said
 
