@@ -239,6 +239,6 @@ The targets come with the contracts (section 8).
 Answered by the owner on 2026-11-22, and built in the rules PR after B4, which updates sections 4.2, 5 and 11 to match:
 
 - **Wood** (question 157): "Trees regrow slowly." A felled tree grows back after a [Default] number of shifts (about 15).
-- **Grass** (question 158): "Feed animals / food." Grass pays food upkeep at a worse rate than apples: 2 grass for 1 food, after apples and before animals.
+- **Grass** (question 158): "Feed animals / food." Grass pays food upkeep at a worse rate than apples, the rate and order tuned with the simulator.
 - **Animals as food** (question 155): "Yes, that's fine." Kept as built.
 - **Rest** (question 156): "Only at a camp." Rest is started from a camp's panel.
