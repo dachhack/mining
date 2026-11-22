@@ -95,6 +95,8 @@ import type { Recipe } from './recipes';
 import { emptyHistory, noteAction, undoCount, undoLast } from './undoHistory';
 import type { UndoHistory } from './undoHistory';
 import { shadowEdges } from './shadows';
+import { showNight } from './night';
+import type { Night } from './night';
 
 const HINT = 'Tap to gather and dig · tap a camp to upgrade it';
 const STEEP_HINT = 'Too steep: mine the higher blocks around it first.';
@@ -1514,11 +1516,27 @@ export function mountCampLab(
     if (asGame) {
       saveRun(result.world); // saved every shift (question 152)
     }
-    noteSteps(before);
-    cues.start();
     const text = shiftText(result.report, result.world.turn, rest);
     setHint(text, result.report.healthLost > 0 ? true : false);
+    // Night (owner, after the playtest of PR #146): the state has moved on
+    // already; the night only shows it. The animals slide to where they
+    // stepped once it is morning.
+    night?.skip();
+    night = showNight(root, {
+      shift: result.report.shift,
+      summary: text,
+      page,
+      reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+      onDone: () => {
+        night = null;
+        noteSteps(before);
+        cues.start();
+      },
+    });
   }
+
+  /** The night being shown between two shifts, or `null`. */
+  let night: Night | null = null;
 
   /** Close mine takes two taps: the first asks, the second (within a few seconds) closes it. */
   let closeAskedAt = -Infinity;
