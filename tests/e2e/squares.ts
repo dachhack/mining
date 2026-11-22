@@ -169,6 +169,11 @@ export interface CampSpot {
 export interface CampSpotWithCoal extends CampSpot {
   coal: Square;
   around: Square[];
+  /**
+   * True if mining the coal would leave squares unstable (the pit round it
+   * is only 1 deep): the map then asks for a second tap before it mines.
+   */
+  coalRisky: boolean;
 }
 
 /** The squares of the 3 x 3 patch round `centre`. */
@@ -218,7 +223,7 @@ function findCoalDig(
   view: View,
   patch: Square[],
   stoneBeside: Square,
-): { coal: Square; around: Square[] } | undefined {
+): { coal: Square; around: Square[]; coalRisky: boolean } | undefined {
   for (const coal of squaresOf(view)) {
     if (blockDefAt(withCamp, { x: coal.x, y: coal.y, z: 1 }).name !== BLOCKS.coalSeam.name) {
       continue;
@@ -237,12 +242,14 @@ function findCoalDig(
     if (!clear) {
       continue;
     }
+    let coalRisky: boolean;
     try {
       let state = endShift(withCamp).state;
       for (const square of [...around, coal]) {
         state = take(state, 'mine', square);
       }
       state = endShift(state).state;
+      coalRisky = unstableAfterMine(state, coal.x, coal.y).length > 0;
       state = take(state, 'mine', coal);
       if ((state.stockpile['coal'] ?? 0) < 1) {
         continue;
@@ -253,7 +260,7 @@ function findCoalDig(
     } catch {
       continue; // Some step was not legal (no AP left, the level rule, ...).
     }
-    return { coal, around };
+    return { coal, around, coalRisky };
   }
   return undefined;
 }
@@ -303,7 +310,7 @@ function findSpot(state: GameState, view: View, wantCoal: boolean): CampSpotWith
       }
       const dig = wantCoal
         ? findCoalDig(withCamp, view, patch, stoneBeside)
-        : { coal: stoneBeside, around: [] };
+        : { coal: stoneBeside, around: [], coalRisky: false };
       if (dig === undefined) {
         continue;
       }
@@ -318,7 +325,15 @@ function findSpot(state: GameState, view: View, wantCoal: boolean): CampSpotWith
         continue;
       }
       const underStone = blockDefAt(state, { x: stoneBeside.x, y: stoneBeside.y, z: 1 }).name;
-      return { centre, stoneBeside, coal: dig.coal, around: dig.around, spare, underStone };
+      return {
+        centre,
+        stoneBeside,
+        coal: dig.coal,
+        around: dig.around,
+        coalRisky: dig.coalRisky,
+        spare,
+        underStone,
+      };
     }
   }
   throw new Error(

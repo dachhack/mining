@@ -90,6 +90,12 @@ test('sealant is crafted and used from the tool bar; look and hold list a square
   await page.getByTestId('end-shift').click();
   await expect(gauges).toContainText('Shift 3');
   await tapSquare(page, canvas, SPOT.coal.x, SPOT.coal.y);
+  if (SPOT.coalRisky) {
+    // The pit round it is only 1 deep, so the map warns first; nothing in
+    // this test ends the shift again, so nothing cracks.
+    await expect(outcome).toContainText('Tap the square again to mine it all the same');
+    await tapSquare(page, canvas, SPOT.coal.x, SPOT.coal.y);
+  }
   await expect(outcome).toContainText('Got 1 Coal');
   await tapSquare(page, canvas, STONE.x, STONE.y);
   await expect(outcome).toContainText('Got 1 Stone');

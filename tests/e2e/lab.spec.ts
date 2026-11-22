@@ -175,14 +175,31 @@ test('the map never moves while the counter fills up', async ({ page }) => {
   const world = newLabWorld(SEED);
 
   // On screen, one untouched square for each kind of item a top block yields
-  // (stone, coal, timber, ...), found with the engine.
-  const firstOfItem = new Map<string, { x: number; y: number }>();
+  // (stone, timber, ...), found with the engine. The top layer holds no coal
+  // (question 140), so a square is also taken if a second tap on it (the
+  // block below) yields an item not found yet: that is how coal is reached.
+  const firstOfItem = new Map<string, { x: number; y: number; taps: number }>();
   for (let y = Math.ceil(cam.y); y < Math.floor(cam.y) + 10; y += 1) {
     for (let x = Math.ceil(cam.x); x < Math.floor(cam.x) + 10; x += 1) {
       const block = blockDefByCode(topBlockAt(world.state, x, y));
       const item = block.yields[0]?.item;
-      if (item !== undefined && !firstOfItem.has(item) && labTap(world, x, y).result.mined) {
-        firstOfItem.set(item, { x, y });
+      const first = labTap(world, x, y);
+      if (item !== undefined && !firstOfItem.has(item) && first.result.mined) {
+        firstOfItem.set(item, { x, y, taps: 1 });
+      }
+    }
+  }
+  for (let y = Math.ceil(cam.y); y < Math.floor(cam.y) + 10 && firstOfItem.size < 3; y += 1) {
+    for (let x = Math.ceil(cam.x); x < Math.floor(cam.x) + 10 && firstOfItem.size < 3; x += 1) {
+      const used = [...firstOfItem.values()].some(
+        (sq) => Math.abs(sq.x - x) + Math.abs(sq.y - y) <= 1,
+      );
+      const first = labTap(world, x, y);
+      if (used || !first.result.mined) continue;
+      const second = labTap(first.world, x, y);
+      const item = second.result.yields[0]?.item;
+      if (second.result.mined && item !== undefined && !firstOfItem.has(item)) {
+        firstOfItem.set(item, { x, y, taps: 2 });
       }
     }
   }
@@ -199,11 +216,14 @@ test('the map never moves while the counter fills up', async ({ page }) => {
   // player's finger does: if the map had moved, the tap would land on
   // another square and `data-last-tap` would name it.
   for (const [item, square] of firstOfItem) {
-    await page.touchscreen.tap(
-      before.x + (square.x - cam.x + 0.5) * cam.cellPx,
-      before.y + (square.y - cam.y + 0.5) * cam.cellPx,
-    );
-    await expect(canvas).toHaveAttribute('data-last-tap', `mined ${square.x},${square.y}`);
+    for (let tap = 0; tap < square.taps; tap += 1) {
+      await page.touchscreen.tap(
+        before.x + (square.x - cam.x + 0.5) * cam.cellPx,
+        before.y + (square.y - cam.y + 0.5) * cam.cellPx,
+      );
+      await expect(canvas).toHaveAttribute('data-last-tap', `mined ${square.x},${square.y}`);
+      expect(await canvas.boundingBox()).toEqual(before);
+    }
     await expect(page.getByTestId(`lab-res-${item}`)).toBeVisible();
     expect(await canvas.boundingBox()).toEqual(before);
   }
