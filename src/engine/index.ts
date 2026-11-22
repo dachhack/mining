@@ -48,8 +48,10 @@ import type { GameState } from './state';
  * 0.5.0: no coal at the surface, a minimum of coal in layer 1 (owner,
  *        2026-11-22, question 140; decision note 0052). First PR of the
  *        batch after the 2026-11-22 playtest.
+ * 0.6.0: Lab 2 becomes the game (docs/plans/lab2-becomes-the-game.md). Set
+ *        by PR A1, the new world beside the old; covers the batch A1 to B1.
  */
-export const ENGINE_VERSION = '0.5.0';
+export const ENGINE_VERSION = '0.6.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
@@ -432,6 +434,9 @@ export {
   surfaceKindAt,
 } from './surface/state';
 export { shiftsUntilRegrowth } from './surface/regrowth';
+// The new game's world (plan A1), beside the old game until phase C.
+export { createFrontier } from './frontier/generation';
+export type { Feature, FrontierAnimal, FrontierCamp, FrontierState } from './frontier/state';
 // The cube seen from above (design doc v0.2 section 3.1; issue #84): a
 // square's depth, its top block, and the level rule. `topBlockAt` reads the
 // true cube, under a tree too: a view must use `knownSquare` instead.

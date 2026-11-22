@@ -94,6 +94,8 @@ export const BLOCK_LOOKS: Record<BlockId, BlockLook> = {
   air: { colour: '#d9cfbf', ink: '#d9cfbf', pattern: 'plain' },
   // Dirt: warm brown, speckled like loose earth.
   dirt: { colour: '#8a5a33', ink: '#5e3c20', pattern: 'speckle' },
+  // Clay: reddish brown, plain (the old game never generates it).
+  clay: { colour: '#b8673f', ink: '#97502f', pattern: 'plain' },
   // Stone: mid grey, plain.
   stone: { colour: '#8d8d8d', ink: '#8d8d8d', pattern: 'plain' },
   // Hard rock: darker blue-grey with diagonal hatching (it costs more to mine).

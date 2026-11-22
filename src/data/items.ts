@@ -19,7 +19,13 @@ export type ItemId =
   | 'scannerCharge'
   | 'sealant'
   | 'explosive'
-  | 'campKit';
+  | 'campKit'
+  // The new game's surface and clay (Lab 2 becomes the game, plan A1).
+  | 'wood'
+  | 'grass'
+  | 'apple'
+  | 'animal'
+  | 'clay';
 
 // Fuel is a gauge, not an item, so it is not here. The torch and the safety
 // lamp are gone with light (design doc v0.2, section 7). Items have no weight:
@@ -49,4 +55,10 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   sealant: { name: 'Sealant' },
   explosive: { name: 'Explosive' },
   campKit: { name: 'Camp kit' },
+  // The new game's surface and clay (plan A1).
+  wood: { name: 'Wood' },
+  grass: { name: 'Grass' },
+  apple: { name: 'Apples' },
+  animal: { name: 'Animals' },
+  clay: { name: 'Clay' },
 };

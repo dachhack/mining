@@ -418,12 +418,14 @@ describe('M2 data (decision note 0014)', () => {
     for (const [blockId, block] of Object.entries(GAME_DATA.blocks)) {
       limits[blockId] = block.slumpLimit;
     }
-    // Dirt and rubble 1, hard rock and crystal 3, every other block 2.
+    // Dirt, rubble and clay 1, hard rock and crystal 3, every other block 2.
+    // Clay (plan A1) is soft ground like dirt.
     expect(limits).toEqual({
       air: null,
       bedrock: null,
       dirt: 1,
       rubble: 1,
+      clay: 1,
       hardRock: 3,
       crystal: 3,
       stone: 2,

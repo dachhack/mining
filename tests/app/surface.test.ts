@@ -407,9 +407,12 @@ describe('the starting ring pays for the next steps (issue #121), in 200 seeds',
 });
 
 describe('the lab data', () => {
-  it('keeps clay out of the game: no block called clay, and level 1 can mine what clay replaces', () => {
-    expect(Object.keys(BLOCKS)).not.toContain('clay');
-    expect(LAB_CAMP_LEVELS[0]?.addsBlocks).toEqual(expect.arrayContaining(['dirt', 'stone']));
+  it('clay is a real block now (Lab 2 becomes the game, plan A1), and level 1 mines it and what it replaces', () => {
+    expect(Object.keys(BLOCKS)).toContain('clay');
+    expect(BLOCKS.clay.yields).toEqual([{ item: 'clay', count: LAB_SURFACE.clayPerBlock }]);
+    expect(LAB_CAMP_LEVELS[0]?.addsBlocks).toEqual(
+      expect.arrayContaining(['dirt', 'stone', 'clay']),
+    );
   });
 
   it('generates the same surface for a seed', () => {

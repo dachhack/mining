@@ -19,7 +19,8 @@ export type BlockId =
   | 'keystone'
   | 'bedrock'
   | 'rubble'
-  | 'sealed';
+  | 'sealed'
+  | 'clay';
 
 // Design doc 3.5. Every block in that table is defined here, including the
 // ones M1 does not generate yet (unstable ore, relic, keystone).
@@ -173,5 +174,16 @@ export const BLOCKS: Record<BlockId, BlockDef> = {
     mineCostWithDrill: null,
     yields: [],
     slumpLimit: 2,
+  },
+  // Clay: blobs of it in the layers just under the surface of the new game
+  // (Lab 2 becomes the game, plan A1). The old game's cube has none.
+  clay: {
+    code: 15,
+    name: 'Clay',
+    solid: true,
+    mineCost: 1,
+    mineCostWithDrill: null,
+    yields: [{ item: 'clay', count: 1 }],
+    slumpLimit: 1,
   },
 };
