@@ -149,5 +149,5 @@ describe('the frontier world (plan A1)', () => {
         );
       }
     }
-  });
+  }, 60_000); // 200 whole worlds: about 2 s alone, but over 5 s on CI with every suite running at once
 });
