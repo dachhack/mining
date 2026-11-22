@@ -38,7 +38,8 @@ npm run sim       # headless simulation: -- --policy pit --runs 1000 [--json]  (
                   #   -- --acceptance --runs 1000    every policy, rules checked after every step, every run replayed
                   #   -- --survey depth --runs 1000  the depth survey: see docs/surveys/depth-survey.md
 npm run golden    # re-hash or re-record the golden runs: see tests/golden/README.md
-npm run play      # text play interface for playtesting: -- --help for usage and the rules
+npm run play      # text play interface for playtesting the new game: -- --help for usage and the rules
+npm run play:old  # the old game's play interface, until Phase C removes it
 npm run ascii     # print layers of a generated cube as text: -- --seed 7 --layers 0-3
 npm run e2e       # Playwright
 npm run build     # production web build
