@@ -365,21 +365,31 @@ export function startSquare(state: GameState, surface?: Surface): { x: number; y
 }
 
 /**
- * `lab` with no coal at the surface (owner: "No coal at surface"): every coal
- * seam in the cube's top layer is `LAB_SURFACE.surfaceCoalBecomes` (stone)
- * instead. Coal deeper down stays. Lab 2 only: the cube is copied, so the
- * game's own generation, and Lab 1, are not changed.
+ * Lab 2's own cube, made from the game's (Lab 2 only: the cube is copied, so
+ * the game's own generation, and Lab 1, are not changed):
+ *
+ * - no coal at the surface (owner: "No coal at surface"): every coal seam
+ *   in the top layer is `LAB_SURFACE.surfaceCoalBecomes` (stone) instead;
+ *   coal deeper down stays;
+ * - no timber-root anywhere (owner: "Let's get rid of the roots square"):
+ *   every timber-root cell, in any layer, is `LAB_SURFACE.timberRootBecomes`
+ *   (dirt) instead. In Lab 2, wood comes from trees ("Wood is timber").
  */
-export function withoutSurfaceCoal(lab: LabWorld): LabWorld {
+export function labCube(lab: LabWorld): LabWorld {
   const state = lab.state;
   const coal = BLOCKS.coalSeam.code;
-  const replacement = BLOCKS[LAB_SURFACE.surfaceCoalBecomes].code;
+  const coalBecomes = BLOCKS[LAB_SURFACE.surfaceCoalBecomes].code;
+  const root = BLOCKS.timberRoot.code;
+  const rootBecomes = BLOCKS[LAB_SURFACE.timberRootBecomes].code;
+  // Layer 0 is the top layer: its cells are the first x * y entries of the cube.
+  const topCells = state.size.x * state.size.y;
   // `slice()` copies the typed array, like `list[:]` in Python.
   const blocks = state.blocks.slice();
-  // Layer 0 is the top layer: its cells are the first x * y entries of the cube.
-  for (let i = 0; i < state.size.x * state.size.y; i += 1) {
-    if (blocks[i] === coal) {
-      blocks[i] = replacement;
+  for (let i = 0; i < blocks.length; i += 1) {
+    if (blocks[i] === root) {
+      blocks[i] = rootBecomes;
+    } else if (i < topCells && blocks[i] === coal) {
+      blocks[i] = coalBecomes;
     }
   }
   return labWorldFromState(lab.seed, { ...state, blocks });
@@ -391,7 +401,7 @@ export function withoutSurfaceCoal(lab: LabWorld): LabWorld {
  * a patch whose ring pays for the next camp.
  */
 export function newCampWorld(seed: number): CampWorld {
-  const lab = withoutSurfaceCoal(newLabWorld(seed));
+  const lab = labCube(newLabWorld(seed));
   const start = startSquare(lab.state, generateSurface(lab.state, seed));
   // Generate again, keeping the camp's 3 x 3 clear of features and animals,
   // and starting the first animal inside the camp's ring.

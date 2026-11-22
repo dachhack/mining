@@ -474,7 +474,17 @@ body[data-screen='lab2'] {
   flex-wrap: nowrap;
   gap: 4px;
   min-width: 0;
-  overflow: hidden;
+  /* An upgrade costs four kinds since wood joined (note 0050): on a narrow
+     phone the chips scroll sideways, rather than the last being cut off,
+     and the right edge fades as the counter's does. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  mask-image: linear-gradient(90deg, #000 calc(100% - 14px), transparent);
+}
+
+.lab2-cost::-webkit-scrollbar {
+  display: none;
 }
 
 .lab2-cost-chip {

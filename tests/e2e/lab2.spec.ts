@@ -248,13 +248,14 @@ test('the start screen leads to lab 2, which opens in fog round one camp', async
 
 test('the key fits the tray: no entry is cut by its fixed height', async ({ page }) => {
   // Review of PR #122: with the surface's kinds added, a third row of the key
-  // was cut in half by the tray. Seed 110 opens with six kinds in sight
-  // (dirt, stone, timber-root, grass, tree, apple tree: no coal at the
-  // surface since the owner's playtest of the PR #126 build), filling both
-  // of the key's rows.
+  // was cut in half by the tray. Seed 110 opens with five kinds in sight
+  // (dirt, stone, grass, tree, apple tree: no coal at the surface and no
+  // timber-root, since the owner's playtests of the PR #126 and #128
+  // builds), filling both of the key's rows.
   await openLab2(page);
   const key = page.getByTestId('lab2-tray').locator('.lab-key');
-  await expect(key.locator('.lab-key-entry')).toHaveCount(6);
+  await expect(key.locator('.lab-key-entry')).toHaveCount(5);
+  await expect(key).not.toContainText('Timber');
   const fit = await key.evaluate((el) => {
     const box = el.getBoundingClientRect();
     const entries = Array.from(el.children).map((child) => child.getBoundingClientRect());
@@ -493,7 +494,7 @@ test('a second camp on level ground lifts the fog; then the first is demolished 
   await expect.poll(() => counts(page)).toEqual(expectedCounts(world));
 });
 
-test('clay, stone and an animal pay for level 2, and the ring grows', async ({ page }) => {
+test('wood, clay, stone and an animal pay for level 2, and the ring grows', async ({ page }) => {
   const plan = planLevel2(SEED);
   expect(plan).not.toBeNull();
   if (plan === null) return;
@@ -514,10 +515,13 @@ test('clay, stone and an animal pay for level 2, and the ring grows', async ({ p
   const order = await page
     .getByTestId('lab-counter')
     .evaluate((el) => Array.from(el.children).map((c) => (c as HTMLElement).dataset['testid']));
-  expect(order.slice(0, 4)).toEqual([
+  const level2 = upgradeCostFrom(1) ?? [];
+  expect(order.slice(0, 1 + level2.length)).toEqual([
     'lab-dug',
-    ...(upgradeCostFrom(1) ?? []).map((stack) => `lab-res-${stack.item}`),
+    ...level2.map((stack) => `lab-res-${stack.item}`),
   ]);
+  // Wood is timber (owner): Lab 2 never shows timber.
+  expect(order).not.toContain('lab-res-timber');
 
   // The camp's panel: level 1, ring 5, and the upgrade's cost all green.
   const cost = upgradeCostFrom(1) ?? [];
@@ -534,7 +538,7 @@ test('clay, stone and an animal pay for level 2, and the ring grows', async ({ p
   await expect(page.getByTestId('lab2-upgrade')).toBeEnabled();
   await page.getByTestId('lab2-upgrade').click();
 
-  // Level 2: a wider ring, and the clay, stone and animal paid.
+  // Level 2: a wider ring, and the wood, clay, stone and animal paid.
   await expect(page.getByTestId('lab2-camp-title')).toContainText('Level 2');
   await expect(page.getByTestId('lab2-camp-line')).toContainText(`Ring ${campRadius(2)}`);
   expect(Number(await canvas.getAttribute('data-shown'))).toBeGreaterThan(shownOf(plan.world));
@@ -1023,4 +1027,41 @@ test('undo takes back a placed camp: the camp, its cost and its light', async ({
     'Undone: placing the camp. Back at the start.',
   );
   await expect(undo).toBeDisabled();
+});
+
+test('an upgrade’s four costs can all be reached: the cost row scrolls sideways at 320 px', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  const plan = planLevel2(SEED);
+  expect(plan).not.toBeNull();
+  if (plan === null) return;
+  await pauseClock(page);
+  await page.goto('/#game');
+  await page.evaluate(([key, text]) => window.localStorage.setItem(key, text), [
+    PREPARED_LAB2_KEY,
+    JSON.stringify({ seed: plan.seed, steps: plan.steps }),
+  ] as const);
+  await page.goto('/#lab2');
+  await expect(page.getByTestId('lab-seed')).toHaveText(`Seed ${SEED} · prepared`);
+  await tapSquare(page, page.getByTestId('lab-map'), plan.camp);
+  await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'camp');
+  const row = page.getByTestId('lab2-tray').locator('.lab2-cost');
+  const last = (upgradeCostFrom(1) ?? []).at(-1);
+  expect(last).toBeDefined();
+  if (last === undefined) return;
+  // Scrolled to its end, the last chip is wholly inside the row.
+  await row.evaluate((el) => {
+    el.scrollLeft = el.scrollWidth;
+  });
+  const rowBox = await row.boundingBox();
+  const chip = await page.getByTestId(`lab2-cost-${last.item}`).boundingBox();
+  expect(rowBox).not.toBeNull();
+  expect(chip).not.toBeNull();
+  if (rowBox === null || chip === null) return;
+  // (Within a pixel: the browser rounds the scroll position.)
+  expect(chip.x).toBeGreaterThanOrEqual(rowBox.x - 1);
+  expect(chip.x + chip.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 1);
+  // The Upgrade button is whole and on screen beside it.
+  await expect(page.getByTestId('lab2-upgrade')).toBeInViewport({ ratio: 1 });
 });

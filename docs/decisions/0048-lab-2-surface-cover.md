@@ -21,7 +21,7 @@ Date: 2026-11-22. Status: implemented (PR #127). This follows the owner's playte
   - The owner's words were "Grass and doesn't grow on coal or stone". The coordinator read "and" as "and trees", so the rule covers all three.
   - Tree clumps still draw their chance on every square, so they fall where they did before, minus the rocky squares.
 - **No coal at the surface** (`LAB_SURFACE.surfaceCoalBecomes`): a coal seam in the cube's top layer becomes **stone** in Lab 2. Coal below the top layer is unchanged.
-  - Lab 2 copies the cube (`withoutSurfaceCoal` in `campWorld.ts`), so the game's generation and Lab 1 are unchanged.
+  - Lab 2 copies the cube (`labCube` in `campWorld.ts`, named `withoutSurfaceCoal` until note 0050), so the game's generation and Lab 1 are unchanged.
   - Whether the real game should do the same is question 140, open.
 
 ## Why stone
