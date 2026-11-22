@@ -18,7 +18,8 @@
     "sim": "tsx tools/sim.ts",
     "golden": "tsx tools/golden.ts",
     "ascii": "tsx tools/ascii.ts",
-    "play": "tsx tools/play.ts",
+    "play": "tsx tools/playFrontier.ts",
+    "play:old": "tsx tools/play.ts",
     "e2e": "playwright test"
   },
   "devDependencies": {
