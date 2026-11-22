@@ -745,3 +745,87 @@ for (const screen of SCREENS) {
     await expect(canvas).toHaveAttribute('data-camps', '2');
   });
 }
+
+// The owner's phone, after PR #123: Place camp still under the gesture bar.
+// Android 15 and later draws the app edge to edge, under the status bar and
+// the gesture bar, and Capacitor tells the page how tall they are by setting
+// --safe-area-inset-* on <html> (its SystemBars plugin; env() has them too).
+// Playwright's Chromium has no system bars, so these insets were 0 in every
+// earlier test, and the page fit; on the phone it was taller than the screen
+// by both bars. Here the page gets the insets as the phone gives them.
+const PHONES_WITH_BARS = [
+  { width: 390, height: 844, top: 32, bottom: 24, left: 0, right: 0 },
+  { width: 390, height: 780, top: 32, bottom: 48, left: 0, right: 0 },
+  { width: 360, height: 700, top: 28, bottom: 48, left: 0, right: 0 },
+  { width: 915, height: 412, top: 0, bottom: 24, left: 32, right: 0 },
+];
+for (const phone of PHONES_WITH_BARS) {
+  test(`with system bars (${phone.top} px top, ${phone.bottom} px bottom) at ${phone.width} x ${phone.height}: Place camp is above the gesture bar and works`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: phone.width, height: phone.height });
+    const start = newCampWorld(SEED);
+    const camp = start.camps[0] ?? { x: 0, y: 0 };
+    const target = { x: camp.x + campRadius(1) - 1, y: camp.y };
+    const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp, footprintOf(target.x, target.y));
+    expect(plan).not.toBeNull();
+    if (plan === null) return;
+
+    await pauseClock(page);
+    await page.goto('/#game');
+    await page.evaluate(([key, text]) => window.localStorage.setItem(key, text), [
+      PREPARED_LAB2_KEY,
+      JSON.stringify({
+        seed: SEED,
+        steps: plan.taps.map((s) => ({ kind: 'tap', x: s.x, y: s.y })),
+      }),
+    ] as const);
+    await page.goto('/#lab2');
+    await expect(page.getByTestId('lab-seed')).toHaveText(`Seed ${SEED} · prepared`);
+    // What Capacitor's SystemBars plugin does on the phone.
+    await page.evaluate((insets) => {
+      const style = document.documentElement.style;
+      style.setProperty('--safe-area-inset-top', `${insets.top}px`);
+      style.setProperty('--safe-area-inset-right', `${insets.right}px`);
+      style.setProperty('--safe-area-inset-bottom', `${insets.bottom}px`);
+      style.setProperty('--safe-area-inset-left', `${insets.left}px`);
+      window.dispatchEvent(new Event('resize'));
+    }, phone);
+    const canvas = page.getByTestId('lab-map');
+
+    // The page fits the screen: nothing below it to scroll to (it cannot scroll).
+    const innerHeight = await page.evaluate(() => window.innerHeight);
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(
+      innerHeight,
+    );
+    // The part of the screen the bars leave free.
+    const free = {
+      x: phone.left,
+      y: phone.top,
+      width: phone.width - phone.left - phone.right,
+      height: innerHeight - phone.top - phone.bottom,
+    };
+    await expectInside(page.locator('.lab-top'), free);
+
+    await page.getByTestId('lab2-camp-tool').click();
+    await expect(page.getByTestId('lab-hint')).toHaveText(
+      'Tap the middle of a flat, lit 3 × 3 patch for the new camp.',
+    );
+    await tapSquare(page, canvas, target);
+    await expect(canvas).toHaveAttribute('data-target', `${target.x},${target.y}`);
+    // The hint says what to do next, not "Tap to gather and dig".
+    await expect(page.getByTestId('lab-hint')).toHaveText(
+      'Tap Place camp to build here, or tap another spot.',
+    );
+
+    const confirm = page.getByTestId('lab2-place-confirm');
+    await expect(confirm).toBeEnabled();
+    await expectInside(page.getByTestId('lab2-tray'), free);
+    await expectInside(confirm, free);
+
+    const box = await confirm.boundingBox();
+    if (box === null) return;
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(canvas).toHaveAttribute('data-camps', '2');
+  });
+}

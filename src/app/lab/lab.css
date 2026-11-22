@@ -104,9 +104,14 @@
   margin: 0 auto;
   padding: 0 16px 12px;
   box-sizing: border-box;
-  /* The lab fills the screen; the map takes whatever height is left. */
-  height: 100vh;
-  height: 100dvh;
+  /* The lab fills exactly the part of the screen the system bars leave
+     free: #app (index.html) is padded by their insets, so the lab's height
+     takes them off. With 100dvh alone the page was taller than the screen by
+     the status bar and the gesture bar, and on the owner's phone Place camp
+     sat under the gesture bar (PR #124). The map takes whatever height is
+     left. */
+  height: calc(100vh - var(--inset-top, 0px) - var(--inset-bottom, 0px));
+  height: calc(100dvh - var(--inset-top, 0px) - var(--inset-bottom, 0px));
   display: flex;
   flex-direction: column;
 }

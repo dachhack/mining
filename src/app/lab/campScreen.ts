@@ -89,6 +89,7 @@ const HARVEST_HINTS = {
 };
 const GREYED_HINT = 'Out of range now: put a camp nearby to mine here.';
 const PLACE_HINT = 'Tap the middle of a flat, lit 3 × 3 patch for the new camp.';
+const PLACE_CHOSEN_HINT = 'Tap Place camp to build here, or tap another spot.';
 const NOT_LEVEL_TEXT = 'Ground not level: a camp needs a flat 3 × 3.';
 const DEMOLISH_FIRST = 'Build another camp that covers this one first.';
 
@@ -1063,7 +1064,9 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
         ? new Set(newlyCovered(world, mode.target.x, mode.target.y))
         : new Set();
     if (mode.kind === 'placing') {
-      setHint(mode.target === null ? PLACE_HINT : HINT, false);
+      // While placing, the hint says what to do next: choose a spot, then
+      // tap Place camp (the panel says why a spot is refused, if it is).
+      setHint(mode.target === null ? PLACE_HINT : PLACE_CHOSEN_HINT, false);
     }
     showTray();
     draw();
