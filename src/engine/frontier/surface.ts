@@ -7,11 +7,11 @@
 // - a tree, or an apple tree with no apples left, is felled (wood).
 //
 // Only then can the block under the square be mined. Animals moving and
-// apples growing back come with shifts (A4). The numbers are in
+// apples growing back happen at the end of a shift (shift.ts). The numbers are in
 // src/data/frontier.ts.
 
 import type { ItemStack } from '../../data';
-import { FRONTIER_SURFACE } from '../../data/frontier';
+import { FRONTIER_SHIFT, FRONTIER_SURFACE } from '../../data/frontier';
 import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from './state';
 import type { FrontierAnimal, FrontierState } from './state';
 
@@ -74,8 +74,11 @@ export function harvestAt(state: FrontierState, x: number, y: number): FrontierH
   }
   const apples = state.apples[i] ?? 0;
   if (feature === APPLE_TREE && apples > 0) {
+    // Picked bare, the tree regrows its apples some shifts later (A4).
+    const regrowIn =
+      apples === 1 ? replaced(state.regrowIn, i, FRONTIER_SHIFT.appleRegrowShifts) : state.regrowIn;
     return take(
-      { ...state, apples: replaced(state.apples, i, apples - 1) },
+      { ...state, apples: replaced(state.apples, i, apples - 1), regrowIn },
       { item: 'apple', count: 1 },
       'apple',
     );

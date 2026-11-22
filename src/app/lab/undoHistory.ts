@@ -10,8 +10,10 @@
 //   empty apple tree too), placing a camp, upgrading one, demolishing one.
 // - Not undoable, and never in the history: catching an animal and picking
 //   an apple. Undo steps past them; they stay done.
-// - Never touched by undo: the animals, the apples on the trees, the
-//   regrowth timers' running, and the lab clock. Time never goes back.
+// - Never touched by undo: the animals and the apples on the trees.
+// - Shifts (plan A4): undo works within the current shift only (question
+//   151): the screen empties the history when a shift ends, since the world
+//   has moved on. Undoing an action gives its tap back.
 //
 // For each action the history keeps only what that action changed: the
 // cells of the cube, the depths, the counts, the camps, the squares it lit
@@ -44,8 +46,8 @@ export interface PlayerChange {
   nextCampId: number;
   /** Squares the action lit for the first time (they go back to fog). */
   newlySeen: number[];
-  /** Plants the action removed, as they were: grass, a tree, an apple tree with its apples and timer. */
-  plants: { index: number; feature: Feature; apples: number; regrowAt: number }[];
+  /** Plants the action removed, as they were: grass, a tree, an apple tree with its apples and regrowth wait. */
+  plants: { index: number; feature: Feature; apples: number; regrowIn: number }[];
 }
 
 export interface UndoHistory {
@@ -71,7 +73,7 @@ function fieldsOf(state: GameState): Record<string, unknown> {
   return state as unknown as Record<string, unknown>;
 }
 
-/** What `step` changed, going from `before` to `after` (both at the same lab time). */
+/** What `step` changed, going from `before` to `after` (both in the same shift). */
 export function changeOf(before: CampWorld, after: CampWorld, step: CampStep): PlayerChange {
   // The cube: every array cell that differs, and any other field that differs.
   const cells: PlayerChange['cells'] = [];
@@ -115,7 +117,7 @@ export function changeOf(before: CampWorld, after: CampWorld, step: CampStep): P
         index: i,
         feature,
         apples: before.surface.apples[i] ?? 0,
-        regrowAt: before.surface.regrowAt[i] ?? -1,
+        regrowIn: before.surface.regrowIn[i] ?? -1,
       });
     }
   });
@@ -186,15 +188,14 @@ export function undoChange(world: CampWorld, change: PlayerChange): CampWorld | 
   for (const { index, before } of change.depths) depths[index] = before;
   const seen = [...world.seen];
   for (const i of change.newlySeen) seen[i] = false;
-  // The plants: back as they were. A regrowth timer that has come due since
-  // fires at the next tick: the clock was never turned back.
+  // The plants: back as they were, with their regrowth wait.
   const features = [...world.surface.features];
   const apples = [...world.surface.apples];
-  const regrowAt = [...world.surface.regrowAt];
+  const regrowIn = [...world.surface.regrowIn];
   for (const plant of change.plants) {
     features[plant.index] = plant.feature;
     apples[plant.index] = plant.apples;
-    regrowAt[plant.index] = plant.regrowAt;
+    regrowIn[plant.index] = plant.regrowIn;
   }
   return {
     lab: {
@@ -207,8 +208,10 @@ export function undoChange(world: CampWorld, change: PlayerChange): CampWorld | 
     camps: change.camps,
     seen,
     nextCampId: change.nextCampId,
-    // Only the plants: the animals, the apples' regrowing and the clock are left alone.
-    surface: { ...world.surface, features, apples, regrowAt },
+    // Only the plants: the animals and the apples are left alone.
+    surface: { ...world.surface, features, apples, regrowIn },
+    // The action cost a tap: undoing it gives the tap back (question 151).
+    turn: { ...world.turn, tapsLeft: world.turn.tapsLeft + 1 },
   };
 }
 

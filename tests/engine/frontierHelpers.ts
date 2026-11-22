@@ -1,6 +1,10 @@
 // Hand-made frontier worlds for the engine's tests of the new game (plan A2, A3).
 import type { ItemStack } from '../../src/data';
-import { FRONTIER_CAMP_LEVELS, FRONTIER_NEW_CAMP_COST } from '../../src/data/frontier';
+import {
+  FRONTIER_CAMP_LEVELS,
+  FRONTIER_NEW_CAMP_COST,
+  FRONTIER_SHIFT,
+} from '../../src/data/frontier';
 import { campRadius, seenWith } from '../../src/engine/frontier/camps';
 import { FRONTIER_STATE_VERSION, NO_FEATURE } from '../../src/engine/frontier/state';
 import type { Feature, FrontierAnimal, FrontierState } from '../../src/engine/frontier/state';
@@ -69,6 +73,11 @@ export function world(options: WorldOptions = {}): FrontierState {
     seen: seenWith(new Array<boolean>(SIDE * SIDE).fill(false), camps, SIDE, SIDE),
     inventory: new Map(Object.entries(options.inventory ?? {})),
     mined: 0,
+    regrowIn: new Array<number>(SIDE * SIDE).fill(-1),
+    shift: 1,
+    tapsLeft: FRONTIER_SHIFT.taps,
+    health: FRONTIER_SHIFT.startHealth,
+    status: 'active',
   };
 }
 

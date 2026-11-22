@@ -103,7 +103,7 @@ export const FRONTIER_SURFACE = {
   /** What a tap gives: 1 grass from a tuft, 2 wood from a felled tree (apple trees too, once empty). */
   grassPerTuft: 1,
   woodPerTree: 2,
-  /** An apple tree holds this many apples, 1 a tap. (How long one takes to regrow is the lab's, in milliseconds, until shifts come: labCamps.ts.) */
+  /** An apple tree holds this many apples, 1 a tap. It regrows them FRONTIER_SHIFT.appleRegrowShifts shifts after it is picked bare. */
   applesPerTree: 3,
   /** Roaming animals at the start, and the most there can be. */
   animals: 8,
@@ -131,4 +131,28 @@ export const FRONTIER_SURFACE = {
    * game's own cube is not changed.
    */
   timberRootBecomes: 'dirt' as BlockId,
+};
+
+/**
+ * Shifts (plan section 2; owner, questions 145 to 150). A shift is the
+ * player's turn of taps, then End shift, when the world moves on. Every
+ * number is a [Default] for the owner to tune.
+ */
+export const FRONTIER_SHIFT = {
+  /** Taps a shift (owner: "Fixed number of taps"). Every tap that does something costs 1. */
+  taps: 10,
+  /** The crew's health at the start, and what resting restores it to. */
+  startHealth: 10,
+  /** Upkeep: this much wood at the end of every shift (owner: "Food and wood")... */
+  woodEveryShift: 1,
+  /** ...1 food (an apple, else an animal) at the end of every this many shifts... */
+  foodEveryShifts: 2,
+  /** ...and 1 more wood, every this many shifts, for each camp after the first. */
+  campWoodEveryShifts: 4,
+  /** Each animal takes this many steps at the end of a shift (question 149). */
+  animalStepsPerShift: 3,
+  /** A new animal walks in at the edge every this many shifts, while there are fewer than FRONTIER_SURFACE.animals. */
+  animalEveryShifts: 3,
+  /** An apple tree picked bare has its apples back this many shifts later (question 150). */
+  appleRegrowShifts: 5,
 };

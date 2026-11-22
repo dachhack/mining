@@ -435,8 +435,8 @@ export {
 } from './surface/state';
 export { shiftsUntilRegrowth } from './surface/regrowth';
 // The new game's world (plan A1), beside the old game until phase C.
-export { createFrontier } from './frontier/generation';
-export { FRONTIER_STATE_VERSION } from './frontier/state';
+export { createFrontier, startSquare as frontierStartSquare } from './frontier/generation';
+export { APPLE_TREE, FRONTIER_STATE_VERSION, GRASS, NO_FEATURE, TREE } from './frontier/state';
 // Camps and fog (plan A2).
 export {
   CAMP_HALF_SIZE,
@@ -475,6 +475,10 @@ export type { FrontierHarvest, HarvestKind } from './frontier/surface';
 export { frontierTap } from './frontier/tap';
 export type { FrontierTap, FrontierTapKind } from './frontier/tap';
 export { hashFrontier } from './frontier/hash';
+// Shifts (plan A4).
+export { endFrontierShift, frontierAct, upkeepDue } from './frontier/shift';
+export type { FrontierAction, FrontierOutcome, ShiftReport } from './frontier/shift';
+export type { FrontierStatus } from './frontier/state';
 export type { Feature, FrontierAnimal, FrontierCamp, FrontierState } from './frontier/state';
 // The cube seen from above (design doc v0.2 section 3.1; issue #84): a
 // square's depth, its top block, and the level rule. `topBlockAt` reads the

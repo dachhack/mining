@@ -4,9 +4,10 @@
 //
 // What each tap should do is worked out here with the same lab code the
 // build runs (campWorld.ts): the engine and the surface are deterministic,
-// so the page and this file play the same world. The page's clock is
-// installed and paused (Playwright's `page.clock`), so the animals stand
-// still while a test taps, and a test moves them by running the clock.
+// so the page and this file play the same world. The world moves on only
+// at End shift (plan A4): animals stand still while a test taps, and a test
+// moves them by ending the shift. Each shift has 10 taps, so long runs of
+// taps end the shift when they run out, on the page as in the model.
 // Seed 110 opens with its first camp near the middle of the screen, its
 // whole ring and a little fog in view.
 import { expect, test } from '@playwright/test';
@@ -14,7 +15,7 @@ import type { Locator, Page } from '@playwright/test';
 import { LAB_NEW_CAMP_COST, LAB_SURFACE } from '../../src/data/labCamps';
 import {
   PREPARED_LAB2_KEY,
-  advanceWorld,
+  endShift,
   upgradeCostFrom,
   campRadius,
   demolishCamp,
@@ -26,7 +27,8 @@ import {
   newlyCovered,
   sightMap,
 } from '../../src/app/lab/campWorld';
-import type { CampWorld } from '../../src/app/lab/campWorld';
+import type { CampStep, CampWorld } from '../../src/app/lab/campWorld';
+import { FRONTIER_SHIFT } from '../../src/data/frontier';
 import { GRASS, TREE } from '../../src/app/lab/surface';
 import { planLevel2, tapsUntil } from './campPlan';
 import { emptyHistory, recordAction, undoCount, undoLast } from '../../src/app/lab/undoHistory';
@@ -228,6 +230,70 @@ async function digOnce(
   throw new Error(`square ${square.x},${square.y} was never mined`);
 }
 
+/**
+ * Play one step on the page and in the model `world`, and return the model
+ * after it: a tap (checked against the model's answer) or End shift.
+ */
+async function playStep(
+  page: Page,
+  canvas: Locator,
+  world: CampWorld,
+  step: CampStep,
+): Promise<CampWorld> {
+  if (step.kind === 'endShift') {
+    const next = endShift(world).world;
+    await page.getByTestId('lab2-end-shift').click();
+    await expect(page.getByTestId('lab2-hud')).toHaveAttribute(
+      'data-shift',
+      String(next.turn.shift),
+    );
+    return next;
+  }
+  if (step.kind !== 'tap') {
+    throw new Error(`playStep plays taps and End shift only, not ${step.kind}`);
+  }
+  const tap = campTap(world, step.x, step.y);
+  await tapSquare(page, canvas, step);
+  await expect(canvas).toHaveAttribute('data-last-tap', `${tap.kind} ${step.x},${step.y}`);
+  return tap.world;
+}
+
+/** Play every step of a plan on the page and in the model; return the model after them. */
+async function playSteps(
+  page: Page,
+  canvas: Locator,
+  world: CampWorld,
+  steps: CampStep[],
+): Promise<CampWorld> {
+  let w = world;
+  for (const step of steps) {
+    w = await playStep(page, canvas, w, step);
+  }
+  return w;
+}
+
+/**
+ * Tap `square` until it is mined, ending the shift whenever its taps run
+ * out, on the page and in the model. Returns the model after it.
+ */
+async function digUntilMined(
+  page: Page,
+  canvas: Locator,
+  world: CampWorld,
+  square: Square,
+): Promise<CampWorld> {
+  let w = world;
+  for (let i = 0; i < 8; i += 1) {
+    if (w.turn.tapsLeft === 0) {
+      w = await playStep(page, canvas, w, { kind: 'endShift' });
+    }
+    const mined = campTap(w, square.x, square.y).kind === 'mined';
+    w = await playStep(page, canvas, w, { kind: 'tap', ...square });
+    if (mined) return w;
+  }
+  throw new Error(`square ${square.x},${square.y} was never mined`);
+}
+
 /** A fog square on screen: straight east of the first camp, just past its ring. */
 function fogSquare(world: CampWorld): Square {
   const camp = world.camps[0] ?? { x: 0, y: 0 };
@@ -342,19 +408,14 @@ test('grass is cut, a tree felled, and an animal caught as it wanders', async ({
     String(LAB_SURFACE.woodPerTree),
   );
 
-  // Run the clock until an animal stands on lit ground, then tap it.
-  let time = 0;
+  // End shifts until an animal stands on lit ground (they move only then), then tap it.
   let animal: Square | null = null;
-  while (animal === null) {
-    time += 2_000;
-    expect(time).toBeLessThan(120_000);
-    const later = advanceWorld(world, time);
-    const lit = sightMap(later);
-    animal = later.surface.animals.find((a) => lit[a.x + width * a.y] === 'shown') ?? null;
+  for (let shift = 0; animal === null; shift += 1) {
+    expect(shift).toBeLessThan(12);
+    world = await playStep(page, canvas, world, { kind: 'endShift' });
+    const lit = sightMap(world);
+    animal = world.surface.animals.find((a) => lit[a.x + width * a.y] === 'shown') ?? null;
   }
-  await page.clock.runFor(time);
-  await expect(canvas).toHaveAttribute('data-lab-time', String(time));
-  world = advanceWorld(world, time);
   const animalsBefore = world.surface.animals.length;
   await expect(canvas).toHaveAttribute(
     'data-animals',
@@ -381,7 +442,8 @@ test('a second camp on level ground lifts the fog; then the first is demolished 
   // zoom, so the map is dragged to it first (tapSquare).
   const target = { x: camp.x + campRadius(1) - 1, y: camp.y };
   expect(target.x - camp.x).toBeGreaterThanOrEqual(8);
-  const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp, footprintOf(target.x, target.y));
+  // Two taps kept in hand: one to dig a square, one to place the camp.
+  const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp, footprintOf(target.x, target.y), 2);
   expect(plan).not.toBeNull();
   if (plan === null) return;
   // The new camp lights a wide band of new ground, not a sliver.
@@ -408,18 +470,29 @@ test('a second camp on level ground lifts the fog; then the first is demolished 
   await expect(page.getByTestId('lab2-place-confirm')).toBeDisabled();
   await page.getByTestId('lab2-place-cancel').click();
 
-  // Cutting, felling and digging: each tap either takes something or mines.
-  for (const square of plan.taps) {
-    await tapSquare(page, canvas, square);
-    await expect(canvas).toHaveAttribute(
-      'data-last-tap',
-      new RegExp(`^(harvested|mined) ${square.x},${square.y}$`),
-    );
-  }
-  await expect.poll(() => counts(page)).toEqual(expectedCounts(plan.world));
+  // Cutting, felling and digging: each tap either takes something or mines,
+  // with End shift whenever a shift's taps run out.
+  let played = await playSteps(page, canvas, start, plan.steps);
+  await expect.poll(() => counts(page)).toEqual(expectedCounts(played));
 
-  // A patch the mining left uneven is refused, with its own cue.
-  const uneven = plan.taps.find((sq) => placeRefusal(plan.world, sq.x, sq.y) === 'notLevel');
+  // Dig one bare square near the camp: a patch over it is uneven, and refused with its own cue.
+  const width = start.lab.state.size.x;
+  const bare = sightMap(played)
+    .map((sight, i) => ({ sight, x: i % width, y: Math.floor(i / width) }))
+    .filter((sq) => sq.sight === 'shown' && campTap(played, sq.x, sq.y).kind === 'mined')
+    .filter((sq) => !footprintOf(target.x, target.y).some((f) => f.x === sq.x && f.y === sq.y))
+    // A patch centred there must not overlap the camp's own 3 x 3.
+    .filter((sq) => Math.max(Math.abs(sq.x - camp.x), Math.abs(sq.y - camp.y)) >= 3)
+    .sort(
+      (a, b) =>
+        Math.abs(a.x - camp.x) +
+        Math.abs(a.y - camp.y) -
+        (Math.abs(b.x - camp.x) + Math.abs(b.y - camp.y)),
+    )[0];
+  expect(bare).toBeDefined();
+  if (bare === undefined) return;
+  played = await playStep(page, canvas, played, { kind: 'tap', x: bare.x, y: bare.y });
+  const uneven = placeRefusal(played, bare.x, bare.y) === 'notLevel' ? bare : undefined;
   expect(uneven).toBeDefined();
   await page.getByTestId('lab2-camp-tool').click();
   if (uneven !== undefined) {
@@ -431,7 +504,7 @@ test('a second camp on level ground lifts the fog; then the first is demolished 
   // The level patch: the square past the first ring is fog now.
   const beyond = { x: camp.x + campRadius(1) + 1, y: camp.y };
   expect(await brightness(canvas, beyond)).toBeLessThan(30);
-  const fresh = newlyCovered(plan.world, target.x, target.y).length;
+  const fresh = newlyCovered(played, target.x, target.y).length;
   await tapSquare(page, canvas, target);
   await expect(page.getByTestId('lab2-place-line')).toContainText(
     `level ground · lights ${fresh} new squares`,
@@ -445,30 +518,23 @@ test('a second camp on level ground lifts the fog; then the first is demolished 
   await page.getByTestId('lab2-place-confirm').click();
 
   await expect(canvas).toHaveAttribute('data-camps', '2');
-  await expect(canvas).toHaveAttribute('data-shown', String(shownOf(plan.world) + fresh));
+  await expect(canvas).toHaveAttribute('data-shown', String(shownOf(played) + fresh));
   await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'idle');
   await page.waitForTimeout(1000); // let the ring finish spreading
   expect(await brightness(canvas, beyond)).toBeGreaterThan(40);
   // The camp's cost was paid.
   const paid = await counts(page);
   for (const stack of LAB_NEW_CAMP_COST) {
-    expect(paid[stack.item] ?? 0).toBe((plan.world.lab.counts.get(stack.item) ?? 0) - stack.count);
+    expect(paid[stack.item] ?? 0).toBe((played.lab.counts.get(stack.item) ?? 0) - stack.count);
   }
 
   // Dig for clay: the taps nearest the camp until one gives clay.
-  let world = placeCamp(plan.world, target.x, target.y);
+  let world = placeCamp(played, target.x, target.y);
   const clayBefore = world.lab.counts.get('clay') ?? 0;
-  const forClay = tapsUntil(world, [{ item: 'clay', count: clayBefore + 1 }], camp);
+  const forClay = tapsUntil(world, [{ item: 'clay', count: clayBefore + 1 }], camp, [], 1);
   expect(forClay).not.toBeNull();
   if (forClay === null) return;
-  for (const square of forClay.taps) {
-    await tapSquare(page, canvas, square);
-    await expect(canvas).toHaveAttribute(
-      'data-last-tap',
-      new RegExp(`^(harvested|mined) ${square.x},${square.y}$`),
-    );
-  }
-  world = forClay.world;
+  world = await playSteps(page, canvas, world, forClay.steps);
   await expect(page.getByTestId('lab-res-clay')).toHaveAttribute(
     'data-count',
     String(clayBefore + 1),
@@ -483,15 +549,12 @@ test('a second camp on level ground lifts the fog; then the first is demolished 
   await expect(page.getByTestId('lab-hint')).toContainText('Camp demolished');
   expect(await counts(page)).toEqual(paidAfterClay); // no refund
 
-  // ...and dig where it stood: all nine squares, then the middle once more.
+  // ...and dig where it stood: all nine squares, then the middle once more
+  // (ending the shift when its taps run out).
   world = demolishCamp(world, 1);
   const digs = [...footprintOf(camp.x, camp.y), { x: camp.x, y: camp.y }];
   for (const square of digs) {
-    const tap = campTap(world, square.x, square.y);
-    expect(tap.kind, `${square.x},${square.y}`).toBe('mined');
-    world = tap.world;
-    await tapSquare(page, canvas, square);
-    await expect(canvas).toHaveAttribute('data-last-tap', `mined ${square.x},${square.y}`);
+    world = await digUntilMined(page, canvas, world, square);
   }
   await expect.poll(() => counts(page)).toEqual(expectedCounts(world));
 });
@@ -593,8 +656,9 @@ test('the map never moves while the tool and the panels open and close', async (
   // A refused tap (fog), a mine, and a too-steep refusal: still no movement.
   // The fog square is on screen at the opening zoom: diagonally up and out
   // from the camp, just past its ring (radius 9), not straight out, which is
-  // off screen, nor down to the right, where the Undo button covers the map.
-  const fog = { x: camp.x + 6, y: camp.y - 8 };
+  // off screen. Up to the left: the HUD there lets taps through, while Close
+  // mine covers the top-right corner, and End shift, Rest and Undo the bottom.
+  const fog = { x: camp.x - 6, y: camp.y - 8 };
   expect(sightMap(world)[fog.x + world.lab.state.size.x * fog.y]).toBe('fog');
   expect(await inView(canvas, fog)).toBe(true);
   await tapFixed(fog);
@@ -784,7 +848,7 @@ for (const screen of SCREENS) {
     const start = newCampWorld(SEED);
     const camp = start.camps[0] ?? { x: 0, y: 0 };
     const target = { x: camp.x + campRadius(1) - 1, y: camp.y };
-    const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp, footprintOf(target.x, target.y));
+    const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp, footprintOf(target.x, target.y), 1);
     expect(plan).not.toBeNull();
     if (plan === null) return;
     expect(placeRefusal(plan.world, target.x, target.y)).toBeNull();
@@ -794,10 +858,7 @@ for (const screen of SCREENS) {
     await page.goto('/#game');
     await page.evaluate(([key, text]) => window.localStorage.setItem(key, text), [
       PREPARED_LAB2_KEY,
-      JSON.stringify({
-        seed: SEED,
-        steps: plan.taps.map((s) => ({ kind: 'tap', x: s.x, y: s.y })),
-      }),
+      JSON.stringify({ seed: SEED, steps: plan.steps }),
     ] as const);
     await page.goto('/#lab2');
     await expect(page.getByTestId('lab-seed')).toHaveText(`Seed ${SEED} · prepared`);
@@ -858,7 +919,7 @@ for (const phone of PHONES_WITH_BARS) {
     const start = newCampWorld(SEED);
     const camp = start.camps[0] ?? { x: 0, y: 0 };
     const target = { x: camp.x + campRadius(1) - 1, y: camp.y };
-    const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp, footprintOf(target.x, target.y));
+    const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp, footprintOf(target.x, target.y), 1);
     expect(plan).not.toBeNull();
     if (plan === null) return;
 
@@ -866,10 +927,7 @@ for (const phone of PHONES_WITH_BARS) {
     await page.goto('/#game');
     await page.evaluate(([key, text]) => window.localStorage.setItem(key, text), [
       PREPARED_LAB2_KEY,
-      JSON.stringify({
-        seed: SEED,
-        steps: plan.taps.map((s) => ({ kind: 'tap', x: s.x, y: s.y })),
-      }),
+      JSON.stringify({ seed: SEED, steps: plan.steps }),
     ] as const);
     await page.goto('/#lab2');
     await expect(page.getByTestId('lab-seed')).toHaveText(`Seed ${SEED} · prepared`);
@@ -994,45 +1052,89 @@ test('undo takes back the player’s taps one by one, steps past harvests, and i
   await expect(undo).toBeDisabled();
 });
 
-test('undo while the animals move: they stay where they are, and the clock runs on', async ({
+test('End shift: the HUD counts taps down, End shift refills them, moves the animals, and empties Undo', async ({
   page,
 }) => {
   const canvas = await openLab2(page);
+  const hud = page.getByTestId('lab2-hud');
   const start = newCampWorld(SEED);
+  await expect(hud).toHaveAttribute('data-shift', '1');
+  await expect(hud).toHaveAttribute('data-taps', String(FRONTIER_SHIFT.taps));
+  await expect(hud).toHaveAttribute('data-health', String(FRONTIER_SHIFT.startHealth));
   const camp = start.camps[0] ?? { x: 0, y: 0 };
   const lit = { x: camp.x - 2, y: camp.y }; // just outside the camp's 3 x 3
   const dug = await digOnce(page, canvas, start, lit);
-  await expect.poll(() => counts(page)).toEqual(expectedCounts(dug));
+  await expect(hud).toHaveAttribute('data-taps', String(dug.turn.tapsLeft));
+  await expect(page.getByTestId('lab2-undo')).toBeEnabled();
 
-  // Let the animals walk for 10 seconds of lab time.
-  await page.clock.runFor(10_000);
-  const animals = await canvas.getAttribute('data-animals');
-  const time = Number(await canvas.getAttribute('data-lab-time'));
-  expect(time).toBeGreaterThanOrEqual(10_000);
-  expect(animals).not.toBe(start.surface.animals.map((a) => `${a.x},${a.y}`).join(' '));
+  // End shift: a new shift with a full set of taps, the animals have moved
+  // (as the model says), Undo is off, and the hint says what upkeep took.
+  const next = endShift(dug).world;
+  await page.getByTestId('lab2-end-shift').click();
+  await expect(hud).toHaveAttribute('data-shift', '2');
+  await expect(hud).toHaveAttribute('data-taps', String(FRONTIER_SHIFT.taps));
+  await expect(hud).toHaveAttribute('data-health', String(next.turn.health));
+  await expect(canvas).toHaveAttribute(
+    'data-animals',
+    next.surface.animals.map((a) => `${a.x},${a.y}`).join(' '),
+  );
+  await expect(page.getByTestId('lab2-undo')).toBeDisabled();
+  await expect(page.getByTestId('lab-hint')).toContainText('Shift 1 over');
+  await expect.poll(() => counts(page)).toEqual(expectedCounts(next));
+});
 
-  // Undo the dig: the block is back, the animals have not moved, and the
-  // clock has not gone back.
-  await page.getByTestId('lab2-undo').click();
-  await expect(page.getByTestId('lab-hint')).toContainText(`Undone: the tap at ${lit.x}, ${lit.y}`);
-  const undone = await counts(page);
-  expect(undone['dug'] ?? 0).toBe(dug.lab.mined - 1);
-  await expect(canvas).toHaveAttribute('data-animals', animals ?? '');
-  expect(Number(await canvas.getAttribute('data-lab-time'))).toBeGreaterThanOrEqual(time);
+test('out of taps: a tap does nothing and says so, and End shift stands out', async ({ page }) => {
+  const canvas = await openLab2(page);
+  const start = newCampWorld(SEED);
+  const camp = start.camps[0] ?? { x: 0, y: 0 };
+  const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp);
+  expect(plan).not.toBeNull();
+  // The first shift's taps, one after another, then one more.
+  const first = (plan?.steps ?? []).slice(0, FRONTIER_SHIFT.taps);
+  expect(first.every((step) => step.kind === 'tap')).toBe(true);
+  const world = await playSteps(page, canvas, start, first);
+  await expect(page.getByTestId('lab2-hud')).toHaveAttribute('data-taps', '0');
+  await expect(page.getByTestId('lab2-end-shift')).toHaveClass(/lab2-end-shift-now/);
+  const extra = plan?.taps[FRONTIER_SHIFT.taps] ?? camp;
+  await tapSquare(page, canvas, extra);
+  await expect(canvas).toHaveAttribute('data-last-tap', `noTaps ${extra.x},${extra.y}`);
+  await expect(page.getByTestId('lab-hint')).toContainText('No taps left this shift');
+  await expect.poll(() => counts(page)).toEqual(expectedCounts(world));
+});
+
+test('Close mine asks once, then ends the run: nothing more can be done', async ({ page }) => {
+  const canvas = await openLab2(page);
+  const close = page.getByTestId('lab2-close-mine');
+  await close.click();
+  await expect(close).toHaveText('Tap to confirm');
+  await expect(page.getByTestId('lab2-over')).toBeHidden();
+  await close.click();
+  await expect(page.getByTestId('lab2-hud')).toHaveAttribute('data-status', 'closed');
+  await expect(page.getByTestId('lab2-over')).toBeVisible();
+  await expect(page.getByTestId('lab2-over')).toContainText('Mine closed');
+  await expect(page.getByTestId('lab2-end-shift')).toBeDisabled();
+  const camp = newCampWorld(SEED).camps[0] ?? { x: 0, y: 0 };
+  const lit = { x: camp.x - 2, y: camp.y };
+  await tapSquare(page, canvas, lit);
+  await expect(canvas).toHaveAttribute('data-last-tap', `over ${lit.x},${lit.y}`);
+  // New world starts a fresh run.
+  await page.getByRole('button', { name: 'New world' }).click();
+  await expect(page.getByTestId('lab2-hud')).toHaveAttribute('data-status', 'active');
+  await expect(page.getByTestId('lab2-over')).toBeHidden();
 });
 
 test('undo takes back a placed camp: the camp, its cost and its light', async ({ page }) => {
   const start = newCampWorld(SEED);
   const camp = start.camps[0] ?? { x: 0, y: 0 };
   const target = { x: camp.x + campRadius(1) - 1, y: camp.y };
-  const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp, footprintOf(target.x, target.y));
+  const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp, footprintOf(target.x, target.y), 1);
   expect(plan).not.toBeNull();
   if (plan === null) return;
   await pauseClock(page);
   await page.goto('/#game');
   await page.evaluate(([key, text]) => window.localStorage.setItem(key, text), [
     PREPARED_LAB2_KEY,
-    JSON.stringify({ seed: SEED, steps: plan.taps.map((s) => ({ kind: 'tap', x: s.x, y: s.y })) }),
+    JSON.stringify({ seed: SEED, steps: plan.steps }),
   ] as const);
   await page.goto('/#lab2');
   await expect(page.getByTestId('lab-seed')).toHaveText(`Seed ${SEED} · prepared`);

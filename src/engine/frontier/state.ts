@@ -17,7 +17,7 @@ import type { RngState } from '../rng';
  * not loaded into a new shape. Separate from the old game's STATE_VERSION
  * while the two rule sets live side by side.
  */
-export const FRONTIER_STATE_VERSION = 3; // 2: `inventory` (A2); 3: `mined` (A3)
+export const FRONTIER_STATE_VERSION = 4; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4)
 
 /** What grows on a square: nothing, grass, a tree or an apple tree. */
 export const NO_FEATURE = 0;
@@ -69,4 +69,17 @@ export interface FrontierState {
   inventory: Map<string, number>;
   /** How many blocks have been mined in this world (Lab 2's "Dug"). */
   mined: number;
+  /** For an apple tree picked bare, the shifts until its apples come back; -1 for every other square. */
+  regrowIn: number[];
+  /** The shift being played: 1 is the first. */
+  shift: number;
+  /** Taps left in this shift (src/data/frontier.ts, FRONTIER_SHIFT.taps a shift). */
+  tapsLeft: number;
+  /** The crew's health: 0 loses the run. */
+  health: number;
+  /** 'active' while the run goes on; 'lost' when the crew's health reached 0; 'closed' when the player closed the mine. */
+  status: FrontierStatus;
 }
+
+/** How a run stands: going on, lost, or ended by closing the mine. */
+export type FrontierStatus = 'active' | 'lost' | 'closed';

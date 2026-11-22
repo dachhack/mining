@@ -14,56 +14,51 @@
 //   ground can then be mined;
 // - upgrading a camp costs resources and widens its circle and what it mines.
 //
+// Every rule is the engine's now (src/engine/frontier, plans A2 to A4):
+// this file keeps Lab 2's names for its screen and tests, and turns a Lab 2
+// world into the engine's state and back (`toFrontier`, `fromFrontier`).
+// Shifts (A4): every action that does something costs a tap, and End shift
+// moves the world on (animals, apples, upkeep, hunger).
+//
 // No DOM code here, so the unit tests run it in plain Node. Every number
-// (radii, costs, which level mines which block) is in src/data/labCamps.ts.
+// is in src/data/frontier.ts.
 // Like labWorld.ts, nothing here changes a world it is given: every change
 // returns a new world.
 
 import { BLOCKS, blockDefByCode } from '../../data';
+import { FRONTIER_SHIFT } from '../../data/frontier';
+import { LAB_CAMP_LEVELS } from '../../data/labCamps';
 import {
-  LAB_CAMP_LEVELS,
-  LAB_NEW_CAMP_COST,
-  LAB_START_REACH,
-  LAB_SURFACE,
-} from '../../data/labCamps';
-import {
-  CAMP_HALF_SIZE,
   FRONTIER_STATE_VERSION,
+  NO_FEATURE,
   createFrontier,
-  frontierTap,
+  depthMapOf,
+  frontierAct,
+  frontierStartSquare,
   campAt as engineCampAt,
-  campRadius,
-  canAfford,
   coverLevelAt as engineCoverLevelAt,
-  demolishCamp as engineDemolishCamp,
   demolishRefusal as engineDemolishRefusal,
-  footprintOf,
-  inCircle,
-  inFootprint,
   isLevelPatch as engineIsLevelPatch,
   newlyCovered as engineNewlyCovered,
-  placeCamp as enginePlaceCamp,
   placeRefusal as enginePlaceRefusal,
   seenWith,
   sightAt as engineSightAt,
   sightMap as engineSightMap,
-  topBlockAt,
-  upgradeCamp as engineUpgradeCamp,
   upgradeRefusal as engineUpgradeRefusal,
 } from '../../engine';
 import type {
-  CampChange,
   CampGround,
+  FrontierAction,
   FrontierCamp,
   FrontierState,
-  FrontierTap,
+  FrontierStatus,
   GameState,
-  PlaceRefusal,
+  PlaceRefusal as EnginePlaceRefusal,
+  ShiftReport,
   Sight,
 } from '../../engine';
 import { labWorldFromState } from './labWorld';
 import type { LabTap, LabWorld } from './labWorld';
-import { APPLE_TREE, GRASS, TREE, advanceSurface, clearFeatures, generateSurface } from './surface';
 import type { Harvest, Surface } from './surface';
 
 /** A camp: id, centre square and level. The engine's own record (plan A2). */
@@ -80,8 +75,32 @@ export interface CampWorld {
   seen: boolean[];
   /** The id the next camp will get. */
   nextCampId: number;
-  /** The surface (issue #121): grass, trees, apple trees, animals, clay, and the lab's clock. */
+  /** The surface (issue #121): grass, trees, apple trees and animals. */
   surface: Surface;
+  /** The shift being played, its taps left, the crew's health, and whether the run goes on (A4). */
+  turn: CampTurn;
+}
+
+/** Where the run stands (plan A4). */
+export interface CampTurn {
+  /** The shift being played: 1 is the first. */
+  shift: number;
+  /** Taps left in this shift. */
+  tapsLeft: number;
+  /** The crew's health: 0 loses the run. */
+  health: number;
+  /** 'active', 'lost' (the crew's health reached 0) or 'closed' (the mine was closed). */
+  status: FrontierStatus;
+}
+
+/** A fresh run: shift 1, a full shift of taps, full health. */
+export function firstTurn(): CampTurn {
+  return {
+    shift: 1,
+    tapsLeft: FRONTIER_SHIFT.taps,
+    health: FRONTIER_SHIFT.startHealth,
+    status: 'active',
+  };
 }
 
 // ----- Levels, circles and sight -----
@@ -103,7 +122,20 @@ export {
   upgradeCostFrom,
 } from '../../engine';
 /** What one square looks like to the player: 'shown', 'greyed' or 'fog'. */
-export type { PlaceRefusal, Sight };
+export type { ShiftReport, Sight };
+
+/**
+ * Why an action cannot be done now: the engine's camp rule's reason, or
+ * 'noTaps' (the shift has none left) or 'over' (the run has ended).
+ */
+export type TurnRefusal = 'noTaps' | 'over';
+export type PlaceRefusal = EnginePlaceRefusal | TurnRefusal;
+
+/** Why nothing at all can be done now ('over' or 'noTaps'), or `null` if an action can be. */
+export function turnRefusal(world: CampWorld): TurnRefusal | null {
+  if (world.turn.status !== 'active') return 'over';
+  return world.turn.tapsLeft <= 0 ? 'noTaps' : null;
+}
 
 /** The fields of a Lab 2 world that the engine's camp rules read. Nothing is copied. */
 function ground(world: CampWorld): CampGround {
@@ -116,15 +148,74 @@ function ground(world: CampWorld): CampGround {
   };
 }
 
-/** `world` after a camp change from the engine: new camps, sight and counts. */
-function withChange(world: CampWorld, change: CampChange): CampWorld {
+/** A Lab 2 world as the engine's state. Nothing big is copied. */
+export function toFrontier(world: CampWorld): FrontierState {
   return {
-    ...world,
-    lab: { ...world.lab, counts: change.inventory },
-    camps: change.camps,
-    seen: change.seen,
-    nextCampId: change.nextCampId,
+    version: FRONTIER_STATE_VERSION,
+    seed: world.lab.seed,
+    cube: world.lab.state,
+    features: world.surface.features,
+    apples: world.surface.apples,
+    animals: world.surface.animals,
+    nextAnimalId: world.surface.nextAnimalId,
+    rng: { s: world.surface.rng },
+    camps: world.camps,
+    nextCampId: world.nextCampId,
+    seen: world.seen,
+    inventory: world.lab.counts,
+    mined: world.lab.mined,
+    regrowIn: world.surface.regrowIn,
+    shift: world.turn.shift,
+    tapsLeft: world.turn.tapsLeft,
+    health: world.turn.health,
+    status: world.turn.status,
   };
+}
+
+/**
+ * `world` brought to the engine's `state`. The depth table is kept when the
+ * cube did not change, and worked out again when it did.
+ */
+export function fromFrontier(world: CampWorld, state: FrontierState): CampWorld {
+  const depths = state.cube === world.lab.state ? world.lab.depths : depthMapOf(state.cube);
+  return {
+    lab: {
+      seed: state.seed,
+      state: state.cube,
+      depths,
+      counts: state.inventory,
+      mined: state.mined,
+    },
+    camps: state.camps,
+    seen: state.seen,
+    nextCampId: state.nextCampId,
+    surface: {
+      features: state.features,
+      apples: state.apples,
+      regrowIn: state.regrowIn,
+      animals: state.animals,
+      nextAnimalId: state.nextAnimalId,
+      rng: state.rng.s,
+    },
+    turn: {
+      shift: state.shift,
+      tapsLeft: state.tapsLeft,
+      health: state.health,
+      status: state.status,
+    },
+  };
+}
+
+/** Do `action` in the engine: the world after it (the very same world if it did nothing) and the engine's answer. */
+function act(
+  world: CampWorld,
+  action: FrontierAction,
+): { world: CampWorld; done: boolean; report: ShiftReport | null } {
+  const outcome = frontierAct(toFrontier(world), action);
+  if (!outcome.done) {
+    return { world, done: false, report: null };
+  }
+  return { world: fromFrontier(world, outcome.state), done: true, report: outcome.report };
 }
 
 /** The best level of the camps covering square (x, y); 0 if none covers it. */
@@ -157,19 +248,16 @@ export function isLevelPatch(lab: LabWorld, x: number, y: number): boolean {
 
 // ----- Making a world -----
 
-/** A bare surface for a cube: no grass, trees, animals or clay. Hand-made test worlds start with it. */
+/** A bare surface for a cube: no grass, trees or animals. Hand-made test worlds start with it. */
 export function bareSurface(state: GameState): Surface {
   const squares = state.size.x * state.size.y;
   return {
-    features: new Array<0>(squares).fill(0),
+    features: new Array<typeof NO_FEATURE>(squares).fill(NO_FEATURE),
     apples: new Array<number>(squares).fill(0),
-    regrowAt: new Array<number>(squares).fill(-1),
-    clay: new Set<number>(),
+    regrowIn: new Array<number>(squares).fill(-1),
     animals: [],
     nextAnimalId: 1,
-    nextSpawnAt: Infinity,
     rng: 1,
-    time: 0,
   };
 }
 
@@ -186,7 +274,7 @@ export function campWorldFromLab(
   const camps: Camp[] = [{ id: 1, x, y, level: 1 }];
   const { width, height } = lab.depths;
   const seen = seenWith(new Array<boolean>(width * height).fill(false), camps, width, height);
-  return { lab, camps, seen, nextCampId: 2, surface };
+  return { lab, camps, seen, nextCampId: 2, surface, turn: firstTurn() };
 }
 
 /** A camp world on a hand-made cube, with the first camp at (x, y). */
@@ -201,86 +289,14 @@ export function campWorldFromState(
 }
 
 /**
- * What the surface inside a ring of `radius` around (x, y) gives when all
- * of it is taken, leaving out the 3 x 3 a camp would stand on: wood from
- * trees and apple trees, grass from tufts. For choosing the first camp.
+ * Where the free first camp goes on a level cube with nothing growing on it:
+ * the 3 x 3 patch near the middle with the most dirt on top, then the nearest
+ * the middle. The engine's choice (`createFrontier`), for hand-made tests.
  */
-function surfaceGains(
-  surface: Surface,
-  width: number,
-  height: number,
-  x: number,
-  y: number,
-  radius: number,
-): Map<string, number> {
-  let trees = 0;
-  let tufts = 0;
-  for (let sy = Math.max(0, y - radius); sy <= Math.min(height - 1, y + radius); sy += 1) {
-    for (let sx = Math.max(0, x - radius); sx <= Math.min(width - 1, x + radius); sx += 1) {
-      if (!inCircle(x, y, radius, sx, sy) || inFootprint(x, y, sx, sy)) {
-        continue;
-      }
-      const feature = surface.features[sx + width * sy];
-      if (feature === TREE || feature === APPLE_TREE) trees += 1;
-      if (feature === GRASS) tufts += 1;
-    }
-  }
-  return new Map([
-    ['wood', trees * LAB_SURFACE.woodPerTree],
-    ['grass', tufts * LAB_SURFACE.grassPerTuft],
-  ]);
+export function startSquare(state: GameState): { x: number; y: number } {
+  const bare = new Array<typeof NO_FEATURE>(state.size.x * state.size.y).fill(NO_FEATURE);
+  return frontierStartSquare(state, bare);
 }
-
-/**
- * Where the free first camp goes: among the 3 x 3 patches centred within
- * `LAB_START_REACH` squares of the middle of the map, first those whose
- * ring holds enough wood and grass for a new camp (issue #121), then the one
- * with the most dirt on top (open ground), then the nearest the middle. A
- * new world is level everywhere, so every patch is level. Ties go to the
- * patch met first, row by row, so the choice is the same every time.
- */
-export function startSquare(state: GameState, surface?: Surface): { x: number; y: number } {
-  const midX = (state.size.x - 1) / 2;
-  const midY = (state.size.y - 1) / 2;
-  const h = CAMP_HALF_SIZE;
-  const radius = campRadius(1);
-  let best = { x: Math.floor(midX), y: Math.floor(midY) };
-  let bestPays = -1;
-  let bestDirt = -1;
-  let bestDistance = Infinity;
-  for (let y = h; y < state.size.y - h; y += 1) {
-    for (let x = h; x < state.size.x - h; x += 1) {
-      const distance = (x - midX) ** 2 + (y - midY) ** 2;
-      if (distance > LAB_START_REACH ** 2) {
-        continue; // only patches near the middle
-      }
-      const pays =
-        surface === undefined ||
-        canAfford(
-          surfaceGains(surface, state.size.x, state.size.y, x, y, radius),
-          LAB_NEW_CAMP_COST,
-        )
-          ? 1
-          : 0;
-      const dirt = footprintOf(x, y).filter(
-        (s) => topBlockAt(state, s.x, s.y) === BLOCKS.dirt.code,
-      ).length;
-      // Better means: pays for a camp; then more dirt; then nearer the middle.
-      const better =
-        pays > bestPays ||
-        (pays === bestPays && (dirt > bestDirt || (dirt === bestDirt && distance < bestDistance)));
-      if (better) {
-        best = { x, y };
-        bestPays = pays;
-        bestDirt = dirt;
-        bestDistance = distance;
-      }
-    }
-  }
-  return best;
-}
-
-/**
 
 /**
  * A new Lab 2 world on `seed`: the game's cube (no coal at the surface,
@@ -289,31 +305,18 @@ export function startSquare(state: GameState, surface?: Surface): { x: number; y
  * a patch whose ring pays for the next camp.
  */
 export function newCampWorld(seed: number): CampWorld {
-  // The world is the engine's (plans A1 and A3): its cube, with clay as real
-  // blocks, and its first camp.
+  // The world is the engine's (plans A1 to A4): its cube with clay as real
+  // blocks, its surface and animals, its first camp, and shift 1.
   const frontier = createFrontier(seed);
-  const lab = labWorldFromState(seed, frontier.cube);
-  const start = frontier.camps[0] ?? { x: 0, y: 0 }; // a new world always has its first camp
-  // Lab 2's surface keeps its clock (animals' step times, apples regrowing)
-  // until shifts come (A4), so it is drawn here as before: on the same cube
-  // and seed, in the same order, it has the engine's plants and animals
-  // (tests/app/frontierMatchesLab.test.ts). Clay is in the cube now, so its
-  // own clay set is left empty.
-  const ring: { x: number; y: number }[] = [];
-  const r = campRadius(1);
-  for (let y = start.y - r; y <= start.y + r; y += 1) {
-    for (let x = start.x - r; x <= start.x + r; x += 1) {
-      if (inCircle(start.x, start.y, r, x, y)) ring.push({ x, y });
-    }
-  }
-  const drawn = generateSurface(lab.state, seed, footprintOf(start.x, start.y), ring);
-  return campWorldFromLab(lab, start.x, start.y, { ...drawn, clay: new Set<number>() });
-}
-
-/** The world at lab time `now` (milliseconds): animals have moved, apples have regrown. */
-export function advanceWorld(world: CampWorld, now: number): CampWorld {
-  const surface = advanceSurface(world.surface, world.lab.state, now);
-  return surface === world.surface ? world : { ...world, surface };
+  const empty: CampWorld = {
+    lab: labWorldFromState(seed, frontier.cube),
+    camps: [],
+    seen: [],
+    nextCampId: 1,
+    surface: bareSurface(frontier.cube),
+    turn: firstTurn(),
+  };
+  return fromFrontier(empty, frontier);
 }
 
 // ----- A tap -----
@@ -328,9 +331,12 @@ export function advanceWorld(world: CampWorld, now: number): CampWorld {
  * - 'camp': the square holds a camp, which is never mined;
  * - 'refused': the level rule refused it (`tap.result.refusal` says why);
  * - 'tooHard': the level rule allows it, but the camps covering the square
- *   cannot mine its top block (`needs` says which level can).
+ *   cannot mine its top block (`needs` says which level can);
+ * - 'noTaps': the shift has no taps left (A4);
+ * - 'over': the run has ended (A4).
  */
-export type CampTapKind = 'mined' | 'harvested' | 'fog' | 'greyed' | 'camp' | 'tooHard' | 'refused';
+export type CampTapKind =
+  'mined' | 'harvested' | 'fog' | 'greyed' | 'camp' | 'tooHard' | 'refused' | 'noTaps' | 'over';
 
 export interface CampTap {
   kind: CampTapKind;
@@ -344,22 +350,23 @@ export interface CampTap {
 }
 
 /**
- * Tap square (x, y). It is mined only if a camp covers it, no camp stands on
- * it, the level rule allows it, and a covering camp's level can mine its top
- * block (checked in that order). In every other case the very same world
- * comes back.
+ * Tap square (x, y): the engine's `frontierAct` (plan A3, A4). A tap that
+ * takes or mines something costs 1 tap; in every other case the very same
+ * world comes back.
  */
 export function campTap(world: CampWorld, x: number, y: number): CampTap {
-  // The rules are the engine's (plan A3): `frontierTap` on the fields of
-  // this world. What follows only turns its answer back into Lab 2's world.
-  const tap = frontierTap(frontierView(world), x, y);
+  const outcome = frontierAct(toFrontier(world), { kind: 'tap', x, y });
+  const tap = outcome.tap;
   const answer = (kind: CampTapKind): CampTap => ({
     kind,
     world,
     tap: null,
-    needs: tap.needs,
+    needs: tap?.needs ?? null,
     harvest: null,
   });
+  if (tap === null) {
+    return answer(outcome.refusal === 'over' ? 'over' : 'noTaps');
+  }
   if (tap.kind === 'refused') {
     const result = {
       state: world.lab.state,
@@ -371,95 +378,31 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
     };
     return { ...answer('refused'), tap: { world: world.lab, result } };
   }
+  if (!outcome.done) {
+    return answer(tap.kind); // 'fog', 'greyed', 'camp' or 'tooHard': nothing changes
+  }
+  const after = fromFrontier(world, outcome.state);
   if (tap.kind === 'harvested') {
-    return harvested(world, tap, x, y);
+    const gain = tap.gain[0] ?? { item: 'grass', count: 0 }; // a harvest always gives one stack
+    const harvest = { surface: after.surface, gain, kind: tap.harvest ?? 'grass' };
+    return { ...answer('harvested'), world: after, harvest };
   }
-  if (tap.kind === 'mined') {
-    // Only the mined square's depth changed, and by exactly 1 (a cavern
-    // under it collapses to rubble, so it never drops further).
-    const depths = { ...world.lab.depths, depths: [...world.lab.depths.depths] };
-    const i = x + depths.width * y;
-    depths.depths[i] = (depths.depths[i] ?? 0) + 1;
-    const lab: LabWorld = {
-      seed: world.lab.seed,
-      state: tap.state.cube,
-      depths,
-      counts: tap.state.inventory,
-      mined: tap.state.mined,
-    };
-    const result = {
-      state: tap.state.cube,
-      mined: true,
-      block: tap.block,
-      yields: tap.gain,
-      refusal: null,
-      higherNeighbours: [],
-    };
-    return { ...answer('mined'), world: { ...world, lab }, tap: { world: lab, result } };
-  }
-  return answer(tap.kind); // 'fog', 'greyed', 'camp' or 'tooHard': nothing changes
-}
-
-/**
- * The fields of a Lab 2 world as an engine state, for `frontierTap`. Lab 2's
- * animals also carry their step times; the engine ignores them.
- */
-function frontierView(world: CampWorld): FrontierState {
-  return {
-    version: FRONTIER_STATE_VERSION,
-    seed: world.lab.seed,
-    cube: world.lab.state,
-    features: world.surface.features,
-    apples: world.surface.apples,
-    animals: world.surface.animals,
-    nextAnimalId: world.surface.nextAnimalId,
-    rng: { s: world.surface.rng },
-    camps: world.camps,
-    nextCampId: world.nextCampId,
-    seen: world.seen,
-    inventory: world.lab.counts,
-    mined: world.lab.mined,
+  const result = {
+    state: after.lab.state,
+    mined: true,
+    block: tap.block,
+    yields: tap.gain,
+    refusal: null,
+    higherNeighbours: [],
   };
-}
-
-/**
- * The engine took something from the surface of (x, y): Lab 2's world with
- * its counts and surface after it. Lab 2's clock is kept here until shifts
- * come (A4): an apple tree picked bare regrows its apples after a while,
- * and a felled tree regrows nothing.
- */
-function harvested(world: CampWorld, tap: FrontierTap, x: number, y: number): CampTap {
-  const i = x + world.lab.state.size.x * y;
-  const kind = tap.harvest ?? 'grass'; // `harvest` is set for every 'harvested' tap
-  const regrowAt = [...world.surface.regrowAt];
-  if (kind === 'apple' && (tap.state.apples[i] ?? 0) === 0) {
-    regrowAt[i] = world.surface.time + LAB_SURFACE.appleRegrowMs;
-  } else if (kind === 'felled') {
-    regrowAt[i] = -1;
-  }
-  const kept = new Set(tap.state.animals.map((a) => a.id));
-  const surface: Surface = {
-    ...world.surface,
-    features: tap.state.features,
-    apples: tap.state.apples,
-    regrowAt,
-    animals: world.surface.animals.filter((a) => kept.has(a.id)),
-  };
-  const gain = tap.gain[0] ?? { item: 'grass', count: 0 };
-  return {
-    kind: 'harvested',
-    world: { ...world, lab: { ...world.lab, counts: tap.state.inventory }, surface },
-    tap: null,
-    needs: null,
-    harvest: { surface, gain, kind },
-  };
+  return { ...answer('mined'), world: after, tap: { world: after.lab, result } };
 }
 
 // ----- New camps, upgrades and demolishing (the engine's rules) -----
 
-/** Why a new camp cannot be centred on (x, y), or `null` if it can. */
+/** Why a new camp cannot be centred on (x, y) now, or `null` if it can. */
 export function placeRefusal(world: CampWorld, x: number, y: number): PlaceRefusal | null {
-  return enginePlaceRefusal(ground(world), x, y);
+  return turnRefusal(world) ?? enginePlaceRefusal(ground(world), x, y);
 }
 
 /**
@@ -471,43 +414,65 @@ export function newlyCovered(world: CampWorld, x: number, y: number): number[] {
 }
 
 /**
- * Place a new level-1 camp on (x, y) and pay its cost. If `placeRefusal`
- * says no, the very same world comes back.
+ * Place a new level-1 camp on (x, y), pay its cost, and spend a tap. What
+ * grew on its 3 x 3 is cleared and gives nothing. If `placeRefusal` says
+ * no, the very same world comes back.
  */
 export function placeCamp(world: CampWorld, x: number, y: number): CampWorld {
-  const change = enginePlaceCamp(ground(world), x, y);
-  if (change.camps === world.camps) {
-    return world; // refused
-  }
-  const placed = withChange(world, change);
-  // The camp is built over whatever grew on its 3 x 3: that is cleared, and gives nothing.
-  const width = world.lab.state.size.x;
-  return { ...placed, surface: clearFeatures(world.surface, width, footprintOf(x, y)) };
+  return act(world, { kind: 'place', x, y }).world;
 }
 
-/** Why camp `id` cannot be upgraded ('missing', 'top' level, or 'cost'), or `null` if it can. */
-export function upgradeRefusal(world: CampWorld, id: number): 'missing' | 'top' | 'cost' | null {
-  return engineUpgradeRefusal(ground(world), id);
+/** Why camp `id` cannot be upgraded now, or `null` if it can. */
+export function upgradeRefusal(
+  world: CampWorld,
+  id: number,
+): 'missing' | 'top' | 'cost' | TurnRefusal | null {
+  return turnRefusal(world) ?? engineUpgradeRefusal(ground(world), id);
 }
 
-/** Upgrade camp `id` one level and pay for it. If `upgradeRefusal` says no, the same world comes back. */
+/** Upgrade camp `id` one level, pay for it, and spend a tap. If refused, the same world comes back. */
 export function upgradeCamp(world: CampWorld, id: number): CampWorld {
-  const change = engineUpgradeCamp(ground(world), id);
-  return change.camps === world.camps ? world : withChange(world, change);
+  return act(world, { kind: 'upgrade', id }).world;
 }
 
-/** Why camp `id` cannot be demolished ('missing' or 'notCovered'), or `null` if it can. */
-export function demolishRefusal(world: CampWorld, id: number): 'missing' | 'notCovered' | null {
-  return engineDemolishRefusal(ground(world), id);
+/** Why camp `id` cannot be demolished now, or `null` if it can. */
+export function demolishRefusal(
+  world: CampWorld,
+  id: number,
+): 'missing' | 'notCovered' | TurnRefusal | null {
+  return turnRefusal(world) ?? engineDemolishRefusal(ground(world), id);
 }
 
 /**
- * Demolish camp `id`: it goes, and gives nothing back. If `demolishRefusal`
- * says no, the very same world comes back.
+ * Demolish camp `id` and spend a tap: it goes, and gives nothing back. If
+ * `demolishRefusal` says no, the very same world comes back.
  */
 export function demolishCamp(world: CampWorld, id: number): CampWorld {
-  const change = engineDemolishCamp(ground(world), id);
-  return change.camps === world.camps ? world : withChange(world, change);
+  return act(world, { kind: 'demolish', id }).world;
+}
+
+// ----- Shifts (plan A4) -----
+
+/**
+ * End the shift: the animals step, apples regrow, upkeep is paid in wood
+ * and food, hunger costs health for what cannot be paid, and the next shift
+ * starts with a full set of taps. `report` says what happened; `null` if
+ * the run has already ended (the world is then the same).
+ */
+export function endShift(world: CampWorld): { world: CampWorld; report: ShiftReport | null } {
+  const result = act(world, { kind: 'endShift' });
+  return { world: result.world, report: result.report };
+}
+
+/** Rest: the crew's health is restored, then the shift ends as with `endShift`. */
+export function restCrew(world: CampWorld): { world: CampWorld; report: ShiftReport | null } {
+  const result = act(world, { kind: 'rest' });
+  return { world: result.world, report: result.report };
+}
+
+/** Close the mine: the run ends, kept as it is. */
+export function closeMine(world: CampWorld): CampWorld {
+  return act(world, { kind: 'close' }).world;
 }
 
 /** The display names of the block kinds that level `level` adds to the level below it. */
@@ -547,8 +512,10 @@ export type CampStep =
   | { kind: 'place'; x: number; y: number }
   | { kind: 'upgrade'; id: number }
   | { kind: 'demolish'; id: number }
-  // Let the lab clock run to `until` milliseconds: animals move, apples regrow.
-  | { kind: 'wait'; until: number };
+  // End the shift, rest, or close the mine (A4).
+  | { kind: 'endShift' }
+  | { kind: 'rest' }
+  | { kind: 'close' };
 
 /** The world after one step. A step that is not allowed changes nothing, as on screen. */
 export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
@@ -561,8 +528,14 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   if (step.kind === 'upgrade') {
     return upgradeCamp(world, step.id);
   }
-  if (step.kind === 'wait') {
-    return advanceWorld(world, step.until);
+  if (step.kind === 'endShift') {
+    return endShift(world).world;
+  }
+  if (step.kind === 'rest') {
+    return restCrew(world).world;
+  }
+  if (step.kind === 'close') {
+    return closeMine(world);
   }
   return demolishCamp(world, step.id);
 }

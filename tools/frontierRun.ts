@@ -9,22 +9,20 @@ import {
   canAfford,
   coverLevels,
   createFrontier,
-  demolishFrontierCamp,
+  frontierAct,
   frontierTap,
   hashFrontier,
   newlyCovered,
-  placeFrontierCamp,
   placeRefusal,
   upgradeCostFrom,
-  upgradeFrontierCamp,
   upgradeRefusal,
 } from '../src/engine';
-import type { FrontierState } from '../src/engine';
+import type { FrontierAction, FrontierState } from '../src/engine';
 import { NO_FEATURE } from '../src/engine/frontier/state';
 
 /**
  * One step of the new game, as a short text: "tap X,Y", "place X,Y",
- * "upgrade ID" or "demolish ID". (Shifts come in A4.)
+ * "upgrade ID", "demolish ID", "endShift", "rest" or "close".
  */
 export type FrontierStep = string;
 
@@ -57,34 +55,31 @@ function squareOf(text: string): { x: number; y: number } {
   return { x, y };
 }
 
+/** The engine's action for a step. Throws for text that is not a step. */
+export function actionOf(step: FrontierStep): FrontierAction {
+  const [verb, arg] = step.split(' ');
+  if (verb === 'endShift' || verb === 'rest' || verb === 'close') {
+    return { kind: verb };
+  }
+  if ((verb === 'tap' || verb === 'place') && arg !== undefined) {
+    return { kind: verb, ...squareOf(arg) };
+  }
+  if ((verb === 'upgrade' || verb === 'demolish') && arg !== undefined) {
+    return { kind: verb, id: Number(arg) };
+  }
+  throw new Error(`"${step}" is not a step of the new game`);
+}
+
 /**
  * The state after `step`. A step the rules refuse throws: a recorded run
  * only holds steps that did something, so a refusal means the rules changed.
  */
 export function applyFrontierStep(state: FrontierState, step: FrontierStep): FrontierState {
-  const [verb, arg] = step.split(' ');
-  if (verb === 'tap' && arg !== undefined) {
-    const { x, y } = squareOf(arg);
-    const tap = frontierTap(state, x, y);
-    if (tap.kind !== 'mined' && tap.kind !== 'harvested') {
-      throw new Error(`"${step}" did nothing: ${tap.kind}`);
-    }
-    return tap.state;
+  const outcome = frontierAct(state, actionOf(step));
+  if (!outcome.done) {
+    throw new Error(`"${step}" did nothing: ${outcome.refusal ?? ''}`);
   }
-  if (verb === 'place' && arg !== undefined) {
-    const { x, y } = squareOf(arg);
-    const refusal = placeRefusal(state, x, y);
-    if (refusal !== null) throw new Error(`"${step}" was refused: ${refusal}`);
-    return placeFrontierCamp(state, x, y);
-  }
-  if ((verb === 'upgrade' || verb === 'demolish') && arg !== undefined) {
-    const id = Number(arg);
-    const next =
-      verb === 'upgrade' ? upgradeFrontierCamp(state, id) : demolishFrontierCamp(state, id);
-    if (next === state) throw new Error(`"${step}" was refused`);
-    return next;
-  }
-  throw new Error(`"${step}" is not a step of the new game`);
+  return outcome.state;
 }
 
 /** A new world on `seed` with `steps` taken in order. */
@@ -96,11 +91,16 @@ export function replayFrontier(seed: number, steps: FrontierStep[]): FrontierSta
   return state;
 }
 
+/** The gatherer rests at the end of a shift when the crew's health is this or lower. */
+const GATHERER_REST_AT = 4;
+
 /** The gatherer stops placing camps once it has this many. */
 const GATHERER_CAMPS = 3;
 
 /**
  * The gatherer: a plain policy for recording golden runs. In order:
+ * 0. with no taps left, end the shift, or rest if the crew's health is at
+ *    GATHERER_REST_AT or below (plan A4);
  * 1. upgrade the lowest camp it can pay for;
  * 2. with fewer than 3 camps, place one where it lights the most new
  *    ground, if it can pay;
@@ -112,6 +112,10 @@ const GATHERER_CAMPS = 3;
  * Ties go to the square met first, row by row. `null` when nothing is left to do.
  */
 export function gathererStep(state: FrontierState): FrontierStep | null {
+  if (state.status !== 'active') return null;
+  if (state.tapsLeft === 0) {
+    return state.health <= GATHERER_REST_AT ? 'rest' : 'endShift';
+  }
   const byLevel = [...state.camps].sort((a, b) => a.level - b.level || a.id - b.id);
   for (const camp of byLevel) {
     if (upgradeCostFrom(camp.level) !== null && upgradeRefusal(state, camp.id) === null) {
@@ -173,7 +177,8 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
     if (state.features[s.x + width * s.y] !== NO_FEATURE) continue; // a plant must go first
     if (frontierTap(state, s.x, s.y).kind === 'mined') return `tap ${s.x},${s.y}`;
   }
-  return plant === undefined ? null : `tap ${plant.x},${plant.y}`;
+  // Nothing left to take: end the shift, so the animals and apples come round again.
+  return plant === undefined ? 'endShift' : `tap ${plant.x},${plant.y}`;
 }
 
 /** Play the gatherer on `seed` for at most `maxSteps` steps. */
