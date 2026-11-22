@@ -19,6 +19,7 @@ import {
   newlyCovered,
   demolishCamp,
   demolishRefusal,
+  endShift,
   footprintOf,
   isLevelPatch,
   placeCamp,
@@ -404,6 +405,8 @@ describe('3 x 3 camps on level ground (owner, question 134)', () => {
     expect(campTap(w, MID, MID).kind).toBe('camp');
     w = demolishCamp(w, 1);
     expect(w.lab.counts).toEqual(counts);
+    // A fresh shift, for the ten taps that follow (plan A4).
+    w = endShift(w).world;
     // Every square of the old 3 x 3 can be dug now...
     for (const sq of footprintOf(MID, MID)) {
       const tap = campTap(w, sq.x, sq.y);

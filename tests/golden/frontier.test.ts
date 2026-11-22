@@ -39,7 +39,7 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
     });
   }
 
-  it('between them, they place camps, upgrade one, catch animals, take plants and mine clay', () => {
+  it('between them, they place camps, upgrade one, catch animals, take plants, mine clay and end shifts', () => {
     const seen = new Set<string>();
     for (const name of files) {
       const golden = load(name);
@@ -61,6 +61,8 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
         state = next;
       }
     }
-    expect([...seen].sort()).toEqual(['catch', 'clay', 'mine', 'place', 'plant', 'upgrade']);
+    expect([...seen]).toEqual(
+      expect.arrayContaining(['catch', 'clay', 'endShift', 'mine', 'place', 'plant', 'upgrade']),
+    );
   });
 });

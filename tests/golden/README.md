@@ -32,15 +32,15 @@ Each file holds:
 
 Lab 2 becomes the game (`docs/plans/lab2-becomes-the-game.md`). Its rules are moving into the engine beside the old game's, and they get their own golden runs from plan step A3. `frontier.test.ts` replays every `frontier/*.json`.
 
-| File                            | What it is                                                                                                                                                    |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `frontier/gatherer-seed-1.json` | The gatherer policy (`tools/frontierRun.ts`): takes plants and animals, places two more camps where they light the most new ground, mines, and upgrades camps |
-| `frontier/gatherer-seed-7.json` | The gatherer on another seed: three camps, one upgraded, with clay mined                                                                                      |
+| File                            | What it is                                                                                                                                              |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `frontier/gatherer-seed-1.json` | The gatherer policy (`tools/frontierRun.ts`): 10 taps a shift; takes plants and animals, places two more camps, mines, upgrades a camp, and pays upkeep |
+| `frontier/gatherer-seed-7.json` | The gatherer on another seed: three camps, one upgraded, with clay mined                                                                                |
 
 Each file holds:
 
 - `seed`: what `createFrontier` is called with.
-- `steps`: every step in order: `"tap X,Y"`, `"place X,Y"`, `"upgrade ID"` or `"demolish ID"`. A step the rules refuse fails the replay.
+- `steps`: every step in order: `"tap X,Y"`, `"place X,Y"`, `"upgrade ID"`, `"demolish ID"`, `"endShift"`, `"rest"` or `"close"`. A step the rules refuse (including a tap with no taps left in the shift) fails the replay.
 - `expectedHash`: `hashFrontier` of the state after the last step.
 - `engineVersion`: the engine version it was recorded on. A replay is only expected to match on that version.
 - `stepCount`, `description` and `recordedWith`: for the reader.

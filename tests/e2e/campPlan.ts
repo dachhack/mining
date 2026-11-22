@@ -1,9 +1,15 @@
 // UI lab 2 (issues #118 and #121): plans for the e2e tests, worked out with
-// the same code the build runs (campWorld.ts). The engine and the lab's
-// surface are deterministic, so a plan made here plays out the same on the
-// page, as long as the lab clock stands still (the tests pause it).
+// the same code the build runs (campWorld.ts). The engine is deterministic,
+// and the world moves on only at End shift (plan A4), so a plan made here
+// plays out the same on the page.
 import type { ItemStack } from '../../src/data';
-import { campTap, canAfford, newCampWorld, upgradeCostFrom } from '../../src/app/lab/campWorld';
+import {
+  campTap,
+  canAfford,
+  endShift,
+  newCampWorld,
+  upgradeCostFrom,
+} from '../../src/app/lab/campWorld';
 import type { CampStep, CampWorld } from '../../src/app/lab/campWorld';
 
 /** A square. */
@@ -18,15 +24,19 @@ export interface Square {
  * picks an apple, fells a tree, catches an animal). Squares in `noDig` are
  * only harvested, never mined, so a patch kept for a camp stays level.
  */
-function useful(world: CampWorld, noDig: Square[]): Square[] {
-  const found: Square[] = [];
+function useful(world: CampWorld, noDig: Square[]): (Square & { gives: string[] })[] {
+  const found: (Square & { gives: string[] })[] = [];
   const size = world.lab.state.size;
   for (let y = 0; y < size.y; y += 1) {
     for (let x = 0; x < size.x; x += 1) {
-      const kind = campTap(world, x, y).kind;
+      const tap = campTap(world, x, y);
       const kept = noDig.some((s) => s.x === x && s.y === y);
-      if (kind === 'harvested' || (kind === 'mined' && !kept)) {
-        found.push({ x, y });
+      if (tap.kind === 'harvested' || (tap.kind === 'mined' && !kept)) {
+        const gives =
+          tap.kind === 'harvested'
+            ? [tap.harvest?.gain.item ?? '']
+            : (tap.tap?.result.yields ?? []).map((stack) => stack.item);
+        found.push({ x, y, gives });
       }
     }
   }
@@ -34,8 +44,14 @@ function useful(world: CampWorld, noDig: Square[]): Square[] {
 }
 
 /**
- * Useful taps, one after another, until `cost` is affordable. Squares
- * nearest `near` go first, so every tap stays near the middle of the screen.
+ * Useful taps, one after another, until `cost` is affordable. Taps that
+ * give an item the cost still lacks go first, then the squares nearest
+ * `near`, so every tap stays near the middle of the screen.
+ * When the shift runs out of taps, the shift is ended (plan A4) and the
+ * plan carries on; upkeep is paid then, so the plan gathers enough for it
+ * too. With `leaveTaps`, the plan ends with at least that many taps left in
+ * the shift, for the action that spends what was gathered. `taps` are the
+ * squares tapped; `steps` are every step in order, End shifts included.
  * `null` if nothing useful is left first.
  */
 export function tapsUntil(
@@ -43,31 +59,52 @@ export function tapsUntil(
   cost: ItemStack[],
   near: Square,
   noDig: Square[] = [],
-): { taps: Square[]; world: CampWorld } | null {
+  leaveTaps = 0,
+): { taps: Square[]; steps: CampStep[]; world: CampWorld } | null {
   let world = start;
   const taps: Square[] = [];
-  while (!canAfford(world.lab.counts, cost)) {
-    const options = useful(world, noDig);
-    options.sort(
-      (a, b) =>
-        Math.abs(a.x - near.x) +
-        Math.abs(a.y - near.y) -
-        (Math.abs(b.x - near.x) + Math.abs(b.y - near.y)),
+  const steps: CampStep[] = [];
+  // Done when the cost is covered with `leaveTaps` taps still left in the
+  // shift (for a camp to be placed or upgraded next).
+  while (!(canAfford(world.lab.counts, cost) && world.turn.tapsLeft >= leaveTaps)) {
+    if (world.turn.status !== 'active') {
+      return null;
+    }
+    if (world.turn.tapsLeft === 0 || canAfford(world.lab.counts, cost)) {
+      // Out of taps (or paid for, but short of the taps to spend it): end the
+      // shift. Upkeep may take some of what was gathered; the loop gathers it back.
+      world = endShift(world).world;
+      steps.push({ kind: 'endShift' });
+      continue;
+    }
+    // A tap that gives something the cost still lacks goes first; then the
+    // nearest useful tap (digging down to what lies under the ground).
+    const lacking = new Set(
+      cost
+        .filter((stack) => (world.lab.counts.get(stack.item) ?? 0) < stack.count)
+        .map((stack) => stack.item),
     );
+    const score = (o: Square & { gives: string[] }): number =>
+      (o.gives.some((item) => lacking.has(item)) ? 0 : 1000) +
+      Math.abs(o.x - near.x) +
+      Math.abs(o.y - near.y);
+    const options = useful(world, noDig);
+    options.sort((a, b) => score(a) - score(b));
     const next = options[0];
     if (next === undefined) {
       return null;
     }
     world = campTap(world, next.x, next.y).world;
     taps.push(next);
+    steps.push({ kind: 'tap', x: next.x, y: next.y });
   }
-  return { taps, world };
+  return { taps, steps, world };
 }
 
 /** A played world that can pay for level 2 (wood, clay, stone and an animal) from the first camp's ring. */
 export interface Level2Plan {
   seed: number;
-  /** The taps, as steps to replay before the page opens (no waits: the clock stays at 0). */
+  /** The taps and End shifts, as steps to replay before the page opens. */
   steps: CampStep[];
   world: CampWorld;
   camp: Square & { id: number };
@@ -75,9 +112,9 @@ export interface Level2Plan {
 
 /**
  * Play `seed` with the first camp only: tap the squares nearest it until
- * the counts pay for level 2. The first animal starts inside the ring and
- * the clock does not run, so it is caught where it stands. `null` if the
- * ring cannot pay for it.
+ * the counts pay for level 2, ending each shift when its taps run out. The
+ * first animal starts inside the ring and is caught before the first shift
+ * ends. `null` if the ring cannot pay for it.
  */
 export function planLevel2(seed: number): Level2Plan | null {
   const start = newCampWorld(seed);
@@ -85,13 +122,16 @@ export function planLevel2(seed: number): Level2Plan | null {
   if (camp === undefined) {
     return null;
   }
-  const plan = tapsUntil(start, upgradeCostFrom(1) ?? [], camp);
+  // Upkeep eats an apple, else an animal, every other shift (plan A4): two
+  // apples more than the upgrade needs keep the animal for it.
+  const cost = [...(upgradeCostFrom(1) ?? []), { item: 'apple', count: 2 }];
+  const plan = tapsUntil(start, cost, camp, [], 1);
   if (plan === null) {
     return null;
   }
   return {
     seed,
-    steps: plan.taps.map((s) => ({ kind: 'tap', x: s.x, y: s.y })),
+    steps: plan.steps,
     world: plan.world,
     camp: { id: camp.id, x: camp.x, y: camp.y },
   };

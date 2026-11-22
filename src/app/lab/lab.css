@@ -903,3 +903,106 @@ body[data-screen='lab2'] {
 .lab .lab2-tool {
   position: relative;
 }
+
+/* Shifts (plan A4): the HUD over the map's top-left corner, End shift and
+   Rest over its bottom-left, Close mine over its top-right. Like Undo they
+   sit over the map, so they take no room and never move it. */
+.lab2-hud {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 16px;
+  font-size: min(0.85rem, 16px);
+  font-weight: 650;
+  color: #f2e2c4;
+  background: rgba(24, 19, 15, 0.88);
+  border: 1px solid #7a6650;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.lab2-hud-shift {
+  color: #c9b79c;
+}
+
+.lab2-hud-taps.lab2-hud-empty {
+  color: #ffcf4a;
+}
+
+.lab2-hud-health.lab2-hud-low {
+  color: #ff7a5c;
+}
+
+.lab2-shift-buttons {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  display: flex;
+  gap: 6px;
+}
+
+.lab .lab2-end-shift,
+.lab .lab2-rest,
+.lab .lab2-close-mine {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 20px;
+  font-size: min(0.9rem, 17px);
+  font-weight: 650;
+  color: #f2e2c4;
+  background: rgba(24, 19, 15, 0.88);
+  border: 1px solid #7a6650;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+}
+
+/* Out of taps: End shift is the next thing to press. */
+.lab .lab2-end-shift.lab2-end-shift-now {
+  color: #1b1510;
+  background: linear-gradient(180deg, #e7b878, #c98c4c);
+  border-color: #e9c08a;
+}
+
+.lab .lab2-close-mine {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  height: 32px;
+  padding: 0 12px;
+  font-size: min(0.8rem, 15px);
+}
+
+.lab .lab2-end-shift:disabled,
+.lab .lab2-rest:disabled,
+.lab .lab2-close-mine:disabled {
+  opacity: 0.45;
+}
+
+/* The end of a run: a banner across the middle of the map. */
+.lab2-over {
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 40%;
+  padding: 14px 16px;
+  border-radius: 14px;
+  text-align: center;
+  font-size: min(0.95rem, 18px);
+  font-weight: 650;
+  color: #f2e2c4;
+  background: rgba(24, 19, 15, 0.94);
+  border: 1px solid #c98c4c;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  /* Taps go through to the map, which answers them ("This run is over"). */
+  pointer-events: none;
+}
+
+.lab2-over[hidden] {
+  display: none;
+}

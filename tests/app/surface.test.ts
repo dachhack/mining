@@ -3,12 +3,13 @@
 import { describe, expect, it } from 'vitest';
 import { BLOCKS } from '../../src/data';
 import type { ItemStack } from '../../src/data';
+import { FRONTIER_SHIFT } from '../../src/data/frontier';
 import { LAB_CAMP_LEVELS, LAB_NEW_CAMP_COST, LAB_SURFACE } from '../../src/data/labCamps';
 import { blockAt, depthAt, hashState } from '../../src/engine';
 import { newLabWorld } from '../../src/app/lab/labWorld';
 import {
-  advanceWorld,
   bareSurface,
+  endShift,
   campRadius,
   campTap,
   campWorldFromState,
@@ -24,15 +25,7 @@ import {
   upgradeRefusal,
 } from '../../src/app/lab/campWorld';
 import type { CampWorld } from '../../src/app/lab/campWorld';
-import {
-  APPLE_TREE,
-  NO_FEATURE,
-  GRASS,
-  TREE,
-  advanceSurface,
-  cellIndex,
-  generateSurface,
-} from '../../src/app/lab/surface';
+import { APPLE_TREE, NO_FEATURE, GRASS, TREE, cellIndex } from '../../src/app/lab/surface';
 import type { Feature, Surface } from '../../src/app/lab/surface';
 import { buildState } from '../engine/helpers';
 
@@ -94,8 +87,11 @@ describe('the surface', () => {
     expect(campTap(fell.world, AT.x, AT.y).kind).toBe('mined');
   });
 
-  it('an apple tree gives its apples one a tap, regrows them, and is felled once empty', () => {
-    let w = world((s) => withFeature(s, AT.x, AT.y, APPLE_TREE));
+  it('an apple tree gives its apples one a tap, regrows them some shifts later, and is felled once empty', () => {
+    let w = holding(
+      world((s) => withFeature(s, AT.x, AT.y, APPLE_TREE)),
+      { wood: 99 },
+    );
     for (let i = 0; i < LAB_SURFACE.applesPerTree; i += 1) {
       const pick = campTap(w, AT.x, AT.y);
       expect(pick.harvest?.kind).toBe('apple');
@@ -103,15 +99,16 @@ describe('the surface', () => {
     }
     expect(w.lab.counts.get('apple')).toBe(LAB_SURFACE.applesPerTree);
     expect(w.surface.apples[AT.x + SIDE * AT.y]).toBe(0);
-    // Just before the regrowth time it is still bare; at it, it is full again.
-    const almost = advanceWorld(w, LAB_SURFACE.appleRegrowMs - 1);
-    expect(almost.surface.apples[AT.x + SIDE * AT.y]).toBe(0);
-    const regrown = advanceWorld(w, LAB_SURFACE.appleRegrowMs);
-    expect(regrown.surface.apples[AT.x + SIDE * AT.y]).toBe(LAB_SURFACE.applesPerTree);
+    // One shift before the regrowth it is still bare; at the end of that shift, it is full again.
+    let later = w;
+    for (let i = 1; i < FRONTIER_SHIFT.appleRegrowShifts; i += 1) later = endShift(later).world;
+    expect(later.surface.apples[AT.x + SIDE * AT.y]).toBe(0);
+    later = endShift(later).world;
+    expect(later.surface.apples[AT.x + SIDE * AT.y]).toBe(LAB_SURFACE.applesPerTree);
     // While empty, a tap fells it for wood.
     const fell = campTap(w, AT.x, AT.y);
     expect(fell.harvest?.kind).toBe('felled');
-    expect(fell.world.lab.counts.get('wood')).toBe(LAB_SURFACE.woodPerTree);
+    expect(fell.world.lab.counts.get('wood')).toBe(99 + LAB_SURFACE.woodPerTree);
     expect(fell.world.surface.features[AT.x + SIDE * AT.y]).toBe(0);
   });
 
@@ -174,36 +171,35 @@ describe('clay', () => {
       expect(z).toBeLessThanOrEqual(LAB_SURFACE.clayLastLayer);
     });
     expect(count).toBeGreaterThan(0);
-    // The lab's own clay set is left empty: the clay is in the cube.
-    expect(w.surface.clay.size).toBe(0);
   });
 });
 
-describe('roaming animals', () => {
-  it('move the same way for a seed, however often the clock is read', () => {
-    const start = newCampWorld(110);
-    // One jump to 30 s, against many small steps to the same time.
-    const once = advanceWorld(start, 30_000);
-    let often = start;
-    for (let t = 0; t <= 30_000; t += 250) {
-      often = advanceWorld(often, t);
+describe('roaming animals (they move at End shift, plan A4)', () => {
+  it('stand still during a shift, then move the same way for a seed when it ends', () => {
+    const start = holding(newCampWorld(110), { wood: 99, apple: 99 });
+    // Taps do not move them.
+    const tapped = campTap(start, (start.camps[0]?.x ?? 0) + 2, start.camps[0]?.y ?? 0).world;
+    expect(tapped.surface.animals).toEqual(start.surface.animals);
+    let a = start;
+    let b = start;
+    for (let i = 0; i < 5; i += 1) {
+      a = endShift(a).world;
+      b = endShift(b).world;
     }
-    expect(often.surface.animals).toEqual(once.surface.animals);
-    expect(once.surface.animals.map((a) => [a.x, a.y])).not.toEqual(
-      start.surface.animals.map((a) => [a.x, a.y]),
+    expect(a.surface.animals).toEqual(b.surface.animals);
+    expect(a.surface.animals.map((x) => [x.x, x.y])).not.toEqual(
+      start.surface.animals.map((x) => [x.x, x.y]),
     );
-    // And a world made again from the seed does the same.
-    expect(advanceWorld(newCampWorld(110), 30_000).surface.animals).toEqual(once.surface.animals);
   });
 
   it('never step into a pit or onto a tree, and never share a square', () => {
-    // A world whose middle row is dug 1 down, with a tree; one animal starts beside them.
+    // A world whose middle row is dug 1 down, with a tree; two animals start beside them.
     const state = cube();
     let w = campWorldFromState(1, state, MID, 2, {
       ...withFeature(bareSurface(state), 4, 9, TREE),
       animals: [
-        { id: 1, x: 3, y: 9, nextStepAt: 2_000 },
-        { id: 2, x: 5, y: 10, nextStepAt: 2_000 },
+        { id: 1, x: 3, y: 9 },
+        { id: 2, x: 5, y: 10 },
       ],
       nextAnimalId: 3,
       rng: 12345,
@@ -216,8 +212,9 @@ describe('roaming animals', () => {
     ] as const) {
       w = campTap(w, x, y).world;
     }
-    for (let t = 0; t <= 600_000; t += 7_000) {
-      w = advanceWorld(w, t);
+    w = holding(w, { wood: 999, apple: 999 });
+    for (let shift = 0; shift < 60; shift += 1) {
+      w = endShift(w).world;
       for (const a of w.surface.animals) {
         expect(depthAt(w.lab.state, a.x, a.y), `animal ${a.id} at ${a.x},${a.y}`).toBe(0);
         expect(w.surface.features[a.x + SIDE * a.y]).not.toBe(TREE);
@@ -229,12 +226,10 @@ describe('roaming animals', () => {
 
   it('are caught with a tap inside a ring, and new ones walk in at the edge', () => {
     const state = cube();
-    const animal = { id: 1, x: AT.x, y: AT.y, nextStepAt: 1_000_000 };
     const w = campWorldFromState(1, state, MID, MID, {
       ...bareSurface(state),
-      animals: [animal],
+      animals: [{ id: 1, x: AT.x, y: AT.y }],
       nextAnimalId: 2,
-      nextSpawnAt: LAB_SURFACE.animalRespawnMs,
     });
     const caught = campTap(w, AT.x, AT.y);
     expect(caught.kind).toBe('harvested');
@@ -242,10 +237,11 @@ describe('roaming animals', () => {
     expect(caught.world.lab.counts.get('animal')).toBe(1);
     expect(caught.world.surface.animals).toEqual([]);
     expect(depthAt(caught.world.lab.state, AT.x, AT.y)).toBe(0); // the ground is untouched
-    // A minute later, a new animal has walked in at the edge of the map.
-    const later = advanceSurface(caught.world.surface, state, LAB_SURFACE.animalRespawnMs);
-    expect(later.animals).toHaveLength(1);
-    const [fresh] = later.animals;
+    // A few shifts later, a new animal has walked in at the edge of the map.
+    let later = holding(caught.world, { wood: 99, apple: 99 });
+    for (let i = 0; i < FRONTIER_SHIFT.animalEveryShifts; i += 1) later = endShift(later).world;
+    expect(later.surface.animals).toHaveLength(1);
+    const [fresh] = later.surface.animals;
     const onEdge =
       fresh !== undefined &&
       (fresh.x === 0 || fresh.y === 0 || fresh.x === SIDE - 1 || fresh.y === SIDE - 1);
@@ -256,7 +252,7 @@ describe('roaming animals', () => {
     const state = cube();
     const w = campWorldFromState(1, state, MID, MID, {
       ...bareSurface(state),
-      animals: [{ id: 1, x: 0, y: 0, nextStepAt: 1_000_000 }],
+      animals: [{ id: 1, x: 0, y: 0 }],
     });
     expect(campTap(w, 0, 0).kind).toBe('fog');
   });
@@ -321,7 +317,9 @@ function takeEverything(start: CampWorld, keep: { x: number; y: number }[] = [])
       const x = i % width;
       const y = Math.floor(i / width);
       const kept = keep.some((k) => k.x === x && k.y === y);
-      const tap = campTap(w, x, y);
+      // What a ring holds, not how fast it can be taken: a full shift of taps
+      // before every tap, and no upkeep (shifts are measured by the policy runs).
+      const tap = campTap({ ...w, turn: { ...w.turn, tapsLeft: FRONTIER_SHIFT.taps } }, x, y);
       if ((tap.kind === 'mined' && !kept) || tap.kind === 'harvested') {
         w = tap.world;
         changed = true;
@@ -376,11 +374,11 @@ describe('the starting ring pays for the next steps (issue #121), in 200 seeds',
     const short: string[] = [];
     for (let seed = 1; seed <= 200; seed += 1) {
       const start = newCampWorld(seed);
-      // An animal walks onto lit ground within 10 minutes of lab time.
-      let w = start;
+      // An animal walks onto lit ground within 20 shifts.
+      let w = holding(start, { wood: 999, apple: 999 });
       let seen = false;
-      for (let t = 0; t <= 600_000 && !seen; t += 2_000) {
-        w = advanceWorld(w, t);
+      for (let shift = 0; shift <= 20 && !seen; shift += 1) {
+        if (shift > 0) w = endShift(w).world;
         const sights = sightMap(w);
         seen = w.surface.animals.some((a) => sights[a.x + w.lab.state.size.x * a.y] === 'shown');
       }
@@ -398,7 +396,8 @@ describe('the starting ring pays for the next steps (issue #121), in 200 seeds',
       const keep = best === null ? [] : footprintOf(best.x, best.y);
       let taken = takeEverything(start, keep);
       if (best !== null) {
-        taken = takeEverything(placeCamp(taken, best.x, best.y));
+        const placing = { ...taken, turn: { ...taken.turn, tapsLeft: FRONTIER_SHIFT.taps } };
+        taken = takeEverything(placeCamp(placing, best.x, best.y));
       }
       if (!seen || taken.camps.length < 2 || !canAfford(taken.lab.counts, clayAndStone)) {
         short.push(
@@ -423,10 +422,8 @@ describe('the lab data', () => {
     const a = newCampWorld(42);
     const b = newCampWorld(42);
     expect(a.surface.features).toEqual(b.surface.features);
-    expect([...a.surface.clay]).toEqual([...b.surface.clay]);
     expect(a.surface.animals).toEqual(b.surface.animals);
-    const state = a.lab.state;
-    expect(generateSurface(state, 42).features.length).toBe(state.size.x * state.size.y);
+    expect(a.surface.features.length).toBe(a.lab.state.size.x * a.lab.state.size.y);
   });
 });
 

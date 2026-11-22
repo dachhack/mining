@@ -1,11 +1,11 @@
 // UI lab 2: Undo (owner: "Undo button"; question 141: "animal and apple
-// harvest cannot be undone", the animals, apples and clock are left alone).
-// Undo takes back only the player's own changes, exactly.
+// harvest cannot be undone", the animals and apples are left alone).
+// Undo takes back only the player's own changes, exactly, within the current
+// shift (question 151, plan A4), and gives each undone action's tap back.
 import { describe, expect, it } from 'vitest';
 import { LAB_NEW_CAMP_COST } from '../../src/data/labCamps';
 import { hashState } from '../../src/engine';
 import {
-  advanceWorld,
   applyCampStep,
   campRadius,
   campTap,
@@ -44,9 +44,10 @@ function living(w: CampWorld, skip: Set<number> = new Set()): string {
   return JSON.stringify({
     animals: w.surface.animals,
     apples: w.surface.apples.filter((_, i) => !skip.has(i)),
-    regrowAt: w.surface.regrowAt.filter((_, i) => !skip.has(i)),
-    time: w.surface.time,
+    regrowIn: w.surface.regrowIn.filter((_, i) => !skip.has(i)),
     rng: w.surface.rng,
+    shift: w.turn.shift,
+    health: w.turn.health,
     caught: w.lab.counts.get('animal') ?? 0,
     picked: w.lab.counts.get('apple') ?? 0,
   });
@@ -62,25 +63,24 @@ function undoable(w: CampWorld, step: CampStep): boolean {
   );
 }
 
-/** A player: plays steps at a lab clock, keeping the history as the screen does. */
+/** A player: plays steps, keeping the history as the screen does (emptied when a shift ends). */
 function player(start: CampWorld): {
-  act: (step: CampStep, waitMs?: number) => void;
+  act: (step: CampStep) => void;
   undo: () => string | null;
   world: () => CampWorld;
   history: () => UndoHistory;
-  wait: (ms: number) => void;
 } {
   let world = start;
   let history = emptyHistory();
-  const wait = (ms: number): void => {
-    world = advanceWorld(world, world.surface.time + ms);
-  };
   return {
-    act: (step, waitMs = 700) => {
-      wait(waitMs);
+    act: (step) => {
       const next = applyCampStep(world, step);
       if (next === world) return;
-      if (undoable(world, step)) history = recordAction(history, world, next, step);
+      if (step.kind === 'endShift' || step.kind === 'rest') {
+        history = emptyHistory();
+      } else if (undoable(world, step)) {
+        history = recordAction(history, world, next, step);
+      }
       world = next;
     },
     undo: () => {
@@ -93,7 +93,6 @@ function player(start: CampWorld): {
     },
     world: () => world,
     history: () => history,
-    wait,
   };
 }
 
@@ -119,57 +118,53 @@ describe('undo (owner: "Undo button"; question 141)', () => {
     expect(p.undo()).toBe('nothing');
   });
 
-  it('takes back every action of the player, exactly, while the animals, apples and clock are left alone', () => {
+  it('takes back every action of the shift, exactly, gives each tap back, and leaves the animals and apples alone', () => {
     const start = newCampWorld(110);
     const camp = start.camps[0] ?? { x: 0, y: 0 };
     const target = { x: camp.x + campRadius(1) - 1, y: camp.y };
     const p = player(start);
-    // Play: taps that pay for a camp (planned again as the animals move),
-    // the camp, and a demolish once the new camp covers the first; keep the
-    // player's state before each undoable action.
+    // Gather for a camp over several shifts, then start a fresh shift: place
+    // the camp, dig a little, and demolish the first camp, all in one shift,
+    // keeping the player's state before each undoable action.
+    const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp, footprintOf(target.x, target.y));
+    for (const step of plan?.steps ?? []) p.act(step);
+    p.act({ kind: 'endShift' });
+    expect(undoCount(p.history())).toBe(0); // a shift's end empties the history
+    // Upkeep may have spent some of what the plan gathered: gather it back in this shift.
+    const topUp = tapsUntil(p.world(), LAB_NEW_CAMP_COST, camp, footprintOf(target.x, target.y));
     const before: string[] = [];
+    const taps: number[] = [];
     const act = (step: CampStep): void => {
-      p.wait(700);
-      if (undoable(p.world(), step)) before.push(playerState(p.world()));
-      p.act(step, 0);
+      if (undoable(p.world(), step)) {
+        before.push(playerState(p.world()));
+        taps.push(p.world().turn.tapsLeft);
+      }
+      p.act(step);
     };
-    for (let round = 0; round < 5 && p.world().camps.length < 2; round += 1) {
-      const plan = tapsUntil(p.world(), LAB_NEW_CAMP_COST, camp, footprintOf(target.x, target.y));
-      for (const s of plan?.taps ?? []) act({ kind: 'tap', x: s.x, y: s.y });
-      act({ kind: 'place', x: target.x, y: target.y });
-    }
+    for (const step of topUp?.steps ?? []) act(step);
+    act({ kind: 'place', x: target.x, y: target.y });
     const first = p.world().camps[0];
     if (first !== undefined && demolishRefusal(p.world(), first.id) === null) {
       act({ kind: 'demolish', id: first.id });
     }
+    expect(p.world().turn.shift).toBe(
+      start.turn.shift + (plan?.steps.filter((s) => s.kind === 'endShift').length ?? 0) + 1,
+    );
     const kinds = p.history().changes.map((c) => c.step.kind);
     expect(kinds).toContain('place');
     expect(kinds).toContain('demolish');
     expect(undoCount(p.history())).toBe(before.length);
 
-    // Undo all the way, with time passing between undos.
+    // Undo all the way back to the start of the shift.
     for (let k = before.length - 1; k >= 0; k -= 1) {
-      p.wait(1500);
       const undone = p.history().changes.at(-1);
       const skip = new Set(undone?.plants.map((plant) => plant.index) ?? []);
-      let livingBefore = living(p.world(), skip);
-      let result = p.undo();
-      // A tree cannot come back under an animal: wait for it to move.
-      for (
-        let tries = 0;
-        tries < 20 && result !== null && result.startsWith('An animal');
-        tries += 1
-      ) {
-        p.wait(3000);
-        livingBefore = living(p.world(), skip);
-        result = p.undo();
-      }
-      expect(result, `undo ${k}`).toBeNull();
+      const livingBefore = living(p.world(), skip);
+      expect(p.undo(), `undo ${k}`).toBeNull();
       expect(playerState(p.world()), `the player's state before action ${k}`).toBe(before[k]);
-      // The animals, apples, harvests and clock are as they were just before the undo.
-      // The animals, harvests and clock are as they were just before the undo;
-      // so are the apples and timers, except on a plant the undo put back
-      // (a felled apple tree comes back as it was).
+      expect(p.world().turn.tapsLeft, `taps back after undo ${k}`).toBe(taps[k]);
+      // The animals, harvests, apples and shift are as they were just before
+      // the undo, except on a plant the undo put back.
       expect(living(p.world(), skip)).toBe(livingBefore);
     }
     expect(p.undo()).toBe('nothing');
@@ -187,15 +182,15 @@ describe('undo (owner: "Undo button"; question 141)', () => {
     if (dig === null || apple === null || animal === null) return;
 
     // Dig A, catch the animal, pick an apple, then dig B.
-    p.act({ kind: 'tap', ...dig }, 0);
+    p.act({ kind: 'tap', ...dig });
     const afterA = playerState(p.world());
-    p.act({ kind: 'tap', ...animal }, 0);
-    p.act({ kind: 'tap', ...apple }, 0);
+    p.act({ kind: 'tap', ...animal });
+    p.act({ kind: 'tap', ...apple });
     const caughtId = start.surface.animals.find((a) => a.x === animal.x && a.y === animal.y)?.id;
     const applesLeft = p.world().surface.apples[apple.x + start.lab.state.size.x * apple.y];
     const digB = squareWhere(p.world(), 'mined');
     if (digB === null) throw new Error('nothing more to dig');
-    p.act({ kind: 'tap', ...digB }, 0);
+    p.act({ kind: 'tap', ...digB });
     // Only the two digs are in the history.
     expect(p.history().changes.map((c) => c.step)).toEqual([
       { kind: 'tap', ...dig },
@@ -225,7 +220,7 @@ describe('undo (owner: "Undo button"; question 141)', () => {
     expect(tree).not.toBeNull();
     if (tree === null) return;
     const p = player(start);
-    p.act({ kind: 'tap', ...tree }, 0);
+    p.act({ kind: 'tap', ...tree });
     expect(p.world().surface.features[tree.x + start.lab.state.size.x * tree.y]).not.toBe(TREE);
     // An animal walks onto the cleared square.
     const w = p.world();

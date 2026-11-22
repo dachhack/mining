@@ -6,6 +6,7 @@
 import { BLOCKS, CONTRACT_IDS, DEFAULT_LOADOUT_ID } from '../../data';
 import {
   FRONTIER_NEW_CAMP_COST,
+  FRONTIER_SHIFT,
   FRONTIER_SURFACE,
   FRONTIER_START_REACH,
 } from '../../data/frontier';
@@ -68,7 +69,7 @@ interface SurfaceDraw {
 }
 
 /** True if an animal could stand on square (x, y): on the map, at ground level, no tree, no other animal. */
-function walkable(
+export function walkable(
   cube: GameState,
   features: Feature[],
   animals: FrontierAnimal[],
@@ -315,5 +316,10 @@ export function createFrontier(seed: number): FrontierState {
     ),
     inventory: new Map(),
     mined: 0,
+    regrowIn: new Array<number>(cube.size.x * cube.size.y).fill(-1),
+    shift: 1,
+    tapsLeft: FRONTIER_SHIFT.taps,
+    health: FRONTIER_SHIFT.startHealth,
+    status: 'active',
   };
 }

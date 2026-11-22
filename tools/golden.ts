@@ -312,13 +312,14 @@ const FRONTIER_RUNS: { name: string; seed: number; maxSteps: number; description
     seed: 1,
     maxSteps: 400,
     description:
-      'The gatherer: takes plants and animals, places two more camps where they light the most new ground, mines clay and stone, and upgrades camps to level 2',
+      'The gatherer: 10 taps a shift; takes plants and animals, places two more camps where they light the most new ground, mines clay and stone, upgrades a camp to level 2, and pays upkeep at the end of each shift',
   },
   {
     name: 'gatherer-seed-7',
     seed: 7,
     maxSteps: 400,
-    description: 'The gatherer on another seed: three camps, one upgraded, with clay mined',
+    description:
+      'The gatherer on another seed: three camps, one upgraded, and a rest when hunger brought the crew low',
   },
 ];
 

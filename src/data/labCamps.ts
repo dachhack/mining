@@ -41,15 +41,7 @@ export const LAB_ITEMS: Record<string, string> = {
 };
 
 /**
- * The surface (src/data/frontier.ts), and the lab's clock in milliseconds.
+ * The surface (src/data/frontier.ts). Its clock is shifts now (plan A4,
+ * FRONTIER_SHIFT): Lab 2's millisecond timings are gone.
  */
-export const LAB_SURFACE = {
-  ...FRONTIER_SURFACE,
-  /** An empty apple tree regrows its apples after this long. */
-  appleRegrowMs: 60_000,
-  /** Each animal steps to a face neighbour every this many milliseconds (a random time in the range). */
-  animalStepMinMs: 2_000,
-  animalStepMaxMs: 3_000,
-  /** One new animal walks in at the map's edge this often, while there are fewer than `animals`. */
-  animalRespawnMs: 60_000,
-};
+export const LAB_SURFACE = FRONTIER_SURFACE;

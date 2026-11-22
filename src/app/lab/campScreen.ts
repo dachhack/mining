@@ -20,13 +20,17 @@
 
 import { BLOCKS, blockDefByCode, ITEMS } from '../../data';
 import type { ItemId, ItemStack } from '../../data';
+import { FRONTIER_SHIFT } from '../../data/frontier';
 import { LAB_ITEMS, LAB_NEW_CAMP_COST } from '../../data/labCamps';
 import type { HigherNeighbour, SquareDirection } from '../../engine';
 import { SQUARE_STEPS } from '../../engine';
 import { randomSeed } from '../previewSession';
 import { CAMP_LOOK, CAMP_MARKS } from './campLook';
 import {
-  advanceWorld,
+  closeMine,
+  endShift,
+  restCrew,
+  turnRefusal,
   campAt,
   campRadius,
   campTap,
@@ -46,7 +50,15 @@ import {
   upgradeCamp,
   upgradeCostFrom,
 } from './campWorld';
-import type { Camp, CampStep, CampWorld, PlaceRefusal, Sight } from './campWorld';
+import type {
+  Camp,
+  CampStep,
+  CampTurn,
+  CampWorld,
+  PlaceRefusal,
+  ShiftReport,
+  Sight,
+} from './campWorld';
 import { centredLabCamera, clampLabCamera, rowsOf } from './labCamera';
 import type { LabCamera, ViewSize } from './labCamera';
 import { blockIcon, button, element, labCounter, labKey, labTopBar, showKey } from './labDom';
@@ -96,9 +108,29 @@ const PLACE_HINT = 'Tap the middle of a flat, lit 3 × 3 patch for the new camp.
 const PLACE_CHOSEN_HINT = 'Tap Place camp to build here, or tap another spot.';
 const NOT_LEVEL_TEXT = 'Ground not level: a camp needs a flat 3 × 3.';
 const DEMOLISH_FIRST = 'Build another camp that covers this one first.';
+const NO_TAPS_HINT = 'No taps left this shift: tap End shift to carry on.';
+const OVER_HINT = 'This run is over. Tap New world to start another.';
+const CLOSE_CONFIRM_MS = 3000;
+
+/** What End shift did, in one short line for the hint. */
+function shiftText(report: ShiftReport, turn: CampTurn, rested: boolean): string {
+  const paid = report.paid.map((s) => `${s.count} ${itemName(s.item).toLowerCase()}`).join(', ');
+  const lacking = report.unpaid.map((s) => s.item).join(' or ');
+  const start = rested ? `Rested. Shift ${report.shift} over` : `Shift ${report.shift} over`;
+  if (turn.status === 'lost') {
+    return `${start}: no ${lacking}. The crew is lost.`;
+  }
+  if (report.healthLost > 0) {
+    const part = paid === '' ? '' : `paid ${paid}; `;
+    return `${start}: ${part}no ${lacking}, −${report.healthLost} health.`;
+  }
+  return `${start}: ${paid === '' ? 'nothing due' : `paid ${paid}`}.`;
+}
 
 /** What the place-camp tool says about a target the rules refuse. */
 function placeRefusalText(refusal: PlaceRefusal): string {
+  if (refusal === 'noTaps') return NO_TAPS_HINT;
+  if (refusal === 'over') return OVER_HINT;
   if (refusal === 'notShown') return 'The 3 × 3 must be lit, inside a camp’s ring.';
   if (refusal === 'occupied') return 'It overlaps another camp.';
   if (refusal === 'notLevel') return NOT_LEVEL_TEXT;
@@ -218,15 +250,10 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   /** What the player did, to undo it (undoHistory.ts). A new world starts with none. */
   let history: UndoHistory = emptyHistory();
   /**
-   * The lab's clock, in milliseconds: it starts where the world's surface
-   * left off (0 for a new world), and runs with the screen's clock. Animals
-   * move and apples regrow by it (surface.ts).
+   * Where each animal was before the last End shift, and when (screen time,
+   * in milliseconds): it slides across from there (A4: animals move only
+   * when a shift ends).
    */
-  let clockStart = performance.now() - world.surface.time;
-  function labNow(): number {
-    return performance.now() - clockStart;
-  }
-  /** Where each animal was before its last step, and when it stepped: to slide it across. */
   const lastStep = new Map<number, { x: number; y: number; at: number; facing: number }>();
 
   // ----- The page -----
@@ -247,6 +274,35 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   undoButton.setAttribute('aria-label', 'Undo the last action');
   undoButton.addEventListener('click', undo);
   frame.append(undoButton);
+
+  // Shifts (plan A4): the HUD (shift, taps left, health) over the map's
+  // top-left corner; End shift and Rest over its bottom-left, by the thumb;
+  // Close mine over its top-right. Like Undo, they sit over the map, so they
+  // take no room from the tray and never move the map.
+  const hud = element('div', 'lab2-hud');
+  hud.dataset['testid'] = 'lab2-hud';
+  hud.setAttribute('aria-live', 'polite');
+  const hudShift = element('span', 'lab2-hud-shift');
+  const hudTaps = element('span', 'lab2-hud-taps');
+  hudTaps.dataset['testid'] = 'lab2-hud-taps';
+  const hudHealth = element('span', 'lab2-hud-health');
+  hudHealth.dataset['testid'] = 'lab2-hud-health';
+  hud.append(hudShift, hudTaps, hudHealth);
+  const shiftButtons = element('div', 'lab2-shift-buttons');
+  const endShiftButton = button('lab2-end-shift', 'End shift');
+  endShiftButton.dataset['testid'] = 'lab2-end-shift';
+  endShiftButton.addEventListener('click', () => finishShift(false));
+  const restButton = button('lab2-rest', 'Rest');
+  restButton.dataset['testid'] = 'lab2-rest';
+  restButton.setAttribute('aria-label', 'Rest: the crew gets its health back, and the shift ends');
+  restButton.addEventListener('click', () => finishShift(true));
+  shiftButtons.append(endShiftButton, restButton);
+  const closeButton = button('lab2-close-mine', 'Close mine');
+  closeButton.dataset['testid'] = 'lab2-close-mine';
+  closeButton.addEventListener('click', askCloseMine);
+  const overBanner = element('div', 'lab2-over');
+  overBanner.dataset['testid'] = 'lab2-over';
+  frame.append(hud, shiftButtons, closeButton, overBanner);
 
   const hint = element('p', 'lab-hint', HINT);
   hint.dataset['testid'] = 'lab-hint';
@@ -386,8 +442,8 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     // The square a new camp would go on, while placing: '' if none yet.
     canvas.dataset['target'] =
       mode.kind === 'placing' && mode.target !== null ? `${mode.target.x},${mode.target.y}` : '';
-    // For the e2e tests: the lab clock, and where the animals are.
-    canvas.dataset['labTime'] = String(world.surface.time);
+    // For the e2e tests: the shift, and where the animals are.
+    canvas.dataset['shift'] = String(world.turn.shift);
     canvas.dataset['animals'] = world.surface.animals.map((a) => `${a.x},${a.y}`).join(' ');
   }
 
@@ -439,7 +495,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
    * that has just stepped slides across from where it was.
    */
   function drawAnimals(ctx: CanvasRenderingContext2D, c: number): void {
-    const now = world.surface.time;
+    const now = performance.now();
     for (const animal of world.surface.animals) {
       if (sightOf(animal.x, animal.y) !== 'shown') {
         continue;
@@ -465,7 +521,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       const was = before.find((a) => a.id === animal.id);
       if (was !== undefined && (was.x !== animal.x || was.y !== animal.y)) {
         const facing = Math.atan2(animal.y - was.y, animal.x - was.x);
-        lastStep.set(animal.id, { x: was.x, y: was.y, at: world.surface.time, facing });
+        lastStep.set(animal.id, { x: was.x, y: was.y, at: performance.now(), facing });
       }
     }
   }
@@ -798,8 +854,10 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   const cues = cueLoop((now) => {
     effects = effects.filter((e) => now - e.start < effectMs(e.kind));
     draw(now);
-    // While the camp tool has a target, keep drawing: its square pulses.
-    return effects.length > 0 || (mode.kind === 'placing' && mode.target !== null);
+    // While the camp tool has a target, keep drawing: its square pulses. So
+    // too while an animal is still sliding to where End shift moved it.
+    const sliding = [...lastStep.values()].some((step) => now - step.at < CAMP_LOOK.animalSlideMs);
+    return effects.length > 0 || sliding || (mode.kind === 'placing' && mode.target !== null);
   });
 
   function addEffect(effect: Omit<Effect, 'start'>): void {
@@ -1207,7 +1265,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       actions.append(costRow(cost));
       const upgrade = button('lab2-button lab2-button-main', 'Upgrade');
       upgrade.dataset['testid'] = 'lab2-upgrade';
-      upgrade.disabled = !canAfford(world.lab.counts, cost);
+      upgrade.disabled = !canAfford(world.lab.counts, cost) || turnRefusal(world) !== null;
       upgrade.addEventListener('click', () => confirmUpgrade(camp.id));
       actions.append(upgrade);
     }
@@ -1221,6 +1279,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     world = next;
     tops = topBlocksOf(world.lab.state);
     sights = sightMap(world);
+    showHud();
     showCampCounter();
     showTray();
     draw();
@@ -1249,7 +1308,6 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   }
 
   function confirmPlace(x: number, y: number): void {
-    tick();
     const next = placeCamp(world, x, y);
     if (next === world) {
       return;
@@ -1271,7 +1329,6 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   }
 
   function confirmUpgrade(id: number): void {
-    tick();
     const before = world.camps.find((c) => c.id === id);
     const next = upgradeCamp(world, id);
     if (before === undefined || next === world) {
@@ -1292,16 +1349,89 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   }
 
   function confirmDemolish(id: number): void {
-    tick();
     const next = demolishCamp(world, id);
     if (next === world) {
-      setHint(DEMOLISH_FIRST, true);
+      const why = turnRefusal(world);
+      setHint(why === 'noTaps' ? NO_TAPS_HINT : why === 'over' ? OVER_HINT : DEMOLISH_FIRST, true);
       return;
     }
     remember(world, next, { kind: 'demolish', id });
     mode = { kind: 'idle' };
     setWorld(next);
     setHint('Camp demolished: its ground can be mined now.', false);
+  }
+
+  // ----- Shifts (plan A4) -----
+
+  /** The HUD, the shift buttons and the end-of-run banner, from the world's turn. */
+  function showHud(): void {
+    const turn = world.turn;
+    hudShift.textContent = `Shift ${turn.shift}`;
+    hudTaps.textContent = `⚡ ${turn.tapsLeft}/${FRONTIER_SHIFT.taps}`;
+    hudHealth.textContent = `♥ ${turn.health}/${FRONTIER_SHIFT.startHealth}`;
+    hud.dataset['shift'] = String(turn.shift);
+    hud.dataset['taps'] = String(turn.tapsLeft);
+    hud.dataset['health'] = String(turn.health);
+    hud.dataset['status'] = turn.status;
+    hudTaps.classList.toggle('lab2-hud-empty', turn.tapsLeft === 0);
+    hudHealth.classList.toggle('lab2-hud-low', turn.health <= FRONTIER_SHIFT.startHealth * 0.3);
+    const active = turn.status === 'active';
+    endShiftButton.disabled = !active;
+    restButton.disabled = !active;
+    closeButton.disabled = !active;
+    // Out of taps: End shift is what to press next, so it stands out.
+    endShiftButton.classList.toggle('lab2-end-shift-now', active && turn.tapsLeft === 0);
+    overBanner.hidden = active;
+    overBanner.textContent =
+      turn.status === 'lost'
+        ? `The crew is lost after ${turn.shift - 1} shifts. Tap New world to start again.`
+        : `Mine closed after ${turn.shift} shifts. Tap New world to start again.`;
+  }
+
+  /**
+   * End the shift, or rest (the crew's health back to full, then the shift
+   * ends). The animals slide to where they stepped, the Undo history is
+   * emptied (it never crosses a shift, question 151), and the hint says what
+   * upkeep was paid and what hunger cost.
+   */
+  function finishShift(rest: boolean): void {
+    const before = world.surface.animals;
+    const result = rest ? restCrew(world) : endShift(world);
+    if (result.report === null) {
+      return;
+    }
+    history = emptyHistory();
+    showUndo();
+    effects = [];
+    mode = { kind: 'idle' };
+    preview = new Set();
+    setWorld(result.world);
+    noteSteps(before);
+    cues.start();
+    const text = shiftText(result.report, result.world.turn, rest);
+    setHint(text, result.report.healthLost > 0 ? true : false);
+  }
+
+  /** Close mine takes two taps: the first asks, the second (within a few seconds) closes it. */
+  let closeAskedAt = -Infinity;
+  function askCloseMine(): void {
+    const now = performance.now();
+    if (now - closeAskedAt > CLOSE_CONFIRM_MS) {
+      closeAskedAt = now;
+      closeButton.textContent = 'Tap to confirm';
+      setHint('Close the mine and end this run? Tap Close mine again to confirm.', true);
+      window.setTimeout(() => {
+        closeButton.textContent = 'Close mine';
+      }, CLOSE_CONFIRM_MS);
+      return;
+    }
+    closeAskedAt = -Infinity;
+    closeButton.textContent = 'Close mine';
+    history = emptyHistory();
+    showUndo();
+    mode = { kind: 'idle' };
+    setWorld(closeMine(world));
+    setHint(OVER_HINT, false);
   }
 
   // ----- Undo -----
@@ -1328,7 +1458,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     if (step.kind === 'place') return 'placing the camp';
     if (step.kind === 'upgrade') return `the upgrade of camp ${step.id}`;
     if (step.kind === 'demolish') return `demolishing camp ${step.id}`;
-    return 'waiting';
+    return 'the end of the shift'; // never in the history: it is emptied when a shift ends
   }
 
   /**
@@ -1338,7 +1468,6 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
    * so (owner, question 141; decision note 0049). The camera stays put.
    */
   function undo(): void {
-    tick(); // bring the animals up to now, so a tree is not put back under one
     const result = undoLast(history, world);
     if (result === null) {
       return;
@@ -1366,11 +1495,19 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       tapWhilePlacing(x, y);
       return;
     }
-    tick(); // bring the animals up to now first, so the tap lands where they are
     const result = campTap(world, x, y);
     canvas.dataset['lastTap'] = `${result.kind} ${x},${y}`;
     if (result.kind === 'fog') {
       return; // Fog: nothing at all happens.
+    }
+    if (result.kind === 'noTaps' || result.kind === 'over') {
+      // A camp can still be opened to look at it; nothing else happens.
+      const camp = campAt(world, x, y);
+      if (camp !== null) {
+        setMode({ kind: 'camp', id: camp.id });
+      }
+      setHint(result.kind === 'noTaps' ? NO_TAPS_HINT : OVER_HINT, true);
+      return;
     }
     if (result.kind === 'camp') {
       const camp = campAt(world, x, y);
@@ -1491,7 +1628,6 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     clearPrepared();
     isPrepared = false;
     world = newCampWorld(randomSeed(Math.random));
-    clockStart = performance.now();
     history = emptyHistory();
     showUndo();
     lastStep.clear();
@@ -1525,6 +1661,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     tops = topBlocksOf(world.lab.state);
     sights = sightMap(world);
     centreOnFirstCamp();
+    showHud();
     showCampCounter();
     showTray();
     draw();
@@ -1540,26 +1677,6 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     onTap: tap,
     onHold: hold,
   });
-
-  /**
-   * Bring the world up to the lab clock: animals step and apples regrow
-   * (surface.ts works out every step that is due, in time order, so how
-   * often this runs does not change where the animals end up).
-   */
-  function tick(): void {
-    const before = world.surface.animals;
-    const next = advanceWorld(world, labNow());
-    if (next === world) {
-      return;
-    }
-    world = next;
-    noteSteps(before);
-    if (next.surface.animals.length !== before.length) {
-      showCampCounter();
-    }
-    draw();
-  }
-  window.setInterval(tick, CAMP_LOOK.clockTickMs);
 
   showUndo();
   showWorld();

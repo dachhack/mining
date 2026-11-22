@@ -395,12 +395,14 @@ export function placeFrontierCamp(state: FrontierState, x: number, y: number): F
   }
   const features = [...state.features];
   const apples = [...state.apples];
+  const regrowIn = [...state.regrowIn];
   for (const s of footprintOf(x, y)) {
     const i = s.x + state.cube.size.x * s.y;
     features[i] = NO_FEATURE;
     apples[i] = 0;
+    regrowIn[i] = -1;
   }
-  return { ...state, ...change, features, apples };
+  return { ...state, ...change, features, apples, regrowIn };
 }
 
 /** `upgradeCamp` on a whole state. A refused upgrade returns the very same state. */

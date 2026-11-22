@@ -30,6 +30,11 @@ export function hashFrontier(state: FrontierState): string {
       seen: state.seen,
       inventory,
       mined: state.mined,
+      regrowIn: state.regrowIn,
+      shift: state.shift,
+      tapsLeft: state.tapsLeft,
+      health: state.health,
+      status: state.status,
     }),
   );
 }
