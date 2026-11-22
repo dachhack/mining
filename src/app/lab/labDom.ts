@@ -48,10 +48,15 @@ export interface LabTopBar {
   newWorld: HTMLButtonElement;
 }
 
-export function labTopBar(title: string, subtitle: string, onBack: () => void): LabTopBar {
+export function labTopBar(
+  title: string,
+  subtitle: string,
+  onBack: () => void,
+  backLabel = 'Back to the start screen',
+): LabTopBar {
   const bar = element('header', 'lab-top');
   const back = button('lab-back', '‹');
-  back.setAttribute('aria-label', 'Back to the start screen');
+  back.setAttribute('aria-label', backLabel);
   back.addEventListener('click', onBack);
   // Two short lines, each cut off with "…" rather than wrapped, so the bar is
   // always one row high (owner, question 137): the title, then the subtitle

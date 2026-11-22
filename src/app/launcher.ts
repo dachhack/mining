@@ -1,12 +1,14 @@
-// The start screen (issue #116): the real game, and the UI labs beside it.
+// The screens (issue #116; Lab 2 becomes the game, plan B1).
 //
 // The page shows one screen at a time, chosen by the address's "hash" (the
 // part after #), so the phone's back button and a bookmark both work:
 //
-//   (none)       the start screen
-//   #game        the game (the phone preview, unchanged)
-//   #lab1        UI lab 1; #lab1/110 opens it on seed 110
-//   #lab2        UI lab 2 (camps and fog); #lab2/110 opens it on seed 110
+//   (none), #play  the game: Lab 2's screen, saved every shift and carried
+//                  on when the app opens again; #play/110 starts a new run on seed 110
+//   #versions      the other versions, kept until the old ones are removed (plan C1)
+//   #game          the old game (the phone preview, unchanged)
+//   #lab1          UI lab 1; #lab1/110 opens it on seed 110
+//   #lab2          UI lab 2, the game's screen as a sandbox: nothing saved; #lab2/110 on seed 110
 //
 // Changing screens reloads the page, so each screen starts clean and none of
 // them has to tidy up after itself. Later labs add a button and a hash here.
@@ -27,9 +29,15 @@ interface LaunchEntry {
 
 const ENTRIES: LaunchEntry[] = [
   {
+    hash: 'play',
+    title: 'The game',
+    blurb: 'Camps, fog and shifts: your saved run.',
+    testid: 'launch-play',
+  },
+  {
     hash: 'game',
-    title: 'Game',
-    blurb: 'The current preview: shifts, AP, hazards, camps.',
+    title: 'Old game',
+    blurb: 'The old preview: AP, hazards, the old camps. Kept until the new game is settled.',
     testid: 'launch-game',
   },
   {
@@ -41,7 +49,7 @@ const ENTRIES: LaunchEntry[] = [
   {
     hash: 'lab2',
     title: 'Lab 2',
-    blurb: 'Fog of war around camps. Place camps, upgrade them to see further and dig harder rock.',
+    blurb: 'The game’s screen as a sandbox: a fresh world each time, nothing saved.',
     testid: 'launch-lab2',
   },
 ];
@@ -70,7 +78,7 @@ function mountStart(root: HTMLElement): void {
   page.dataset['testid'] = 'launcher';
   const hero = element('header', 'launch-hero');
   hero.append(
-    element('h1', 'launch-title', 'Mining Game'),
+    element('h1', 'launch-title', 'Other versions'),
     element('p', 'launch-sub', `Pick a version to try · Engine v${ENGINE_VERSION}`),
   );
   const list = element('nav', 'launch-list');
@@ -92,10 +100,10 @@ function mountStart(root: HTMLElement): void {
 
 function mountGame(root: HTMLElement): void {
   const bar = element('nav', 'launch-back-bar');
-  const back = element('button', 'launch-back', '‹ Start screen');
+  const back = element('button', 'launch-back', '‹ Other versions');
   back.type = 'button';
   back.dataset['testid'] = 'back-to-start';
-  back.addEventListener('click', () => go(''));
+  back.addEventListener('click', () => go('versions'));
   bar.append(back);
   const game = element('div', 'launch-game');
   root.replaceChildren(bar, game);
@@ -106,17 +114,19 @@ function mountGame(root: HTMLElement): void {
 function show(root: HTMLElement): void {
   const hash = window.location.hash.replace(/^#/, '');
   const [name, seedText] = hash.split('/');
-  document.body.dataset['screen'] = name || 'start';
-  if (name === 'game') {
+  const seed = seedText === undefined ? null : parseSeed(seedText);
+  document.body.dataset['screen'] = name || 'play';
+  if (name === 'versions') {
+    mountStart(root);
+  } else if (name === 'game') {
     mountGame(root);
   } else if (name === 'lab1') {
-    const seed = seedText === undefined ? null : parseSeed(seedText);
-    mountLab(root, seed, () => go(''));
+    mountLab(root, seed, () => go('versions'));
   } else if (name === 'lab2') {
-    const seed = seedText === undefined ? null : parseSeed(seedText);
-    mountCampLab(root, seed, () => go(''));
+    mountCampLab(root, seed, () => go('versions'));
   } else {
-    mountStart(root);
+    // No hash, #play, or anything unknown: the game.
+    mountCampLab(root, name === 'play' ? seed : null, () => go('versions'), true);
   }
 }
 

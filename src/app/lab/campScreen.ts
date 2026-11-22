@@ -23,11 +23,13 @@ import type { ItemId, ItemStack } from '../../data';
 import { FRONTIER_SHIFT } from '../../data/frontier';
 import { LAB_ITEMS, LAB_NEW_CAMP_COST } from '../../data/labCamps';
 import type { HigherNeighbour, SquareDirection } from '../../engine';
-import { SQUARE_STEPS } from '../../engine';
+import { SQUARE_STEPS, loadFrontier, saveFrontier } from '../../engine';
 import { randomSeed } from '../previewSession';
 import { CAMP_LOOK, CAMP_MARKS } from './campLook';
 import {
+  campWorldOf,
   closeMine,
+  toFrontier,
   endShift,
   restCrew,
   turnRefusal,
@@ -111,6 +113,8 @@ const DEMOLISH_FIRST = 'Build another camp that covers this one first.';
 const NO_TAPS_HINT = 'No taps left this shift: tap End shift to carry on.';
 const OVER_HINT = 'This run is over. Tap New world to start another.';
 const CLOSE_CONFIRM_MS = 3000;
+/** Where the game keeps its run (plan B1). */
+export const RUN_KEY = 'mining-game.run';
 
 /** What End shift did, in one short line for the hint. */
 function shiftText(report: ShiftReport, turn: CampTurn, rested: boolean): string {
@@ -208,6 +212,29 @@ function clearPrepared(): void {
   }
 }
 
+/** The saved run of the game (plan B1), or `null` if there is none or it cannot be read. */
+function loadRun(): CampWorld | null {
+  try {
+    const state = loadFrontier(window.localStorage.getItem(RUN_KEY));
+    return state === null ? null : campWorldOf(state);
+  } catch {
+    return null; // no storage
+  }
+}
+
+/**
+ * Save the run (question 152: saved every shift). It is saved at the start
+ * of each shift, so reopening the app carries on from there; taps since are
+ * not kept, as Undo could take them back anyway.
+ */
+function saveRun(world: CampWorld): void {
+  try {
+    window.localStorage.setItem(RUN_KEY, saveFrontier(toFrontier(world)));
+  } catch {
+    // No storage, or it is full: the run goes on, unsaved.
+  }
+}
+
 /** The pinned recipes saved last time, or the first pins (recipes.ts). */
 function loadPins(): string[] {
   try {
@@ -227,11 +254,23 @@ function savePins(pins: string[]): void {
 }
 
 /** Build Lab 2 inside `root`. `seed` opens that world; `null` picks a random one. */
-export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () => void): void {
-  const prepared = loadPrepared();
+export function mountCampLab(
+  root: HTMLElement,
+  seed: number | null,
+  onBack: () => void,
+  asGame = false,
+): void {
+  // As the game (plan B1), the run is loaded from its save, or a new one
+  // started; a seed in the address starts a new run on that seed. As Lab 2
+  // (the sandbox), nothing is saved, and a prepared world may be opened.
+  const prepared = asGame ? null : loadPrepared();
   /** True while the world on screen is the prepared one (e2e tests only). */
   let isPrepared = prepared !== null;
-  let world: CampWorld = prepared ?? newCampWorld(seed ?? randomSeed(Math.random));
+  const saved = asGame && seed === null ? loadRun() : null;
+  let world: CampWorld = prepared ?? saved ?? newCampWorld(seed ?? randomSeed(Math.random));
+  if (asGame) {
+    saveRun(world);
+  }
   let tops: number[] = topBlocksOf(world.lab.state);
   let sights: Sight[] = sightMap(world);
   let camera: LabCamera = { x: 0, y: 0, cells: CAMP_LOOK.startCells };
@@ -259,7 +298,13 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   // ----- The page -----
   const page = element('main', 'lab lab2');
   page.dataset['testid'] = 'lab2';
-  const top = labTopBar('Lab 2', 'Camps and fog', onBack);
+  const top = asGame
+    ? labTopBar('Mining Game', 'Camps and fog', onBack, 'Other versions')
+    : labTopBar('Lab 2', 'Camps and fog', onBack);
+  if (asGame) {
+    top.newWorld.textContent = 'New run';
+    top.newWorld.dataset['testid'] = 'new-run';
+  }
   const counter = labCounter();
 
   const frame = element('div', 'lab-map-frame');
@@ -1406,6 +1451,9 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     mode = { kind: 'idle' };
     preview = new Set();
     setWorld(result.world);
+    if (asGame) {
+      saveRun(result.world); // saved every shift (question 152)
+    }
     noteSteps(before);
     cues.start();
     const text = shiftText(result.report, result.world.turn, rest);
@@ -1428,6 +1476,9 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     closeAskedAt = -Infinity;
     closeButton.textContent = 'Close mine';
     const closed = closeMine(world);
+    if (asGame) {
+      saveRun(closed);
+    }
     history = emptyHistory(closed);
     showUndo();
     mode = { kind: 'idle' };
@@ -1625,10 +1676,31 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     tapWhilePlacing(x, y);
   }
 
+  /** As the game, New run takes two taps: it throws the saved run away. */
+  let newAskedAt = -Infinity;
   top.newWorld.addEventListener('click', () => {
+    if (asGame && world.turn.status === 'active') {
+      const now = performance.now();
+      if (now - newAskedAt > CLOSE_CONFIRM_MS) {
+        newAskedAt = now;
+        top.newWorld.textContent = 'Sure?';
+        setHint('Start a new run? This one is lost. Tap New run again to confirm.', true);
+        window.setTimeout(() => {
+          top.newWorld.textContent = 'New run';
+        }, CLOSE_CONFIRM_MS);
+        return;
+      }
+    }
+    newAskedAt = -Infinity;
+    if (asGame) {
+      top.newWorld.textContent = 'New run';
+    }
     clearPrepared();
     isPrepared = false;
     world = newCampWorld(randomSeed(Math.random));
+    if (asGame) {
+      saveRun(world);
+    }
     history = emptyHistory(world);
     showUndo();
     lastStep.clear();

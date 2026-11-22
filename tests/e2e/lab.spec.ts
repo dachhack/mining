@@ -65,8 +65,8 @@ async function openLab(page: Page): Promise<{ canvas: Locator; cx: number; cy: n
   return { canvas, cx: Math.floor(cam.x) + 5, cy: Math.floor(cam.y) + 5 };
 }
 
-test('the start screen leads to the game and to lab 1, and back', async ({ page }) => {
-  await page.goto('/');
+test('Other versions leads to the old game and to lab 1, and back', async ({ page }) => {
+  await page.goto('/#versions');
   await expect(page.getByTestId('launcher')).toBeVisible();
 
   await page.getByTestId('launch-lab1').click();
