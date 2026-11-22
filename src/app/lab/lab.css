@@ -1116,3 +1116,48 @@ body[data-screen='lab2'] {
 .lab2-night.lab2-night-still.lab2-night-dawn .lab2-night-sky {
   transition: opacity 200ms linear;
 }
+
+/* The recipe book: a card over the whole screen, inside the system bars
+   (owner, after the playtest of PR #146). */
+.lab2-book-card {
+  position: fixed;
+  top: var(--inset-top, 0px);
+  right: var(--inset-right, 0px);
+  bottom: var(--inset-bottom, 0px);
+  left: var(--inset-left, 0px);
+  z-index: 50;
+  display: flex;
+  justify-content: center;
+  background: #15110e;
+}
+
+.lab2-book-card[hidden] {
+  display: none;
+}
+
+.lab2-book-inner {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 520px;
+  height: 100%;
+  padding: 8px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lab2-book-card .lab2-recipe {
+  padding: 6px 6px 6px 10px;
+}
+
+.lab2-book-card .lab2-recipe-name {
+  font-size: 0.85rem;
+}
+
+/* The card has the room: every cost chip shows, wrapping to a second line
+   rather than scrolling sideways. */
+.lab2-book-card .lab2-cost {
+  flex-wrap: wrap;
+  overflow: visible;
+  mask-image: none;
+}

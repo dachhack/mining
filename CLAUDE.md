@@ -34,7 +34,7 @@
 ```bash
 npm run dev       # local web build
 npm test          # unit, scenario, determinism tests
-npm run sim       # the new game's simulation: -- --policy careful --runs 1000 [--json]  (policies: random, gatherer, careful, digger)
+npm run sim       # the new game's simulation: -- --policy careful --runs 1000 [--json]  (policies: random, gatherer, careful, digger, idle)
                   #   -- --acceptance --runs 1000    every policy, rules checked after every step, every run replayed
 npm run sim:old   # the old game's simulation and depth survey, until Phase C removes it
 npm run golden    # re-hash or re-record the golden runs (-- --frontier: the new game's): see tests/golden/README.md

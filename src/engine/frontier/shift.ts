@@ -216,8 +216,10 @@ interface Regrowth {
  * Each square's wait counts down. When it runs out:
  * - an apple tree picked bare has its apples back;
  * - a stump grows its tree back, full of apples if it is an apple tree. It
- *   cannot grow where the square was mined (the stump was dug out) or a camp
- *   stands: the stump is gone. Where an animal stands, it waits a shift more.
+ *   never grows where the square was mined (the stump was dug out: owner,
+ *   "Trees grow back as long as you don't mine the ground directly under
+ *   them"). Where a camp or an animal stands, it waits a shift more, so a
+ *   stump under a camp grows back once the camp is demolished.
  * `state.animals` are the animals after this shift's steps.
  */
 function regrow(state: FrontierState): Regrowth {
@@ -239,12 +241,12 @@ function regrow(state: FrontierState): Regrowth {
     }
     const x = i % width;
     const y = Math.floor(i / width);
-    if (animalAt(state, x, y) !== null) {
-      return 1; // an animal stands on it: try again next shift
+    const unmined = growOn.has(blockAt(state.cube, { x, y, z: 0 }));
+    if (unmined && (animalAt(state, x, y) !== null || campAt(state.camps, x, y) !== null)) {
+      return 1; // an animal or a camp stands on it: try again next shift
     }
     stumps[i] = NO_FEATURE;
-    const unmined = growOn.has(blockAt(state.cube, { x, y, z: 0 }));
-    if (unmined && features[i] === NO_FEATURE && campAt(state.camps, x, y) === null) {
+    if (unmined && features[i] === NO_FEATURE) {
       features[i] = stump;
       apples[i] = stump === APPLE_TREE ? FRONTIER_SURFACE.applesPerTree : 0;
       treesRegrown += 1;
