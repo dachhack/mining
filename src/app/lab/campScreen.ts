@@ -1122,7 +1122,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     if (next === world) {
       return;
     }
-    remember(world, { kind: 'place', x, y });
+    remember(world, next, { kind: 'place', x, y });
     mode = { kind: 'idle' };
     preview = new Set();
     setWorld(next);
@@ -1145,7 +1145,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     if (before === undefined || next === world) {
       return;
     }
-    remember(world, { kind: 'upgrade', id });
+    remember(world, next, { kind: 'upgrade', id });
     setWorld(next);
     setHint(`Camp ${id} is level ${before.level + 1}: a wider ring, harder blocks.`, false);
     addEffect({
@@ -1166,7 +1166,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       setHint(DEMOLISH_FIRST, true);
       return;
     }
-    remember(world, { kind: 'demolish', id });
+    remember(world, next, { kind: 'demolish', id });
     mode = { kind: 'idle' };
     setWorld(next);
     setHint('Camp demolished: its ground can be mined now.', false);
@@ -1178,8 +1178,8 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
    * Note an action about to change the world: `before` is the world just
    * before it, brought up to the lab clock.
    */
-  function remember(before: CampWorld, step: CampStep): void {
-    history = recordAction(history, before, step);
+  function remember(before: CampWorld, after: CampWorld, step: CampStep): void {
+    history = recordAction(history, before, after, step);
     showUndo();
   }
 
@@ -1200,26 +1200,31 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   }
 
   /**
-   * Undo the last action: the world goes back to exactly what it was just
-   * before it, animals and the lab clock included (decision note 0049).
-   * The clock is set back to match, so time runs on from there. The camera
-   * stays where it is.
+   * Undo the last undoable action: only the player's own change is taken
+   * back (blocks, items, camps, fog, plants). The animals, the apples and
+   * the lab clock are left alone, and caught animals and picked apples stay
+   * so (owner, question 141; decision note 0049). The camera stays put.
    */
   function undo(): void {
-    const last = history.entries[history.entries.length - 1];
-    const undone = undoLast(history);
-    if (undone === null || last === undefined) {
+    tick(); // bring the animals up to now, so a tree is not put back under one
+    const result = undoLast(history, world);
+    if (result === null) {
       return;
     }
-    history = undone.history;
-    clockStart = performance.now() - undone.world.surface.time;
-    lastStep.clear();
+    if ('refused' in result) {
+      setHint(result.refused, true);
+      return;
+    }
+    history = result.history;
     effects = [];
     mode = { kind: 'idle' };
     preview = new Set();
-    setWorld(undone.world);
+    setWorld(result.world);
     const left = undoCount(history);
-    setHint(`Undone: ${describeStep(last.step)}.${left === 0 ? ' Back at the start.' : ''}`, false);
+    setHint(
+      `Undone: ${describeStep(result.undone.step)}.${left === 0 ? ' Nothing more to undo.' : ''}`,
+      false,
+    );
     showUndo();
   }
 
@@ -1292,7 +1297,11 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     }
     if (result.kind === 'harvested' && result.harvest !== null) {
       effects = effects.filter((e) => !(e.x === x && e.y === y));
-      remember(world, { kind: 'tap', x, y });
+      // Cut grass and felled trees can be undone; a caught animal or a picked
+      // apple cannot (owner, question 141), so they are not remembered.
+      if (result.harvest.kind === 'grass' || result.harvest.kind === 'felled') {
+        remember(world, result.world, { kind: 'tap', x, y });
+      }
       setWorld(result.world);
       setHint(HARVEST_HINTS[result.harvest.kind], false);
       addEffect({
@@ -1308,7 +1317,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     }
     // Mined.
     effects = effects.filter((e) => !(e.x === x && e.y === y));
-    remember(world, { kind: 'tap', x, y });
+    remember(world, result.world, { kind: 'tap', x, y });
     setWorld(result.world);
     setHint(HINT, false);
     addEffect({
