@@ -29,6 +29,7 @@ import {
 import type { CampWorld } from '../../src/app/lab/campWorld';
 import { GRASS, TREE } from '../../src/app/lab/surface';
 import { planLevel2, tapsUntil } from './campPlan';
+import { emptyHistory, recordAction, undoCount, undoLast } from '../../src/app/lab/undoHistory';
 import type { Square } from './campPlan';
 
 test.use({ viewport: { width: 390, height: 844 } });
@@ -929,64 +930,90 @@ for (const phone of PHONES_WITH_BARS) {
   });
 }
 
-// Undo (owner, after the PR #126 playtest: "Undo button").
-test('undo takes back taps one by one, exactly, back to the start; then it is off', async ({
+// Undo (owner, after the PR #126 playtest: "Undo button"; question 141:
+// "animal and apple harvest cannot be undone"; the animals, apples and clock
+// are left alone).
+test('undo takes back the player’s taps one by one, steps past harvests, and is off at the start', async ({
   page,
 }) => {
   const canvas = await openLab2(page);
   const undo = page.getByTestId('lab2-undo');
   await expect(undo).toBeDisabled();
 
-  // Six useful taps (each cuts, fells, catches or mines), worked out here.
+  // Six useful taps (each cuts, fells, picks, catches or mines). The model
+  // keeps the same history the page does: catches and apple picks are not
+  // in it. The page's clock is paused, so the model and the page agree.
   const start = newCampWorld(SEED);
   const camp = start.camps[0] ?? { x: 0, y: 0 };
   const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp);
   expect(plan).not.toBeNull();
   if (plan === null) return;
-  const taps = plan.taps.slice(0, 6);
-  const worlds: CampWorld[] = [start];
-  for (const square of taps) {
-    const before = worlds[worlds.length - 1] ?? start;
-    worlds.push(campTap(before, square.x, square.y).world);
+  let world = start;
+  let history = emptyHistory();
+  for (const square of plan.taps.slice(0, 6)) {
+    const tap = campTap(world, square.x, square.y);
+    const harvestKind = tap.kind === 'harvested' ? tap.harvest?.kind : null;
+    if (tap.kind === 'mined' || harvestKind === 'grass' || harvestKind === 'felled') {
+      history = recordAction(history, world, tap.world, { kind: 'tap', ...square });
+    }
+    world = tap.world;
     await tapSquare(page, canvas, square);
-    await expect
-      .poll(() => counts(page))
-      .toEqual(expectedCounts(worlds[worlds.length - 1] ?? start));
+    await expect.poll(() => counts(page)).toEqual(expectedCounts(world));
   }
-  await expect(undo).toBeEnabled();
-  await expect(undo).toHaveAttribute('data-count', '6');
+  const undoable = undoCount(history);
+  expect(undoable).toBeGreaterThan(2);
+  await expect(undo).toHaveAttribute('data-count', String(undoable));
 
-  // Undo three: each time, the counts and the lit squares are what they were.
-  for (let k = 5; k >= 3; k -= 1) {
+  // Undo, one by one: each time the counts, the lit squares and the blocks
+  // match the model.
+  for (let left = undoable - 1; left >= 0; left -= 1) {
+    const result = undoLast(history, world);
+    if (result === null || 'refused' in result) throw new Error('the model could not undo');
+    world = result.world;
+    history = result.history;
     await undo.click();
-    const was = worlds[k] ?? start;
-    await expect.poll(() => counts(page)).toEqual(expectedCounts(was));
-    await expect(canvas).toHaveAttribute('data-shown', String(shownOf(was)));
-    await expect(undo).toHaveAttribute('data-count', String(k));
+    await expect.poll(() => counts(page)).toEqual(expectedCounts(world));
+    await expect(canvas).toHaveAttribute('data-shown', String(shownOf(world)));
+    await expect(undo).toHaveAttribute('data-count', String(left));
   }
-  await expect(page.getByTestId('lab-hint')).toContainText('Undone: the tap at');
-
-  // The blocks are back too: tapping the fourth square again does what it did the first time.
-  const fourth = taps[3] ?? { x: 0, y: 0 };
-  const again = campTap(worlds[3] ?? start, fourth.x, fourth.y);
-  await tapSquare(page, canvas, fourth);
-  await expect(canvas).toHaveAttribute('data-last-tap', `${again.kind} ${fourth.x},${fourth.y}`);
-  await expect.poll(() => counts(page)).toEqual(expectedCounts(again.world));
-
-  // Undo all the way: back at the start, and Undo is off.
-  for (let left = 4; left > 0; left -= 1) {
-    await undo.click();
-  }
-  await expect.poll(() => counts(page)).toEqual(expectedCounts(start));
-  await expect(canvas).toHaveAttribute('data-shown', String(shownOf(start)));
   await expect(undo).toBeDisabled();
-  await expect(page.getByTestId('lab-hint')).toContainText('Back at the start');
+  await expect(page.getByTestId('lab-hint')).toContainText('Nothing more to undo');
+  // Back to the start, except what was harvested (it stays harvested).
+  for (const [item, count] of world.lab.counts) {
+    expect(item === 'apple' || item === 'animal', `${item} ${count}`).toBe(true);
+  }
 
   // New world: nothing to undo.
-  await tapSquare(page, canvas, taps[0] ?? { x: 0, y: 0 });
-  await expect(undo).toBeEnabled();
+  await tapSquare(page, canvas, plan.taps[0] ?? { x: 0, y: 0 });
   await page.getByRole('button', { name: 'New world' }).click();
   await expect(undo).toBeDisabled();
+});
+
+test('undo while the animals move: they stay where they are, and the clock runs on', async ({
+  page,
+}) => {
+  const canvas = await openLab2(page);
+  const start = newCampWorld(SEED);
+  const camp = start.camps[0] ?? { x: 0, y: 0 };
+  const lit = { x: camp.x - 2, y: camp.y }; // just outside the camp's 3 x 3
+  const dug = await digOnce(page, canvas, start, lit);
+  await expect.poll(() => counts(page)).toEqual(expectedCounts(dug));
+
+  // Let the animals walk for 10 seconds of lab time.
+  await page.clock.runFor(10_000);
+  const animals = await canvas.getAttribute('data-animals');
+  const time = Number(await canvas.getAttribute('data-lab-time'));
+  expect(time).toBeGreaterThanOrEqual(10_000);
+  expect(animals).not.toBe(start.surface.animals.map((a) => `${a.x},${a.y}`).join(' '));
+
+  // Undo the dig: the block is back, the animals have not moved, and the
+  // clock has not gone back.
+  await page.getByTestId('lab2-undo').click();
+  await expect(page.getByTestId('lab-hint')).toContainText(`Undone: the tap at ${lit.x}, ${lit.y}`);
+  const undone = await counts(page);
+  expect(undone['dug'] ?? 0).toBe(dug.lab.mined - 1);
+  await expect(canvas).toHaveAttribute('data-animals', animals ?? '');
+  expect(Number(await canvas.getAttribute('data-lab-time'))).toBeGreaterThanOrEqual(time);
 });
 
 test('undo takes back a placed camp: the camp, its cost and its light', async ({ page }) => {
@@ -1020,7 +1047,7 @@ test('undo takes back a placed camp: the camp, its cost and its light', async ({
   await expect(canvas).toHaveAttribute('data-shown', String(shownOf(plan.world)));
   await expect.poll(() => counts(page)).toEqual(expectedCounts(plan.world));
   await expect(page.getByTestId('lab-hint')).toHaveText(
-    'Undone: placing the camp. Back at the start.',
+    'Undone: placing the camp. Nothing more to undo.',
   );
   await expect(undo).toBeDisabled();
 });
