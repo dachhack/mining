@@ -537,6 +537,211 @@ test('holding a lit square opens the camp tool on it, and mines nothing', async 
   await page.clock.runFor(800); // the hold is a timer: the clock is paused, so run it
   await page.mouse.up();
   await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'placing');
-  await expect(page.getByTestId('lab2-place-line')).toContainText(`At ${square.x}, ${square.y}`);
+  await expect(canvas).toHaveAttribute('data-target', `${square.x},${square.y}`);
+  // Nothing mined yet, so the line says what the camp still needs.
+  await expect(page.getByTestId('lab2-place-line')).toContainText(missingLine(world));
   expect((await counts(page))['dug']).toBe(0);
 });
+
+/** "Need 5 more wood and 5 more grass": what `world`'s counts lack of a new camp's cost. */
+function missingLine(world: CampWorld): string {
+  const short = LAB_NEW_CAMP_COST.map((stack) => ({
+    item: stack.item,
+    lack: stack.count - (world.lab.counts.get(stack.item) ?? 0),
+  }))
+    .filter((s) => s.lack > 0)
+    .map((s) => `${s.lack} more ${s.item}`);
+  const last = short.pop() ?? '';
+  return `Need ${short.length > 0 ? `${short.join(', ')} and ${last}` : last}`;
+}
+
+/** Expect `inner` to lie wholly inside `outer`'s box. */
+async function expectInside(
+  inner: Locator,
+  outer: { x: number; y: number; width: number; height: number },
+): Promise<void> {
+  const box = await inner.boundingBox();
+  expect(box).not.toBeNull();
+  if (box === null) return;
+  expect(box.x).toBeGreaterThanOrEqual(outer.x - 0.5);
+  expect(box.y).toBeGreaterThanOrEqual(outer.y - 0.5);
+  expect(box.x + box.width).toBeLessThanOrEqual(outer.x + outer.width + 0.5);
+  expect(box.y + box.height).toBeLessThanOrEqual(outer.y + outer.height + 0.5);
+}
+
+/**
+ * The shared top bar is one tidy row (owner, question 137): the back button,
+ * the title box and "New world" side by side, each whole inside the bar, no
+ * wrapping, and the title "Lab 2" never cut off.
+ */
+async function expectTidyTopBar(
+  page: Page,
+  screen: { width: number; height: number },
+): Promise<void> {
+  const bar = page.locator('.lab-top');
+  const box = await bar.boundingBox();
+  expect(box).not.toBeNull();
+  if (box === null) return;
+  expect(box.height).toBeLessThanOrEqual(70); // 62 at normal text, at most 68 with the capped sizes
+  await expectInside(bar, { x: 0, y: 0, width: screen.width, height: screen.height });
+  const parts = [bar.locator('.lab-back'), bar.locator('.lab-title-box'), bar.locator('.lab-new')];
+  let right = box.x;
+  for (const part of parts) {
+    await expectInside(part, box);
+    const partBox = await part.boundingBox();
+    if (partBox === null) return;
+    // Left to right, without overlapping.
+    expect(partBox.x).toBeGreaterThanOrEqual(right - 0.5);
+    right = partBox.x + partBox.width;
+  }
+  // The button's label and the title fit their boxes: neither is cut.
+  const cut = await bar.evaluate((el) => {
+    const title = el.querySelector('.lab-title');
+    const button = el.querySelector('.lab-new');
+    return {
+      title: title === null ? 1 : title.scrollWidth - title.clientWidth,
+      button: button === null ? 1 : button.scrollWidth - button.clientWidth,
+      bar: el.scrollWidth - el.clientWidth,
+    };
+  });
+  expect(cut).toEqual({ title: 0, button: 0, bar: 0 });
+}
+
+// The owner's bug report: "Place camp doesn't show" on their phone. On a
+// narrow screen, or with a larger text size, the button must still be whole
+// and inside the tray, and when it is off the line says why.
+const PHONES = [
+  { width: 320, height: 640, rootFont: '' },
+  { width: 360, height: 740, rootFont: '' },
+  { width: 390, height: 844, rootFont: '' },
+  { width: 320, height: 640, rootFont: '20px' },
+];
+for (const phone of PHONES) {
+  const label = `${phone.width} x ${phone.height}${phone.rootFont === '' ? '' : `, text ${phone.rootFont}`}`;
+  test(`Place camp is whole and inside the tray at ${label}, with and without a spot`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: phone.width, height: phone.height });
+    const canvas = await openLab2(page);
+    if (phone.rootFont !== '') {
+      await page.addStyleTag({ content: `html { font-size: ${phone.rootFont}; }` });
+    }
+    const start = newCampWorld(SEED);
+    const camp = start.camps[0] ?? { x: 0, y: 0 };
+    const target = { x: camp.x + campRadius(1) - 1, y: camp.y };
+    expect(placeRefusal(start, target.x, target.y)).toBe('cost');
+
+    const confirm = page.getByTestId('lab2-place-confirm');
+    const check = async (): Promise<void> => {
+      await expect(confirm).toBeVisible();
+      await expect(confirm).toHaveText('Place camp');
+      const tray = await page.getByTestId('lab2-tray').boundingBox();
+      expect(tray).not.toBeNull();
+      if (tray === null) return;
+      await expectInside(confirm, tray);
+      await expectInside(confirm, { x: 0, y: 0, width: phone.width, height: phone.height });
+      await expectInside(page.getByTestId('lab2-place-cancel'), tray);
+    };
+
+    await expectTidyTopBar(page, phone);
+
+    // No spot yet: the button is off, and the line says to choose one.
+    await page.getByTestId('lab2-camp-tool').click();
+    await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'placing');
+    await expect(confirm).toBeDisabled();
+    await expect(confirm).toHaveAttribute('title', 'Choose a spot first');
+    await expect(page.getByTestId('lab2-place-line')).toContainText('Tap the middle');
+    await check();
+
+    // A level spot the camp cannot be paid for yet: the line names what is missing.
+    await tapSquare(page, canvas, target);
+    await expect(confirm).toBeDisabled();
+    await expect(page.getByTestId('lab2-place-line')).toContainText(missingLine(start));
+    await expect(confirm).toHaveAttribute('title', missingLine(start));
+    await check();
+    if (phone.rootFont === '') {
+      await page.screenshot({
+        path: `test-results/lab2-place-${phone.width}.png`,
+      });
+    }
+  });
+}
+
+// More from the owner: they had the wood and grass, and still no Place camp,
+// in portrait and on its side. Android's system text size (WebView text
+// zoom) makes the text bigger, as a larger root font does here; on its side
+// the phone is too short for the map above the tray. With a camp that can be
+// paid for and a good spot chosen, Place camp must be on screen, whole, and
+// work, at every text size, either way up.
+const SCREENS = [
+  { width: 390, height: 844, rootFont: '100%' },
+  { width: 390, height: 844, rootFont: '130%' },
+  { width: 390, height: 844, rootFont: '150%' },
+  { width: 390, height: 844, rootFont: '200%' },
+  { width: 320, height: 640, rootFont: '150%' },
+  { width: 320, height: 640, rootFont: '200%' },
+  { width: 915, height: 412, rootFont: '100%' },
+  { width: 915, height: 412, rootFont: '200%' },
+  { width: 844, height: 390, rootFont: '130%' },
+  { width: 740, height: 360, rootFont: '150%' },
+];
+for (const screen of SCREENS) {
+  test(`a paid-for camp on a good spot: Place camp is on screen and works at ${screen.width} x ${screen.height}, text ${screen.rootFont}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: screen.width, height: screen.height });
+    const start = newCampWorld(SEED);
+    const camp = start.camps[0] ?? { x: 0, y: 0 };
+    const target = { x: camp.x + campRadius(1) - 1, y: camp.y };
+    const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp, footprintOf(target.x, target.y));
+    expect(plan).not.toBeNull();
+    if (plan === null) return;
+    expect(placeRefusal(plan.world, target.x, target.y)).toBeNull();
+
+    // Open lab 2 on the played world: the cost is paid for from the start.
+    await pauseClock(page);
+    await page.goto('/#game');
+    await page.evaluate(([key, text]) => window.localStorage.setItem(key, text), [
+      PREPARED_LAB2_KEY,
+      JSON.stringify({
+        seed: SEED,
+        steps: plan.taps.map((s) => ({ kind: 'tap', x: s.x, y: s.y })),
+      }),
+    ] as const);
+    await page.goto('/#lab2');
+    await expect(page.getByTestId('lab-seed')).toHaveText(`Seed ${SEED} · prepared`);
+    await page.addStyleTag({ content: `html { font-size: ${screen.rootFont}; }` });
+    const canvas = page.getByTestId('lab-map');
+
+    await page.getByTestId('lab2-camp-tool').click();
+    await tapSquare(page, canvas, target);
+    await expect(canvas).toHaveAttribute('data-target', `${target.x},${target.y}`);
+    await expect(page.getByTestId('lab2-place-line')).toContainText('level ground');
+
+    const confirm = page.getByTestId('lab2-place-confirm');
+    await expect(confirm).toBeEnabled();
+    await expect(confirm).toHaveText('Place camp');
+    await expectTidyTopBar(page, screen);
+    const tray = await page.getByTestId('lab2-tray').boundingBox();
+    expect(tray).not.toBeNull();
+    if (tray === null) return;
+    await expectInside(page.getByTestId('lab2-tray'), {
+      x: 0,
+      y: 0,
+      width: screen.width,
+      height: screen.height,
+    });
+    await expectInside(confirm, tray);
+    // Nothing in the tray is cut off at the bottom.
+    const cut = await page
+      .getByTestId('lab2-tray')
+      .evaluate((el) => el.scrollHeight - el.clientHeight);
+    expect(cut).toBeLessThanOrEqual(0);
+
+    // A real tap on it places the camp.
+    const box = await confirm.boundingBox();
+    if (box === null) return;
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(canvas).toHaveAttribute('data-camps', '2');
+  });
+}
