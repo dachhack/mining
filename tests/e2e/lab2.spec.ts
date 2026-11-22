@@ -569,6 +569,44 @@ async function expectInside(
   expect(box.y + box.height).toBeLessThanOrEqual(outer.y + outer.height + 0.5);
 }
 
+/**
+ * The shared top bar is one tidy row (owner, question 137): the back button,
+ * the title box and "New world" side by side, each whole inside the bar, no
+ * wrapping, and the title "Lab 2" never cut off.
+ */
+async function expectTidyTopBar(
+  page: Page,
+  screen: { width: number; height: number },
+): Promise<void> {
+  const bar = page.locator('.lab-top');
+  const box = await bar.boundingBox();
+  expect(box).not.toBeNull();
+  if (box === null) return;
+  expect(box.height).toBeLessThanOrEqual(70); // 62 at normal text, at most 68 with the capped sizes
+  await expectInside(bar, { x: 0, y: 0, width: screen.width, height: screen.height });
+  const parts = [bar.locator('.lab-back'), bar.locator('.lab-title-box'), bar.locator('.lab-new')];
+  let right = box.x;
+  for (const part of parts) {
+    await expectInside(part, box);
+    const partBox = await part.boundingBox();
+    if (partBox === null) return;
+    // Left to right, without overlapping.
+    expect(partBox.x).toBeGreaterThanOrEqual(right - 0.5);
+    right = partBox.x + partBox.width;
+  }
+  // The button's label and the title fit their boxes: neither is cut.
+  const cut = await bar.evaluate((el) => {
+    const title = el.querySelector('.lab-title');
+    const button = el.querySelector('.lab-new');
+    return {
+      title: title === null ? 1 : title.scrollWidth - title.clientWidth,
+      button: button === null ? 1 : button.scrollWidth - button.clientWidth,
+      bar: el.scrollWidth - el.clientWidth,
+    };
+  });
+  expect(cut).toEqual({ title: 0, button: 0, bar: 0 });
+}
+
 // The owner's bug report: "Place camp doesn't show" on their phone. On a
 // narrow screen, or with a larger text size, the button must still be whole
 // and inside the tray, and when it is off the line says why.
@@ -604,6 +642,8 @@ for (const phone of PHONES) {
       await expectInside(confirm, { x: 0, y: 0, width: phone.width, height: phone.height });
       await expectInside(page.getByTestId('lab2-place-cancel'), tray);
     };
+
+    await expectTidyTopBar(page, phone);
 
     // No spot yet: the button is off, and the line says to choose one.
     await page.getByTestId('lab2-camp-tool').click();
@@ -681,6 +721,7 @@ for (const screen of SCREENS) {
     const confirm = page.getByTestId('lab2-place-confirm');
     await expect(confirm).toBeEnabled();
     await expect(confirm).toHaveText('Place camp');
+    await expectTidyTopBar(page, screen);
     const tray = await page.getByTestId('lab2-tray').boundingBox();
     expect(tray).not.toBeNull();
     if (tray === null) return;

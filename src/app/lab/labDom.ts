@@ -53,11 +53,15 @@ export function labTopBar(title: string, subtitle: string, onBack: () => void): 
   const back = button('lab-back', '‹');
   back.setAttribute('aria-label', 'Back to the start screen');
   back.addEventListener('click', onBack);
+  // Two short lines, each cut off with "…" rather than wrapped, so the bar is
+  // always one row high (owner, question 137): the title, then the subtitle
+  // and the seed.
   const titleBox = element('div', 'lab-title-box');
-  titleBox.append(element('h1', 'lab-title', title), element('p', 'lab-subtitle', subtitle));
   const seedText = element('span', 'lab-seed');
   seedText.dataset['testid'] = 'lab-seed';
-  titleBox.append(seedText);
+  const subline = element('p', 'lab-subline');
+  subline.append(element('span', 'lab-subtitle', subtitle), ' · ', seedText);
+  titleBox.append(element('h1', 'lab-title', title), subline);
   const newWorld = button('lab-new', 'New world');
   bar.append(back, titleBox, newWorld);
   return { bar, seedText, newWorld };
