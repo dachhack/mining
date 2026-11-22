@@ -25,6 +25,8 @@ Question 140, after Lab 2 took coal off its own surface (note 0048): "No coal at
 
 Coal is no longer free at the start. To mine a layer-1 block, the square must already be 1 deep and, by the level rule, all four of its neighbours must be at least 1 deep too: about 6 mines (6 AP near a camp, more away from one) for the first coal. Policies that only scratch the surface (`random`) now craft no fuel at all; the acceptance and depth-survey numbers before and after are in the PR description.
 
+The owner's answer to question 144 (2026-11-22): "Keep the harder start." No compensation is planned: starting fuel stays 72 and the layer-1 minimum stays 12.
+
 ## Tests
 
 - `tests/engine/surfaceCoal.test.ts`: on 500 seeds no coal in layer 0 and at least 12 in layer 1; on a hand-built cube, the swap, the top-up staying in layer 1 and in plain rock, no random number drawn when layer 1 has enough, the minimum scaled to a small cube; the data validator's new checks.
