@@ -4,6 +4,7 @@
 
 import {
   FRONTIER_CAMP_LEVELS,
+  FRONTIER_FOODS,
   FRONTIER_NEW_CAMP_COST,
   FRONTIER_SHIFT,
   FRONTIER_SURFACE,
@@ -17,6 +18,8 @@ function cost(stacks: { item: string; count: number }[]): string {
 
 export function frontierHelpText(): string {
   const s = FRONTIER_SHIFT;
+  // "1 apple, else 2 grass, else 1 animal"
+  const foods = FRONTIER_FOODS.map((f) => `${f.count} ${f.item}`).join(', else ');
   const levels = FRONTIER_CAMP_LEVELS.map(
     (level, i) =>
       `  Level ${i + 1}: ring ${level.radius}; mines ${level.addsBlocks.join(', ')}${i === 0 ? '' : ' and all of the above'}${level.upgradeCost.length > 0 ? `; upgrade costs ${cost(level.upgradeCost)}` : ''}`,
@@ -32,7 +35,7 @@ export function frontierHelpText(): string {
     '  npm run play -- --replay run.json              replay a saved run and show where it ended',
     '  npm run play:old -- --help                     the old game (until it is removed)',
     '',
-    'Choices: "tap X,Y", "place X,Y", "upgrade N", "demolish N", "end", "rest", "close",',
+    'Choices: "tap X,Y", "place X,Y", "upgrade N", "demolish N", "end", "rest N", "close",',
     '"undo", "look X,Y", or the number of a listed choice. Separate several with ";".',
     '',
     'The rules:',
@@ -50,11 +53,12 @@ export function frontierHelpText(): string {
     '  cover its 3 x 3; it gives nothing back.',
     ...levels,
     `- At the end of each shift: animals take ${s.animalStepsPerShift} steps (a new one walks in every ${s.animalEveryShifts} shifts);`,
-    `  an apple tree picked bare has its apples back ${s.appleRegrowShifts} shifts later; upkeep is paid:`,
-    `  ${s.woodEveryShift} wood every shift, 1 food (an apple, else an animal) every ${s.foodEveryShifts} shifts, and 1 more wood`,
+    `  an apple tree picked bare has its apples back ${s.appleRegrowShifts} shifts later; a felled tree grows back`,
+    `  ${s.treeRegrowShifts} shifts later, unless its square was mined or a camp stands on it; upkeep is paid:`,
+    `  ${s.woodEveryShift} wood every shift, 1 food (${foods}) every ${s.foodEveryShifts} shifts, and 1 more wood`,
     `  every ${s.campWoodEveryShifts} shifts for each camp after the first.`,
     `- Each item of upkeep you cannot pay costs 1 health (of ${s.startHealth}). At 0 the crew is lost.`,
-    '- "rest" restores full health, then ends the shift. "close" closes the mine: the run ends.',
+    '- "rest N" rests at camp N: full health, then the shift ends. "close" closes the mine: the run ends.',
     '- "undo" takes back your last action in this shift and gives the tap back. Catching an',
     '  animal and picking an apple cannot be undone, and nothing before the shift began can.',
   ].join('\n');

@@ -310,6 +310,33 @@ export function drawAppleTree(
 // ----- Animals -----
 
 /**
+ * A stump where a tree was felled (question 157: it grows back): a small
+ * ring of cut wood in the middle of the square, a sign that a tree will
+ * stand there again. Drawn over the square's block.
+ */
+export function drawStump(ctx: CanvasRenderingContext2D, box: SquareBox): void {
+  const p = SURFACE_PAINT.wood;
+  const cx = box.left + box.inner / 2;
+  const cy = box.top + box.inner / 2;
+  const r = box.inner * 0.2;
+  ctx.save();
+  ctx.fillStyle = p.bark;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = p.ring;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = p.ringDark;
+  ctx.lineWidth = Math.max(1, r * 0.15);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.35, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
  * A sheep seen from above, centred at (cx, cy), `size` pixels across: a
  * woolly body, a dark face pointing `facing` (radians), four little legs.
  */

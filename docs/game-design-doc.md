@@ -128,13 +128,14 @@ A run is a sequence of **shifts** (owner: "Keep shifts").
 In this order:
 
 1. **Animals:** each takes 3 steps to an open face neighbour. Every 3rd shift a new one walks in at the map's edge, while there are fewer than 8 (question 149).
-2. **Apples:** an apple tree picked bare has its 3 apples back 5 shifts later (question 150). A felled tree regrows nothing, and **trees never regrow**.
-3. **Upkeep** (owner, question 147: "Food and wood"):
+2. **Apples:** an apple tree picked bare has its 3 apples back 5 shifts later (question 150).
+3. **Trees** (owner, question 157: "Trees regrow slowly"): a felled tree leaves a stump, and the same kind of tree grows back on it 15 shifts later; an apple tree comes back with its 3 apples. Nothing grows back on a square mined since (the stump is dug out) or under a camp. Where an animal stands on the stump, it waits a shift more.
+4. **Upkeep** (owner, question 147: "Food and wood"):
    - 1 wood every shift;
-   - 1 food every 2nd shift: an apple, else an animal;
+   - 1 food every 2nd shift: 3 grass, else an apple, else an animal (questions 155 and 158; decision note 0057);
    - 1 more wood every 4th shift for each camp after the first.
-4. **Hunger:** each item of upkeep that cannot be paid costs 1 health (section 5).
-5. The next shift starts with a full set of taps.
+5. **Hunger:** each item of upkeep that cannot be paid costs 1 health (section 5).
+6. The next shift starts with a full set of taps.
 
 ### 4.3 Mining and the level rule [Decided; numbers Default]
 
@@ -154,7 +155,7 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 
 - **Health:** [Default] 10.
 - **What hurts it:** hunger only, for now (owner, question 148). Each item of upkeep that cannot be paid costs 1 health.
-- **Rest** restores full health, then the shift ends as with End shift, so that shift's upkeep is still paid. For now it is usable anywhere; the owner has answered "Only at a camp" (question 156), and the rules PR after B4 moves Rest into a camp's panel.
+- **Rest**, only at a camp (owner, question 156: "Only at a camp"): the crew has no position, so it rests at the camp whose panel the player opens and taps Rest in. It restores full health, then the shift ends as with End shift, so that shift's upkeep is still paid.
 - **At 0 health** the crew is lost and the run ends.
 
 ### 5.1 How a run ends, and saving
@@ -186,7 +187,7 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 ## 7. Resources
 
 - **Items:** wood, grass, apples, animals, clay, stone, coal, and the ores. Everything gathered goes into one store with no limit.
-- **What uses them:** camps and upgrades (section 6), and upkeep (section 4.2).
+- **What uses them:** camps and upgrades (section 6), and upkeep (section 4.2): wood, and grass, apples or animals as food.
 - **For now, coal and the ores have no use.** They are for the rules that come back (section 10) and the contracts (section 8).
 - **There is no crafting for now:** the recipe book replaces it, and recipes can be added to it later.
 
@@ -213,19 +214,19 @@ Each rule that comes back is its own small batch, playtested before the next.
 ## 11. Interface (mobile first)
 
 - **Primary view:** the ground from above. Lit squares show their top block and what grows on them, shaded by depth so the terraces read at a glance. Greyed squares are drained of colour, and the fog is dark. Animals slide to their new squares when a shift ends.
-- **Tap:** a tap on a lit square takes or mines (one action, no menu). A tap on a camp opens its panel (upgrade, demolish). A refused tap says why.
+- **Tap:** a tap on a lit square takes or mines (one action, no menu). A tap on a camp opens its panel (rest, upgrade, demolish). A refused tap says why.
 - **The camp tool** (⛺+) places a new camp. It previews the ring and the squares it would light, says what is missing, and shows the cost.
 - **The recipe book** (📖) and the pinned row are in the tray.
-- **HUD**, over the map so it never moves it: shift, taps left, health. **End shift** and **Rest** at the bottom-left, by the thumb; **Undo** at the bottom-right; **Close mine** at the top-right, with a second tap to confirm.
+- **HUD**, over the map so it never moves it: shift, taps left, health. **End shift** at the bottom-left, by the thumb (Rest is in a camp's panel); **Undo** at the bottom-right; **Close mine** at the top-right, with a second tap to confirm.
 - **The resource counter** is one row above the map.
 - **Orientation:** portrait, with a landscape layout for phones on their side. One-handed play should be possible.
 
 ## 12. Run length targets [Default]
 
-Not set for the new game yet. The simulator (`npm run sim`) measures runs; at the default numbers, with scripted players over 40 shifts (B3, 1,000 runs each):
-- a player who keeps wood and food back for upkeep places 3 camps and upgrades one by shift 40, but lost its crew in 58 runs of 1,000 once its rings ran out of trees (question 157);
-- one who spends everything as it comes goes hungry by shift 6 in most runs, but lost its crew in none;
-- a random player loses its crew in 95% of runs, at about shift 26.
+Not set for the new game yet. The simulator (`npm run sim`) measures runs; at the default numbers, with scripted players over 40 shifts (1,000 runs each, after the owner's answers to questions 155 to 158):
+- a player who keeps wood and food back for upkeep places 3 camps and upgrades one by shift 40, and lost its crew in none (58 before grass became food: those crews starved, decision note 0057);
+- one who spends everything as it comes goes short by shift 6 in most runs, but lost its crew in none;
+- a random player loses its crew in 8 runs of 1,000 (95% before grass became food).
 
 The targets come with the contracts (section 8).
 
@@ -236,9 +237,4 @@ The targets come with the contracts (section 8).
 3. Monetisation: not yet discussed.
 4. Game title.
 
-Answered by the owner on 2026-11-22, and built in the rules PR after B4, which updates sections 4.2, 5 and 11 to match:
-
-- **Wood** (question 157): "Trees regrow slowly." A felled tree grows back after a [Default] number of shifts (about 15).
-- **Grass** (question 158): "Feed animals / food." Grass pays food upkeep at a worse rate than apples, the rate and order tuned with the simulator.
-- **Animals as food** (question 155): "Yes, that's fine." Kept as built.
-- **Rest** (question 156): "Only at a camp." Rest is started from a camp's panel.
+Answered by the owner on 2026-11-22, and built (sections 4.2, 5 and 11; decision note 0057): trees regrow slowly (question 157), grass is food (158), animals stay food (155), and the crew rests only at a camp (156).

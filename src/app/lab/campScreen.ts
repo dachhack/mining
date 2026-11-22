@@ -77,13 +77,14 @@ import type { SquareBox } from './labDraw';
 import { attachLabGestures } from './labGestures';
 import { LAB_LOOK } from './labLook';
 import { topBlocksOf } from './labWorld';
-import { APPLE_TREE, GRASS, TREE } from './surface';
+import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from './surface';
 import type { Animal } from './surface';
 import {
   clayTexture,
   drawAnimal,
   drawAppleTree,
   drawForest,
+  drawStump,
   drawGrass,
   featureSwatch,
   labItemIcon,
@@ -126,7 +127,8 @@ function shiftText(report: ShiftReport, turn: CampTurn, rested: boolean): string
   }
   if (report.healthLost > 0) {
     const part = paid === '' ? '' : `paid ${paid}; `;
-    return `${start}: ${part}no ${lacking}, −${report.healthLost} health.`;
+    // The crew rests only at a camp (question 156), so say where.
+    return `${start}: ${part}no ${lacking}, −${report.healthLost} health. Tap a camp to rest.`;
   }
   return `${start}: ${paid === '' ? 'nothing due' : `paid ${paid}`}.`;
 }
@@ -321,7 +323,8 @@ export function mountCampLab(
   frame.append(undoButton);
 
   // Shifts (plan A4): the HUD (shift, taps left, health) over the map's
-  // top-left corner; End shift and Rest over its bottom-left, by the thumb;
+  // top-left corner; End shift over its bottom-left, by the thumb (Rest is
+  // in a camp's panel: the crew rests only at a camp, question 156);
   // Close mine over its top-right. Like Undo, they sit over the map, so they
   // take no room from the tray and never move the map.
   const hud = element('div', 'lab2-hud');
@@ -336,12 +339,8 @@ export function mountCampLab(
   const shiftButtons = element('div', 'lab2-shift-buttons');
   const endShiftButton = button('lab2-end-shift', 'End shift');
   endShiftButton.dataset['testid'] = 'lab2-end-shift';
-  endShiftButton.addEventListener('click', () => finishShift(false));
-  const restButton = button('lab2-rest', 'Rest');
-  restButton.dataset['testid'] = 'lab2-rest';
-  restButton.setAttribute('aria-label', 'Rest: the crew gets its health back, and the shift ends');
-  restButton.addEventListener('click', () => finishShift(true));
-  shiftButtons.append(endShiftButton, restButton);
+  endShiftButton.addEventListener('click', () => finishShift(null));
+  shiftButtons.append(endShiftButton);
   const closeButton = button('lab2-close-mine', 'Close mine');
   closeButton.dataset['testid'] = 'lab2-close-mine';
   closeButton.addEventListener('click', askCloseMine);
@@ -504,7 +503,8 @@ export function mountCampLab(
 
   /**
    * What grows on square `i` (grass, a tree, an apple tree), drawn over its
-   * block and hiding it. Trees join the forest squares beside them.
+   * block and hiding it. Trees join the forest squares beside them. A stump
+   * is drawn small, over the block.
    */
   function drawFeature(
     ctx: CanvasRenderingContext2D,
@@ -520,6 +520,9 @@ export function mountCampLab(
       return;
     }
     if (feature !== TREE && feature !== APPLE_TREE) {
+      if ((world.surface.stumps[i] ?? NO_FEATURE) !== NO_FEATURE) {
+        drawStump(ctx, box); // a felled tree that will grow back
+      }
       return;
     }
     const joins = {
@@ -1285,7 +1288,14 @@ export function mountCampLab(
       demolish.classList.add('lab2-pack-short');
     }
     demolish.addEventListener('click', () => confirmDemolish(camp.id));
-    head.append(demolish);
+    // Rest (question 156: "Only at a camp"): the crew rests here, gets its
+    // health back, and the shift ends.
+    const rest = button('lab2-pack lab2-rest-here', 'Rest');
+    rest.dataset['testid'] = 'lab2-rest';
+    rest.setAttribute('aria-label', 'Rest here: the crew gets its health back, and the shift ends');
+    rest.disabled = world.turn.status !== 'active';
+    rest.addEventListener('click', () => finishShift(camp.id));
+    head.append(rest, demolish);
     const close = button('lab2-close', '×');
     close.setAttribute('aria-label', 'Close');
     close.dataset['testid'] = 'lab2-camp-close';
@@ -1422,7 +1432,6 @@ export function mountCampLab(
     hudHealth.classList.toggle('lab2-hud-low', turn.health <= FRONTIER_SHIFT.startHealth * 0.3);
     const active = turn.status === 'active';
     endShiftButton.disabled = !active;
-    restButton.disabled = !active;
     closeButton.disabled = !active;
     // Out of taps: End shift is what to press next, so it stands out.
     endShiftButton.classList.toggle('lab2-end-shift-now', active && turn.tapsLeft === 0);
@@ -1434,14 +1443,15 @@ export function mountCampLab(
   }
 
   /**
-   * End the shift, or rest (the crew's health back to full, then the shift
-   * ends). The animals slide to where they stepped, the Undo history is
+   * End the shift, or rest at camp `restAt` (the crew's health back to full,
+   * then the shift ends). The animals slide to where they stepped, the Undo history is
    * emptied (it never crosses a shift, question 151), and the hint says what
    * upkeep was paid and what hunger cost.
    */
-  function finishShift(rest: boolean): void {
+  function finishShift(restAt: number | null): void {
     const before = world.surface.animals;
-    const result = rest ? restCrew(world) : endShift(world);
+    const rest = restAt !== null;
+    const result = restAt !== null ? restCrew(world, restAt) : endShift(world);
     if (result.report === null) {
       return;
     }

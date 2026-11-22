@@ -790,6 +790,17 @@ body[data-screen='lab2'] {
 }
 
 /* Demolish while no other camp covers this one: still tappable (it says why), but quieter. */
+.lab .lab2-pack.lab2-rest-here {
+  margin-left: 0;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  color: #f2e2c4;
+}
+
+.lab .lab2-pack.lab2-rest-here:disabled {
+  opacity: 0.45;
+}
+
 .lab .lab2-pack.lab2-pack-short {
   color: #8f8578;
   border-style: dashed;
@@ -948,7 +959,6 @@ body[data-screen='lab2'] {
 }
 
 .lab .lab2-end-shift,
-.lab .lab2-rest,
 .lab .lab2-close-mine {
   height: 40px;
   padding: 0 14px;
@@ -979,7 +989,6 @@ body[data-screen='lab2'] {
 }
 
 .lab .lab2-end-shift:disabled,
-.lab .lab2-rest:disabled,
 .lab .lab2-close-mine:disabled {
   opacity: 0.45;
 }

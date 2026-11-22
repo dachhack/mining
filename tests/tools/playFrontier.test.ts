@@ -61,13 +61,17 @@ describe('the new game’s play interface (plan B2)', () => {
   });
 
   it('reads choices: numbers of listed choices, taps in a few spellings, and words', () => {
-    const listed = ['endShift', 'rest', 'close'];
+    const listed = ['endShift', 'rest 1', 'close'];
     expect(stepOf('1', listed)).toBe('endShift');
     expect(stepOf('tap 3,4', listed)).toBe('tap 3,4');
     expect(stepOf('t 3 4', listed)).toBe('tap 3,4');
     expect(stepOf('place 5, 6', listed)).toBe('place 5,6');
     expect(stepOf('Upgrade 2', listed)).toBe('upgrade 2');
     expect(stepOf('end shift', listed)).toBe('endShift');
+    // Rest is at a camp (question 156): "rest" alone only when one camp stands.
+    expect(stepOf('rest 1', listed)).toBe('rest 1');
+    expect(stepOf('rest', listed)).toBe('rest 1');
+    expect(stepOf('rest', ['endShift', 'rest 1', 'rest 2', 'close'])).toBeNull();
     expect(stepOf('dig', listed)).toBeNull();
     expect(stepOf('9', listed)).toBeNull();
   });
@@ -85,7 +89,7 @@ describe('the new game’s play interface (plan B2)', () => {
     const second = runFrontierCli(['--log', path, '--do', 'rest']);
     expect(second.output).toContain('Carrying on the run');
     const log = readLog(path);
-    expect(log.steps).toEqual([tap, 'endShift', 'rest']);
+    expect(log.steps).toEqual([tap, 'endShift', 'rest 1']);
     const replay = runFrontierCli(['--replay', path]);
     expect(replay.output).toContain(`Hash ${hashFrontier(replayFrontier(SEED, log.steps))}`);
   });

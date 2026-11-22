@@ -385,7 +385,7 @@ export function demolishCamp(ground: CampGround, id: number): CampChange {
 
 /**
  * `placeCamp` on a whole state: the camp is built over whatever grew on its
- * 3 x 3, which is cleared and gives nothing. A refused place returns the
+ * 3 x 3, which is cleared and gives nothing (stumps too: nothing grows back). A refused place returns the
  * very same state.
  */
 export function placeFrontierCamp(state: FrontierState, x: number, y: number): FrontierState {
@@ -396,13 +396,15 @@ export function placeFrontierCamp(state: FrontierState, x: number, y: number): F
   const features = [...state.features];
   const apples = [...state.apples];
   const regrowIn = [...state.regrowIn];
+  const stumps = [...state.stumps];
   for (const s of footprintOf(x, y)) {
     const i = s.x + state.cube.size.x * s.y;
     features[i] = NO_FEATURE;
     apples[i] = 0;
     regrowIn[i] = -1;
+    stumps[i] = NO_FEATURE; // nothing grows back under a camp
   }
-  return { ...state, ...change, features, apples, regrowIn };
+  return { ...state, ...change, features, apples, regrowIn, stumps };
 }
 
 /** `upgradeCamp` on a whole state. A refused upgrade returns the very same state. */

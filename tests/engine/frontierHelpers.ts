@@ -74,6 +74,7 @@ export function world(options: WorldOptions = {}): FrontierState {
     inventory: new Map(Object.entries(options.inventory ?? {})),
     mined: 0,
     regrowIn: new Array<number>(SIDE * SIDE).fill(-1),
+    stumps: new Array<Feature>(SIDE * SIDE).fill(NO_FEATURE),
     shift: 1,
     tapsLeft: FRONTIER_SHIFT.taps,
     health: FRONTIER_SHIFT.startHealth,

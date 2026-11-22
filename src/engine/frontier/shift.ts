@@ -6,22 +6,28 @@
 //    (owner, questions 145 and 146). An action that does nothing costs nothing.
 // 2. End shift. It can be pressed with taps left; they are lost. Then, in order:
 //    - each animal takes its steps, and every few shifts a new one walks in;
-//    - apples come back on trees picked bare long enough ago;
-//    - upkeep is paid in wood and food (question 147);
+//    - apples come back on trees picked bare long enough ago, and felled
+//      trees grow back on their stumps (question 157);
+//    - upkeep is paid in wood and food (question 147): food is an apple,
+//      else 2 grass, else an animal (questions 155 and 158);
 //    - each item of upkeep that cannot be paid costs the crew 1 health
 //      (question 148: "Hunger only"); at 0 health the run is lost.
 //
-// Resting restores the crew's health and takes the rest of the shift.
-// Closing the mine ends the run. The numbers are in src/data/frontier.ts.
+// Resting, at a camp (question 156: "Only at a camp"), restores the crew's
+// health and takes the rest of the shift. Closing the mine ends the run. The numbers are in src/data/frontier.ts.
 
+import { BLOCKS } from '../../data';
 import type { ItemStack } from '../../data';
-import { FRONTIER_SHIFT, FRONTIER_SURFACE } from '../../data/frontier';
+import { FRONTIER_FOODS, FRONTIER_SHIFT, FRONTIER_SURFACE } from '../../data/frontier';
 import { nextFloat } from '../rng';
-import { demolishFrontierCamp, placeFrontierCamp, upgradeFrontierCamp } from './camps';
+import { blockAt } from '../state';
+import { campAt, demolishFrontierCamp, placeFrontierCamp, upgradeFrontierCamp } from './camps';
 import { walkable } from './generation';
+import { animalAt } from './surface';
 import { frontierTap } from './tap';
 import type { FrontierTap } from './tap';
-import type { FrontierAnimal, FrontierState } from './state';
+import { APPLE_TREE, NO_FEATURE } from './state';
+import type { Feature, FrontierAnimal, FrontierState } from './state';
 
 /** Something the player can do. */
 export type FrontierAction =
@@ -30,7 +36,8 @@ export type FrontierAction =
   | { kind: 'upgrade'; id: number }
   | { kind: 'demolish'; id: number }
   | { kind: 'endShift' }
-  | { kind: 'rest' }
+  // Rest at the camp named `id` (question 156: "Only at a camp").
+  | { kind: 'rest'; id: number }
   | { kind: 'close' };
 
 /** What End shift did: the upkeep paid and unpaid, and the health it cost. */
@@ -45,6 +52,8 @@ export interface ShiftReport {
   healthLost: number;
   /** Apple trees whose apples came back. */
   regrown: number;
+  /** Felled trees that grew back. */
+  treesRegrown: number;
   /** Animals that walked in. */
   newAnimals: number;
 }
@@ -81,9 +90,6 @@ export function upkeepDue(shift: number, camps: number): ItemStack[] {
   }
   return due;
 }
-
-/** Food, in the order it is eaten: apples first, being the commoner, then animals. */
-const FOODS = ['apple', 'animal'];
 
 /** The animals after each takes its steps, and the generator after the draws. */
 function stepAnimals(state: FrontierState): { animals: FrontierAnimal[]; rng: { s: number } } {
@@ -143,33 +149,24 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
       newAnimals = 1;
     }
   }
-  // Apples come back on trees whose wait is over.
-  const apples = [...state.apples];
-  let regrown = 0;
-  const regrowIn = state.regrowIn.map((left, i) => {
-    if (left < 0) return left;
-    if (left <= 1) {
-      apples[i] = FRONTIER_SURFACE.applesPerTree;
-      regrown += 1;
-      return -1;
-    }
-    return left - 1;
-  });
+  // Apples come back on trees whose wait is over, and felled trees on their stumps.
+  const grown = regrow({ ...state, animals });
   // Upkeep, item by item; what cannot be paid costs 1 health each.
   const inventory = new Map(state.inventory);
   const paid: ItemStack[] = [];
   const unpaid: ItemStack[] = [];
   for (const due of upkeepDue(state.shift, state.camps.length)) {
-    const candidates = due.item === 'food' ? FOODS : [due.item];
-    const item = candidates.find((c) => (inventory.get(c) ?? 0) > 0);
-    if (item === undefined) {
+    // What can pay it: wood pays wood; food is paid by the first of FRONTIER_FOODS held.
+    const candidates = due.item === 'food' ? FRONTIER_FOODS : [due];
+    const pay = candidates.find((c) => (inventory.get(c.item) ?? 0) >= c.count);
+    if (pay === undefined) {
       unpaid.push(due);
       continue;
     }
-    const left = (inventory.get(item) ?? 0) - 1;
-    if (left > 0) inventory.set(item, left);
-    else inventory.delete(item);
-    paid.push({ item, count: 1 });
+    const left = (inventory.get(pay.item) ?? 0) - pay.count;
+    if (left > 0) inventory.set(pay.item, left);
+    else inventory.delete(pay.item);
+    paid.push({ item: pay.item, count: pay.count });
   }
   const healthLost = unpaid.length;
   const health = Math.max(0, state.health - healthLost);
@@ -178,8 +175,10 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
     animals,
     nextAnimalId,
     rng,
-    apples,
-    regrowIn,
+    features: grown.features,
+    apples: grown.apples,
+    regrowIn: grown.regrowIn,
+    stumps: grown.stumps,
     inventory,
     health,
     shift: state.shift + 1,
@@ -196,10 +195,63 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
       paid: merge(paid),
       unpaid: merge(unpaid),
       healthLost,
-      regrown,
+      regrown: grown.regrown,
+      treesRegrown: grown.treesRegrown,
       newAnimals,
     },
   };
+}
+
+/** What grows back at the end of a shift: the surface after it, and how many apple trees and trees came back. */
+interface Regrowth {
+  features: Feature[];
+  apples: number[];
+  regrowIn: number[];
+  stumps: Feature[];
+  regrown: number;
+  treesRegrown: number;
+}
+
+/**
+ * Each square's wait counts down. When it runs out:
+ * - an apple tree picked bare has its apples back;
+ * - a stump grows its tree back, full of apples if it is an apple tree. It
+ *   cannot grow where the square was mined (the stump was dug out) or a camp
+ *   stands: the stump is gone. Where an animal stands, it waits a shift more.
+ * `state.animals` are the animals after this shift's steps.
+ */
+function regrow(state: FrontierState): Regrowth {
+  const width = state.cube.size.x;
+  const growOn = new Set<number>(FRONTIER_SURFACE.plantsGrowOn.map((id) => BLOCKS[id].code));
+  const features = [...state.features];
+  const apples = [...state.apples];
+  const stumps = [...state.stumps];
+  let regrown = 0;
+  let treesRegrown = 0;
+  const regrowIn = state.regrowIn.map((left, i) => {
+    if (left < 0) return left;
+    if (left > 1) return left - 1;
+    const stump = stumps[i] ?? NO_FEATURE;
+    if (stump === NO_FEATURE) {
+      apples[i] = FRONTIER_SURFACE.applesPerTree;
+      regrown += 1;
+      return -1;
+    }
+    const x = i % width;
+    const y = Math.floor(i / width);
+    if (animalAt(state, x, y) !== null) {
+      return 1; // an animal stands on it: try again next shift
+    }
+    stumps[i] = NO_FEATURE;
+    const unmined = growOn.has(blockAt(state.cube, { x, y, z: 0 }));
+    if (unmined && features[i] === NO_FEATURE && campAt(state.camps, x, y) === null) {
+      features[i] = stump;
+      apples[i] = stump === APPLE_TREE ? FRONTIER_SURFACE.applesPerTree : 0;
+      treesRegrown += 1;
+    }
+    return -1;
+  });
+  return { features, apples, regrowIn, stumps, regrown, treesRegrown };
 }
 
 /** Stacks of the same item added together, in first-seen order: [1 wood, 1 wood] -> [2 wood]. */
@@ -246,6 +298,10 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
     return endFrontierShift(state);
   }
   if (action.kind === 'rest') {
+    // The crew rests at a camp: refused unless camp `id` stands.
+    if (!state.camps.some((c) => c.id === action.id)) {
+      return refused(state, 'rest');
+    }
     // Rest restores the crew, then the shift ends (the rest of it is spent resting).
     return endFrontierShift({ ...state, health: FRONTIER_SHIFT.startHealth });
   }

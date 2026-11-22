@@ -165,6 +165,7 @@ export function toFrontier(world: CampWorld): FrontierState {
     inventory: world.lab.counts,
     mined: world.lab.mined,
     regrowIn: world.surface.regrowIn,
+    stumps: world.surface.stumps,
     shift: world.turn.shift,
     tapsLeft: world.turn.tapsLeft,
     health: world.turn.health,
@@ -193,6 +194,7 @@ export function fromFrontier(world: CampWorld, state: FrontierState): CampWorld 
       features: state.features,
       apples: state.apples,
       regrowIn: state.regrowIn,
+      stumps: state.stumps,
       animals: state.animals,
       nextAnimalId: state.nextAnimalId,
       rng: state.rng.s,
@@ -255,6 +257,7 @@ export function bareSurface(state: GameState): Surface {
     features: new Array<typeof NO_FEATURE>(squares).fill(NO_FEATURE),
     apples: new Array<number>(squares).fill(0),
     regrowIn: new Array<number>(squares).fill(-1),
+    stumps: new Array<typeof NO_FEATURE>(squares).fill(NO_FEATURE),
     animals: [],
     nextAnimalId: 1,
     rng: 1,
@@ -468,9 +471,16 @@ export function endShift(world: CampWorld): { world: CampWorld; report: ShiftRep
   return { world: result.world, report: result.report };
 }
 
-/** Rest: the crew's health is restored, then the shift ends as with `endShift`. */
-export function restCrew(world: CampWorld): { world: CampWorld; report: ShiftReport | null } {
-  const result = act(world, { kind: 'rest' });
+/**
+ * Rest at camp `id` (question 156: "Only at a camp"): the crew's health is
+ * restored, then the shift ends as with `endShift`. `report` is `null` if
+ * there is no such camp or the run has ended (the world is then the same).
+ */
+export function restCrew(
+  world: CampWorld,
+  id: number,
+): { world: CampWorld; report: ShiftReport | null } {
+  const result = act(world, { kind: 'rest', id });
   return { world: result.world, report: result.report };
 }
 
@@ -516,9 +526,9 @@ export type CampStep =
   | { kind: 'place'; x: number; y: number }
   | { kind: 'upgrade'; id: number }
   | { kind: 'demolish'; id: number }
-  // End the shift, rest, or close the mine (A4).
+  // End the shift, rest at a camp, or close the mine (A4).
   | { kind: 'endShift' }
-  | { kind: 'rest' }
+  | { kind: 'rest'; id: number }
   | { kind: 'close' };
 
 /** The world after one step. A step that is not allowed changes nothing, as on screen. */
@@ -536,7 +546,7 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
     return endShift(world).world;
   }
   if (step.kind === 'rest') {
-    return restCrew(world).world;
+    return restCrew(world, step.id).world;
   }
   if (step.kind === 'close') {
     return closeMine(world);

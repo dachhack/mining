@@ -321,15 +321,15 @@ const FRONTIER_RUNS: {
     policy: 'gatherer',
     maxShifts: 30,
     description:
-      'The gatherer for 30 shifts: takes plants and animals, places two more camps where they light the most new ground, mines, upgrades a camp to level 2, and goes hungry once it spends its wood',
+      'The gatherer for 30 shifts: takes plants and animals, places two more camps where they light the most new ground, mines, upgrades a camp to level 2, and is never hungry in 30 shifts',
   },
   {
-    name: 'gatherer-seed-7',
-    seed: 7,
+    name: 'gatherer-seed-26',
+    seed: 26,
     policy: 'gatherer',
     maxShifts: 30,
     description:
-      'The gatherer on another seed: hungry from shift 4, after placing camps, and a rest when the crew is low',
+      'The gatherer on another seed: hungry early, places two camps, rests at camp 1 when the crew is low, then upgrades it',
   },
   {
     name: 'careful-seed-3',
@@ -348,12 +348,12 @@ const FRONTIER_RUNS: {
       'The digger: a pit 5 levels deep next to the first camp under the level rule, gathering only for upkeep',
   },
   {
-    name: 'random-seed-6-lost',
-    seed: 6,
+    name: 'random-seed-155-lost',
+    seed: 155,
     policy: 'random',
     maxShifts: 30,
     description:
-      'The random policy: never keeps food or wood for upkeep, goes hungry from the first shift, and loses the crew at shift 26',
+      'The random policy: never keeps wood back for upkeep, goes short from shift 5, and loses the crew at shift 14',
   },
 ];
 

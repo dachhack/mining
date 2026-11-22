@@ -145,7 +145,7 @@ export const FRONTIER_SHIFT = {
   startHealth: 10,
   /** Upkeep: this much wood at the end of every shift (owner: "Food and wood")... */
   woodEveryShift: 1,
-  /** ...1 food (an apple, else an animal) at the end of every this many shifts... */
+  /** ...1 food at the end of every this many shifts (FRONTIER_FOODS says what pays it)... */
   foodEveryShifts: 2,
   /** ...and 1 more wood, every this many shifts, for each camp after the first. */
   campWoodEveryShifts: 4,
@@ -155,4 +155,23 @@ export const FRONTIER_SHIFT = {
   animalEveryShifts: 3,
   /** An apple tree picked bare has its apples back this many shifts later (question 150). */
   appleRegrowShifts: 5,
+  /**
+   * A felled tree grows back, as the same kind of tree, this many shifts
+   * later (owner, question 157: "Trees regrow slowly").
+   */
+  treeRegrowShifts: 15,
 };
+
+/**
+ * What pays 1 food of upkeep, in the order it is eaten: the first one held
+ * in the amount given pays. Grass first, at a worse rate than apples (owner,
+ * question 158: "Feed animals / food"): it is the commonest and has few
+ * other uses, so eating it first keeps it from piling up. Then an apple,
+ * then an animal (owner, question 155: "Yes, that's fine"). Tuned with
+ * `npm run sim` (decision note 0057).
+ */
+export const FRONTIER_FOODS: ItemStack[] = [
+  { item: 'grass', count: 3 },
+  { item: 'apple', count: 1 },
+  { item: 'animal', count: 1 },
+];
