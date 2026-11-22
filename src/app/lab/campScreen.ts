@@ -75,6 +75,8 @@ import {
   labItemIcon,
 } from './surfaceArt';
 import { resourceEntries } from './resources';
+import { emptyHistory, recordAction, undoCount, undoLast } from './undoHistory';
+import type { UndoHistory } from './undoHistory';
 import { shadowEdges } from './shadows';
 
 const HINT = 'Tap to gather and dig · tap a camp to upgrade it';
@@ -181,6 +183,8 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   let camera: LabCamera = { x: 0, y: 0, cells: CAMP_LOOK.startCells };
   let effects: Effect[] = [];
   let mode: Mode = { kind: 'idle' };
+  /** What the player did, to undo it (undoHistory.ts). A new world starts with none. */
+  let history: UndoHistory = emptyHistory();
   /**
    * The lab's clock, in milliseconds: it starts where the world's surface
    * left off (0 for a new world), and runs with the screen's clock. Animals
@@ -203,6 +207,14 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   const canvas = element('canvas', 'lab-map');
   canvas.dataset['testid'] = 'lab-map';
   frame.append(canvas);
+
+  // Undo (owner: "Undo button"): over the map's bottom-right corner, near the
+  // thumb, so it takes no room from the tray and never moves the map.
+  const undoButton = button('lab2-undo', '↶ Undo');
+  undoButton.dataset['testid'] = 'lab2-undo';
+  undoButton.setAttribute('aria-label', 'Undo the last action');
+  undoButton.addEventListener('click', undo);
+  frame.append(undoButton);
 
   const hint = element('p', 'lab-hint', HINT);
   hint.dataset['testid'] = 'lab-hint';
@@ -1105,10 +1117,12 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   }
 
   function confirmPlace(x: number, y: number): void {
+    tick();
     const next = placeCamp(world, x, y);
     if (next === world) {
       return;
     }
+    remember(world, { kind: 'place', x, y });
     mode = { kind: 'idle' };
     preview = new Set();
     setWorld(next);
@@ -1125,11 +1139,13 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   }
 
   function confirmUpgrade(id: number): void {
+    tick();
     const before = world.camps.find((c) => c.id === id);
     const next = upgradeCamp(world, id);
     if (before === undefined || next === world) {
       return;
     }
+    remember(world, { kind: 'upgrade', id });
     setWorld(next);
     setHint(`Camp ${id} is level ${before.level + 1}: a wider ring, harder blocks.`, false);
     addEffect({
@@ -1144,14 +1160,67 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   }
 
   function confirmDemolish(id: number): void {
+    tick();
     const next = demolishCamp(world, id);
     if (next === world) {
       setHint(DEMOLISH_FIRST, true);
       return;
     }
+    remember(world, { kind: 'demolish', id });
     mode = { kind: 'idle' };
     setWorld(next);
     setHint('Camp demolished: its ground can be mined now.', false);
+  }
+
+  // ----- Undo -----
+
+  /**
+   * Note an action about to change the world: `before` is the world just
+   * before it, brought up to the lab clock.
+   */
+  function remember(before: CampWorld, step: CampStep): void {
+    history = recordAction(history, before, step);
+    showUndo();
+  }
+
+  /** The Undo button is off when there is nothing to undo. */
+  function showUndo(): void {
+    const count = undoCount(history);
+    undoButton.disabled = count === 0;
+    undoButton.dataset['count'] = String(count);
+  }
+
+  /** What an action was, for the hint after it is undone. */
+  function describeStep(step: CampStep): string {
+    if (step.kind === 'tap') return `the tap at ${step.x}, ${step.y}`;
+    if (step.kind === 'place') return 'placing the camp';
+    if (step.kind === 'upgrade') return `the upgrade of camp ${step.id}`;
+    if (step.kind === 'demolish') return `demolishing camp ${step.id}`;
+    return 'waiting';
+  }
+
+  /**
+   * Undo the last action: the world goes back to exactly what it was just
+   * before it, animals and the lab clock included (decision note 0049).
+   * The clock is set back to match, so time runs on from there. The camera
+   * stays where it is.
+   */
+  function undo(): void {
+    const last = history.entries[history.entries.length - 1];
+    const undone = undoLast(history);
+    if (undone === null || last === undefined) {
+      return;
+    }
+    history = undone.history;
+    clockStart = performance.now() - undone.world.surface.time;
+    lastStep.clear();
+    effects = [];
+    mode = { kind: 'idle' };
+    preview = new Set();
+    setWorld(undone.world);
+    const left = undoCount(history);
+    setHint(`Undone: ${describeStep(last.step)}.${left === 0 ? ' Back at the start.' : ''}`, false);
+    showUndo();
   }
 
   // ----- A tap -----
@@ -1223,6 +1292,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     }
     if (result.kind === 'harvested' && result.harvest !== null) {
       effects = effects.filter((e) => !(e.x === x && e.y === y));
+      remember(world, { kind: 'tap', x, y });
       setWorld(result.world);
       setHint(HARVEST_HINTS[result.harvest.kind], false);
       addEffect({
@@ -1238,6 +1308,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     }
     // Mined.
     effects = effects.filter((e) => !(e.x === x && e.y === y));
+    remember(world, { kind: 'tap', x, y });
     setWorld(result.world);
     setHint(HINT, false);
     addEffect({
@@ -1280,6 +1351,8 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     isPrepared = false;
     world = newCampWorld(randomSeed(Math.random));
     clockStart = performance.now();
+    history = emptyHistory();
+    showUndo();
     lastStep.clear();
     effects = [];
     mode = { kind: 'idle' };
@@ -1347,5 +1420,6 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   }
   window.setInterval(tick, CAMP_LOOK.clockTickMs);
 
+  showUndo();
   showWorld();
 }
