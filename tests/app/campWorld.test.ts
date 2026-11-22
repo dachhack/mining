@@ -115,6 +115,8 @@ describe('the lab 2 data', () => {
     const named: BlockId[] = LAB_CAMP_LEVELS.flatMap((level) => level.addsBlocks);
     expect(new Set(named).size).toBe(named.length);
     for (const id of Object.keys(BLOCKS) as BlockId[]) {
+      // Lab 2's cube has no timber-root (LAB_SURFACE.timberRootBecomes).
+      if (id === 'timberRoot') continue;
       if (BLOCKS[id].yields.length > 0) {
         expect(levelNeededFor(BLOCKS[id].code), id).not.toBeNull();
       }
