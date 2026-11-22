@@ -479,6 +479,15 @@ export { hashFrontier } from './frontier/hash';
 export { endFrontierShift, frontierAct, upkeepDue } from './frontier/shift';
 export type { FrontierAction, FrontierOutcome, ShiftReport } from './frontier/shift';
 export type { FrontierStatus } from './frontier/state';
+// Undo within a shift (plan A5).
+export {
+  actLogged,
+  isUndoable,
+  startLog,
+  undoCount as shiftUndoCount,
+  undoLast as undoLastAction,
+} from './frontier/undo';
+export type { LoggedAction, ShiftLog } from './frontier/undo';
 export type { Feature, FrontierAnimal, FrontierCamp, FrontierState } from './frontier/state';
 // The cube seen from above (design doc v0.2 section 3.1; issue #84): a
 // square's depth, its top block, and the level rule. `topBlockAt` reads the

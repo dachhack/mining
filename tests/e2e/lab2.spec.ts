@@ -31,7 +31,7 @@ import type { CampStep, CampWorld } from '../../src/app/lab/campWorld';
 import { FRONTIER_SHIFT } from '../../src/data/frontier';
 import { GRASS, TREE } from '../../src/app/lab/surface';
 import { planLevel2, tapsUntil } from './campPlan';
-import { emptyHistory, recordAction, undoCount, undoLast } from '../../src/app/lab/undoHistory';
+import { emptyHistory, noteAction, undoCount, undoLast } from '../../src/app/lab/undoHistory';
 import { labRecipes } from '../../src/app/lab/recipes';
 import type { Square } from './campPlan';
 
@@ -1012,13 +1012,12 @@ test('undo takes back the player’s taps one by one, steps past harvests, and i
   expect(plan).not.toBeNull();
   if (plan === null) return;
   let world = start;
-  let history = emptyHistory();
+  let history = emptyHistory(start);
   for (const square of plan.taps.slice(0, 6)) {
     const tap = campTap(world, square.x, square.y);
     const harvestKind = tap.kind === 'harvested' ? tap.harvest?.kind : null;
-    if (tap.kind === 'mined' || harvestKind === 'grass' || harvestKind === 'felled') {
-      history = recordAction(history, world, tap.world, { kind: 'tap', ...square });
-    }
+    const undoable = tap.kind === 'mined' || harvestKind === 'grass' || harvestKind === 'felled';
+    history = noteAction(history, { kind: 'tap', ...square }, undoable);
     world = tap.world;
     await tapSquare(page, canvas, square);
     await expect.poll(() => counts(page)).toEqual(expectedCounts(world));
