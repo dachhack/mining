@@ -61,10 +61,16 @@ export const LAB_CAMP_LEVELS: LabCampLevel[] = [
   },
 ];
 
-/** What a new camp costs. The first camp is free. */
+/**
+ * What a new camp costs, the same for every camp. The first camp is free.
+ * 15 wood and 15 grass (was 5 and 5): the owner found camps too cheap once
+ * the rings grew to radius 9 ("Flat, about 3x higher", question 139). The
+ * first camp's ring always holds that much to gather (a test checks 200
+ * seeds), and the first camp is put where its ring does (startSquare).
+ */
 export const LAB_NEW_CAMP_COST: ItemStack[] = [
-  { item: 'wood', count: 5 },
-  { item: 'grass', count: 5 },
+  { item: 'wood', count: 15 },
+  { item: 'grass', count: 15 },
 ];
 
 /**
