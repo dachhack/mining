@@ -5,13 +5,11 @@
 
 import { FRONTIER_NEW_CAMP_COST } from '../src/data/frontier';
 import {
-  ENGINE_VERSION,
   canAfford,
   coverLevels,
   createFrontier,
   frontierAct,
-  frontierTap,
-  hashFrontier,
+  previewTap,
   newlyCovered,
   placeRefusal,
   upgradeCostFrom,
@@ -175,33 +173,8 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
   if (plant !== undefined && short) return `tap ${plant.x},${plant.y}`;
   for (const s of squares) {
     if (state.features[s.x + width * s.y] !== NO_FEATURE) continue; // a plant must go first
-    if (frontierTap(state, s.x, s.y).kind === 'mined') return `tap ${s.x},${s.y}`;
+    if (previewTap(state, s.x, s.y).kind === 'mined') return `tap ${s.x},${s.y}`;
   }
   // Nothing left to take: end the shift, so the animals and apples come round again.
   return plant === undefined ? 'endShift' : `tap ${plant.x},${plant.y}`;
-}
-
-/** Play the gatherer on `seed` for at most `maxSteps` steps. */
-export function recordGatherer(
-  seed: number,
-  maxSteps: number,
-  description: string,
-): FrontierGolden {
-  let state = createFrontier(seed);
-  const steps: FrontierStep[] = [];
-  while (steps.length < maxSteps) {
-    const step = gathererStep(state);
-    if (step === null) break;
-    state = applyFrontierStep(state, step);
-    steps.push(step);
-  }
-  return {
-    description,
-    recordedWith: 'gatherer',
-    engineVersion: ENGINE_VERSION,
-    seed,
-    stepCount: steps.length,
-    expectedHash: hashFrontier(state),
-    steps,
-  };
 }

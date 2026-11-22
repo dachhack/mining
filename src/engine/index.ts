@@ -472,7 +472,7 @@ export type { CampChange, CampGround, PlaceRefusal, Sight } from './frontier/cam
 // The surface and a tap (plan A3).
 export { animalAt, gained, harvestAt } from './frontier/surface';
 export type { FrontierHarvest, HarvestKind } from './frontier/surface';
-export { frontierTap } from './frontier/tap';
+export { frontierTap, previewTap } from './frontier/tap';
 export type { FrontierTap, FrontierTapKind } from './frontier/tap';
 export { hashFrontier } from './frontier/hash';
 // Shifts (plan A4).

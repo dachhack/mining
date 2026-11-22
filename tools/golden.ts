@@ -16,19 +16,20 @@
 //       tests/golden. Use when a rule change makes recorded decisions illegal.
 //   npm run golden -- --frontier
 //       Record the new game's golden runs (Lab 2 becomes the game, plan A3)
-//       in tests/golden/frontier again: the gatherer policy of
-//       tools/frontierRun.ts on the seeds in `FRONTIER_RUNS` below.
+//       in tests/golden/frontier again: the new simulator's policies
+//       (tools/frontierPolicies.ts) on the seeds in `FRONTIER_RUNS` below.
 
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import * as prettier from 'prettier';
 import { CONTRACT_IDS, DEFAULT_LOADOUT_ID, GAME_DATA, validateData } from '../src/data';
-import { hashState } from '../src/engine';
+import { ENGINE_VERSION, hashState } from '../src/engine';
 import { POLICY_NAMES, isPolicyName, makePolicy } from './policies';
 import { TOOL_KIT } from './simKit';
 import { playRun, replayDecisions, statusText } from './simRun';
 import type { GoldenRun } from './simRun';
-import { recordGatherer } from './frontierRun';
+import { playFrontierRun } from './frontierSim';
+import type { FrontierPolicyName } from './frontierPolicies';
 import type { FrontierGolden } from './frontierRun';
 
 const GOLDEN_DIR = path.join(import.meta.dirname, '..', 'tests', 'golden');
@@ -301,36 +302,82 @@ async function record(spec: RecordSpec): Promise<void> {
 }
 
 /**
- * The new game's golden runs (plan A3), in tests/golden/frontier: the
- * gatherer policy (tools/frontierRun.ts) on these seeds. `--frontier`
- * records them all again; there is nothing to rehash separately, since the
- * gatherer always plays the same way on a seed.
+ * The new game's golden runs, in tests/golden/frontier: the new simulator's
+ * policies (tools/frontierPolicies.ts, plan B3) on these seeds, each played
+ * for at most `maxShifts` shifts. `--frontier` records them all again;
+ * there is nothing to rehash separately, since a policy always plays the
+ * same way on a seed.
  */
-const FRONTIER_RUNS: { name: string; seed: number; maxSteps: number; description: string }[] = [
+const FRONTIER_RUNS: {
+  name: string;
+  seed: number;
+  policy: FrontierPolicyName;
+  maxShifts: number;
+  description: string;
+}[] = [
   {
     name: 'gatherer-seed-1',
     seed: 1,
-    maxSteps: 400,
+    policy: 'gatherer',
+    maxShifts: 30,
     description:
-      'The gatherer: 10 taps a shift; takes plants and animals, places two more camps where they light the most new ground, mines clay and stone, upgrades a camp to level 2, and pays upkeep at the end of each shift',
+      'The gatherer for 30 shifts: takes plants and animals, places two more camps where they light the most new ground, mines, upgrades a camp to level 2, and goes hungry once it spends its wood',
   },
   {
     name: 'gatherer-seed-7',
     seed: 7,
-    maxSteps: 400,
+    policy: 'gatherer',
+    maxShifts: 30,
     description:
-      'The gatherer on another seed: three camps, one upgraded, and a rest when hunger brought the crew low',
+      'The gatherer on another seed: hungry from shift 4, after placing camps, and a rest when the crew is low',
+  },
+  {
+    name: 'careful-seed-3',
+    seed: 3,
+    policy: 'careful',
+    maxShifts: 30,
+    description:
+      'The careful policy: keeps wood and food back for upkeep, places two more camps, and is never hungry in 30 shifts',
+  },
+  {
+    name: 'digger-seed-5',
+    seed: 5,
+    policy: 'digger',
+    maxShifts: 30,
+    description:
+      'The digger: a pit 5 levels deep next to the first camp under the level rule, gathering only for upkeep',
+  },
+  {
+    name: 'random-seed-6-lost',
+    seed: 6,
+    policy: 'random',
+    maxShifts: 30,
+    description:
+      'The random policy: never keeps food or wood for upkeep, goes hungry from the first shift, and loses the crew at shift 26',
   },
 ];
 
 async function recordFrontier(): Promise<void> {
   const dir = path.join(GOLDEN_DIR, 'frontier');
   mkdirSync(dir, { recursive: true });
+  // The runs recorded before B3 (the gatherer only, 400 steps) are replaced.
+  for (const name of readdirSync(dir).filter((n) => n.endsWith('.json'))) {
+    rmSync(path.join(dir, name));
+  }
   for (const run of FRONTIER_RUNS) {
-    const golden = recordGatherer(run.seed, run.maxSteps, run.description);
+    const result = playFrontierRun(run.seed, run.policy, run.maxShifts);
+    const golden: FrontierGolden = {
+      description: run.description,
+      recordedWith: run.policy,
+      engineVersion: ENGINE_VERSION,
+      seed: run.seed,
+      stepCount: result.steps.length,
+      expectedHash: result.metrics.finalHash,
+      steps: result.steps,
+    };
     await writeGolden(path.join(dir, `${run.name}.json`), golden);
     console.log(
-      `frontier/${run.name}.json: ${golden.stepCount} steps, hash ${golden.expectedHash}`,
+      `frontier/${run.name}.json: ${golden.stepCount} steps, ${result.metrics.outcome}, hash ${golden.expectedHash}`,
     );
   }
 }

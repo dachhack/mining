@@ -34,10 +34,10 @@
 ```bash
 npm run dev       # local web build
 npm test          # unit, scenario, determinism tests
-npm run sim       # headless simulation: -- --policy pit --runs 1000 [--json]  (policies: random, pit, greedy, camp, terrace)
+npm run sim       # the new game's simulation: -- --policy careful --runs 1000 [--json]  (policies: random, gatherer, careful, digger)
                   #   -- --acceptance --runs 1000    every policy, rules checked after every step, every run replayed
-                  #   -- --survey depth --runs 1000  the depth survey: see docs/surveys/depth-survey.md
-npm run golden    # re-hash or re-record the golden runs: see tests/golden/README.md
+npm run sim:old   # the old game's simulation and depth survey, until Phase C removes it
+npm run golden    # re-hash or re-record the golden runs (-- --frontier: the new game's): see tests/golden/README.md
 npm run play      # text play interface for playtesting the new game: -- --help for usage and the rules
 npm run play:old  # the old game's play interface, until Phase C removes it
 npm run ascii     # print layers of a generated cube as text: -- --seed 7 --layers 0-3

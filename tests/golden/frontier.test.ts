@@ -24,8 +24,10 @@ function load(name: string): FrontierGolden {
 
 // Each replay takes a fraction of a second alone; the limit allows for a busy CI machine.
 describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
-  it('there are at least two, recorded on this engine version', () => {
-    expect(files.length).toBeGreaterThanOrEqual(2);
+  it('there is one for every policy, recorded on this engine version', () => {
+    expect(files.length).toBeGreaterThanOrEqual(5);
+    const policies = new Set(files.map((name) => load(name).recordedWith));
+    expect([...policies].sort()).toEqual(['careful', 'digger', 'gatherer', 'random']);
     for (const name of files) {
       expect(load(name).engineVersion, name).toBe(ENGINE_VERSION);
     }
@@ -39,7 +41,7 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
     });
   }
 
-  it('between them, they place camps, upgrade one, catch animals, take plants, mine clay and end shifts', () => {
+  it('between them, they place camps, upgrade one, catch animals, take plants, mine clay, rest, and lose a crew', () => {
     const seen = new Set<string>();
     for (const name of files) {
       const golden = load(name);
@@ -53,16 +55,27 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
           seen.add('mine');
           const clayBefore = state.inventory.get('clay') ?? 0;
           if ((next.inventory.get('clay') ?? 0) > clayBefore) seen.add('clay');
-        } else if (next.animals.length < state.animals.length) {
+        } else if (next.animals.length < state.animals.length && step.startsWith('tap')) {
           seen.add('catch');
         } else {
           seen.add('plant');
         }
         state = next;
       }
+      if (state.status === 'lost') seen.add('lost');
     }
     expect([...seen]).toEqual(
-      expect.arrayContaining(['catch', 'clay', 'endShift', 'mine', 'place', 'plant', 'upgrade']),
+      expect.arrayContaining([
+        'catch',
+        'clay',
+        'endShift',
+        'lost',
+        'mine',
+        'place',
+        'plant',
+        'rest',
+        'upgrade',
+      ]),
     );
   });
 });

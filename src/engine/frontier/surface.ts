@@ -85,11 +85,14 @@ export function harvestAt(state: FrontierState, x: number, y: number): FrontierH
   }
   if (feature === TREE || feature === APPLE_TREE) {
     const features = replaced(state.features, i, NO_FEATURE);
+    // A felled tree regrows nothing: an apple tree's wait for its apples ends with it.
+    const regrowIn = replaced(state.regrowIn, i, -1);
     return take(
-      { ...state, features },
+      { ...state, features, regrowIn },
       { item: 'wood', count: FRONTIER_SURFACE.woodPerTree },
       'felled',
     );
   }
+
   return null;
 }

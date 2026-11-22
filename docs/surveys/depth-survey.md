@@ -191,9 +191,9 @@ Each coal block is worth 3 shifts. Careful runs find 5 to 9 of them, and a run's
 ## How to run it again
 
 ```bash
-npm run sim -- --survey depth --runs 1000      # tables 1 to 8; about 55 minutes on 4 cores
-npm run sim -- --survey candidates --runs 200 --max-shifts 400   # table 9
-npm run sim -- --survey camp --runs 300        # table 10
+npm run sim:old -- --survey depth --runs 1000      # tables 1 to 8; about 55 minutes on 4 cores
+npm run sim:old -- --survey candidates --runs 200 --max-shifts 400   # table 9
+npm run sim:old -- --survey camp --runs 300        # table 10
 ```
 
 The same command always prints the same tables. The trials are in `tools/whatIf.ts`, the candidates in `tools/survey.ts`. The three commands above reproduce tables 1 to 10 only on the commit that merged this survey (PR #113): the trials are written as changes from the numbers of that day, and the numbers have since changed. To measure the game as it is now, use `npm run sim -- --survey depth-now --runs 300`.
@@ -438,7 +438,7 @@ Camp survey: engine 0.4.0, seeds 1 to 300 (300 runs a row). The terracing policy
 
 ## After the owner's choice: the main tables again
 
-The output of `npm run sim -- --survey depth-now --runs 300` on the data of decision note 0040, pasted unchanged but for the table numbers (A1 to A5).
+The output of `npm run sim:old -- --survey depth-now --runs 300` on the data of decision note 0040, pasted unchanged but for the table numbers (A1 to A5).
 
 Depth survey: engine 0.4.0, seeds 1 to 300 (300 runs for each policy), standard loadout, shift cap 300.
 

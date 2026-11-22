@@ -13,13 +13,16 @@
 // mine says so rather than promising that an upgrade would let it be mined
 // (review of PR #119).
 
+import { blockDefByCode } from '../../data';
 import type { ItemStack } from '../../data';
+import { FRONTIER_SURFACE } from '../../data/frontier';
 import { mayMine, topBlockAt } from '../heightmap';
 import type { HigherNeighbour, MineRefusal } from '../heightmap';
 import { labMine } from '../lab';
 import { campAt, coverLevelAt, levelNeededFor, sightAt } from './camps';
 import { gained, harvestAt } from './surface';
 import type { HarvestKind } from './surface';
+import { APPLE_TREE, GRASS, TREE } from './state';
 import type { FrontierState } from './state';
 
 /**
@@ -108,4 +111,43 @@ export function frontierTap(state: FrontierState, x: number, y: number): Frontie
     gain: mined.yields,
     block: mined.block,
   };
+}
+
+/**
+ * What a tap on (x, y) would do and give, without making the new state: the
+ * same checks in the same order as `frontierTap`, for policies and views
+ * that look at every square (copying the cube for each would be slow).
+ * `previewTap(s, x, y).kind` is always `frontierTap(s, x, y).kind`; a test
+ * checks it on whole runs.
+ */
+export function previewTap(
+  state: FrontierState,
+  x: number,
+  y: number,
+): { kind: FrontierTapKind; gain: ItemStack[] } {
+  if (x < 0 || y < 0 || x >= state.cube.size.x || y >= state.cube.size.y) {
+    return { kind: 'refused', gain: [] };
+  }
+  const sight = sightAt(state, x, y);
+  if (sight !== 'shown') return { kind: sight, gain: [] };
+  const animalHere = state.animals.some((a) => a.x === x && a.y === y);
+  if (animalHere) return { kind: 'harvested', gain: [{ item: 'animal', count: 1 }] };
+  if (campAt(state.camps, x, y) !== null) return { kind: 'camp', gain: [] };
+  const i = x + state.cube.size.x * y;
+  const feature = state.features[i];
+  if (feature === GRASS) {
+    return { kind: 'harvested', gain: [{ item: 'grass', count: FRONTIER_SURFACE.grassPerTuft }] };
+  }
+  if (feature === APPLE_TREE && (state.apples[i] ?? 0) > 0) {
+    return { kind: 'harvested', gain: [{ item: 'apple', count: 1 }] };
+  }
+  if (feature === TREE || feature === APPLE_TREE) {
+    return { kind: 'harvested', gain: [{ item: 'wood', count: FRONTIER_SURFACE.woodPerTree }] };
+  }
+  if (!mayMine(state.cube, x, y).allowed) return { kind: 'refused', gain: [] };
+  const code = topBlockAt(state.cube, x, y);
+  const needs = levelNeededFor(code);
+  if (needs === null || needs > coverLevelAt(state.camps, x, y))
+    return { kind: 'tooHard', gain: [] };
+  return { kind: 'mined', gain: blockDefByCode(code).yields.map((s) => ({ ...s })) };
 }
