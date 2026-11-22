@@ -436,6 +436,38 @@ export {
 export { shiftsUntilRegrowth } from './surface/regrowth';
 // The new game's world (plan A1), beside the old game until phase C.
 export { createFrontier } from './frontier/generation';
+// Camps and fog (plan A2).
+export {
+  CAMP_HALF_SIZE,
+  MAX_CAMP_LEVEL,
+  blocksMinedAt,
+  campAt,
+  campRadius,
+  canAfford,
+  coverLevelAt,
+  coverLevels,
+  demolishCamp,
+  demolishFrontierCamp,
+  demolishRefusal,
+  footprintOf,
+  inCircle,
+  inFootprint,
+  isLevelPatch,
+  levelNeededFor,
+  newlyCovered,
+  pay,
+  placeCamp,
+  placeFrontierCamp,
+  placeRefusal,
+  seenWith,
+  sightAt,
+  sightMap,
+  upgradeCamp,
+  upgradeCostFrom,
+  upgradeFrontierCamp,
+  upgradeRefusal,
+} from './frontier/camps';
+export type { CampChange, CampGround, PlaceRefusal, Sight } from './frontier/camps';
 export type { Feature, FrontierAnimal, FrontierCamp, FrontierState } from './frontier/state';
 // The cube seen from above (design doc v0.2 section 3.1; issue #84): a
 // square's depth, its top block, and the level rule. `topBlockAt` reads the

@@ -5,7 +5,6 @@
 
 import { BLOCKS, CONTRACT_IDS, DEFAULT_LOADOUT_ID } from '../../data';
 import {
-  FRONTIER_CAMP_LEVELS,
   FRONTIER_NEW_CAMP_COST,
   FRONTIER_SURFACE,
   FRONTIER_START_REACH,
@@ -15,6 +14,7 @@ import { createRng, nextFloat } from '../rng';
 import type { RngState } from '../rng';
 import { blockAt } from '../state';
 import type { GameState } from '../state';
+import { CAMP_HALF_SIZE, campRadius, footprintOf, inCircle, inFootprint, seenWith } from './camps';
 import { APPLE_TREE, FRONTIER_STATE_VERSION, GRASS, NO_FEATURE, TREE } from './state';
 import type { Feature, FrontierAnimal, FrontierCamp, FrontierState } from './state';
 
@@ -24,45 +24,6 @@ import type { Feature, FrontierAnimal, FrontierCamp, FrontierState } from './sta
  * the same number, so the same seed gives the same surface.)
  */
 const SURFACE_SEED_MIX = 0x51ab5eed;
-
-/** How far a camp's footprint reaches from its centre square: 1, so a camp covers 3 x 3 squares. */
-export const CAMP_HALF_SIZE = 1;
-
-/** A camp of `level` lights a circle of this radius (src/data/frontier.ts). */
-export function campRadius(level: number): number {
-  const data = FRONTIER_CAMP_LEVELS[level - 1];
-  if (data === undefined) {
-    throw new Error(`No camp level ${level}`);
-  }
-  return data.radius;
-}
-
-/**
- * True if square (x, y) is inside a circle of `radius` around (cx, cy). The
- * test is dx² + dy² <= r² + r, a circle of radius about r + 0.5, so its edge
- * has no lone squares sticking out at the four points.
- */
-export function inCircle(cx: number, cy: number, radius: number, x: number, y: number): boolean {
-  const dx = x - cx;
-  const dy = y - cy;
-  return dx * dx + dy * dy <= radius * radius + radius;
-}
-
-/** The squares of a camp centred on (x, y): its 3 x 3 footprint, row by row. */
-export function footprintOf(x: number, y: number): { x: number; y: number }[] {
-  const squares: { x: number; y: number }[] = [];
-  for (let dy = -CAMP_HALF_SIZE; dy <= CAMP_HALF_SIZE; dy += 1) {
-    for (let dx = -CAMP_HALF_SIZE; dx <= CAMP_HALF_SIZE; dx += 1) {
-      squares.push({ x: x + dx, y: y + dy });
-    }
-  }
-  return squares;
-}
-
-/** True if square (x, y) is part of the footprint of the camp centred on (cx, cy). */
-function inFootprint(cx: number, cy: number, x: number, y: number): boolean {
-  return Math.abs(x - cx) <= CAMP_HALF_SIZE && Math.abs(y - cy) <= CAMP_HALF_SIZE;
-}
 
 /** The index of square (x, y) in the per-square lists (row by row). */
 function squareIndex(cube: GameState, x: number, y: number): number {
@@ -309,22 +270,6 @@ export function startSquare(cube: GameState, features: Feature[]): { x: number; 
   return best;
 }
 
-/** Every square within the circles of `camps`, row by row: true where some camp lights it. */
-export function litBy(camps: FrontierCamp[], width: number, height: number): boolean[] {
-  const lit = new Array<boolean>(width * height).fill(false);
-  for (const camp of camps) {
-    const r = campRadius(camp.level);
-    for (let y = Math.max(0, camp.y - r); y <= Math.min(height - 1, camp.y + r); y += 1) {
-      for (let x = Math.max(0, camp.x - r); x <= Math.min(width - 1, camp.x + r); x += 1) {
-        if (inCircle(camp.x, camp.y, r, x, y)) {
-          lit[x + width * y] = true;
-        }
-      }
-    }
-  }
-  return lit;
-}
-
 /**
  * A new world on `seed`: the game's cube made the new game's (no
  * timber-root, clay in the layers under the ground), its surface (grass,
@@ -362,6 +307,12 @@ export function createFrontier(seed: number): FrontierState {
     rng: surface.rng,
     camps,
     nextCampId: 2,
-    seen: litBy(camps, cube.size.x, cube.size.y),
+    seen: seenWith(
+      new Array<boolean>(cube.size.x * cube.size.y).fill(false),
+      camps,
+      cube.size.x,
+      cube.size.y,
+    ),
+    inventory: new Map(),
   };
 }

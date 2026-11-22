@@ -8,7 +8,7 @@ import {
   FRONTIER_SURFACE,
 } from '../../src/data/frontier';
 import { ENGINE_VERSION, blockAt, createFrontier, hashState } from '../../src/engine';
-import { inCircle } from '../../src/engine/frontier/generation';
+import { inCircle } from '../../src/engine/frontier/camps';
 import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from '../../src/engine/frontier/state';
 import type { FrontierState } from '../../src/engine/frontier/state';
 
