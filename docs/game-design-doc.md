@@ -223,10 +223,13 @@ Each rule that comes back is its own small batch, playtested before the next.
 
 ## 12. Run length targets [Default]
 
-Not set for the new game yet. The simulator (`npm run sim`) measures runs; at the default numbers, with scripted players over 40 shifts (1,000 runs each, after the owner's answers to questions 155 to 158):
-- a player who keeps wood and food back for upkeep places 3 camps and upgrades one by shift 40, and lost its crew in none (58 before grass became food: those crews starved, decision note 0057);
-- one who spends everything as it comes goes short by shift 6 in most runs, but lost its crew in none;
-- a random player loses its crew in 8 runs of 1,000 (95% before grass became food).
+Not set for the new game yet. The simulator (`npm run sim`) measures runs; at the default numbers (100 taps a shift), with scripted players over 40 shifts (1,000 runs each, decision note 0058):
+- a player who keeps wood and food back for upkeep places 3 camps, has one at level 3, digs 11 levels down and is short in only 19 runs of 1,000; none lost its crew;
+- one who spends everything as it comes is short in 115 runs, and lost its crew in none;
+- a player who stays at one camp and digs lost its crew in 10 runs, for want of wood once its ring's ground was mined;
+- a random player loses its crew in 8 runs of 1,000.
+
+With 100 taps, upkeep takes about 2 taps a shift: close to trivial (decision note 0058 lists the levers).
 
 The targets come with the contracts (section 8).
 
