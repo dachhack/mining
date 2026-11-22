@@ -365,13 +365,38 @@ export function startSquare(state: GameState, surface?: Surface): { x: number; y
 }
 
 /**
- * A new Lab 2 world on `seed`: the game's cube (which has no coal at the
- * surface since question 140, so Lab 2 no longer swaps it out), its surface (grass, trees,
+/**
+ * Lab 2's own cube, made from the game's (Lab 2 only: the cube is copied, so
+ * the game's own generation, and Lab 1, are not changed): no timber-root
+ * anywhere (owner: "Let's get rid of the roots square"). Every timber-root
+ * cell, in any layer, is `LAB_SURFACE.timberRootBecomes` (dirt) instead. In
+ * Lab 2, wood comes from trees ("Wood is timber").
+ *
+ * (Lab 2 used to turn surface coal into stone here too. The game's own
+ * generation now does that, question 140, so Lab 2 no longer needs to.)
+ */
+export function labCube(lab: LabWorld): LabWorld {
+  const state = lab.state;
+  const root = BLOCKS.timberRoot.code;
+  const rootBecomes = BLOCKS[LAB_SURFACE.timberRootBecomes].code;
+  // `slice()` copies the typed array, like `list[:]` in Python.
+  const blocks = state.blocks.slice();
+  for (let i = 0; i < blocks.length; i += 1) {
+    if (blocks[i] === root) {
+      blocks[i] = rootBecomes;
+    }
+  }
+  return labWorldFromState(lab.seed, { ...state, blocks });
+}
+
+/**
+ * A new Lab 2 world on `seed`: the game's cube (no coal at the surface,
+ * question 140; no timber-root in Lab 2, `labCube`), its surface (grass, trees,
  * apple trees, animals, clay), and one free level-1 camp near the middle on
  * a patch whose ring pays for the next camp.
  */
 export function newCampWorld(seed: number): CampWorld {
-  const lab = newLabWorld(seed);
+  const lab = labCube(newLabWorld(seed));
   const start = startSquare(lab.state, generateSurface(lab.state, seed));
   // Generate again, keeping the camp's 3 x 3 clear of features and animals,
   // and starting the first animal inside the camp's ring.

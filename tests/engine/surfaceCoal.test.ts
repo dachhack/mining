@@ -1,4 +1,4 @@
-// Coal near the surface (owner, 2026-11-22, question 140; decision note 0050):
+// Coal near the surface (owner, 2026-11-22, question 140; decision note 0052):
 // "No coal at surface in the real game, but make sure there is some coal at
 // the first level after the surface."
 

@@ -167,7 +167,7 @@ describe('generateCube', () => {
     // change here must be meant and must be said in the PR description.
     // Only the block array is hashed, so other parts of the state cannot move it.
     const blocks = generate(FULL_SIZE, 7);
-    // Changed for question 140 (no coal on the top layer; decision note 0050).
+    // Changed for question 140 (no coal on the top layer; decision note 0052).
     expect(hashString(Array.from(blocks).join(','))).toBe('a48ca59c93d2453b');
   });
 

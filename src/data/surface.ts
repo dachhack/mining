@@ -101,7 +101,7 @@ export const SURFACE: SurfaceData = {
     outcropBlock: 'stone',
     outcropChance: 0.3,
     // Coal in sight at the start (owner, PR #72) is gone: the top layer holds
-    // no coal at all (owner, 2026-11-22, question 140; decision note 0050).
+    // no coal at all (owner, 2026-11-22, question 140; decision note 0052).
   },
 };
 

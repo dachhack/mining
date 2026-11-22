@@ -29,6 +29,8 @@ import {
 import type { CampWorld } from '../../src/app/lab/campWorld';
 import { GRASS, TREE } from '../../src/app/lab/surface';
 import { planLevel2, tapsUntil } from './campPlan';
+import { emptyHistory, recordAction, undoCount, undoLast } from '../../src/app/lab/undoHistory';
+import { labRecipes } from '../../src/app/lab/recipes';
 import type { Square } from './campPlan';
 
 test.use({ viewport: { width: 390, height: 844 } });
@@ -248,13 +250,14 @@ test('the start screen leads to lab 2, which opens in fog round one camp', async
 
 test('the key fits the tray: no entry is cut by its fixed height', async ({ page }) => {
   // Review of PR #122: with the surface's kinds added, a third row of the key
-  // was cut in half by the tray. Seed 110 opens with six kinds in sight
-  // (dirt, stone, timber-root, grass, tree, apple tree: no coal at the
-  // surface since the owner's playtest of the PR #126 build), filling both
-  // of the key's rows.
+  // was cut in half by the tray. Seed 110 opens with five kinds in sight
+  // (dirt, stone, grass, tree, apple tree: no coal at the surface and no
+  // timber-root, since the owner's playtests of the PR #126 and #128
+  // builds), filling both of the key's rows.
   await openLab2(page);
   const key = page.getByTestId('lab2-tray').locator('.lab-key');
-  await expect(key.locator('.lab-key-entry')).toHaveCount(6);
+  await expect(key.locator('.lab-key-entry')).toHaveCount(5);
+  await expect(key).not.toContainText('Timber');
   const fit = await key.evaluate((el) => {
     const box = el.getBoundingClientRect();
     const entries = Array.from(el.children).map((child) => child.getBoundingClientRect());
@@ -493,7 +496,7 @@ test('a second camp on level ground lifts the fog; then the first is demolished 
   await expect.poll(() => counts(page)).toEqual(expectedCounts(world));
 });
 
-test('clay, stone and an animal pay for level 2, and the ring grows', async ({ page }) => {
+test('wood, clay, stone and an animal pay for level 2, and the ring grows', async ({ page }) => {
   const plan = planLevel2(SEED);
   expect(plan).not.toBeNull();
   if (plan === null) return;
@@ -514,10 +517,13 @@ test('clay, stone and an animal pay for level 2, and the ring grows', async ({ p
   const order = await page
     .getByTestId('lab-counter')
     .evaluate((el) => Array.from(el.children).map((c) => (c as HTMLElement).dataset['testid']));
-  expect(order.slice(0, 4)).toEqual([
+  const level2 = upgradeCostFrom(1) ?? [];
+  expect(order.slice(0, 1 + level2.length)).toEqual([
     'lab-dug',
-    ...(upgradeCostFrom(1) ?? []).map((stack) => `lab-res-${stack.item}`),
+    ...level2.map((stack) => `lab-res-${stack.item}`),
   ]);
+  // Wood is timber (owner): Lab 2 never shows timber.
+  expect(order).not.toContain('lab-res-timber');
 
   // The camp's panel: level 1, ring 5, and the upgrade's cost all green.
   const cost = upgradeCostFrom(1) ?? [];
@@ -534,7 +540,7 @@ test('clay, stone and an animal pay for level 2, and the ring grows', async ({ p
   await expect(page.getByTestId('lab2-upgrade')).toBeEnabled();
   await page.getByTestId('lab2-upgrade').click();
 
-  // Level 2: a wider ring, and the clay, stone and animal paid.
+  // Level 2: a wider ring, and the wood, clay, stone and animal paid.
   await expect(page.getByTestId('lab2-camp-title')).toContainText('Level 2');
   await expect(page.getByTestId('lab2-camp-line')).toContainText(`Ring ${campRadius(2)}`);
   expect(Number(await canvas.getAttribute('data-shown'))).toBeGreaterThan(shownOf(plan.world));
@@ -929,64 +935,90 @@ for (const phone of PHONES_WITH_BARS) {
   });
 }
 
-// Undo (owner, after the PR #126 playtest: "Undo button").
-test('undo takes back taps one by one, exactly, back to the start; then it is off', async ({
+// Undo (owner, after the PR #126 playtest: "Undo button"; question 141:
+// "animal and apple harvest cannot be undone"; the animals, apples and clock
+// are left alone).
+test('undo takes back the player’s taps one by one, steps past harvests, and is off at the start', async ({
   page,
 }) => {
   const canvas = await openLab2(page);
   const undo = page.getByTestId('lab2-undo');
   await expect(undo).toBeDisabled();
 
-  // Six useful taps (each cuts, fells, catches or mines), worked out here.
+  // Six useful taps (each cuts, fells, picks, catches or mines). The model
+  // keeps the same history the page does: catches and apple picks are not
+  // in it. The page's clock is paused, so the model and the page agree.
   const start = newCampWorld(SEED);
   const camp = start.camps[0] ?? { x: 0, y: 0 };
   const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp);
   expect(plan).not.toBeNull();
   if (plan === null) return;
-  const taps = plan.taps.slice(0, 6);
-  const worlds: CampWorld[] = [start];
-  for (const square of taps) {
-    const before = worlds[worlds.length - 1] ?? start;
-    worlds.push(campTap(before, square.x, square.y).world);
+  let world = start;
+  let history = emptyHistory();
+  for (const square of plan.taps.slice(0, 6)) {
+    const tap = campTap(world, square.x, square.y);
+    const harvestKind = tap.kind === 'harvested' ? tap.harvest?.kind : null;
+    if (tap.kind === 'mined' || harvestKind === 'grass' || harvestKind === 'felled') {
+      history = recordAction(history, world, tap.world, { kind: 'tap', ...square });
+    }
+    world = tap.world;
     await tapSquare(page, canvas, square);
-    await expect
-      .poll(() => counts(page))
-      .toEqual(expectedCounts(worlds[worlds.length - 1] ?? start));
+    await expect.poll(() => counts(page)).toEqual(expectedCounts(world));
   }
-  await expect(undo).toBeEnabled();
-  await expect(undo).toHaveAttribute('data-count', '6');
+  const undoable = undoCount(history);
+  expect(undoable).toBeGreaterThan(2);
+  await expect(undo).toHaveAttribute('data-count', String(undoable));
 
-  // Undo three: each time, the counts and the lit squares are what they were.
-  for (let k = 5; k >= 3; k -= 1) {
+  // Undo, one by one: each time the counts, the lit squares and the blocks
+  // match the model.
+  for (let left = undoable - 1; left >= 0; left -= 1) {
+    const result = undoLast(history, world);
+    if (result === null || 'refused' in result) throw new Error('the model could not undo');
+    world = result.world;
+    history = result.history;
     await undo.click();
-    const was = worlds[k] ?? start;
-    await expect.poll(() => counts(page)).toEqual(expectedCounts(was));
-    await expect(canvas).toHaveAttribute('data-shown', String(shownOf(was)));
-    await expect(undo).toHaveAttribute('data-count', String(k));
+    await expect.poll(() => counts(page)).toEqual(expectedCounts(world));
+    await expect(canvas).toHaveAttribute('data-shown', String(shownOf(world)));
+    await expect(undo).toHaveAttribute('data-count', String(left));
   }
-  await expect(page.getByTestId('lab-hint')).toContainText('Undone: the tap at');
-
-  // The blocks are back too: tapping the fourth square again does what it did the first time.
-  const fourth = taps[3] ?? { x: 0, y: 0 };
-  const again = campTap(worlds[3] ?? start, fourth.x, fourth.y);
-  await tapSquare(page, canvas, fourth);
-  await expect(canvas).toHaveAttribute('data-last-tap', `${again.kind} ${fourth.x},${fourth.y}`);
-  await expect.poll(() => counts(page)).toEqual(expectedCounts(again.world));
-
-  // Undo all the way: back at the start, and Undo is off.
-  for (let left = 4; left > 0; left -= 1) {
-    await undo.click();
-  }
-  await expect.poll(() => counts(page)).toEqual(expectedCounts(start));
-  await expect(canvas).toHaveAttribute('data-shown', String(shownOf(start)));
   await expect(undo).toBeDisabled();
-  await expect(page.getByTestId('lab-hint')).toContainText('Back at the start');
+  await expect(page.getByTestId('lab-hint')).toContainText('Nothing more to undo');
+  // Back to the start, except what was harvested (it stays harvested).
+  for (const [item, count] of world.lab.counts) {
+    expect(item === 'apple' || item === 'animal', `${item} ${count}`).toBe(true);
+  }
 
   // New world: nothing to undo.
-  await tapSquare(page, canvas, taps[0] ?? { x: 0, y: 0 });
-  await expect(undo).toBeEnabled();
+  await tapSquare(page, canvas, plan.taps[0] ?? { x: 0, y: 0 });
   await page.getByRole('button', { name: 'New world' }).click();
   await expect(undo).toBeDisabled();
+});
+
+test('undo while the animals move: they stay where they are, and the clock runs on', async ({
+  page,
+}) => {
+  const canvas = await openLab2(page);
+  const start = newCampWorld(SEED);
+  const camp = start.camps[0] ?? { x: 0, y: 0 };
+  const lit = { x: camp.x - 2, y: camp.y }; // just outside the camp's 3 x 3
+  const dug = await digOnce(page, canvas, start, lit);
+  await expect.poll(() => counts(page)).toEqual(expectedCounts(dug));
+
+  // Let the animals walk for 10 seconds of lab time.
+  await page.clock.runFor(10_000);
+  const animals = await canvas.getAttribute('data-animals');
+  const time = Number(await canvas.getAttribute('data-lab-time'));
+  expect(time).toBeGreaterThanOrEqual(10_000);
+  expect(animals).not.toBe(start.surface.animals.map((a) => `${a.x},${a.y}`).join(' '));
+
+  // Undo the dig: the block is back, the animals have not moved, and the
+  // clock has not gone back.
+  await page.getByTestId('lab2-undo').click();
+  await expect(page.getByTestId('lab-hint')).toContainText(`Undone: the tap at ${lit.x}, ${lit.y}`);
+  const undone = await counts(page);
+  expect(undone['dug'] ?? 0).toBe(dug.lab.mined - 1);
+  await expect(canvas).toHaveAttribute('data-animals', animals ?? '');
+  expect(Number(await canvas.getAttribute('data-lab-time'))).toBeGreaterThanOrEqual(time);
 });
 
 test('undo takes back a placed camp: the camp, its cost and its light', async ({ page }) => {
@@ -1020,7 +1052,165 @@ test('undo takes back a placed camp: the camp, its cost and its light', async ({
   await expect(canvas).toHaveAttribute('data-shown', String(shownOf(plan.world)));
   await expect.poll(() => counts(page)).toEqual(expectedCounts(plan.world));
   await expect(page.getByTestId('lab-hint')).toHaveText(
-    'Undone: placing the camp. Back at the start.',
+    'Undone: placing the camp. Nothing more to undo.',
   );
   await expect(undo).toBeDisabled();
+});
+
+test('an upgrade’s four costs can all be reached: the cost row scrolls sideways at 320 px', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  const plan = planLevel2(SEED);
+  expect(plan).not.toBeNull();
+  if (plan === null) return;
+  await pauseClock(page);
+  await page.goto('/#game');
+  await page.evaluate(([key, text]) => window.localStorage.setItem(key, text), [
+    PREPARED_LAB2_KEY,
+    JSON.stringify({ seed: plan.seed, steps: plan.steps }),
+  ] as const);
+  await page.goto('/#lab2');
+  await expect(page.getByTestId('lab-seed')).toHaveText(`Seed ${SEED} · prepared`);
+  await tapSquare(page, page.getByTestId('lab-map'), plan.camp);
+  await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'camp');
+  const row = page.getByTestId('lab2-tray').locator('.lab2-cost');
+  const last = (upgradeCostFrom(1) ?? []).at(-1);
+  expect(last).toBeDefined();
+  if (last === undefined) return;
+  // Scrolled to its end, the last chip is wholly inside the row.
+  await row.evaluate((el) => {
+    el.scrollLeft = el.scrollWidth;
+  });
+  const rowBox = await row.boundingBox();
+  const chip = await page.getByTestId(`lab2-cost-${last.item}`).boundingBox();
+  expect(rowBox).not.toBeNull();
+  expect(chip).not.toBeNull();
+  if (rowBox === null || chip === null) return;
+  // (Within a pixel: the browser rounds the scroll position.)
+  expect(chip.x).toBeGreaterThanOrEqual(rowBox.x - 1);
+  expect(chip.x + chip.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 1);
+  // The Upgrade button is whole and on screen beside it.
+  await expect(page.getByTestId('lab2-upgrade')).toBeInViewport({ ratio: 1 });
+});
+
+// The recipe book (owner, after the PR #128 playtest: "We need a recipe book
+// on that line ... select which item or upgrade you are gathering resources
+// for. It then adds that item's icon and needed materials to that row ...
+// The row is scrollable horizontally.").
+test('the recipe book: pin two recipes, watch them fill as you gather, unpin one; the map never moves', async ({
+  page,
+}) => {
+  const canvas = await openLab2(page);
+  const before = await canvas.boundingBox();
+  const trayBefore = await page.getByTestId('lab2-tray').boundingBox();
+  const unmoved = async (): Promise<void> => {
+    expect(await canvas.boundingBox()).toEqual(before);
+    expect(await page.getByTestId('lab2-tray').boundingBox()).toEqual(trayBefore);
+  };
+  // At first a new camp is pinned, as the row showed before the book.
+  await expect(page.getByTestId('lab2-pin-new-camp')).toBeVisible();
+
+  // Open the book: every recipe, with its costs from the lab's data.
+  await page.getByTestId('lab2-book').click();
+  await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'book');
+  await unmoved();
+  for (const recipe of labRecipes()) {
+    await expect(page.getByTestId(`lab2-recipe-${recipe.id}`)).toBeAttached();
+    for (const stack of recipe.cost) {
+      await expect(page.getByTestId(`lab2-recipe-${recipe.id}-${stack.item}`)).toContainText(
+        `0/${stack.count}`,
+      );
+    }
+  }
+  // Pin both upgrades.
+  for (const id of ['upgrade-2', 'upgrade-3']) {
+    await page.getByTestId(`lab2-recipe-pin-${id}`).scrollIntoViewIfNeeded();
+    await page.getByTestId(`lab2-recipe-pin-${id}`).click();
+    await expect(page.getByTestId(`lab2-recipe-pin-${id}`)).toHaveText('Pinned ✓');
+    await unmoved();
+  }
+  await page.getByTestId('lab2-book-close').click();
+  await expect(page.getByTestId('lab2-pins').locator('.lab2-pin')).toHaveCount(3);
+  await unmoved();
+
+  // Gather: the pinned cards' have/need fill in from the counts.
+  const start = newCampWorld(SEED);
+  const camp = start.camps[0] ?? { x: 0, y: 0 };
+  const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp);
+  expect(plan).not.toBeNull();
+  if (plan === null) return;
+  let world = start;
+  for (const square of plan.taps.slice(0, 8)) {
+    world = campTap(world, square.x, square.y).world;
+    await tapSquare(page, canvas, square);
+  }
+  await expect.poll(() => counts(page)).toEqual(expectedCounts(world));
+  for (const id of ['new-camp', 'upgrade-2', 'upgrade-3']) {
+    const recipe = labRecipes().find((r) => r.id === id);
+    for (const stack of recipe?.cost ?? []) {
+      const have = Math.min(world.lab.counts.get(stack.item) ?? 0, stack.count);
+      await expect(page.getByTestId(`lab2-pin-${id}-${stack.item}`)).toContainText(
+        `${have}/${stack.count}`,
+      );
+    }
+  }
+  expect(world.lab.counts.get('wood') ?? 0).toBeGreaterThan(0);
+
+  // Unpin level 3: its card goes; the others stay.
+  await page.getByTestId('lab2-pins').evaluate((el) => {
+    el.scrollLeft = el.scrollWidth;
+  });
+  await page.getByTestId('lab2-unpin-upgrade-3').click();
+  await expect(page.getByTestId('lab2-pin-upgrade-3')).toHaveCount(0);
+  await expect(page.getByTestId('lab2-pins').locator('.lab2-pin')).toHaveCount(2);
+  await unmoved();
+
+  // A card goes to where its recipe is built: the camp tool for a new camp,
+  // the panel of a level-1 camp for an upgrade to level 2.
+  await page.getByTestId('lab2-pin-new-camp').locator('.lab2-pin-go').click();
+  await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'placing');
+  await page.getByTestId('lab2-place-cancel').click();
+  await page.getByTestId('lab2-pins').evaluate((el) => {
+    el.scrollLeft = el.scrollWidth;
+  });
+  await page.getByTestId('lab2-pin-upgrade-2').locator('.lab2-pin-go').click();
+  await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'camp');
+  await expect(page.getByTestId('lab2-camp-title')).toContainText('Level 1');
+  await unmoved();
+});
+
+test('the pinned row scrolls sideways at 320 px: every card can be reached, the tray keeps its height', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await openLab2(page);
+  const trayBefore = await page.getByTestId('lab2-tray').boundingBox();
+  await page.getByTestId('lab2-book').click();
+  for (const id of ['upgrade-2', 'upgrade-3']) {
+    await page.getByTestId(`lab2-recipe-pin-${id}`).scrollIntoViewIfNeeded();
+    await page.getByTestId(`lab2-recipe-pin-${id}`).click();
+  }
+  await page.getByTestId('lab2-book-close').click();
+  const strip = page.getByTestId('lab2-pins');
+  await expect(strip.locator('.lab2-pin')).toHaveCount(3);
+  // More than fits: the strip scrolls, not the page.
+  const sizes = await strip.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
+  expect(sizes.scroll).toBeGreaterThan(sizes.client);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+  // Scrolled to its end, the last card's × is inside the strip and works.
+  await strip.evaluate((el) => {
+    el.scrollLeft = el.scrollWidth;
+  });
+  const stripBox = await strip.boundingBox();
+  const last = await page.getByTestId('lab2-unpin-upgrade-3').boundingBox();
+  expect(stripBox).not.toBeNull();
+  expect(last).not.toBeNull();
+  if (stripBox === null || last === null) return;
+  expect(last.x + last.width).toBeLessThanOrEqual(stripBox.x + stripBox.width + 1);
+  expect(last.x).toBeGreaterThanOrEqual(stripBox.x - 1);
+  await page.getByTestId('lab2-unpin-upgrade-3').click();
+  await expect(strip.locator('.lab2-pin')).toHaveCount(2);
+  // The book and the pins never changed the tray's height.
+  expect(await page.getByTestId('lab2-tray').boundingBox()).toEqual(trayBefore);
 });

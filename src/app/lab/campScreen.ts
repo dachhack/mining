@@ -75,6 +75,8 @@ import {
   labItemIcon,
 } from './surfaceArt';
 import { resourceEntries } from './resources';
+import { FIRST_PINS, labRecipes, recipeById } from './recipes';
+import type { Recipe } from './recipes';
 import { emptyHistory, recordAction, undoCount, undoLast } from './undoHistory';
 import type { UndoHistory } from './undoHistory';
 import { shadowEdges } from './shadows';
@@ -122,7 +124,9 @@ interface Effect {
 type Mode =
   | { kind: 'idle' }
   | { kind: 'placing'; target: { x: number; y: number } | null }
-  | { kind: 'camp'; id: number };
+  | { kind: 'camp'; id: number }
+  // The recipe book is open in the tray.
+  | { kind: 'book' };
 
 /** How long each kind of effect lasts, in milliseconds. */
 function effectMs(kind: Effect['kind']): number {
@@ -183,6 +187,11 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   let camera: LabCamera = { x: 0, y: 0, cells: CAMP_LOOK.startCells };
   let effects: Effect[] = [];
   let mode: Mode = { kind: 'idle' };
+  /**
+   * The recipes pinned to the tray's top row, by id, in the order they were
+   * pinned. They stay pinned through New world and Undo.
+   */
+  let pins: string[] = [...FIRST_PINS];
   /** What the player did, to undo it (undoHistory.ts). A new world starts with none. */
   let history: UndoHistory = emptyHistory();
   /**
@@ -847,7 +856,11 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   // ----- The tray under the map -----
 
   /** A row of cost chips: each item's icon, what you have of it and what it costs. */
-  function costRow(cost: ItemStack[]): HTMLElement {
+  /**
+   * One chip for each item of `cost`: its icon and have/need, red while
+   * short. Each chip's test id is `${testPrefix}-${item}`.
+   */
+  function costRow(cost: ItemStack[], testPrefix = 'lab2-cost'): HTMLElement {
     const row = element('div', 'lab2-cost');
     const icons = new Map(
       resourceEntries(new Map(cost.map((s) => [s.item, 1]))).map((e) => [e.item, e.iconBlock]),
@@ -856,7 +869,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       const have = world.lab.counts.get(stack.item) ?? 0;
       const enough = have >= stack.count;
       const chip = element('span', enough ? 'lab2-cost-chip' : 'lab2-cost-chip lab2-cost-short');
-      chip.dataset['testid'] = `lab2-cost-${stack.item}`;
+      chip.dataset['testid'] = `${testPrefix}-${stack.item}`;
       const icon = icons.get(stack.item);
       const labIcon = labItemIcon(stack.item, 'lab2-cost-icon');
       if (labIcon !== null) {
@@ -881,6 +894,8 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     tray.dataset['mode'] = mode.kind;
     if (mode.kind === 'idle') {
       showIdleTray();
+    } else if (mode.kind === 'book') {
+      showBookTray();
     } else if (mode.kind === 'placing') {
       showPlacingTray(mode.target);
     } else {
@@ -896,28 +911,27 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   }
 
   function showIdleTray(): void {
+    // The top row (owner: "revamp the 'what you are building' row"): the
+    // recipe book, the camp tool, then the pinned recipes, side by side in a
+    // strip that scrolls sideways. The row's height never changes.
     const head = element('div', 'lab2-tray-head');
+    const book = button('lab2-book-button', '📖');
+    book.dataset['testid'] = 'lab2-book';
+    book.setAttribute('aria-label', 'Recipe book');
+    book.title = 'Recipe book';
+    book.addEventListener('click', () => setMode({ kind: 'book' }));
     const tool = button('lab2-tool', '');
     tool.dataset['testid'] = 'lab2-camp-tool';
+    tool.setAttribute('aria-label', 'New camp: choose where');
+    tool.title = 'New camp';
     const affordable = canAfford(world.lab.counts, LAB_NEW_CAMP_COST);
     if (!affordable) {
       tool.classList.add('lab2-tool-short');
     }
-    tool.append(
-      element('span', 'lab2-tool-glyph', '⛺'),
-      element('span', 'lab2-tool-text', 'New camp'),
-    );
+    tool.append(element('span', 'lab2-tool-glyph', '⛺'), element('span', 'lab2-tool-plus', '+'));
     tool.addEventListener('click', () => setMode({ kind: 'placing', target: null }));
-    const side = element('div', 'lab2-tray-side');
-    side.append(
-      costRow(LAB_NEW_CAMP_COST),
-      element(
-        'span',
-        'lab2-tray-note',
-        `${world.camps.length} ${world.camps.length === 1 ? 'camp' : 'camps'} · or hold a lit square`,
-      ),
-    );
-    head.append(tool, side);
+    const side = pinStrip();
+    head.append(book, tool, side);
     const key = labKey();
     // The key lists the kinds you can see: lit and greyed squares, never what is under the fog.
     const seenTops = tops.filter((_, i) => (sights[i] ?? 'fog') !== 'fog');
@@ -967,6 +981,105 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       }
     }
     tray.replaceChildren(head, key);
+  }
+
+  /** A recipe's icon: a tent, with the camp level it makes for an upgrade. */
+  function recipeIcon(recipe: Recipe): HTMLElement {
+    const icon = element('span', 'lab2-recipe-icon', '⛺');
+    if (recipe.level > 1) {
+      icon.append(element('span', 'lab2-recipe-level', String(recipe.level)));
+    }
+    icon.title = recipe.name;
+    return icon;
+  }
+
+  /**
+   * The pinned recipes: for each, its icon and what it needs as have/need,
+   * and an × to unpin it. A tap on a card goes to where it is built: the
+   * camp tool for a new camp, the panel of a camp one level below for an
+   * upgrade.
+   */
+  function pinStrip(): HTMLElement {
+    const strip = element('div', 'lab2-pins');
+    strip.dataset['testid'] = 'lab2-pins';
+    const pinned = pins.map((id) => recipeById(id)).filter((r): r is Recipe => r !== null);
+    if (pinned.length === 0) {
+      strip.append(element('span', 'lab2-pins-empty', 'Pin a recipe from the book 📖'));
+      return strip;
+    }
+    for (const recipe of pinned) {
+      const card = element('div', 'lab2-pin');
+      card.dataset['testid'] = `lab2-pin-${recipe.id}`;
+      const go = button('lab2-pin-go', '');
+      go.setAttribute('aria-label', recipe.name);
+      go.append(recipeIcon(recipe), costRow(recipe.cost, `lab2-pin-${recipe.id}`));
+      go.addEventListener('click', () => buildFrom(recipe));
+      const unpin = button('lab2-pin-remove', '×');
+      unpin.dataset['testid'] = `lab2-unpin-${recipe.id}`;
+      unpin.setAttribute('aria-label', `Unpin ${recipe.name}`);
+      unpin.addEventListener('click', () => {
+        pins = pins.filter((id) => id !== recipe.id);
+        showTray();
+      });
+      card.append(go, unpin);
+      strip.append(card);
+    }
+    return strip;
+  }
+
+  /** Go to where `recipe` is built. */
+  function buildFrom(recipe: Recipe): void {
+    if (recipe.level === 1) {
+      setMode({ kind: 'placing', target: null });
+      return;
+    }
+    const camp = world.camps.find((c) => c.level === recipe.level - 1);
+    if (camp === undefined) {
+      setHint(`No level ${recipe.level - 1} camp to upgrade yet.`, true);
+      return;
+    }
+    setMode({ kind: 'camp', id: camp.id });
+  }
+
+  /** The recipe book, in the tray: every recipe, what it costs, and a pin to put it on the row. */
+  function showBookTray(): void {
+    const head = element('div', 'lab2-panel-head');
+    head.append(element('span', 'lab2-panel-title', '📖 Recipe book'));
+    const close = button('lab2-close', '×');
+    close.setAttribute('aria-label', 'Close the recipe book');
+    close.dataset['testid'] = 'lab2-book-close';
+    close.addEventListener('click', () => setMode({ kind: 'idle' }));
+    head.append(close);
+    // The list scrolls inside the tray, so the tray, and the map, never grow.
+    const list = element('div', 'lab2-book-list');
+    list.dataset['testid'] = 'lab2-book-list';
+    for (const recipe of labRecipes()) {
+      const row = element('div', 'lab2-recipe');
+      row.dataset['testid'] = `lab2-recipe-${recipe.id}`;
+      const pinned = pins.includes(recipe.id);
+      const pin = button(
+        pinned ? 'lab2-recipe-pin lab2-recipe-pinned' : 'lab2-recipe-pin',
+        pinned ? 'Pinned ✓' : 'Pin',
+      );
+      pin.dataset['testid'] = `lab2-recipe-pin-${recipe.id}`;
+      pin.setAttribute('aria-pressed', String(pinned));
+      pin.addEventListener('click', () => {
+        pins = pinned ? pins.filter((id) => id !== recipe.id) : [...pins, recipe.id];
+        const scroll = list.scrollTop;
+        showTray();
+        // Keep the list where it was, so pinning does not jump it.
+        const fresh = tray.querySelector('.lab2-book-list');
+        if (fresh !== null) fresh.scrollTop = scroll;
+      });
+      const text = element('div', 'lab2-recipe-text');
+      text.append(
+        element('span', 'lab2-recipe-name', recipe.name),
+        costRow(recipe.cost, `lab2-recipe-${recipe.id}`),
+      );
+      row.append(recipeIcon(recipe), text, pin);
+      list.append(row);
+    }
+    tray.replaceChildren(head, list);
   }
 
   function showPlacingTray(target: { x: number; y: number } | null): void {
@@ -1122,7 +1235,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     if (next === world) {
       return;
     }
-    remember(world, { kind: 'place', x, y });
+    remember(world, next, { kind: 'place', x, y });
     mode = { kind: 'idle' };
     preview = new Set();
     setWorld(next);
@@ -1145,7 +1258,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     if (before === undefined || next === world) {
       return;
     }
-    remember(world, { kind: 'upgrade', id });
+    remember(world, next, { kind: 'upgrade', id });
     setWorld(next);
     setHint(`Camp ${id} is level ${before.level + 1}: a wider ring, harder blocks.`, false);
     addEffect({
@@ -1166,7 +1279,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       setHint(DEMOLISH_FIRST, true);
       return;
     }
-    remember(world, { kind: 'demolish', id });
+    remember(world, next, { kind: 'demolish', id });
     mode = { kind: 'idle' };
     setWorld(next);
     setHint('Camp demolished: its ground can be mined now.', false);
@@ -1178,8 +1291,8 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
    * Note an action about to change the world: `before` is the world just
    * before it, brought up to the lab clock.
    */
-  function remember(before: CampWorld, step: CampStep): void {
-    history = recordAction(history, before, step);
+  function remember(before: CampWorld, after: CampWorld, step: CampStep): void {
+    history = recordAction(history, before, after, step);
     showUndo();
   }
 
@@ -1200,26 +1313,31 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   }
 
   /**
-   * Undo the last action: the world goes back to exactly what it was just
-   * before it, animals and the lab clock included (decision note 0049).
-   * The clock is set back to match, so time runs on from there. The camera
-   * stays where it is.
+   * Undo the last undoable action: only the player's own change is taken
+   * back (blocks, items, camps, fog, plants). The animals, the apples and
+   * the lab clock are left alone, and caught animals and picked apples stay
+   * so (owner, question 141; decision note 0049). The camera stays put.
    */
   function undo(): void {
-    const last = history.entries[history.entries.length - 1];
-    const undone = undoLast(history);
-    if (undone === null || last === undefined) {
+    tick(); // bring the animals up to now, so a tree is not put back under one
+    const result = undoLast(history, world);
+    if (result === null) {
       return;
     }
-    history = undone.history;
-    clockStart = performance.now() - undone.world.surface.time;
-    lastStep.clear();
+    if ('refused' in result) {
+      setHint(result.refused, true);
+      return;
+    }
+    history = result.history;
     effects = [];
     mode = { kind: 'idle' };
     preview = new Set();
-    setWorld(undone.world);
+    setWorld(result.world);
     const left = undoCount(history);
-    setHint(`Undone: ${describeStep(last.step)}.${left === 0 ? ' Back at the start.' : ''}`, false);
+    setHint(
+      `Undone: ${describeStep(result.undone.step)}.${left === 0 ? ' Nothing more to undo.' : ''}`,
+      false,
+    );
     showUndo();
   }
 
@@ -1243,8 +1361,8 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       }
       return;
     }
-    if (mode.kind === 'camp') {
-      // A tap elsewhere closes the camp's panel, and then acts as a tap.
+    if (mode.kind === 'camp' || mode.kind === 'book') {
+      // A tap elsewhere closes the camp's panel (or the book), and then acts as a tap.
       mode = { kind: 'idle' };
       showTray();
     }
@@ -1292,7 +1410,11 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     }
     if (result.kind === 'harvested' && result.harvest !== null) {
       effects = effects.filter((e) => !(e.x === x && e.y === y));
-      remember(world, { kind: 'tap', x, y });
+      // Cut grass and felled trees can be undone; a caught animal or a picked
+      // apple cannot (owner, question 141), so they are not remembered.
+      if (result.harvest.kind === 'grass' || result.harvest.kind === 'felled') {
+        remember(world, result.world, { kind: 'tap', x, y });
+      }
       setWorld(result.world);
       setHint(HARVEST_HINTS[result.harvest.kind], false);
       addEffect({
@@ -1308,7 +1430,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     }
     // Mined.
     effects = effects.filter((e) => !(e.x === x && e.y === y));
-    remember(world, { kind: 'tap', x, y });
+    remember(world, result.world, { kind: 'tap', x, y });
     setWorld(result.world);
     setHint(HINT, false);
     addEffect({

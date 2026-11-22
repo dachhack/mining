@@ -37,13 +37,17 @@ export interface LabCampLevel {
 export const LAB_CAMP_LEVELS: LabCampLevel[] = [
   {
     radius: 9,
-    addsBlocks: ['dirt', 'rubble', 'stone', 'coalSeam', 'timberRoot'],
+    // No timber-root: Lab 2's cube has none (LAB_SURFACE.timberRootBecomes).
+    addsBlocks: ['dirt', 'rubble', 'stone', 'coalSeam'],
     upgradeCost: [],
   },
   {
     radius: 12,
     addsBlocks: ['hardRock'],
+    // Wood too (owner: "Let's make timber needed for each camp upgrade";
+    // "Wood is timber"): a little more than the 15 a new camp costs.
     upgradeCost: [
+      { item: 'wood', count: 20 },
       { item: 'clay', count: 10 },
       { item: 'stone', count: 15 },
       { item: 'animal', count: 1 },
@@ -53,6 +57,7 @@ export const LAB_CAMP_LEVELS: LabCampLevel[] = [
     radius: 15,
     addsBlocks: ['ironOre', 'copperOre', 'crystal', 'unstableOre', 'relic', 'keystone'],
     upgradeCost: [
+      { item: 'wood', count: 40 },
       { item: 'clay', count: 20 },
       { item: 'stone', count: 40 },
       { item: 'animal', count: 3 },
@@ -134,6 +139,15 @@ export const LAB_SURFACE = {
    */
   plantsGrowOn: ['dirt'] as BlockId[],
   // No coal at the surface (owner: "No coal at surface") is now the game's
-  // own rule (`GENERATION.surfaceCoal`, question 140, decision note 0050), so
-  // Lab 2 takes the game's cube as it is.
+  // own rule (`GENERATION.surfaceCoal`, question 140, decision note 0052), so
+  // Lab 2 no longer swaps it out.
+  /**
+   * No timber-root in Lab 2 (owner: "Let's get rid of the roots square";
+   * "Wood is timber": wood comes from trees). Every timber-root cell of the
+   * game's cube, in any layer, is this block instead. Dirt, because roots
+   * grow in soil, dirt is as quick to mine (cost 1), so digging is no
+   * harder, and plants can grow where roots showed at the surface. The
+   * game's own cube is not changed.
+   */
+  timberRootBecomes: 'dirt' as BlockId,
 };

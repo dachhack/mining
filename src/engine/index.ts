@@ -46,7 +46,7 @@ import type { GameState } from './state';
  * 0.4.0: the top-down model of design doc v0.2 (decision note 0025; set by
  *        issue #86, mine by square). Covers the whole batch T2 to T15.
  * 0.5.0: no coal at the surface, a minimum of coal in layer 1 (owner,
- *        2026-11-22, question 140; decision note 0050). First PR of the
+ *        2026-11-22, question 140; decision note 0052). First PR of the
  *        batch after the 2026-11-22 playtest.
  */
 export const ENGINE_VERSION = '0.5.0';

@@ -110,7 +110,7 @@ export const GENERATION: GenerationData = {
   // 12 coal makes 36 fuel, half the standard loadout's 72. Before this rule,
   // layer 1 held 25 coal on the median seed of 1 to 1,000 and fewer than 12
   // on about 1 seed in 100 (the fewest was 4), so the minimum only tops up
-  // the poorest seeds (decision note 0050).
+  // the poorest seeds (decision note 0052).
   surfaceCoal: {
     block: 'coalSeam',
     surfaceBecomes: 'stone',

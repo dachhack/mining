@@ -269,18 +269,29 @@ describe('roaming animals', () => {
 });
 
 describe('the new costs (issue #121)', () => {
-  it('a new camp costs wood and grass; level 2 clay, stone and an animal; level 3 adds apples', () => {
+  it('a new camp costs wood and grass; every upgrade costs wood too (wood is timber); level 3 adds apples', () => {
     const items = (cost: ItemStack[]) => cost.map((s) => s.item).sort();
     expect(items(LAB_NEW_CAMP_COST)).toEqual(['grass', 'wood']);
-    expect(items(upgradeCostFrom(1) ?? [])).toEqual(['animal', 'clay', 'stone']);
-    expect(items(upgradeCostFrom(2) ?? [])).toEqual(['animal', 'apple', 'clay', 'stone']);
+    expect(items(upgradeCostFrom(1) ?? [])).toEqual(['animal', 'clay', 'stone', 'wood']);
+    expect(items(upgradeCostFrom(2) ?? [])).toEqual(['animal', 'apple', 'clay', 'stone', 'wood']);
+    // Nothing in Lab 2 costs timber: wood is timber (owner).
+    for (const cost of [LAB_NEW_CAMP_COST, upgradeCostFrom(1) ?? [], upgradeCostFrom(2) ?? []]) {
+      expect(items(cost)).not.toContain('timber');
+    }
+    // An upgrade costs more wood than a new camp, and level 3 more than level 2.
+    const wood = (cost: ItemStack[]) => cost.find((s) => s.item === 'wood')?.count ?? 0;
+    expect(wood(upgradeCostFrom(1) ?? [])).toBeGreaterThan(wood(LAB_NEW_CAMP_COST));
+    expect(wood(upgradeCostFrom(2) ?? [])).toBeGreaterThan(wood(upgradeCostFrom(1) ?? []));
   });
 
   it('stone alone no longer pays for a camp or an upgrade', () => {
     const w = holding(world(), { stone: 999 });
     expect(placeRefusal(w, MID + campRadius(1) - 1, MID)).toBe('cost');
     expect(upgradeRefusal(w, 1)).toBe('cost');
-    const paid = holding(world(), { clay: 10, stone: 15, animal: 1 });
+    const paid = holding(
+      world(),
+      Object.fromEntries((upgradeCostFrom(1) ?? []).map((stack) => [stack.item, stack.count])),
+    );
     expect(upgradeRefusal(paid, 1)).toBeNull();
     expect(upgradeCamp(paid, 1).lab.counts.size).toBe(0);
   });
@@ -430,18 +441,32 @@ describe('what grows where, and no coal at the surface (owner, after the PR #126
     }
   });
 
-  it('Lab 2 has no coal at the surface, and its cube is the game’s cube', () => {
+  it('Lab 2 has no coal at the surface; its cube is the game’s, apart from timber-root (dirt)', () => {
     // No coal at the surface is now the game's own rule (question 140), so
-    // Lab 2 no longer changes the cube.
+    // Lab 2 no longer swaps it; it only turns timber-root into dirt.
     const coal = BLOCKS.coalSeam.code;
+    const root = BLOCKS.timberRoot.code;
+    const rootBecomes = BLOCKS[LAB_SURFACE.timberRootBecomes].code;
+    let rootsSwapped = 0;
     for (let seed = 1; seed <= 50; seed += 1) {
       const game = newLabWorld(seed).state;
       const lab = newCampWorld(seed).lab.state;
-      expect(Array.from(lab.blocks), `seed ${seed}`).toEqual(Array.from(game.blocks));
+      for (let i = 0; i < game.blocks.length; i += 1) {
+        const before = game.blocks[i];
+        const after = lab.blocks[i];
+        if (before === root) {
+          expect(after).toBe(rootBecomes);
+          rootsSwapped += 1;
+        } else if (after !== before) {
+          expect.fail(`seed ${seed}, cell ${i}: ${before} became ${after}`);
+        }
+      }
       // The cube's cells in order, the top layer (z = 0) first: x * y of them.
       const top = Array.from(lab.blocks.subarray(0, lab.size.x * lab.size.y));
       expect(top.includes(coal), `seed ${seed}`).toBe(false);
     }
+    // The game's cube does have timber-root, so the swap was tested.
+    expect(rootsSwapped).toBeGreaterThan(0);
   });
 
   it('leaves the game’s own cube alone: a run on the same seed is unchanged', () => {

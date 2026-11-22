@@ -5,7 +5,7 @@
 // 2. Veins. Band by band and ore by ore, groups of connected ore blocks
 //    replace some of that rock.
 // 3. Coal near the surface (owner, 2026-11-22, question 140; decision note
-//    0050): no coal on the top layer, and at least a minimum in layer 1.
+//    0052): no coal on the top layer, and at least a minimum in layer 1.
 //
 // Underground spaces (caverns and pockets) are opened afterwards, by
 // `generateSpaces` in spaces.ts.

@@ -14,7 +14,7 @@
 // 4. Stone outcrops: each tree cell over stone becomes an outcrop with the
 //    chance in the data.
 // There is no coal-in-sight step any more: the top layer holds no coal at all
-// (owner, 2026-11-22, question 140; `generateCube`, decision note 0050).
+// (owner, 2026-11-22, question 140; `generateCube`, decision note 0052).
 //
 // There is no miner and nobody walks (design doc v0.2), so there is no start
 // cell: no start clearing, and paths are scenery. A path is open ground over

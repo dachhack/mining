@@ -1,4 +1,4 @@
-# 0050 — No coal at the surface; a minimum of coal in layer 1
+# 0052 — No coal at the surface; a minimum of coal in layer 1
 
 Date: 2026-11-22. Status: implemented (this PR). Engine 0.5.0: the first PR of the batch after the 2026-11-22 playtest.
 
@@ -13,7 +13,7 @@ Question 140, after Lab 2 took coal off its own surface (note 0048): "No coal at
   - This runs before the underground spaces are opened. A space replaces plain rock only and never reaches layer 0, so the coal stays.
   - The minimum is written for the 32 × 32 cube; a smaller (test) cube needs the same share of its layer, rounded up.
 - **Coal in sight is gone.** Design doc 3.2 said at least one square on open ground showed coal at the start (owner, question 67), and `ensureCoalInSight` put one there if needed. The owner's new answer contradicts it, so it is removed: its code, its data (`coalInSightBlock`, `coalInSightReplaces`) and its tests. It was marked [Default], but it was the owner's request, so the owner's approval of this change is recorded here.
-- **Lab 2's own swap is removed.** `withoutSurfaceCoal` (note 0048) turned layer-0 coal into stone on Lab 2's copy of the cube. The game now does exactly that, so the swap found nothing to change: dead code. `LAB_SURFACE.surfaceCoalBecomes` is gone with it. Lab 2 still has no coal at the surface and stone where it was.
+- **Lab 2's own coal swap is removed.** `labCube` (named `withoutSurfaceCoal` in note 0048) turned layer-0 coal into stone on Lab 2's copy of the cube. The game now does exactly that, so that part found nothing to change: dead code. It and `LAB_SURFACE.surfaceCoalBecomes` are gone; `labCube` still turns timber-root into dirt (note 0050). Lab 2 still has no coal at the surface and stone where it was.
 - **The map opens on the open ground nearest the middle.** `openingSquare` preferred the coal in sight nearest the middle; there is none at the start now, so that branch could never be taken.
 
 ## Why 12
@@ -29,5 +29,5 @@ Coal is no longer free at the start. To mine a layer-1 block, the square must al
 
 - `tests/engine/surfaceCoal.test.ts`: on 500 seeds no coal in layer 0 and at least 12 in layer 1; on a hand-built cube, the swap, the top-up staying in layer 1 and in plain rock, no random number drawn when layer 1 has enough, the minimum scaled to a small cube; the data validator's new checks.
 - `tests/engine/generation.test.ts`: the cube rules now say no coal in layer 0, and allow a coal group cut short at the top (it reaches layer 1); the pinned seed-7 cube hash changed.
-- `tests/app/surface.test.ts`: Lab 2's cube is the game's cube, with no surface coal.
+- `tests/app/surface.test.ts`: Lab 2's cube is the game's cube apart from timber-root (dirt in Lab 2), with no surface coal.
 - The golden runs were recorded again, and the hand-played camp-tool run (`tests/engine/campTools.test.ts`) and `tools.spec.ts` now dig for their coal.
