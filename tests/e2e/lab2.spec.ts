@@ -626,3 +626,81 @@ for (const phone of PHONES) {
     }
   });
 }
+
+// More from the owner: they had the wood and grass, and still no Place camp,
+// in portrait and on its side. Android's system text size (WebView text
+// zoom) makes the text bigger, as a larger root font does here; on its side
+// the phone is too short for the map above the tray. With a camp that can be
+// paid for and a good spot chosen, Place camp must be on screen, whole, and
+// work, at every text size, either way up.
+const SCREENS = [
+  { width: 390, height: 844, rootFont: '100%' },
+  { width: 390, height: 844, rootFont: '130%' },
+  { width: 390, height: 844, rootFont: '150%' },
+  { width: 390, height: 844, rootFont: '200%' },
+  { width: 320, height: 640, rootFont: '150%' },
+  { width: 320, height: 640, rootFont: '200%' },
+  { width: 915, height: 412, rootFont: '100%' },
+  { width: 915, height: 412, rootFont: '200%' },
+  { width: 844, height: 390, rootFont: '130%' },
+  { width: 740, height: 360, rootFont: '150%' },
+];
+for (const screen of SCREENS) {
+  test(`a paid-for camp on a good spot: Place camp is on screen and works at ${screen.width} x ${screen.height}, text ${screen.rootFont}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: screen.width, height: screen.height });
+    const start = newCampWorld(SEED);
+    const camp = start.camps[0] ?? { x: 0, y: 0 };
+    const target = { x: camp.x + campRadius(1) - 1, y: camp.y };
+    const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp, footprintOf(target.x, target.y));
+    expect(plan).not.toBeNull();
+    if (plan === null) return;
+    expect(placeRefusal(plan.world, target.x, target.y)).toBeNull();
+
+    // Open lab 2 on the played world: the cost is paid for from the start.
+    await pauseClock(page);
+    await page.goto('/#game');
+    await page.evaluate(([key, text]) => window.localStorage.setItem(key, text), [
+      PREPARED_LAB2_KEY,
+      JSON.stringify({
+        seed: SEED,
+        steps: plan.taps.map((s) => ({ kind: 'tap', x: s.x, y: s.y })),
+      }),
+    ] as const);
+    await page.goto('/#lab2');
+    await expect(page.getByTestId('lab-seed')).toHaveText(`Seed ${SEED} · prepared`);
+    await page.addStyleTag({ content: `html { font-size: ${screen.rootFont}; }` });
+    const canvas = page.getByTestId('lab-map');
+
+    await page.getByTestId('lab2-camp-tool').click();
+    await tapSquare(page, canvas, target);
+    await expect(canvas).toHaveAttribute('data-target', `${target.x},${target.y}`);
+    await expect(page.getByTestId('lab2-place-line')).toContainText('level ground');
+
+    const confirm = page.getByTestId('lab2-place-confirm');
+    await expect(confirm).toBeEnabled();
+    await expect(confirm).toHaveText('Place camp');
+    const tray = await page.getByTestId('lab2-tray').boundingBox();
+    expect(tray).not.toBeNull();
+    if (tray === null) return;
+    await expectInside(page.getByTestId('lab2-tray'), {
+      x: 0,
+      y: 0,
+      width: screen.width,
+      height: screen.height,
+    });
+    await expectInside(confirm, tray);
+    // Nothing in the tray is cut off at the bottom.
+    const cut = await page
+      .getByTestId('lab2-tray')
+      .evaluate((el) => el.scrollHeight - el.clientHeight);
+    expect(cut).toBeLessThanOrEqual(0);
+
+    // A real tap on it places the camp.
+    const box = await confirm.boundingBox();
+    if (box === null) return;
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(canvas).toHaveAttribute('data-camps', '2');
+  });
+}

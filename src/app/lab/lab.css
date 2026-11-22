@@ -354,7 +354,12 @@ body[data-screen='lab2'] {
 .lab2-tray {
   flex: 0 0 auto;
   box-sizing: border-box;
-  height: 164px;
+  /* At least 164px, so the map does not move as the tray changes between its
+     panels at normal text sizes; but never less than its content needs, so
+     with a large system text size (Android's text zoom) the buttons at the
+     bottom are never cut off (owner's bug report: "Place camp doesn't show"). */
+  height: auto;
+  min-height: 164px;
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
@@ -616,4 +621,56 @@ body[data-screen='lab2'] {
 .lab .lab2-pack.lab2-pack-short {
   color: #8f8578;
   border-style: dashed;
+}
+
+/* Lab 2's map gives way to the tray: on a short screen, or with large text,
+   the map gets smaller rather than the tray being pushed off the bottom of a
+   page that cannot scroll. */
+.lab2 .lab-map-frame {
+  flex: 1 1 0;
+  min-height: 96px;
+}
+
+/* A phone on its side: too short for the map above the tray, so the map
+   takes the left and everything else stacks on the right, the tray at the
+   bottom. The top bar is the first to give way if even that is too tall, so
+   the tray and its buttons always stay on the screen. */
+@media (orientation: landscape) and (max-height: 600px) {
+  .lab.lab2 {
+    max-width: 1100px;
+    padding: 8px 16px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 380px);
+    grid-template-rows: minmax(0, max-content) auto minmax(0, 1fr) auto auto;
+    column-gap: 14px;
+  }
+
+  .lab2 .lab-map-frame {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    min-height: 0;
+  }
+
+  .lab2 .lab-top {
+    grid-column: 2;
+    grid-row: 1;
+    min-height: 0;
+    overflow: hidden;
+    padding-top: 0;
+  }
+
+  .lab2 .lab-counter {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .lab2 .lab-hint {
+    grid-column: 2;
+    grid-row: 4;
+  }
+
+  .lab2 .lab2-tray {
+    grid-column: 2;
+    grid-row: 5;
+  }
 }
