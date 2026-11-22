@@ -12,6 +12,9 @@
 //             rests when the crew's health is low.
 // - digger:   digs a pit next to the first camp, as deep as the camps let
 //             it, gathering only to pay upkeep.
+// - idle:     gathers nothing: it ends every shift, rests at a camp when the
+//             crew is at half health or less until shift IDLE_RESTS_UNTIL,
+//             then lets the crew starve. The hunger path, start to end.
 
 import { FRONTIER_FOODS, FRONTIER_SHIFT } from '../src/data/frontier';
 import {
@@ -31,7 +34,7 @@ import { NO_FEATURE } from '../src/engine/frontier/state';
 import { gathererStep, restStep } from './frontierRun';
 import type { FrontierStep } from './frontierRun';
 
-export const FRONTIER_POLICY_NAMES = ['random', 'gatherer', 'careful', 'digger'] as const;
+export const FRONTIER_POLICY_NAMES = ['random', 'gatherer', 'careful', 'digger', 'idle'] as const;
 export type FrontierPolicyName = (typeof FRONTIER_POLICY_NAMES)[number];
 
 /** A policy: the next step for a state, or `null` to stop playing. */
@@ -46,7 +49,18 @@ export function makeFrontierPolicy(name: FrontierPolicyName, seed: number): Fron
   if (name === 'random') return randomPolicy(createRng((seed ^ 0x2545f491) >>> 0));
   if (name === 'careful') return carefulStep;
   if (name === 'digger') return diggerStep;
+  if (name === 'idle') return idleStep;
   return gathererStep;
+}
+
+/** The idle policy rests when the crew is low only before this shift; after it, the crew starves. */
+const IDLE_RESTS_UNTIL = 8;
+
+/** The idle policy (see the top of this file). */
+function idleStep(state: FrontierState): FrontierStep | null {
+  if (state.status !== 'active') return null;
+  const low = state.health <= FRONTIER_SHIFT.startHealth / 2;
+  return low && state.shift < IDLE_RESTS_UNTIL ? restStep(state) : 'endShift';
 }
 
 /** Every lit square where a tap does something now, row by row. */

@@ -31,7 +31,7 @@ import {
 import type { CampStep, CampWorld } from '../../src/app/lab/campWorld';
 import { FRONTIER_SHIFT } from '../../src/data/frontier';
 import { GRASS, TREE } from '../../src/app/lab/surface';
-import { planLevel2, tapsUntil } from './campPlan';
+import { planLevel2, tapsUntil, usefulTaps } from './campPlan';
 import { emptyHistory, noteAction, undoCount, undoLast } from '../../src/app/lab/undoHistory';
 import { labRecipes } from '../../src/app/lab/recipes';
 import type { Square } from './campPlan';
@@ -1084,18 +1084,31 @@ test('End shift: the HUD counts taps down, End shift refills them, moves the ani
 });
 
 test('out of taps: a tap does nothing and says so, and End shift stands out', async ({ page }) => {
-  const canvas = await openLab2(page);
+  // A world prepared with all but one of the shift's taps spent (a shift is
+  // FRONTIER_SHIFT.taps), then the last tap on the page, then one more.
   const start = newCampWorld(SEED);
   const camp = start.camps[0] ?? { x: 0, y: 0 };
-  const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp);
-  expect(plan).not.toBeNull();
-  // The first shift's taps, one after another, then one more.
-  const first = (plan?.steps ?? []).slice(0, FRONTIER_SHIFT.taps);
-  expect(first.every((step) => step.kind === 'tap')).toBe(true);
-  const world = await playSteps(page, canvas, start, first);
+  const spent = usefulTaps(start, FRONTIER_SHIFT.taps - 1, camp);
+  expect(spent).not.toBeNull();
+  if (spent === null) return;
+  await pauseClock(page);
+  await page.goto('/#game');
+  await page.evaluate(([key, text]) => window.localStorage.setItem(key, text), [
+    PREPARED_LAB2_KEY,
+    JSON.stringify({ seed: SEED, steps: spent.steps }),
+  ] as const);
+  await page.goto('/#lab2');
+  await expect(page.getByTestId('lab-seed')).toHaveText(`Seed ${SEED} · prepared`);
+  const canvas = page.getByTestId('lab-map');
+  await expect(page.getByTestId('lab2-hud')).toHaveAttribute('data-taps', '1');
+  const last = usefulTaps(spent.world, 1, camp);
+  const lastStep = last?.steps[0];
+  expect(lastStep?.kind).toBe('tap');
+  if (last === null || lastStep === undefined || lastStep.kind !== 'tap') return;
+  const world = await playSteps(page, canvas, spent.world, [lastStep]);
   await expect(page.getByTestId('lab2-hud')).toHaveAttribute('data-taps', '0');
   await expect(page.getByTestId('lab2-end-shift')).toHaveClass(/lab2-end-shift-now/);
-  const extra = plan?.taps[FRONTIER_SHIFT.taps] ?? camp;
+  const extra = { x: camp.x - 2, y: camp.y };
   await tapSquare(page, canvas, extra);
   await expect(canvas).toHaveAttribute('data-last-tap', `noTaps ${extra.x},${extra.y}`);
   await expect(page.getByTestId('lab-hint')).toContainText('No taps left this shift');

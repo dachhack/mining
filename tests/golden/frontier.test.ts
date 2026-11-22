@@ -27,7 +27,7 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
   it('there is one for every policy, recorded on this engine version', () => {
     expect(files.length).toBeGreaterThanOrEqual(5);
     const policies = new Set(files.map((name) => load(name).recordedWith));
-    expect([...policies].sort()).toEqual(['careful', 'digger', 'gatherer', 'random']);
+    expect([...policies].sort()).toEqual(['careful', 'digger', 'gatherer', 'idle', 'random']);
     for (const name of files) {
       expect(load(name).engineVersion, name).toBe(ENGINE_VERSION);
     }

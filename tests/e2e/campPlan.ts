@@ -101,6 +101,28 @@ export function tapsUntil(
   return { taps, steps, world };
 }
 
+/**
+ * `count` useful taps in a row, each on the useful square nearest `near`
+ * (no End shift): `steps` are the taps, `world` is the world after them.
+ * `null` if nothing useful is left first.
+ */
+export function usefulTaps(
+  start: CampWorld,
+  count: number,
+  near: Square,
+): { steps: CampStep[]; world: CampWorld } | null {
+  let world = start;
+  const steps: CampStep[] = [];
+  const distance = (o: Square): number => Math.abs(o.x - near.x) + Math.abs(o.y - near.y);
+  while (steps.length < count) {
+    const next = useful(world, []).sort((a, b) => distance(a) - distance(b))[0];
+    if (next === undefined) return null;
+    world = campTap(world, next.x, next.y).world;
+    steps.push({ kind: 'tap', x: next.x, y: next.y });
+  }
+  return { steps, world };
+}
+
 /** A played world that can pay for level 2 (wood, clay, stone and an animal) from the first camp's ring. */
 export interface Level2Plan {
   seed: number;
