@@ -1235,9 +1235,13 @@ test('the recipe book: pin two recipes, watch them fill as you gather, unpin one
   // At first a new camp is pinned, as the row showed before the book.
   await expect(page.getByTestId('lab2-pin-new-camp')).toBeVisible();
 
-  // Open the book: every recipe, with its costs from the lab's data.
+  // Open the book: a card over the whole screen (owner, after the playtest of
+  // PR #146), with every recipe and its costs from the lab's data.
   await page.getByTestId('lab2-book').click();
-  await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'book');
+  const card = page.getByTestId('lab2-book-card');
+  await expect(card).toBeVisible();
+  const viewport = page.viewportSize() ?? { width: 0, height: 0 };
+  expect(await card.boundingBox()).toEqual({ x: 0, y: 0, ...viewport });
   await unmoved();
   for (const recipe of labRecipes()) {
     await expect(page.getByTestId(`lab2-recipe-${recipe.id}`)).toBeAttached();
@@ -1255,6 +1259,17 @@ test('the recipe book: pin two recipes, watch them fill as you gather, unpin one
     await unmoved();
   }
   await page.getByTestId('lab2-book-close').click();
+  await expect(card).toBeHidden();
+  await expect(page.getByTestId('lab2-pins').locator('.lab2-pin')).toHaveCount(3);
+  await unmoved();
+
+  // The phone's back button closes the book too, without leaving the screen.
+  const url = page.url();
+  await page.getByTestId('lab2-book').click();
+  await expect(card).toBeVisible();
+  await page.goBack();
+  await expect(card).toBeHidden();
+  expect(page.url()).toBe(url);
   await expect(page.getByTestId('lab2-pins').locator('.lab2-pin')).toHaveCount(3);
   await unmoved();
 
@@ -1338,6 +1353,47 @@ test('the pinned row scrolls sideways at 320 px: every card can be reached, the 
   // The book and the pins never changed the tray's height.
   expect(await page.getByTestId('lab2-tray').boundingBox()).toEqual(trayBefore);
 });
+
+for (const phone of [
+  { width: 360, height: 700, top: 28, bottom: 48, left: 0, right: 0 },
+  { width: 915, height: 412, top: 0, bottom: 24, left: 32, right: 0 },
+]) {
+  test(`the recipe book card fills the screen inside the system bars at ${phone.width} x ${phone.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: phone.width, height: phone.height });
+    await openLab2(page);
+    // What Capacitor's SystemBars plugin does on the phone.
+    await page.evaluate((insets) => {
+      const style = document.documentElement.style;
+      style.setProperty('--safe-area-inset-top', `${insets.top}px`);
+      style.setProperty('--safe-area-inset-right', `${insets.right}px`);
+      style.setProperty('--safe-area-inset-bottom', `${insets.bottom}px`);
+      style.setProperty('--safe-area-inset-left', `${insets.left}px`);
+    }, phone);
+    const map = await page.getByTestId('lab-map').boundingBox();
+    await page.getByTestId('lab2-book').click();
+    const card = page.getByTestId('lab2-book-card');
+    await expect(card).toBeVisible();
+    expect(await card.boundingBox()).toEqual({
+      x: phone.left,
+      y: phone.top,
+      width: phone.width - phone.left - phone.right,
+      height: phone.height - phone.top - phone.bottom,
+    });
+    // Every recipe's pin and the × can be reached inside the card.
+    for (const recipe of labRecipes()) {
+      const pin = page.getByTestId(`lab2-recipe-pin-${recipe.id}`);
+      await pin.scrollIntoViewIfNeeded();
+      await expect(pin).toBeInViewport();
+    }
+    const close = page.getByTestId('lab2-book-close');
+    await expect(close).toBeInViewport();
+    await close.click();
+    await expect(card).toBeHidden();
+    expect(await page.getByTestId('lab-map').boundingBox()).toEqual(map);
+  });
+}
 
 test('pins are saved: after a reload the same recipes are pinned (owner, question 143)', async ({
   page,

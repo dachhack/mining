@@ -356,8 +356,32 @@ export function mountCampLab(
   const tray = element('section', 'lab2-tray');
   tray.dataset['testid'] = 'lab2-tray';
 
-  page.append(top.bar, counter, frame, hint, tray);
+  // The recipe book (owner, after the playtest of PR #146: "The recipe book
+  // should be a card that pops up over the entire screen"): a card over the
+  // whole screen, inside the system bars. The map and tray stay as they were
+  // behind it. × closes it, and so does the phone's back button (see
+  // `openBook` and `closeBook`).
+  const bookCard = element('section', 'lab2-book-card');
+  bookCard.dataset['testid'] = 'lab2-book-card';
+  bookCard.setAttribute('role', 'dialog');
+  bookCard.setAttribute('aria-modal', 'true');
+  bookCard.setAttribute('aria-label', 'Recipe book');
+  bookCard.hidden = true;
+
+  page.append(top.bar, counter, frame, hint, tray, bookCard);
   root.replaceChildren(page);
+
+  // The phone's back button: Android's WebView goes back in the page's
+  // history. Opening the book adds a history entry (same address, so the
+  // screen does not reload), and going back from it closes the book.
+  window.addEventListener('popstate', () => {
+    if (mode.kind === 'book') {
+      setMode({ kind: 'idle' });
+    }
+  });
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && mode.kind === 'book') closeBook();
+  });
 
   // ----- Drawing -----
   function view(): ViewSize {
@@ -1025,10 +1049,13 @@ export function mountCampLab(
 
   function showTray(): void {
     tray.dataset['mode'] = mode.kind;
+    bookCard.hidden = mode.kind !== 'book';
     if (mode.kind === 'idle') {
       showIdleTray();
     } else if (mode.kind === 'book') {
-      showBookTray();
+      // The tray behind the card stays as it is when nothing is open.
+      showIdleTray();
+      showBookCard();
     } else if (mode.kind === 'placing') {
       showPlacingTray(mode.target);
     } else {
@@ -1052,7 +1079,7 @@ export function mountCampLab(
     book.dataset['testid'] = 'lab2-book';
     book.setAttribute('aria-label', 'Recipe book');
     book.title = 'Recipe book';
-    book.addEventListener('click', () => setMode({ kind: 'book' }));
+    book.addEventListener('click', openBook);
     const tool = button('lab2-tool', '');
     tool.dataset['testid'] = 'lab2-camp-tool';
     tool.setAttribute('aria-label', 'New camp: choose where');
@@ -1166,16 +1193,35 @@ export function mountCampLab(
     setMode({ kind: 'camp', id: camp.id });
   }
 
-  /** The recipe book, in the tray: every recipe, what it costs, and a pin to put it on the row. */
-  function showBookTray(): void {
+  /** Open the recipe book card, with a history entry for the back button to take away. */
+  function openBook(): void {
+    if (mode.kind === 'book') return;
+    window.history.pushState({ lab2Book: true }, '');
+    setMode({ kind: 'book' });
+  }
+
+  /** Close the recipe book card: going back takes away its history entry, and `popstate` closes it. */
+  function closeBook(): void {
+    if (mode.kind !== 'book') return;
+    const state: unknown = window.history.state;
+    const ours = typeof state === 'object' && state !== null && 'lab2Book' in state;
+    if (ours) {
+      window.history.back();
+    } else {
+      setMode({ kind: 'idle' });
+    }
+  }
+
+  /** The recipe book card: every recipe, what it costs, and a pin to put it on the row. */
+  function showBookCard(): void {
     const head = element('div', 'lab2-panel-head');
     head.append(element('span', 'lab2-panel-title', '📖 Recipe book'));
     const close = button('lab2-close', '×');
     close.setAttribute('aria-label', 'Close the recipe book');
     close.dataset['testid'] = 'lab2-book-close';
-    close.addEventListener('click', () => setMode({ kind: 'idle' }));
+    close.addEventListener('click', closeBook);
     head.append(close);
-    // The list scrolls inside the tray, so the tray, and the map, never grow.
+    // The list scrolls inside the card.
     const list = element('div', 'lab2-book-list');
     list.dataset['testid'] = 'lab2-book-list';
     for (const recipe of labRecipes()) {
@@ -1193,7 +1239,7 @@ export function mountCampLab(
         const scroll = list.scrollTop;
         showTray();
         // Keep the list where it was, so pinning does not jump it.
-        const fresh = tray.querySelector('.lab2-book-list');
+        const fresh = bookCard.querySelector('.lab2-book-list');
         if (fresh !== null) fresh.scrollTop = scroll;
       });
       const text = element('div', 'lab2-recipe-text');
@@ -1204,7 +1250,9 @@ export function mountCampLab(
       row.append(recipeIcon(recipe), text, pin);
       list.append(row);
     }
-    tray.replaceChildren(head, list);
+    const inner = element('div', 'lab2-book-inner');
+    inner.append(head, list);
+    bookCard.replaceChildren(inner);
   }
 
   function showPlacingTray(target: { x: number; y: number } | null): void {
