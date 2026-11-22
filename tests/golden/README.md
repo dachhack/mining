@@ -32,10 +32,15 @@ Each file holds:
 
 Lab 2 becomes the game (`docs/plans/lab2-becomes-the-game.md`). Its rules are moving into the engine beside the old game's, and they get their own golden runs from plan step A3. `frontier.test.ts` replays every `frontier/*.json`.
 
-| File                            | What it is                                                                                                                                              |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `frontier/gatherer-seed-1.json` | The gatherer policy (`tools/frontierRun.ts`): 10 taps a shift; takes plants and animals, places two more camps, mines, upgrades a camp, and pays upkeep |
-| `frontier/gatherer-seed-7.json` | The gatherer on another seed: three camps, one upgraded, with clay mined                                                                                |
+Recorded with the new simulator's policies (`tools/frontierPolicies.ts`, plan B3), each for at most 30 shifts:
+
+| File                               | What it is                                                                                                      |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `frontier/gatherer-seed-1.json`    | The gatherer: places two more camps, mines, upgrades a camp to level 2, and goes hungry once it spends its wood |
+| `frontier/gatherer-seed-7.json`    | The gatherer on another seed: hungry from shift 4, after placing camps, and a rest when the crew is low         |
+| `frontier/careful-seed-3.json`     | The careful policy: keeps wood and food back for upkeep, places two more camps, never hungry                    |
+| `frontier/digger-seed-5.json`      | The digger: a pit 5 levels deep next to the first camp, gathering only for upkeep                               |
+| `frontier/random-seed-6-lost.json` | The random policy: never keeps anything for upkeep, and loses the crew to hunger at shift 26                    |
 
 Each file holds:
 
@@ -43,9 +48,9 @@ Each file holds:
 - `steps`: every step in order: `"tap X,Y"`, `"place X,Y"`, `"upgrade ID"`, `"demolish ID"`, `"endShift"`, `"rest"` or `"close"`. A step the rules refuse (including a tap with no taps left in the shift) fails the replay.
 - `expectedHash`: `hashFrontier` of the state after the last step.
 - `engineVersion`: the engine version it was recorded on. A replay is only expected to match on that version.
-- `stepCount`, `description` and `recordedWith`: for the reader.
+- `stepCount`, `description` and `recordedWith` (the policy): for the reader.
 
-If the new rules change on purpose, record the runs again with `npm run golden -- --frontier`, and say in the PR why the hashes changed. The gatherer always plays the same way on a seed, so there is no separate rehash.
+If the new rules change on purpose, record the runs again with `npm run golden -- --frontier`, and say in the PR why the hashes changed. A policy always plays the same way on a seed, so there is no separate rehash.
 
 ## When a golden test fails
 

@@ -29,8 +29,11 @@ jobs:
       # A small sample of the acceptance check (issue #108): whole runs of
       # every simulator policy with the rules checked after every step and
       # every run replayed to the same hash. The full check is
-      # `npm run sim -- --acceptance --runs 1000`, run by hand: it takes
+      # `npm run sim:old -- --acceptance --runs 1000`, run by hand: it takes
       # several minutes.
+      - run: npm run sim:old -- --acceptance --runs 8
+      # The same for the new game (plan B3): every policy, rules checked after
+      # every step, every run replayed. By hand: --runs 1000.
       - run: npm run sim -- --acceptance --runs 8
       - run: npm run build
 

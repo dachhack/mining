@@ -29,6 +29,7 @@ import {
   hashFrontier,
   levelNeededFor,
   newlyCovered,
+  previewTap,
   placeRefusal,
   shiftUndoCount,
   sightMap,
@@ -472,7 +473,7 @@ function usefulTaps(state: FrontierState): number {
   let count = 0;
   for (let y = 0; y < state.cube.size.y; y += 1) {
     for (let x = 0; x < state.cube.size.x; x += 1) {
-      const kind = frontierTap(state, x, y).kind;
+      const kind = previewTap(state, x, y).kind;
       if (kind === 'mined' || kind === 'harvested') count += 1;
     }
   }

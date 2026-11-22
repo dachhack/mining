@@ -10,7 +10,7 @@ import {
   upkeepDue,
 } from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
-import { APPLE_TREE, GRASS, TREE } from '../../src/engine/frontier/state';
+import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from '../../src/engine/frontier/state';
 import { AT, MID, NEXT, SIDE, rich, world } from './frontierHelpers';
 
 /** `state` holding `inventory` instead. */
@@ -198,6 +198,20 @@ describe('the world moves on at End shift (plan A4)', () => {
     expect(back.state.apples[i]).toBe(FRONTIER_SURFACE.applesPerTree);
     expect(back.state.regrowIn[i]).toBe(-1);
     expect(back.report?.regrown).toBe(1);
+  });
+
+  it('a bare apple tree felled regrows nothing (bug found by the B3 acceptance check)', () => {
+    let w = world({
+      features: [{ ...AT, feature: APPLE_TREE, apples: 1 }],
+      inventory: { wood: 99 },
+    });
+    w = frontierAct(w, { kind: 'tap', x: AT.x, y: AT.y }).state; // the last apple
+    w = frontierAct(w, { kind: 'tap', x: AT.x, y: AT.y }).state; // felled
+    const i = AT.x + SIDE * AT.y;
+    expect(w.features[i]).toBe(NO_FEATURE);
+    expect(w.regrowIn[i]).toBe(-1);
+    const later = shifts(w, FRONTIER_SHIFT.appleRegrowShifts + 1);
+    expect(later.apples[i]).toBe(0);
   });
 
   it('is the same for the same seed and actions', () => {
