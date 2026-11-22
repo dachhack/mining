@@ -269,18 +269,29 @@ describe('roaming animals', () => {
 });
 
 describe('the new costs (issue #121)', () => {
-  it('a new camp costs wood and grass; level 2 clay, stone and an animal; level 3 adds apples', () => {
+  it('a new camp costs wood and grass; every upgrade costs wood too (wood is timber); level 3 adds apples', () => {
     const items = (cost: ItemStack[]) => cost.map((s) => s.item).sort();
     expect(items(LAB_NEW_CAMP_COST)).toEqual(['grass', 'wood']);
-    expect(items(upgradeCostFrom(1) ?? [])).toEqual(['animal', 'clay', 'stone']);
-    expect(items(upgradeCostFrom(2) ?? [])).toEqual(['animal', 'apple', 'clay', 'stone']);
+    expect(items(upgradeCostFrom(1) ?? [])).toEqual(['animal', 'clay', 'stone', 'wood']);
+    expect(items(upgradeCostFrom(2) ?? [])).toEqual(['animal', 'apple', 'clay', 'stone', 'wood']);
+    // Nothing in Lab 2 costs timber: wood is timber (owner).
+    for (const cost of [LAB_NEW_CAMP_COST, upgradeCostFrom(1) ?? [], upgradeCostFrom(2) ?? []]) {
+      expect(items(cost)).not.toContain('timber');
+    }
+    // An upgrade costs more wood than a new camp, and level 3 more than level 2.
+    const wood = (cost: ItemStack[]) => cost.find((s) => s.item === 'wood')?.count ?? 0;
+    expect(wood(upgradeCostFrom(1) ?? [])).toBeGreaterThan(wood(LAB_NEW_CAMP_COST));
+    expect(wood(upgradeCostFrom(2) ?? [])).toBeGreaterThan(wood(upgradeCostFrom(1) ?? []));
   });
 
   it('stone alone no longer pays for a camp or an upgrade', () => {
     const w = holding(world(), { stone: 999 });
     expect(placeRefusal(w, MID + campRadius(1) - 1, MID)).toBe('cost');
     expect(upgradeRefusal(w, 1)).toBe('cost');
-    const paid = holding(world(), { clay: 10, stone: 15, animal: 1 });
+    const paid = holding(
+      world(),
+      Object.fromEntries((upgradeCostFrom(1) ?? []).map((stack) => [stack.item, stack.count])),
+    );
     expect(upgradeRefusal(paid, 1)).toBeNull();
     expect(upgradeCamp(paid, 1).lab.counts.size).toBe(0);
   });
@@ -430,10 +441,13 @@ describe('what grows where, and no coal at the surface (owner, after the PR #126
     }
   });
 
-  it('a coal seam on the top layer is stone in Lab 2; coal deeper down stays', () => {
+  it('a coal seam on the top layer is stone in Lab 2, and timber-root (any layer) is dirt; nothing else changes', () => {
     const coal = BLOCKS.coalSeam.code;
     const becomes = BLOCKS[LAB_SURFACE.surfaceCoalBecomes].code;
+    const root = BLOCKS.timberRoot.code;
+    const rootBecomes = BLOCKS[LAB_SURFACE.timberRootBecomes].code;
     let swapped = 0;
+    let rootsSwapped = 0;
     for (let seed = 1; seed <= 50; seed += 1) {
       const game = newLabWorld(seed).state;
       const lab = newCampWorld(seed).lab.state;
@@ -445,13 +459,17 @@ describe('what grows where, and no coal at the surface (owner, after the PR #126
         if (i < topCells && before === coal) {
           expect(after).toBe(becomes);
           swapped += 1;
+        } else if (before === root) {
+          expect(after).toBe(rootBecomes);
+          rootsSwapped += 1;
         } else if (after !== before) {
           expect.fail(`seed ${seed}, cell ${i}: ${before} became ${after}`);
         }
       }
     }
-    // The game's cube does have surface coal, so the swap was tested.
+    // The game's cube does have surface coal and timber-root, so both swaps were tested.
     expect(swapped).toBeGreaterThan(0);
+    expect(rootsSwapped).toBeGreaterThan(0);
   });
 
   it('leaves the game’s own cube alone: a run on the same seed is unchanged', () => {

@@ -64,7 +64,7 @@ export function tapsUntil(
   return { taps, world };
 }
 
-/** A played world that can pay for level 2 (clay, stone and an animal) from the first camp's ring. */
+/** A played world that can pay for level 2 (wood, clay, stone and an animal) from the first camp's ring. */
 export interface Level2Plan {
   seed: number;
   /** The taps, as steps to replay before the page opens (no waits: the clock stays at 0). */
