@@ -337,6 +337,9 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     canvas.dataset['greyed'] = String(sights.filter((s) => s === 'greyed').length);
     canvas.dataset['camps'] = String(world.camps.length);
     canvas.dataset['mode'] = mode.kind;
+    // The square a new camp would go on, while placing: '' if none yet.
+    canvas.dataset['target'] =
+      mode.kind === 'placing' && mode.target !== null ? `${mode.target.x},${mode.target.y}` : '';
     // For the e2e tests: the lab clock, and where the animals are.
     canvas.dataset['labTime'] = String(world.surface.time);
     canvas.dataset['animals'] = world.surface.animals.map((a) => `${a.x},${a.y}`).join(' ');
@@ -929,37 +932,71 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   }
 
   function showPlacingTray(target: { x: number; y: number } | null): void {
+    // Cancel is the × in the head, as in a camp's panel, so the row below has
+    // room for the cost and "Place camp" even on a narrow phone (owner's bug
+    // report: "Place camp doesn't show").
     const head = element('div', 'lab2-panel-head');
     head.append(element('span', 'lab2-panel-title', '⛺ New camp'));
-    const body = element('p', 'lab2-panel-line');
-    body.dataset['testid'] = 'lab2-place-line';
-    if (target === null) {
-      body.textContent = PLACE_HINT;
-    } else {
-      const refusal = placeRefusal(world, target.x, target.y);
-      if (refusal !== null && refusal !== 'cost') {
-        body.textContent = placeRefusalText(refusal);
-        body.classList.add('lab2-panel-warn');
-      } else {
-        const fresh = preview.size;
-        body.textContent = `At ${target.x}, ${target.y} · level ground · lights ${fresh} new ${fresh === 1 ? 'square' : 'squares'}`;
-      }
-    }
-    const actions = element('div', 'lab2-actions');
-    const cancel = button('lab2-button lab2-button-quiet', 'Cancel');
+    const cancel = button('lab2-close', '×');
+    cancel.setAttribute('aria-label', 'Cancel');
     cancel.dataset['testid'] = 'lab2-place-cancel';
     cancel.addEventListener('click', () => setMode({ kind: 'idle' }));
+    head.append(cancel);
+
+    // The line says why "Place camp" is off, whenever it is.
+    const body = element('p', 'lab2-panel-line');
+    body.dataset['testid'] = 'lab2-place-line';
+    const refusal = target === null ? null : placeRefusal(world, target.x, target.y);
+    const missing = missingText(LAB_NEW_CAMP_COST);
+    if (target === null) {
+      body.textContent = PLACE_HINT;
+    } else if (refusal !== null && refusal !== 'cost') {
+      body.textContent = placeRefusalText(refusal);
+      body.classList.add('lab2-panel-warn');
+    } else {
+      const fresh = preview.size;
+      const lights = `lights ${fresh} new ${fresh === 1 ? 'square' : 'squares'}`;
+      if (refusal === 'cost') {
+        body.textContent = `${missing} · ${lights}`;
+        body.classList.add('lab2-panel-warn');
+      } else {
+        body.textContent = `At ${target.x}, ${target.y} · level ground · ${lights}`;
+      }
+    }
+
+    const actions = element('div', 'lab2-actions');
     const confirm = button('lab2-button lab2-button-main', 'Place camp');
     confirm.dataset['testid'] = 'lab2-place-confirm';
-    const refusal = target === null ? 'notShown' : placeRefusal(world, target.x, target.y);
-    confirm.disabled = refusal !== null;
+    confirm.disabled = target === null || refusal !== null;
+    // A disabled button keeps its outline and text, and says why in its tooltip too.
+    confirm.title =
+      target === null
+        ? 'Choose a spot first'
+        : refusal === 'cost'
+          ? missing
+          : confirm.disabled
+            ? body.textContent
+            : '';
     confirm.addEventListener('click', () => {
       if (target !== null) {
         confirmPlace(target.x, target.y);
       }
     });
-    actions.append(costRow(LAB_NEW_CAMP_COST), cancel, confirm);
+    actions.append(costRow(LAB_NEW_CAMP_COST), confirm);
     tray.replaceChildren(head, body, actions);
+  }
+
+  /** "Need 2 more wood and 5 more grass", for what the counts lack of `cost`; '' if nothing. */
+  function missingText(cost: ItemStack[]): string {
+    const short = cost
+      .map((stack) => ({ stack, lack: stack.count - (world.lab.counts.get(stack.item) ?? 0) }))
+      .filter((s) => s.lack > 0)
+      .map((s) => `${s.lack} more ${itemName(s.stack.item).toLowerCase()}`);
+    if (short.length === 0) {
+      return '';
+    }
+    const last = short.pop() ?? '';
+    return `Need ${short.length > 0 ? `${short.join(', ')} and ${last}` : last}`;
   }
 
   function showCampTray(camp: Camp): void {

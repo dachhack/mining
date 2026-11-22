@@ -537,6 +537,92 @@ test('holding a lit square opens the camp tool on it, and mines nothing', async 
   await page.clock.runFor(800); // the hold is a timer: the clock is paused, so run it
   await page.mouse.up();
   await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'placing');
-  await expect(page.getByTestId('lab2-place-line')).toContainText(`At ${square.x}, ${square.y}`);
+  await expect(canvas).toHaveAttribute('data-target', `${square.x},${square.y}`);
+  // Nothing mined yet, so the line says what the camp still needs.
+  await expect(page.getByTestId('lab2-place-line')).toContainText(missingLine(world));
   expect((await counts(page))['dug']).toBe(0);
 });
+
+/** "Need 5 more wood and 5 more grass": what `world`'s counts lack of a new camp's cost. */
+function missingLine(world: CampWorld): string {
+  const short = LAB_NEW_CAMP_COST.map((stack) => ({
+    item: stack.item,
+    lack: stack.count - (world.lab.counts.get(stack.item) ?? 0),
+  }))
+    .filter((s) => s.lack > 0)
+    .map((s) => `${s.lack} more ${s.item}`);
+  const last = short.pop() ?? '';
+  return `Need ${short.length > 0 ? `${short.join(', ')} and ${last}` : last}`;
+}
+
+/** Expect `inner` to lie wholly inside `outer`'s box. */
+async function expectInside(
+  inner: Locator,
+  outer: { x: number; y: number; width: number; height: number },
+): Promise<void> {
+  const box = await inner.boundingBox();
+  expect(box).not.toBeNull();
+  if (box === null) return;
+  expect(box.x).toBeGreaterThanOrEqual(outer.x - 0.5);
+  expect(box.y).toBeGreaterThanOrEqual(outer.y - 0.5);
+  expect(box.x + box.width).toBeLessThanOrEqual(outer.x + outer.width + 0.5);
+  expect(box.y + box.height).toBeLessThanOrEqual(outer.y + outer.height + 0.5);
+}
+
+// The owner's bug report: "Place camp doesn't show" on their phone. On a
+// narrow screen, or with a larger text size, the button must still be whole
+// and inside the tray, and when it is off the line says why.
+const PHONES = [
+  { width: 320, height: 640, rootFont: '' },
+  { width: 360, height: 740, rootFont: '' },
+  { width: 390, height: 844, rootFont: '' },
+  { width: 320, height: 640, rootFont: '20px' },
+];
+for (const phone of PHONES) {
+  const label = `${phone.width} x ${phone.height}${phone.rootFont === '' ? '' : `, text ${phone.rootFont}`}`;
+  test(`Place camp is whole and inside the tray at ${label}, with and without a spot`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: phone.width, height: phone.height });
+    const canvas = await openLab2(page);
+    if (phone.rootFont !== '') {
+      await page.addStyleTag({ content: `html { font-size: ${phone.rootFont}; }` });
+    }
+    const start = newCampWorld(SEED);
+    const camp = start.camps[0] ?? { x: 0, y: 0 };
+    const target = { x: camp.x + campRadius(1) - 1, y: camp.y };
+    expect(placeRefusal(start, target.x, target.y)).toBe('cost');
+
+    const confirm = page.getByTestId('lab2-place-confirm');
+    const check = async (): Promise<void> => {
+      await expect(confirm).toBeVisible();
+      await expect(confirm).toHaveText('Place camp');
+      const tray = await page.getByTestId('lab2-tray').boundingBox();
+      expect(tray).not.toBeNull();
+      if (tray === null) return;
+      await expectInside(confirm, tray);
+      await expectInside(confirm, { x: 0, y: 0, width: phone.width, height: phone.height });
+      await expectInside(page.getByTestId('lab2-place-cancel'), tray);
+    };
+
+    // No spot yet: the button is off, and the line says to choose one.
+    await page.getByTestId('lab2-camp-tool').click();
+    await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'placing');
+    await expect(confirm).toBeDisabled();
+    await expect(confirm).toHaveAttribute('title', 'Choose a spot first');
+    await expect(page.getByTestId('lab2-place-line')).toContainText('Tap the middle');
+    await check();
+
+    // A level spot the camp cannot be paid for yet: the line names what is missing.
+    await tapSquare(page, canvas, target);
+    await expect(confirm).toBeDisabled();
+    await expect(page.getByTestId('lab2-place-line')).toContainText(missingLine(start));
+    await expect(confirm).toHaveAttribute('title', missingLine(start));
+    await check();
+    if (phone.rootFont === '') {
+      await page.screenshot({
+        path: `test-results/lab2-place-${phone.width}.png`,
+      });
+    }
+  });
+}

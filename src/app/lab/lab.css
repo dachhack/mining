@@ -560,7 +560,16 @@ body[data-screen='lab2'] {
 }
 
 .lab2-actions .lab2-cost {
-  flex: 1 1 auto;
+  /* The cost gives way first on a narrow phone: the buttons never shrink, so
+     they can never be pushed out of the tray (owner's bug report: "Place camp
+     doesn't show"). The panel's line says what is missing. */
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.lab2-actions .lab2-button {
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .lab .lab2-button {
@@ -578,10 +587,13 @@ body[data-screen='lab2'] {
   border: 1px solid #f3d29c;
 }
 
+/* Disabled, the main button stays plain to see: an outline with readable
+   text, not a dark block that melts into the tray. */
 .lab .lab2-button-main:disabled {
-  color: #7d7266;
-  background: #2a231e;
-  border-color: #3f362f;
+  color: #e3cfae;
+  background: transparent;
+  border: 2px dashed #b08a58;
+  opacity: 1;
 }
 
 .lab .lab2-button-quiet {
