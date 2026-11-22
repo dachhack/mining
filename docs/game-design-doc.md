@@ -218,6 +218,7 @@ Each rule that comes back is its own small batch, playtested before the next.
 - **The camp tool** (⛺+) places a new camp. It previews the ring and the squares it would light, says what is missing, and shows the cost.
 - **The recipe book** (📖) and the pinned row are in the tray.
 - **HUD**, over the map so it never moves it: shift, taps left, health. **End shift** at the bottom-left, by the thumb (Rest is in a camp's panel); **Undo** at the bottom-right; **Close mine** at the top-right, with a second tap to confirm.
+- **Night** (owner, after the playtest of PR #146): when a shift ends (End shift or Rest), the screen fades to black and white, then to dark, and shows the moon, whose phase steps once a shift through 8 phases from the shift number, with a line on what the shift's end paid and cost. About 2.6 s; a tap skips it; with reduced motion it is a still moon and a quick fade. The game has already moved on when it starts.
 - **The resource counter** is one row above the map.
 - **Orientation:** portrait, with a landscape layout for phones on their side. One-handed play should be possible.
 

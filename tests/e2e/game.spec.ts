@@ -6,6 +6,14 @@ import type { Locator, Page } from '@playwright/test';
 import { FRONTIER_SHIFT } from '../../src/data/frontier';
 import { campTap, newCampWorld, sightMap } from '../../src/app/lab/campWorld';
 
+/** Skip the night that follows End shift or Rest (a tap on it), and see it go. */
+async function skipNight(page: Page): Promise<void> {
+  const night = page.getByTestId('lab2-night');
+  await expect(night).toBeVisible();
+  await night.click();
+  await expect(night).toHaveCount(0);
+}
+
 test.use({ viewport: { width: 390, height: 844 } });
 
 const SEED = 110;
@@ -67,6 +75,7 @@ test('a run is saved every shift and carries on when the app opens again', async
   await tapSquare(page, canvas, square.x, square.y);
   await expect(hud).toHaveAttribute('data-taps', String(FRONTIER_SHIFT.taps - 1));
   await page.getByTestId('lab2-end-shift').click();
+  await skipNight(page);
   await expect(hud).toHaveAttribute('data-shift', '2');
   const animals = await canvas.getAttribute('data-animals');
   const dug = await page.getByTestId('lab-dug').getAttribute('data-count');

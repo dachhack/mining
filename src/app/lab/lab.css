@@ -1015,3 +1015,104 @@ body[data-screen='lab2'] {
 .lab2-over[hidden] {
   display: none;
 }
+
+/* ----- Night between shifts (owner, after the playtest of PR #146) ----- */
+
+/* Dusk: the page fades to black and white. */
+.lab {
+  transition: filter var(--dusk-fade, 0ms) ease-in;
+}
+
+.lab.lab2-dusk {
+  filter: grayscale(1) brightness(0.8);
+}
+
+/* The night covers the whole screen, system bars included, and takes every tap. */
+.lab2-night {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--inset-top, 0px) var(--inset-right, 0px) var(--inset-bottom, 0px)
+    var(--inset-left, 0px);
+  background: rgba(6, 8, 16, 0);
+  transition: background-color var(--night-fade, 400ms) ease-in;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.lab2-night.lab2-night-dark {
+  background: rgba(6, 8, 16, 0.96);
+}
+
+.lab2-night-sky {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  max-width: 320px;
+  padding: 0 16px;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity 400ms ease-out,
+    transform 600ms ease-out;
+}
+
+.lab2-night.lab2-night-moonup .lab2-night-sky {
+  opacity: 1;
+  transform: none;
+}
+
+.lab2-night.lab2-night-dawn {
+  background: rgba(6, 8, 16, 0);
+  transition: background-color 450ms ease-out;
+}
+
+.lab2-night.lab2-night-dawn .lab2-night-sky {
+  opacity: 0;
+  transition: opacity 250ms ease-out;
+}
+
+.lab2-night-moon {
+  width: 160px;
+  height: 160px;
+}
+
+.lab2-night-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #d9d4c4;
+}
+
+.lab2-night-phase {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #a9a7b8;
+}
+
+.lab2-night-summary {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  color: #c7c2b3;
+}
+
+/* prefers-reduced-motion: no movement, only a quick fade at the end. */
+.lab2-night.lab2-night-still,
+.lab2-night.lab2-night-still .lab2-night-sky {
+  transition: none;
+  transform: none;
+}
+
+.lab2-night.lab2-night-still.lab2-night-dawn {
+  transition: background-color 200ms linear;
+}
+
+.lab2-night.lab2-night-still.lab2-night-dawn .lab2-night-sky {
+  transition: opacity 200ms linear;
+}

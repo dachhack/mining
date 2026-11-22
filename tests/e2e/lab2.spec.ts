@@ -30,11 +30,20 @@ import {
 } from '../../src/app/lab/campWorld';
 import type { CampStep, CampWorld } from '../../src/app/lab/campWorld';
 import { FRONTIER_SHIFT } from '../../src/data/frontier';
+import { MOON_PHASES, moonPhase } from '../../src/app/lab/night';
 import { GRASS, TREE } from '../../src/app/lab/surface';
 import { planLevel2, tapsUntil } from './campPlan';
 import { emptyHistory, noteAction, undoCount, undoLast } from '../../src/app/lab/undoHistory';
 import { labRecipes } from '../../src/app/lab/recipes';
 import type { Square } from './campPlan';
+
+/** Skip the night that follows End shift or Rest (a tap on it), and see it go. */
+async function skipNight(page: Page): Promise<void> {
+  const night = page.getByTestId('lab2-night');
+  await expect(night).toBeVisible();
+  await night.click();
+  await expect(night).toHaveCount(0);
+}
 
 test.use({ viewport: { width: 390, height: 844 } });
 
@@ -244,6 +253,7 @@ async function playStep(
   if (step.kind === 'endShift') {
     const next = endShift(world).world;
     await page.getByTestId('lab2-end-shift').click();
+    await skipNight(page);
     await expect(page.getByTestId('lab2-hud')).toHaveAttribute(
       'data-shift',
       String(next.turn.shift),
@@ -1071,6 +1081,7 @@ test('End shift: the HUD counts taps down, End shift refills them, moves the ani
   // (as the model says), Undo is off, and the hint says what upkeep took.
   const next = endShift(dug).world;
   await page.getByTestId('lab2-end-shift').click();
+  await skipNight(page);
   await expect(hud).toHaveAttribute('data-shift', '2');
   await expect(hud).toHaveAttribute('data-taps', String(FRONTIER_SHIFT.taps));
   await expect(hud).toHaveAttribute('data-health', String(next.turn.health));
@@ -1100,6 +1111,68 @@ test('out of taps: a tap does nothing and says so, and End shift stands out', as
   await expect(canvas).toHaveAttribute('data-last-tap', `noTaps ${extra.x},${extra.y}`);
   await expect(page.getByTestId('lab-hint')).toContainText('No taps left this shift');
   await expect.poll(() => counts(page)).toEqual(expectedCounts(world));
+});
+
+test('night between shifts: End shift shows the night, with the moon of the shift number, and it clears', async ({
+  page,
+}) => {
+  // Owner, after the playtest of PR #146: "After a shift is night time."
+  const canvas = await openLab2(page);
+  const hud = page.getByTestId('lab2-hud');
+  const night = page.getByTestId('lab2-night');
+  await page.getByTestId('lab2-end-shift').click();
+  // The state has moved on already; the night only shows it.
+  await expect(hud).toHaveAttribute('data-shift', '2');
+  await expect(night).toBeVisible();
+  await expect(night).toHaveAttribute('data-night', '1');
+  await expect(night).toHaveAttribute('data-phase', String(moonPhase(1)));
+  await expect(page.getByTestId('lab2-night-phase')).toHaveText(MOON_PHASES[moonPhase(1)] ?? '');
+  await expect(page.getByTestId('lab2-night-summary')).toContainText('Shift 1 over');
+  // Nothing behind it takes input meanwhile.
+  await expect(page.locator('.lab')).toHaveJSProperty('inert', true);
+  // It clears by itself in about 3 s.
+  await page.clock.runFor(3000);
+  await expect(night).toHaveCount(0);
+  await expect(page.locator('.lab')).toHaveJSProperty('inert', false);
+  // The next night has the next phase: one step a shift.
+  await page.getByTestId('lab2-end-shift').click();
+  await expect(night).toHaveAttribute('data-night', '2');
+  await expect(night).toHaveAttribute('data-phase', String(moonPhase(2)));
+  expect(moonPhase(2)).toBe((moonPhase(1) + 1) % MOON_PHASES.length);
+  await page.clock.runFor(3000);
+  await expect(night).toHaveCount(0);
+  await expect(canvas).toBeVisible();
+});
+
+test('night between shifts: a tap skips it, and the tap does nothing else', async ({ page }) => {
+  const canvas = await openLab2(page);
+  const night = page.getByTestId('lab2-night');
+  await page.getByTestId('lab2-end-shift').click();
+  await expect(night).toBeVisible();
+  const lastTap = await canvas.getAttribute('data-last-tap');
+  // A tap on the night, over the map: it ends the night and taps nothing.
+  const box = await canvas.boundingBox();
+  if (box === null) throw new Error('no map');
+  await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(night).toHaveCount(0);
+  expect(await canvas.getAttribute('data-last-tap')).toBe(lastTap);
+  await expect(page.getByTestId('lab2-hud')).toHaveAttribute(
+    'data-taps',
+    String(FRONTIER_SHIFT.taps),
+  );
+});
+
+test('night between shifts, with reduced motion: a still moon and a quick fade', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await openLab2(page);
+  const night = page.getByTestId('lab2-night');
+  await page.getByTestId('lab2-end-shift').click();
+  await expect(night).toHaveClass(/lab2-night-still/);
+  await expect(night).toHaveClass(/lab2-night-dark/);
+  await page.clock.runFor(1000);
+  await expect(night).toHaveCount(0);
 });
 
 test('Close mine asks once, then ends the run: nothing more can be done', async ({ page }) => {
@@ -1133,6 +1206,7 @@ test('Rest is in a camp’s panel: the crew rests there, then the shift ends', a
   // A shift with nothing held: upkeep goes unpaid and the crew is hurt.
   const hungry = endShift(start).world;
   await page.getByTestId('lab2-end-shift').click();
+  await skipNight(page);
   await expect(hud).toHaveAttribute('data-health', String(hungry.turn.health));
   expect(hungry.turn.health).toBeLessThan(FRONTIER_SHIFT.startHealth);
   // Tap the camp, then Rest here.
@@ -1140,6 +1214,7 @@ test('Rest is in a camp’s panel: the crew rests there, then the shift ends', a
   await expect(page.getByTestId('lab2-camp-title')).toContainText(`Camp ${camp.id}`);
   const rested = restCrew(hungry, camp.id);
   await page.getByTestId('lab2-rest').click();
+  await skipNight(page);
   await expect(hud).toHaveAttribute('data-shift', String(rested.world.turn.shift));
   await expect(hud).toHaveAttribute('data-health', String(rested.world.turn.health));
   await expect(page.getByTestId('lab-hint')).toContainText('Rested.');
