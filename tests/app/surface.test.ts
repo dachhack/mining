@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { BLOCKS } from '../../src/data';
 import type { ItemStack } from '../../src/data';
 import { LAB_CAMP_LEVELS, LAB_NEW_CAMP_COST, LAB_SURFACE } from '../../src/data/labCamps';
-import { depthAt, hashState } from '../../src/engine';
+import { blockAt, depthAt, hashState } from '../../src/engine';
+import { newLabWorld } from '../../src/app/lab/labWorld';
 import {
   advanceWorld,
   bareSurface,
@@ -25,6 +26,7 @@ import {
 import type { CampWorld } from '../../src/app/lab/campWorld';
 import {
   APPLE_TREE,
+  NO_FEATURE,
   GRASS,
   TREE,
   advanceSurface,
@@ -407,5 +409,63 @@ describe('the lab data', () => {
     expect(a.surface.animals).toEqual(b.surface.animals);
     const state = a.lab.state;
     expect(generateSurface(state, 42).features.length).toBe(state.size.x * state.size.y);
+  });
+});
+
+describe('what grows where, and no coal at the surface (owner, after the PR #126 playtest)', () => {
+  it('grass, trees and apple trees grow only on dirt, on 50 seeds', () => {
+    const dirt = BLOCKS.dirt.code;
+    for (let seed = 1; seed <= 50; seed += 1) {
+      const w = newCampWorld(seed);
+      const size = w.lab.state.size;
+      let planted = 0;
+      w.surface.features.forEach((feature, i) => {
+        if (feature === NO_FEATURE) return;
+        planted += 1;
+        const block = blockAt(w.lab.state, { x: i % size.x, y: Math.floor(i / size.x), z: 0 });
+        expect(block, `seed ${seed}, square ${i}`).toBe(dirt);
+      });
+      // Still plenty of plants.
+      expect(planted).toBeGreaterThan(size.x * size.y * 0.3);
+    }
+  });
+
+  it('a coal seam on the top layer is stone in Lab 2; coal deeper down stays', () => {
+    const coal = BLOCKS.coalSeam.code;
+    const becomes = BLOCKS[LAB_SURFACE.surfaceCoalBecomes].code;
+    let swapped = 0;
+    for (let seed = 1; seed <= 50; seed += 1) {
+      const game = newLabWorld(seed).state;
+      const lab = newCampWorld(seed).lab.state;
+      // The cube's cells in order, the top layer (z = 0) first: x * y of them.
+      const topCells = game.size.x * game.size.y;
+      for (let i = 0; i < game.blocks.length; i += 1) {
+        const before = game.blocks[i];
+        const after = lab.blocks[i];
+        if (i < topCells && before === coal) {
+          expect(after).toBe(becomes);
+          swapped += 1;
+        } else if (after !== before) {
+          expect.fail(`seed ${seed}, cell ${i}: ${before} became ${after}`);
+        }
+      }
+    }
+    // The game's cube does have surface coal, so the swap was tested.
+    expect(swapped).toBeGreaterThan(0);
+  });
+
+  it('leaves the game’s own cube alone: a run on the same seed is unchanged', () => {
+    const before = hashState(newLabWorld(7).state);
+    newCampWorld(7);
+    expect(hashState(newLabWorld(7).state)).toBe(before);
+    // And Lab 1's world (the game's cube) still has its surface coal somewhere.
+    let coalOnTop = 0;
+    for (let seed = 1; seed <= 20; seed += 1) {
+      const s = newLabWorld(seed).state;
+      for (let i = 0; i < s.size.x * s.size.y; i += 1) {
+        if (s.blocks[i] === BLOCKS.coalSeam.code) coalOnTop += 1;
+      }
+    }
+    expect(coalOnTop).toBeGreaterThan(0);
   });
 });

@@ -136,6 +136,9 @@ export function generateSurface(
   const draw = random.draw;
   const features: Feature[] = new Array<Feature>(width * height).fill(NO_FEATURE);
   const apples = new Array<number>(width * height).fill(0);
+  // Plants grow only on some top blocks (dirt): never on stone, coal or other rock.
+  const growOn = new Set<number>(LAB_SURFACE.plantsGrowOn.map((id) => BLOCKS[id].code));
+  const fertile = (x: number, y: number): boolean => growOn.has(blockAt(state, { x, y, z: 0 }));
 
   // Trees, in clumps.
   for (let i = 0; i < LAB_SURFACE.treeClumps; i += 1) {
@@ -145,7 +148,9 @@ export function generateSurface(
     for (let y = Math.max(0, cy - r); y <= Math.min(height - 1, cy + r); y += 1) {
       for (let x = Math.max(0, cx - r); x <= Math.min(width - 1, cx + r); x += 1) {
         const inside = (x - cx) ** 2 + (y - cy) ** 2 <= r * r + r;
-        if (inside && draw() < LAB_SURFACE.treeChance) {
+        // The chance is drawn on every square, fertile or not, so the
+        // clumps fall where they did before this rule.
+        if (inside && draw() < LAB_SURFACE.treeChance && fertile(x, y)) {
           features[x + width * y] = TREE;
         }
       }
@@ -155,14 +160,18 @@ export function generateSurface(
   for (let i = 0; i < LAB_SURFACE.appleTrees; i += 1) {
     const x = between(draw, 0, width - 1);
     const y = between(draw, 0, height - 1);
-    if (features[x + width * y] === NO_FEATURE) {
+    if (features[x + width * y] === NO_FEATURE && fertile(x, y)) {
       features[x + width * y] = APPLE_TREE;
       apples[x + width * y] = LAB_SURFACE.applesPerTree;
     }
   }
   // Grass on most of what is left.
   for (let i = 0; i < features.length; i += 1) {
-    if (features[i] === NO_FEATURE && draw() < LAB_SURFACE.grassChance) {
+    if (
+      features[i] === NO_FEATURE &&
+      draw() < LAB_SURFACE.grassChance &&
+      fertile(i % width, Math.floor(i / width))
+    ) {
       features[i] = GRASS;
     }
   }

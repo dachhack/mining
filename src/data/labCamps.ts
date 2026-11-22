@@ -127,4 +127,17 @@ export const LAB_SURFACE = {
   clayBlobRadius: 2,
   /** What a clay block gives when mined. */
   clayPerBlock: 1,
+  /**
+   * Grass, trees and apple trees grow only on these top blocks: never on
+   * stone, coal or other rock (owner, after the PR #126 playtest: "Grass
+   * and doesn't grow on coal or stone").
+   */
+  plantsGrowOn: ['dirt'] as BlockId[],
+  /**
+   * No coal at the surface in Lab 2 (owner: "No coal at surface"): a coal
+   * seam in the top layer of the game's cube is this block instead. Stone,
+   * because seams lie in rock: a bare stone patch is where coal may lie
+   * beneath. The game's own cube is not changed (question 140).
+   */
+  surfaceCoalBecomes: 'stone' as BlockId,
 };
