@@ -3,7 +3,12 @@
 // not in src/data. The camps' radii and costs are in src/data/labCamps.ts.
 
 export const CAMP_LOOK = {
-  /** Squares across the map when a world opens: the first camp's ring and a little fog around it. */
+  /**
+   * Squares across the map when a world opens, centred on the first camp:
+   * about 26 px a square on a 390 px phone, big enough to tap. A level-1 ring
+   * (radius 9, 19 across) runs past the sides; the map drags and pinches to
+   * show the rest (decision note 0046).
+   */
   startCells: 14,
   /** How far the soft edge of the lit ring reaches into a lit square, as a part of the square. */
   edgeWidth: 0.55,

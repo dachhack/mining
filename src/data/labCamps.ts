@@ -24,15 +24,24 @@ export interface LabCampLevel {
  * A square can be mined if a camp whose radius covers it has a level that
  * can mine its top block; with several camps over a square, the best level
  * counts. A block kind in no level's list cannot be mined in Lab 2 at all.
+ *
+ * The radii are 9, 12 and 15 (they were 5, 8 and 12). The owner found camps
+ * had to touch to spread the light ("It's too close") and asked for a bigger
+ * light radius (question 138). A new camp's 3 x 3 must stand on lit ground,
+ * so it can go about one radius (8 squares) from the last; at radius 9 that
+ * lights about 130 new squares, three times as many as at 5. The world is
+ * only 32 x 32, so the radii cannot simply double: the first camp lights 29%
+ * of it at radius 9, a level-2 camp 48% and a level-3 camp 73% (decision
+ * note 0046).
  */
 export const LAB_CAMP_LEVELS: LabCampLevel[] = [
   {
-    radius: 5,
+    radius: 9,
     addsBlocks: ['dirt', 'rubble', 'stone', 'coalSeam', 'timberRoot'],
     upgradeCost: [],
   },
   {
-    radius: 8,
+    radius: 12,
     addsBlocks: ['hardRock'],
     upgradeCost: [
       { item: 'clay', count: 10 },
@@ -41,7 +50,7 @@ export const LAB_CAMP_LEVELS: LabCampLevel[] = [
     ],
   },
   {
-    radius: 12,
+    radius: 15,
     addsBlocks: ['ironOre', 'copperOre', 'crystal', 'unstableOre', 'relic', 'keystone'],
     upgradeCost: [
       { item: 'clay', count: 20 },

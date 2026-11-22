@@ -488,3 +488,41 @@ describe('a new world', () => {
     expect(again.lab.mined).toBe(w.lab.mined);
   });
 });
+
+describe('reach (owner, question 138: "Bigger light radius")', () => {
+  it('a new camp can go one radius out, onto the edge of the ring, and lights a wide band of new ground', () => {
+    const w = rich(world());
+    const r = campRadius(1);
+    // The farthest a new camp's 3 x 3 can stand east: its far edge on the ring's last square.
+    expect(placeRefusal(w, MID + r - 1, MID)).toBeNull();
+    // One square further and its far edge is in the fog.
+    expect(placeRefusal(w, MID + r, MID)).toBe('notShown');
+    // Lit by a whole ring, and newly lit by the next camp out.
+    let ring = 0;
+    for (let y = 0; y < SIDE; y += 1) {
+      for (let x = 0; x < SIDE; x += 1) {
+        if (inCircle(MID, MID, r, x, y)) ring += 1;
+      }
+    }
+    const fresh = newlyCovered(w, MID + r - 1, MID).length;
+    // On this 25 x 25 cube the new ring is cut by the cube's edge; even so,
+    // more than a quarter of it is new ground.
+    expect(fresh).toBeGreaterThan(ring / 4);
+  });
+
+  it('the rings grow with the level, and a level-1 camp sees at least 8 squares out', () => {
+    expect(campRadius(1)).toBeGreaterThanOrEqual(8);
+    for (let level = 2; level <= MAX_CAMP_LEVEL; level += 1) {
+      expect(campRadius(level)).toBeGreaterThan(campRadius(level - 1));
+    }
+  });
+
+  it('the first camp lights less than a third of a generated world, on 200 seeds', () => {
+    for (let seed = 1; seed <= 200; seed += 1) {
+      const w = newCampWorld(seed);
+      const size = w.lab.state.size;
+      const shown = sightMap(w).filter((s) => s === 'shown').length;
+      expect(shown, `seed ${seed}`).toBeLessThan((size.x * size.y) / 3);
+    }
+  });
+});
