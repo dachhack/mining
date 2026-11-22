@@ -307,16 +307,20 @@ export function startSquare(state: GameState): { x: number; y: number } {
 export function newCampWorld(seed: number): CampWorld {
   // The world is the engine's (plans A1 to A4): its cube with clay as real
   // blocks, its surface and animals, its first camp, and shift 1.
-  const frontier = createFrontier(seed);
+  return campWorldOf(createFrontier(seed));
+}
+
+/** Lab 2's world for any engine state: a new world, or a run loaded from a save (plan B1). */
+export function campWorldOf(state: FrontierState): CampWorld {
   const empty: CampWorld = {
-    lab: labWorldFromState(seed, frontier.cube),
+    lab: labWorldFromState(state.seed, state.cube),
     camps: [],
     seen: [],
     nextCampId: 1,
-    surface: bareSurface(frontier.cube),
+    surface: bareSurface(state.cube),
     turn: firstTurn(),
   };
-  return fromFrontier(empty, frontier);
+  return fromFrontier(empty, state);
 }
 
 // ----- A tap -----

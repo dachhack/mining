@@ -488,6 +488,8 @@ export {
   undoLast as undoLastAction,
 } from './frontier/undo';
 export type { LoggedAction, ShiftLog } from './frontier/undo';
+// Saving a run (plan B1).
+export { loadFrontier, saveFrontier } from './frontier/save';
 export type { Feature, FrontierAnimal, FrontierCamp, FrontierState } from './frontier/state';
 // The cube seen from above (design doc v0.2 section 3.1; issue #84): a
 // square's depth, its top block, and the level rule. `topBlockAt` reads the

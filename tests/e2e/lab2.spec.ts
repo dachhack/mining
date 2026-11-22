@@ -300,8 +300,8 @@ function fogSquare(world: CampWorld): Square {
   return { x: camp.x + campRadius(1) + 1, y: camp.y };
 }
 
-test('the start screen leads to lab 2, which opens in fog round one camp', async ({ page }) => {
-  await page.goto('/');
+test('Other versions leads to lab 2, which opens in fog round one camp', async ({ page }) => {
+  await page.goto('/#versions');
   await page.getByTestId('launch-lab2').click();
   await expect(page.getByTestId('lab2')).toBeVisible();
   const canvas = page.getByTestId('lab-map');
