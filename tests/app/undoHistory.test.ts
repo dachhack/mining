@@ -15,8 +15,7 @@ import {
   sightMap,
 } from '../../src/app/lab/campWorld';
 import type { CampStep, CampWorld } from '../../src/app/lab/campWorld';
-import { APPLE_TREE, TREE } from '../../src/app/lab/surface';
-import { emptyHistory, recordAction, undoCount, undoLast } from '../../src/app/lab/undoHistory';
+import { emptyHistory, noteAction, undoCount, undoLast } from '../../src/app/lab/undoHistory';
 import type { UndoHistory } from '../../src/app/lab/undoHistory';
 import { tapsUntil } from '../e2e/campPlan';
 
@@ -71,15 +70,16 @@ function player(start: CampWorld): {
   history: () => UndoHistory;
 } {
   let world = start;
-  let history = emptyHistory();
+  let history = emptyHistory(start);
   return {
     act: (step) => {
       const next = applyCampStep(world, step);
       if (next === world) return;
-      if (step.kind === 'endShift' || step.kind === 'rest') {
-        history = emptyHistory();
-      } else if (undoable(world, step)) {
-        history = recordAction(history, world, next, step);
+      if (step.kind === 'endShift' || step.kind === 'rest' || step.kind === 'close') {
+        history = emptyHistory(next);
+      } else {
+        // Every action that did something is noted; catches and apple picks as not undoable.
+        history = noteAction(history, step, undoable(world, step));
       }
       world = next;
     },
@@ -150,15 +150,24 @@ describe('undo (owner: "Undo button"; question 141)', () => {
     expect(p.world().turn.shift).toBe(
       start.turn.shift + (plan?.steps.filter((s) => s.kind === 'endShift').length ?? 0) + 1,
     );
-    const kinds = p.history().changes.map((c) => c.step.kind);
+    const kinds = p
+      .history()
+      .log.actions.filter((a) => a.undoable)
+      .map((a) => a.action.kind);
     expect(kinds).toContain('place');
     expect(kinds).toContain('demolish');
     expect(undoCount(p.history())).toBe(before.length);
 
     // Undo all the way back to the start of the shift.
     for (let k = before.length - 1; k >= 0; k -= 1) {
-      const undone = p.history().changes.at(-1);
-      const skip = new Set(undone?.plants.map((plant) => plant.index) ?? []);
+      // The squares whose plants the undo puts back are left out of the living world.
+      const was = before[k] ?? '';
+      const skip = new Set<number>();
+      const plantsNow = p.world().surface.features;
+      const plantsBefore = (JSON.parse(was) as { features: number[] }).features;
+      plantsBefore.forEach((f, i) => {
+        if (plantsNow[i] !== f) skip.add(i);
+      });
       const livingBefore = living(p.world(), skip);
       expect(p.undo(), `undo ${k}`).toBeNull();
       expect(playerState(p.world()), `the player's state before action ${k}`).toBe(before[k]);
@@ -192,7 +201,12 @@ describe('undo (owner: "Undo button"; question 141)', () => {
     if (digB === null) throw new Error('nothing more to dig');
     p.act({ kind: 'tap', ...digB });
     // Only the two digs are in the history.
-    expect(p.history().changes.map((c) => c.step)).toEqual([
+    expect(
+      p
+        .history()
+        .log.actions.filter((a) => a.undoable)
+        .map((a) => a.action),
+    ).toEqual([
       { kind: 'tap', ...dig },
       { kind: 'tap', ...digB },
     ]);
@@ -214,33 +228,15 @@ describe('undo (owner: "Undo button"; question 141)', () => {
     expect(p.undo()).toBe('nothing');
   });
 
-  it('will not put a felled tree back under an animal, and says why', () => {
+  it('starts again at the end of a shift: nothing from the last shift can be undone', () => {
     const start = newCampWorld(110);
-    const tree = squareWhere(start, 'felled');
-    expect(tree).not.toBeNull();
-    if (tree === null) return;
+    const dig = squareWhere(start, 'mined');
+    if (dig === null) throw new Error('nothing to dig');
     const p = player(start);
-    p.act({ kind: 'tap', ...tree });
-    expect(p.world().surface.features[tree.x + start.lab.state.size.x * tree.y]).not.toBe(TREE);
-    // An animal walks onto the cleared square.
-    const w = p.world();
-    const first = w.surface.animals[0];
-    if (first === undefined) throw new Error('no animal');
-    const moved: CampWorld = {
-      ...w,
-      surface: {
-        ...w.surface,
-        animals: [{ ...first, x: tree.x, y: tree.y }, ...w.surface.animals.slice(1)],
-      },
-    };
-    const result = undoLast(p.history(), moved);
-    expect(result !== null && 'refused' in result ? result.refused : '').toContain('An animal');
-    // Once it has gone, the tree comes back.
-    const back = undoLast(p.history(), w);
-    expect(
-      back !== null && 'world' in back
-        ? back.world.surface.features[tree.x + start.lab.state.size.x * tree.y]
-        : -1,
-    ).toSatisfy((f: number) => f === TREE || f === APPLE_TREE);
+    p.act({ kind: 'tap', ...dig });
+    expect(undoCount(p.history())).toBe(1);
+    p.act({ kind: 'endShift' });
+    expect(undoCount(p.history())).toBe(0);
+    expect(p.undo()).toBe('nothing');
   });
 });

@@ -89,7 +89,7 @@ import {
 import { resourceEntries } from './resources';
 import { PINS_KEY, labRecipes, parsePins, recipeById } from './recipes';
 import type { Recipe } from './recipes';
-import { emptyHistory, recordAction, undoCount, undoLast } from './undoHistory';
+import { emptyHistory, noteAction, undoCount, undoLast } from './undoHistory';
 import type { UndoHistory } from './undoHistory';
 import { shadowEdges } from './shadows';
 
@@ -248,7 +248,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     savePins(pins);
   }
   /** What the player did, to undo it (undoHistory.ts). A new world starts with none. */
-  let history: UndoHistory = emptyHistory();
+  let history: UndoHistory = emptyHistory(world);
   /**
    * Where each animal was before the last End shift, and when (screen time,
    * in milliseconds): it slides across from there (A4: animals move only
@@ -1312,7 +1312,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     if (next === world) {
       return;
     }
-    remember(world, next, { kind: 'place', x, y });
+    remember({ kind: 'place', x, y });
     mode = { kind: 'idle' };
     preview = new Set();
     setWorld(next);
@@ -1334,7 +1334,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     if (before === undefined || next === world) {
       return;
     }
-    remember(world, next, { kind: 'upgrade', id });
+    remember({ kind: 'upgrade', id });
     setWorld(next);
     setHint(`Camp ${id} is level ${before.level + 1}: a wider ring, harder blocks.`, false);
     addEffect({
@@ -1355,7 +1355,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
       setHint(why === 'noTaps' ? NO_TAPS_HINT : why === 'over' ? OVER_HINT : DEMOLISH_FIRST, true);
       return;
     }
-    remember(world, next, { kind: 'demolish', id });
+    remember({ kind: 'demolish', id });
     mode = { kind: 'idle' };
     setWorld(next);
     setHint('Camp demolished: its ground can be mined now.', false);
@@ -1400,7 +1400,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     if (result.report === null) {
       return;
     }
-    history = emptyHistory();
+    history = emptyHistory(result.world);
     showUndo();
     effects = [];
     mode = { kind: 'idle' };
@@ -1427,21 +1427,22 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     }
     closeAskedAt = -Infinity;
     closeButton.textContent = 'Close mine';
-    history = emptyHistory();
+    const closed = closeMine(world);
+    history = emptyHistory(closed);
     showUndo();
     mode = { kind: 'idle' };
-    setWorld(closeMine(world));
+    setWorld(closed);
     setHint(OVER_HINT, false);
   }
 
   // ----- Undo -----
 
   /**
-   * Note an action about to change the world: `before` is the world just
-   * before it, brought up to the lab clock.
+   * Note an action that did something, for Undo (undoHistory.ts). A catch
+   * or an apple pick is noted as not undoable (question 141).
    */
-  function remember(before: CampWorld, after: CampWorld, step: CampStep): void {
-    history = recordAction(history, before, after, step);
+  function remember(step: CampStep, undoable = true): void {
+    history = noteAction(history, step, undoable);
     showUndo();
   }
 
@@ -1462,10 +1463,10 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
   }
 
   /**
-   * Undo the last undoable action: only the player's own change is taken
-   * back (blocks, items, camps, fog, plants). The animals, the apples and
-   * the lab clock are left alone, and caught animals and picked apples stay
-   * so (owner, question 141; decision note 0049). The camera stays put.
+   * Undo the last undoable action of the shift: the engine plays the shift
+   * again without it (plan A5), so the player's own change is taken back
+   * exactly and its tap comes back. Caught animals and picked apples stay
+   * so (owner, question 141). The camera stays put.
    */
   function undo(): void {
     const result = undoLast(history, world);
@@ -1483,7 +1484,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     setWorld(result.world);
     const left = undoCount(history);
     setHint(
-      `Undone: ${describeStep(result.undone.step)}.${left === 0 ? ' Nothing more to undo.' : ''}`,
+      `Undone: ${describeStep(result.undone)}.${left === 0 ? ' Nothing more to undo.' : ''}`,
       false,
     );
     showUndo();
@@ -1567,10 +1568,10 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     if (result.kind === 'harvested' && result.harvest !== null) {
       effects = effects.filter((e) => !(e.x === x && e.y === y));
       // Cut grass and felled trees can be undone; a caught animal or a picked
-      // apple cannot (owner, question 141), so they are not remembered.
-      if (result.harvest.kind === 'grass' || result.harvest.kind === 'felled') {
-        remember(world, result.world, { kind: 'tap', x, y });
-      }
+      // apple cannot (owner, question 141): it is noted, so Undo plays it
+      // again, but never takes it back.
+      const undoable = result.harvest.kind === 'grass' || result.harvest.kind === 'felled';
+      remember({ kind: 'tap', x, y }, undoable);
       setWorld(result.world);
       setHint(HARVEST_HINTS[result.harvest.kind], false);
       addEffect({
@@ -1586,7 +1587,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     }
     // Mined.
     effects = effects.filter((e) => !(e.x === x && e.y === y));
-    remember(world, result.world, { kind: 'tap', x, y });
+    remember({ kind: 'tap', x, y });
     setWorld(result.world);
     setHint(HINT, false);
     addEffect({
@@ -1628,7 +1629,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     clearPrepared();
     isPrepared = false;
     world = newCampWorld(randomSeed(Math.random));
-    history = emptyHistory();
+    history = emptyHistory(world);
     showUndo();
     lastStep.clear();
     effects = [];
