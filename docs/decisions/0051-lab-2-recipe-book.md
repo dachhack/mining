@@ -35,11 +35,14 @@ The tray's top row, the one showing what you are building: until now, the ⛺ Ne
 - **One source for costs.** The recipes (`src/app/lab/recipes.ts`) are made from `LAB_NEW_CAMP_COST` and `LAB_CAMP_LEVELS` in `src/data/labCamps.ts`. These are the same values the camp tool and a camp's panel use, so the book and the actions always agree. A unit test checks it.
 - **Placing and upgrading** work as before, from the map, the camp tool and a camp's panel.
 
-## Choices (question 143, assumed)
+## Choices (question 143, answered)
 
 - **New camp is pinned at first,** so the row starts out showing what it showed before the book.
 - **Pins stay through New world and Undo,** because they are the player's plan, not part of the world.
-- **Pins are not saved between visits to Lab 2.** Saving them would be a small change if the owner wants it.
+- **Pins are saved** (owner, question 143: "Pins should save when you close the app"). They are kept in the browser's localStorage under `mining-game.lab2.pins` and come back when Lab 2 opens again.
+  - Reading and writing are wrapped so a browser without storage still works; the pins then last until Lab 2 closes.
+  - If nothing was saved, or what was saved cannot be read, the first pins (New camp) are used. Ids the book doesn't know are dropped, and each id counts once (`parsePins` in `recipes.ts`).
+  - An empty list is kept, because the player unpinned everything.
 - **The camp tool and the pinned New camp card are separate.** The tool is always there, even when nothing is pinned. The card only tracks what a camp needs; a tap on it also opens the tool.
 
 ## Tests
@@ -48,7 +51,9 @@ The tray's top row, the one showing what you are building: until now, the ⛺ Ne
   - the book holds New camp, then an upgrade to each level above 1, in order;
   - each recipe's cost is the data's own;
   - New camp is pinned at first.
+- **Unit (`parsePins`):** saved pins are read back in order; an empty list is kept; nothing saved, or bad data (not JSON, not a list, not names, only unknown ids), gives the first pins; unknown ids and repeats are dropped.
 - **E2e:**
+  - Pin both upgrades and unpin New camp, then reload the page: the same two are pinned, in order, and New world keeps them.
   - Open the book: every recipe shows its costs. Pin both upgrades, close the book: three cards. Gather eight times: every pinned material's have/need matches the counts. Unpin level 3: its card goes. Tap the New camp card: the camp tool opens. Tap the level-2 card: a level-1 camp's panel opens. Through all of it, the map and the tray never move.
   - At 320 px wide, with three cards pinned, the strip scrolls sideways (the page does not). The last card's × can be reached and works, and the tray keeps its height.
   - The existing system-bar tests still check the tray at rest, with its new row, above the gesture bar.

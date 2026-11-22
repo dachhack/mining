@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { LAB_CAMP_LEVELS, LAB_NEW_CAMP_COST } from '../../src/data/labCamps';
 import { MAX_CAMP_LEVEL, upgradeCostFrom } from '../../src/app/lab/campWorld';
-import { FIRST_PINS, labRecipes, recipeById } from '../../src/app/lab/recipes';
+import { FIRST_PINS, labRecipes, parsePins, recipeById } from '../../src/app/lab/recipes';
 
 describe('the recipe book', () => {
   it('holds a new camp, then an upgrade to each level above 1, in order', () => {
@@ -23,5 +23,46 @@ describe('the recipe book', () => {
   it('pins a new camp at first, and knows no recipe it was not given', () => {
     expect(FIRST_PINS).toEqual(['new-camp']);
     expect(recipeById('upgrade-9')).toBeNull();
+  });
+});
+
+describe('saved pins (owner, question 143: "Pins should save when you close the app")', () => {
+  it('read back what was saved, in order', () => {
+    expect(parsePins(JSON.stringify(['upgrade-2', 'new-camp']))).toEqual(['upgrade-2', 'new-camp']);
+  });
+
+  it('keep an empty list: the player unpinned everything', () => {
+    expect(parsePins('[]')).toEqual([]);
+  });
+
+  it('fall back to the first pins when nothing was saved', () => {
+    expect(parsePins(null)).toEqual(FIRST_PINS);
+  });
+
+  it('fall back to the first pins when what was saved is bad', () => {
+    for (const bad of [
+      '',
+      'not json',
+      '{"pins":1}',
+      '"new-camp"',
+      '[1, 2]',
+      '[null]',
+      '["nope"]',
+    ]) {
+      expect(parsePins(bad), bad).toEqual(FIRST_PINS);
+    }
+  });
+
+  it('drop ids the book does not know, and repeats', () => {
+    expect(parsePins(JSON.stringify(['upgrade-3', 'gone', 'upgrade-3', 'new-camp']))).toEqual([
+      'upgrade-3',
+      'new-camp',
+    ]);
+  });
+
+  it('never hand out the shared first-pins list itself', () => {
+    const pins = parsePins(null);
+    pins.push('upgrade-2');
+    expect(FIRST_PINS).toEqual(['new-camp']);
   });
 });

@@ -1214,3 +1214,33 @@ test('the pinned row scrolls sideways at 320 px: every card can be reached, the 
   // The book and the pins never changed the tray's height.
   expect(await page.getByTestId('lab2-tray').boundingBox()).toEqual(trayBefore);
 });
+
+test('pins are saved: after a reload the same recipes are pinned (owner, question 143)', async ({
+  page,
+}) => {
+  await openLab2(page);
+  // First visit: a new camp is pinned.
+  await expect(page.getByTestId('lab2-pins').locator('.lab2-pin')).toHaveCount(1);
+  await page.getByTestId('lab2-book').click();
+  for (const id of ['upgrade-2', 'upgrade-3']) {
+    await page.getByTestId(`lab2-recipe-pin-${id}`).scrollIntoViewIfNeeded();
+    await page.getByTestId(`lab2-recipe-pin-${id}`).click();
+  }
+  await page.getByTestId('lab2-book-close').click();
+  // And unpin the new camp, so the saved list is not just the first pins.
+  await page.getByTestId('lab2-unpin-new-camp').click();
+  const pinned = async (): Promise<string[]> =>
+    page
+      .getByTestId('lab2-pins')
+      .locator('.lab2-pin')
+      .evaluateAll((cards) => cards.map((c) => (c as HTMLElement).dataset['testid'] ?? ''));
+  await expect.poll(pinned).toEqual(['lab2-pin-upgrade-2', 'lab2-pin-upgrade-3']);
+
+  // Close and open again: the same pins, in the same order.
+  await page.reload();
+  await expect(page.getByTestId('lab-seed')).toHaveText(`Seed ${SEED}`);
+  await expect.poll(pinned).toEqual(['lab2-pin-upgrade-2', 'lab2-pin-upgrade-3']);
+  // New world keeps them too.
+  await page.getByRole('button', { name: 'New world' }).click();
+  await expect.poll(pinned).toEqual(['lab2-pin-upgrade-2', 'lab2-pin-upgrade-3']);
+});

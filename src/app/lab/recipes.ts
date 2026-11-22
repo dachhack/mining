@@ -43,3 +43,39 @@ export function recipeById(id: string): Recipe | null {
 
 /** The recipes pinned when Lab 2 opens: a new camp, as the row showed before the book. */
 export const FIRST_PINS: string[] = ['new-camp'];
+
+/**
+ * Where the pinned recipes are saved in the browser's localStorage, so they
+ * come back when Lab 2 opens again (owner, question 143: "Pins should save
+ * when you close the app").
+ */
+export const PINS_KEY = 'mining-game.lab2.pins';
+
+/**
+ * The pins saved as `text` (what localStorage held), or the first pins if
+ * nothing was saved or what was saved cannot be read. Saved pins are a JSON
+ * list of recipe ids; ids the book does not know are dropped, and each id
+ * counts once. An empty list is kept: the player unpinned everything.
+ */
+export function parsePins(text: string | null): string[] {
+  if (text === null) {
+    return [...FIRST_PINS];
+  }
+  let saved: unknown;
+  try {
+    saved = JSON.parse(text);
+  } catch {
+    return [...FIRST_PINS]; // not JSON at all
+  }
+  if (!Array.isArray(saved) || !saved.every((id) => typeof id === 'string')) {
+    return [...FIRST_PINS]; // not a list of names
+  }
+  const known: string[] = [];
+  for (const id of saved as string[]) {
+    if (recipeById(id) !== null && !known.includes(id)) {
+      known.push(id);
+    }
+  }
+  // A non-empty list with no id the book knows is not a real choice: start over.
+  return known.length === 0 && saved.length > 0 ? [...FIRST_PINS] : known;
+}
