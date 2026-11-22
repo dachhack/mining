@@ -123,18 +123,20 @@ Question 152 (default, owner told):
 | Caverns under the surface: breaking in drops the square to rubble  | **Stays**          | Lab 2's mining already does this                                                |
 | Close the mine (ends the run alive)                                | **Stays**          | The only way to finish until contracts                                          |
 | Resting at a camp restores crew health                             | **Stays**          | Crew health needs a way back                                                    |
-| Pit walls slump, cracks, supports                                  | Dropped for now    | A hazard                                                                        |
+| Pit walls slump, cracks, supports                                  | **Removed**        | The level rule leaves no steep walls (owner, question 153; note 0053)           |
 | Water, lava, gas                                                   | Dropped for now    | Hazards. Their pockets stay in the cube as plain blocks or spaces, with no flow |
 | Unstable ore and explosives                                        | Dropped for now    | A hazard and its tool                                                           |
 | Tells (damp, pitted, warm stone)                                   | Dropped for now    | Only useful with the hazards                                                    |
 | Pumps, vents, sealant, scanner, drill                              | Dropped for now    | Camp tools for the hazards                                                      |
 | Smelting ingots, the old camp recipes                              | Dropped for now    | The recipe book replaces crafting. Recipes can be added to it later             |
-| Fuel and crafting fuel from coal                                   | Dropped for now    | Upkeep is food and wood (question 147)                                          |
+| Fuel and crafting fuel from coal                                   | Dropped for now    | Upkeep is food and wood (147). First back, with the deep bands (153)            |
 | The old camps: camp kit, mining discount near a camp, decommission | Replaced           | By Lab 2's camps: place, upgrade, demolish, reach                               |
-| Depth bands                                                        | **Stays**          | They shape the cube. Ore and keystones stay deep, behind camp levels            |
+| Depth bands                                                        | **Stays**          | They shape the cube; deeper ore bands come back with fuel (question 153)        |
 | Contracts                                                          | Not built yet (M4) | Unchanged plan                                                                  |
 
-**First back:** wall slumps and supports (owner, question 153). After that, from the rest of the list: water; gas; lava; explosives and unstable ore; tells and scanning; pumps, vents and sealant; the drill; smelting and ingots; fuel.
+**First back:** fuel and depth bands: coal-fuelled digging and the deeper ore bands (owner, question 153). After that, from the rest of the list: water; gas; lava; explosives and unstable ore; tells and scanning; pumps, vents and sealant; the drill; smelting and ingots.
+
+**Removed for good:** wall slumps and supports. The owner: "With the one level down only rule from the lab, wall slump shouldn't be a thing any more." A square is never more than one level below its neighbours, so there are no steep walls to slump and nothing to support (decision note 0053).
 
 ---
 
@@ -220,7 +222,7 @@ Each PR is small, keeps the APK working, has its own tests, and says whether it 
 
 ### Phase D: the old rules come back, one PR each, in your order
 
-First: **wall slumps and supports** (owner, question 153). Then the rest in an order you choose then. Each is its own small batch, playtested before the next.
+First: **fuel and depth bands**, coal-fuelled digging and the deeper ore bands (owner, question 153). Then the rest in an order you choose then. Wall slumps and supports do not come back: they are removed for good (decision note 0053). Each is its own small batch, playtested before the next.
 
 ---
 
