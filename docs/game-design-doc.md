@@ -154,7 +154,7 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 
 - **Health:** [Default] 10.
 - **What hurts it:** hunger only, for now (owner, question 148). Each item of upkeep that cannot be paid costs 1 health.
-- **Rest** restores full health, then the shift ends as with End shift, so that shift's upkeep is still paid (question 156, assumed: there is no crew position, so rest is not tied to a camp).
+- **Rest** restores full health, then the shift ends as with End shift, so that shift's upkeep is still paid. For now it is usable anywhere; the owner has answered "Only at a camp" (question 156), and the rules PR after B4 moves Rest into a camp's panel.
 - **At 0 health** the crew is lost and the run ends.
 
 ### 5.1 How a run ends, and saving
@@ -231,10 +231,14 @@ The targets come with the contracts (section 8).
 
 ## 13. Open questions
 
-1. **Wood:** trees never regrow, but wood upkeep never stops; long runs must keep expanding to find trees (question 157).
-2. **Grass** piles up: only new camps use it (question 158).
-3. **Animals as food** compete with upgrades that need them (question 155).
-4. Run length targets and the contracts (sections 8 and 12).
-5. Art direction and audio: pixel art chosen (decision note 0004); details open.
-6. Monetisation: not yet discussed.
-7. Game title.
+1. Run length targets and the contracts (sections 8 and 12).
+2. Art direction and audio: pixel art chosen (decision note 0004); details open.
+3. Monetisation: not yet discussed.
+4. Game title.
+
+Answered by the owner on 2026-11-22, and built in the rules PR after B4, which updates sections 4.2, 5 and 11 to match:
+
+- **Wood** (question 157): "Trees regrow slowly." A felled tree grows back after a [Default] number of shifts (about 15).
+- **Grass** (question 158): "Feed animals / food." Grass pays food upkeep at a worse rate than apples: 2 grass for 1 food, after apples and before animals.
+- **Animals as food** (question 155): "Yes, that's fine." Kept as built.
+- **Rest** (question 156): "Only at a camp." Rest is started from a camp's panel.
