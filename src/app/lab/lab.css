@@ -416,20 +416,36 @@ body[data-screen='lab2'] {
 .lab2-tray-head {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 56px;
+  gap: 8px;
+  /* A fixed height: pinning or unpinning a recipe never moves the map. */
+  height: 56px;
+  flex: 0 0 auto;
 }
 
+/* The recipe book's button, at the start of the row. */
+.lab .lab2-book-button {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 52px;
+  padding: 0;
+  border-radius: 14px;
+  font-size: 1.35rem;
+  line-height: 1;
+  color: #f2e2c4;
+  background: linear-gradient(180deg, #3b3129, #2c241e);
+  border: 1px solid #6b5a45;
+}
+
+/* The camp tool: a tent, then choose where on the map. */
 .lab .lab2-tool {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  width: 52px;
   height: 52px;
-  padding: 0 16px 0 12px;
+  padding: 0;
   border-radius: 14px;
-  font-size: 1rem;
-  font-weight: 700;
   color: #1b1510;
   background: linear-gradient(180deg, #f2c983, #cf9550);
   border: 1px solid #f3d29c;
@@ -452,20 +468,147 @@ body[data-screen='lab2'] {
   line-height: 1;
 }
 
-.lab2-tray-side {
-  flex: 1 1 auto;
+/* The pinned recipes: one strip that scrolls sideways, its right edge fading. */
+.lab2-pins {
+  flex: 1 1 0;
   min-width: 0;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  mask-image: linear-gradient(90deg, #000 calc(100% - 14px), transparent);
+}
+
+.lab2-pins::-webkit-scrollbar {
+  display: none;
+}
+
+.lab2-pins-empty {
+  font-size: 0.8rem;
+  color: #8f8578;
+  white-space: nowrap;
+}
+
+/* One pinned recipe: its icon and what it needs, then an x to unpin it. */
+.lab2-pin {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  height: 44px;
+  border-radius: 12px;
+  background: #26201b;
+  border: 1px solid #4a3e34;
+}
+
+.lab .lab2-pin-go {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 4px 0 8px;
+  background: none;
+  border: none;
+  color: inherit;
+}
+
+.lab2-pin .lab2-cost {
+  overflow: visible;
+  mask-image: none;
+}
+
+.lab .lab2-pin-remove {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 100%;
+  padding: 0;
+  font-size: 1.1rem;
+  color: #a89a86;
+  background: none;
+  border: none;
+  border-left: 1px solid #3a322c;
+}
+
+/* A recipe's icon: a tent, and the level an upgrade makes in a gold tag. */
+.lab2-recipe-icon {
+  position: relative;
+  flex: 0 0 auto;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.lab2-recipe-level {
+  position: absolute;
+  right: -7px;
+  bottom: -5px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 2px;
+  border-radius: 7px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  line-height: 14px;
+  text-align: center;
+  color: #1b1209;
+  background: #f1b85a;
+}
+
+/* The book, in the tray: its list scrolls inside the tray, so the tray never grows. */
+.lab2-book-list {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.lab2-tray-note {
+.lab2-recipe {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 4px 3px 6px;
+  border-radius: 10px;
+  background: #221c18;
+}
+
+.lab2-recipe-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lab2-recipe-name {
   font-size: 0.75rem;
-  color: #8f8578;
+  line-height: 1.2;
+  font-weight: 650;
+  color: #e9dcc6;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.lab .lab2-recipe-pin {
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: #1b1510;
+  background: linear-gradient(180deg, #f2c983, #cf9550);
+  border: 1px solid #f3d29c;
+}
+
+.lab .lab2-recipe-pin.lab2-recipe-pinned {
+  color: #d8f0c4;
+  background: #24331d;
+  border-color: #4f7a3a;
 }
 
 /* The cost of a camp or an upgrade: what you have of each item, out of what it costs. */
@@ -728,4 +871,35 @@ body[data-screen='lab2'] {
 
 .lab .lab2-undo:disabled {
   opacity: 0.45;
+}
+
+/* In the book, rows are compact, so two or three show at once. */
+.lab2-recipe .lab2-cost-chip {
+  height: 22px;
+  font-size: 0.75rem;
+}
+
+.lab2-recipe .lab2-cost-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* The camp tool's tent has a "+": it builds one; a pinned card's tent only shows what one needs. */
+.lab2-tool-plus {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 14px;
+  height: 14px;
+  border-radius: 7px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 14px;
+  text-align: center;
+  color: #1b1209;
+  background: #f1b85a;
+}
+
+.lab .lab2-tool {
+  position: relative;
 }

@@ -30,6 +30,7 @@ import type { CampWorld } from '../../src/app/lab/campWorld';
 import { GRASS, TREE } from '../../src/app/lab/surface';
 import { planLevel2, tapsUntil } from './campPlan';
 import { emptyHistory, recordAction, undoCount, undoLast } from '../../src/app/lab/undoHistory';
+import { labRecipes } from '../../src/app/lab/recipes';
 import type { Square } from './campPlan';
 
 test.use({ viewport: { width: 390, height: 844 } });
@@ -1091,4 +1092,125 @@ test('an upgrade’s four costs can all be reached: the cost row scrolls sideway
   expect(chip.x + chip.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 1);
   // The Upgrade button is whole and on screen beside it.
   await expect(page.getByTestId('lab2-upgrade')).toBeInViewport({ ratio: 1 });
+});
+
+// The recipe book (owner, after the PR #128 playtest: "We need a recipe book
+// on that line ... select which item or upgrade you are gathering resources
+// for. It then adds that item's icon and needed materials to that row ...
+// The row is scrollable horizontally.").
+test('the recipe book: pin two recipes, watch them fill as you gather, unpin one; the map never moves', async ({
+  page,
+}) => {
+  const canvas = await openLab2(page);
+  const before = await canvas.boundingBox();
+  const trayBefore = await page.getByTestId('lab2-tray').boundingBox();
+  const unmoved = async (): Promise<void> => {
+    expect(await canvas.boundingBox()).toEqual(before);
+    expect(await page.getByTestId('lab2-tray').boundingBox()).toEqual(trayBefore);
+  };
+  // At first a new camp is pinned, as the row showed before the book.
+  await expect(page.getByTestId('lab2-pin-new-camp')).toBeVisible();
+
+  // Open the book: every recipe, with its costs from the lab's data.
+  await page.getByTestId('lab2-book').click();
+  await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'book');
+  await unmoved();
+  for (const recipe of labRecipes()) {
+    await expect(page.getByTestId(`lab2-recipe-${recipe.id}`)).toBeAttached();
+    for (const stack of recipe.cost) {
+      await expect(page.getByTestId(`lab2-recipe-${recipe.id}-${stack.item}`)).toContainText(
+        `0/${stack.count}`,
+      );
+    }
+  }
+  // Pin both upgrades.
+  for (const id of ['upgrade-2', 'upgrade-3']) {
+    await page.getByTestId(`lab2-recipe-pin-${id}`).scrollIntoViewIfNeeded();
+    await page.getByTestId(`lab2-recipe-pin-${id}`).click();
+    await expect(page.getByTestId(`lab2-recipe-pin-${id}`)).toHaveText('Pinned ✓');
+    await unmoved();
+  }
+  await page.getByTestId('lab2-book-close').click();
+  await expect(page.getByTestId('lab2-pins').locator('.lab2-pin')).toHaveCount(3);
+  await unmoved();
+
+  // Gather: the pinned cards' have/need fill in from the counts.
+  const start = newCampWorld(SEED);
+  const camp = start.camps[0] ?? { x: 0, y: 0 };
+  const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp);
+  expect(plan).not.toBeNull();
+  if (plan === null) return;
+  let world = start;
+  for (const square of plan.taps.slice(0, 8)) {
+    world = campTap(world, square.x, square.y).world;
+    await tapSquare(page, canvas, square);
+  }
+  await expect.poll(() => counts(page)).toEqual(expectedCounts(world));
+  for (const id of ['new-camp', 'upgrade-2', 'upgrade-3']) {
+    const recipe = labRecipes().find((r) => r.id === id);
+    for (const stack of recipe?.cost ?? []) {
+      const have = Math.min(world.lab.counts.get(stack.item) ?? 0, stack.count);
+      await expect(page.getByTestId(`lab2-pin-${id}-${stack.item}`)).toContainText(
+        `${have}/${stack.count}`,
+      );
+    }
+  }
+  expect(world.lab.counts.get('wood') ?? 0).toBeGreaterThan(0);
+
+  // Unpin level 3: its card goes; the others stay.
+  await page.getByTestId('lab2-pins').evaluate((el) => {
+    el.scrollLeft = el.scrollWidth;
+  });
+  await page.getByTestId('lab2-unpin-upgrade-3').click();
+  await expect(page.getByTestId('lab2-pin-upgrade-3')).toHaveCount(0);
+  await expect(page.getByTestId('lab2-pins').locator('.lab2-pin')).toHaveCount(2);
+  await unmoved();
+
+  // A card goes to where its recipe is built: the camp tool for a new camp,
+  // the panel of a level-1 camp for an upgrade to level 2.
+  await page.getByTestId('lab2-pin-new-camp').locator('.lab2-pin-go').click();
+  await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'placing');
+  await page.getByTestId('lab2-place-cancel').click();
+  await page.getByTestId('lab2-pins').evaluate((el) => {
+    el.scrollLeft = el.scrollWidth;
+  });
+  await page.getByTestId('lab2-pin-upgrade-2').locator('.lab2-pin-go').click();
+  await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'camp');
+  await expect(page.getByTestId('lab2-camp-title')).toContainText('Level 1');
+  await unmoved();
+});
+
+test('the pinned row scrolls sideways at 320 px: every card can be reached, the tray keeps its height', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await openLab2(page);
+  const trayBefore = await page.getByTestId('lab2-tray').boundingBox();
+  await page.getByTestId('lab2-book').click();
+  for (const id of ['upgrade-2', 'upgrade-3']) {
+    await page.getByTestId(`lab2-recipe-pin-${id}`).scrollIntoViewIfNeeded();
+    await page.getByTestId(`lab2-recipe-pin-${id}`).click();
+  }
+  await page.getByTestId('lab2-book-close').click();
+  const strip = page.getByTestId('lab2-pins');
+  await expect(strip.locator('.lab2-pin')).toHaveCount(3);
+  // More than fits: the strip scrolls, not the page.
+  const sizes = await strip.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
+  expect(sizes.scroll).toBeGreaterThan(sizes.client);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+  // Scrolled to its end, the last card's × is inside the strip and works.
+  await strip.evaluate((el) => {
+    el.scrollLeft = el.scrollWidth;
+  });
+  const stripBox = await strip.boundingBox();
+  const last = await page.getByTestId('lab2-unpin-upgrade-3').boundingBox();
+  expect(stripBox).not.toBeNull();
+  expect(last).not.toBeNull();
+  if (stripBox === null || last === null) return;
+  expect(last.x + last.width).toBeLessThanOrEqual(stripBox.x + stripBox.width + 1);
+  expect(last.x).toBeGreaterThanOrEqual(stripBox.x - 1);
+  await page.getByTestId('lab2-unpin-upgrade-3').click();
+  await expect(strip.locator('.lab2-pin')).toHaveCount(2);
+  // The book and the pins never changed the tray's height.
+  expect(await page.getByTestId('lab2-tray').boundingBox()).toEqual(trayBefore);
 });
