@@ -1470,7 +1470,9 @@ export function mountCampLab(
   function showHud(): void {
     const turn = world.turn;
     hudShift.textContent = `Shift ${turn.shift}`;
-    hudTaps.textContent = `⚡ ${turn.tapsLeft}/${FRONTIER_SHIFT.taps}`;
+    // Taps left only: with 100 a shift, "100/100" crowds Close mine on a 320 px phone.
+    hudTaps.textContent = `⚡ ${turn.tapsLeft}`;
+    hudTaps.setAttribute('aria-label', `${turn.tapsLeft} of ${FRONTIER_SHIFT.taps} taps left`);
     hudHealth.textContent = `♥ ${turn.health}/${FRONTIER_SHIFT.startHealth}`;
     hud.dataset['shift'] = String(turn.shift);
     hud.dataset['taps'] = String(turn.tapsLeft);

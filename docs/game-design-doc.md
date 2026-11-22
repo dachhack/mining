@@ -11,7 +11,7 @@ Working title: **Mining Game**. A turn-based roguelike for Android and iOS. The 
 - **Fog of war:** camps light a circle, ground once lit stays greyed, the rest is dark.
 - **The surface:** grass, trees, apple trees and roaming animals, gathered with a tap; clay just under the ground.
 - **Camps** are placed on level ground, upgraded to see further and dig harder rock, and demolished; a recipe book shows what things cost.
-- **Shifts of 10 taps**, every tap costing 1, with upkeep in wood and food; hunger is the only harm.
+- **Shifts of 100 taps**, every tap costing 1, with upkeep in wood and food; hunger is the only harm.
 - **The old hazards** (slumps, water, lava, gas, explosions), tells, AP, fuel and crafting are gone for now. Wall slumps and supports are gone for good (question 153, decision note 0053). Fuel and depth bands come back first.
 
 v0.2 is in the git history, as v0.1 is.
@@ -33,7 +33,7 @@ v0.2 is in the git history, as v0.1 is.
 | Level rule | A square's top block may be mined only if, afterwards, that square is no more than 1 level lower than each of its 4 face neighbours (section 4.3) |
 | Visibility | **Fog of war** (owner: "Lab 2 becomes the game"). Camps light a circle around them. A square once lit and now outside every circle is shown greyed and cannot be mined; a square never lit is dark (section 3.4) |
 | Genre | Resource gathering and management; roguelike |
-| Pacing | **Turn-based, in shifts of [Default] 10 taps.** Every tap that does something costs 1 (owner, questions 145 and 146: "Fixed number of taps"). End shift moves the world on (section 4) |
+| Pacing | **Turn-based, in shifts of [Default] 100 taps.** Every tap that does something costs 1 (owner, questions 145 and 146: "Fixed number of taps"). End shift moves the world on (section 4) |
 | Player | No avatar. A tap on a lit square takes what is on it (an animal, grass, an apple, a tree) or mines its top block. An abstract **crew** with a health bar does the work (section 5) |
 | Hazards | **None for now** (owner: "Lab 2 becomes the game"). The old ones come back one at a time, fuel and depth bands first; wall slumps and supports are retired (question 153, section 10) |
 | Harm | **Hunger only** (owner, question 148): each item of upkeep that cannot be paid costs the crew 1 health (section 5) |
@@ -110,7 +110,7 @@ A run is a sequence of **shifts** (owner: "Keep shifts").
 
 ### 4.1 The player's turn
 
-- **Taps:** [Default] 10 a shift (`FRONTIER_SHIFT.taps`).
+- **Taps:** [Default] 100 a shift (`FRONTIER_SHIFT.taps`; owner, after the playtest of PR #146: "100 turns per shift").
 - **What costs a tap:** every action that does something costs 1 tap. That covers mining, cutting grass, felling a tree, picking an apple, catching an animal, and placing, upgrading or demolishing a camp. An action that does nothing (a tap in the fog, a block too hard or too steep) costs nothing.
 - **No taps left:** every action is refused until End shift.
 - **End shift** can be pressed with taps left; they are lost.
@@ -129,7 +129,7 @@ In this order:
 
 1. **Animals:** each takes 3 steps to an open face neighbour. Every 3rd shift a new one walks in at the map's edge, while there are fewer than 8 (question 149).
 2. **Apples:** an apple tree picked bare has its 3 apples back 5 shifts later (question 150).
-3. **Trees** (owner, question 157: "Trees regrow slowly"): a felled tree leaves a stump, and the same kind of tree grows back on it 15 shifts later; an apple tree comes back with its 3 apples. Nothing grows back on a square mined since (the stump is dug out) or under a camp. Where an animal stands on the stump, it waits a shift more.
+3. **Trees** (owner, question 157: "Trees regrow slowly"): a felled tree leaves a stump, and the same kind of tree grows back on it 15 shifts later; an apple tree comes back with its 3 apples. A tree grows back unless the ground directly under it is mined (owner, after the playtest of PR #146): nothing grows back on a square mined since, because the stump is dug out. A camp built over a tree leaves a stump, and a stump under a camp waits: it grows back once the camp is demolished. Where an animal stands on the stump, it waits a shift more (decision note 0058).
 4. **Upkeep** (owner, question 147: "Food and wood"):
    - 1 wood every shift;
    - 1 food every 2nd shift: 3 grass, else an apple, else an animal (questions 155 and 158; decision note 0057);
@@ -223,10 +223,13 @@ Each rule that comes back is its own small batch, playtested before the next.
 
 ## 12. Run length targets [Default]
 
-Not set for the new game yet. The simulator (`npm run sim`) measures runs; at the default numbers, with scripted players over 40 shifts (1,000 runs each, after the owner's answers to questions 155 to 158):
-- a player who keeps wood and food back for upkeep places 3 camps and upgrades one by shift 40, and lost its crew in none (58 before grass became food: those crews starved, decision note 0057);
-- one who spends everything as it comes goes short by shift 6 in most runs, but lost its crew in none;
-- a random player loses its crew in 8 runs of 1,000 (95% before grass became food).
+Not set for the new game yet. The simulator (`npm run sim`) measures runs; at the default numbers (100 taps a shift), with scripted players over 40 shifts (1,000 runs each, decision note 0058):
+- a player who keeps wood and food back for upkeep places 3 camps, has one at level 3, digs 11 levels down and is short in only 19 runs of 1,000; none lost its crew;
+- one who spends everything as it comes is short in 115 runs, and lost its crew in none;
+- a player who stays at one camp and digs lost its crew in 10 runs, for want of wood once its ring's ground was mined;
+- a random player loses its crew in 8 runs of 1,000.
+
+With 100 taps, upkeep takes about 2 taps a shift: close to trivial (decision note 0058 lists the levers).
 
 The targets come with the contracts (section 8).
 

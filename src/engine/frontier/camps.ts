@@ -18,10 +18,10 @@
 
 import { BLOCKS } from '../../data';
 import type { BlockId, ItemStack } from '../../data';
-import { FRONTIER_CAMP_LEVELS, FRONTIER_NEW_CAMP_COST } from '../../data/frontier';
+import { FRONTIER_CAMP_LEVELS, FRONTIER_NEW_CAMP_COST, FRONTIER_SHIFT } from '../../data/frontier';
 import { depthAt } from '../heightmap';
 import type { GameState } from '../state';
-import { NO_FEATURE } from './state';
+import { APPLE_TREE, NO_FEATURE, TREE } from './state';
 import type { FrontierCamp, FrontierState } from './state';
 
 /**
@@ -385,7 +385,9 @@ export function demolishCamp(ground: CampGround, id: number): CampChange {
 
 /**
  * `placeCamp` on a whole state: the camp is built over whatever grew on its
- * 3 x 3, which is cleared and gives nothing (stumps too: nothing grows back). A refused place returns the
+ * 3 x 3, which is cleared and gives nothing. A tree there leaves a stump,
+ * and a stump stays: it grows back once the camp is gone (owner: "Trees grow
+ * back as long as you don't mine the ground directly under them"). A refused place returns the
  * very same state.
  */
 export function placeFrontierCamp(state: FrontierState, x: number, y: number): FrontierState {
@@ -399,10 +401,16 @@ export function placeFrontierCamp(state: FrontierState, x: number, y: number): F
   const stumps = [...state.stumps];
   for (const s of footprintOf(x, y)) {
     const i = s.x + state.cube.size.x * s.y;
+    const feature = features[i] ?? NO_FEATURE;
+    if (feature === TREE || feature === APPLE_TREE) {
+      // Cleared for the camp: it leaves a stump, as felling does.
+      stumps[i] = feature;
+      regrowIn[i] = FRONTIER_SHIFT.treeRegrowShifts;
+    } else if ((stumps[i] ?? NO_FEATURE) === NO_FEATURE) {
+      regrowIn[i] = -1;
+    }
     features[i] = NO_FEATURE;
     apples[i] = 0;
-    regrowIn[i] = -1;
-    stumps[i] = NO_FEATURE; // nothing grows back under a camp
   }
   return { ...state, ...change, features, apples, regrowIn, stumps };
 }

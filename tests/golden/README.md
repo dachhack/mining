@@ -32,15 +32,16 @@ Each file holds:
 
 Lab 2 becomes the game (`docs/plans/lab2-becomes-the-game.md`). Its rules are moving into the engine beside the old game's, and they get their own golden runs from plan step A3. `frontier.test.ts` replays every `frontier/*.json`.
 
-Recorded with the new simulator's policies (`tools/frontierPolicies.ts`, plan B3), each for at most 30 shifts:
+Recorded with the new simulator's policies (`tools/frontierPolicies.ts`, plan B3), each for at most 10 shifts of 100 taps (the idle run until it is lost):
 
-| File                                 | What it is                                                                                         |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| `frontier/gatherer-seed-1.json`      | The gatherer: places two more camps, mines, upgrades a camp to level 2, and is never hungry        |
-| `frontier/gatherer-seed-26.json`     | The gatherer on another seed: hungry early, places two camps, rests at camp 1 when the crew is low |
-| `frontier/careful-seed-3.json`       | The careful policy: keeps wood and food back for upkeep, places two more camps, never hungry       |
-| `frontier/digger-seed-5.json`        | The digger: a pit 5 levels deep next to the first camp, gathering only for upkeep                  |
-| `frontier/random-seed-155-lost.json` | The random policy: never keeps wood back for upkeep, and loses the crew at shift 14                |
+| File                             | What it is                                                                                        |
+| -------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `frontier/gatherer-seed-1.json`  | The gatherer: places two more camps, mines, upgrades three times, and is never hungry             |
+| `frontier/gatherer-seed-26.json` | The gatherer on another seed: two more camps, and a camp at level 3                               |
+| `frontier/careful-seed-3.json`   | The careful policy: keeps wood and food back for upkeep, places two more camps, a camp at level 3 |
+| `frontier/digger-seed-5.json`    | The digger: a pit 5 levels deep next to the first camp, gathering only for upkeep                 |
+| `frontier/random-seed-6.json`    | The random policy: a useful step at random; upgrades a camp to level 3                            |
+| `frontier/idle-seed-2-lost.json` | The idle policy: gathers nothing, rests at camp 1 once, and loses the crew to hunger at shift 11  |
 
 Each file holds:
 
