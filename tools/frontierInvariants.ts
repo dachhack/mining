@@ -19,11 +19,14 @@
 // - SIGHT: what has been seen only grows, and every lit square has been seen.
 // - THE SURFACE: animals stand on open ground at ground level, never two on
 //   a square; an apple tree holds 0 to a full tree's apples, nothing else
-//   holds any; only a bare apple tree waits to regrow.
+//   holds any; a square waits to regrow only as a bare apple tree or a stump
+//   (a felled tree, with nothing growing on it and no camp over it), and
+//   every stump waits.
 
 import { FRONTIER_SHIFT, FRONTIER_SURFACE } from '../src/data/frontier';
 import {
   SQUARE_STEPS,
+  campAt,
   coverLevels,
   depthAt,
   isLevelPatch,
@@ -31,7 +34,7 @@ import {
   previewTap,
 } from '../src/engine';
 import type { FrontierOutcome, FrontierState } from '../src/engine';
-import { APPLE_TREE, TREE } from '../src/engine/frontier/state';
+import { APPLE_TREE, NO_FEATURE, TREE } from '../src/engine/frontier/state';
 import type { FrontierStep } from './frontierRun';
 
 /** Every broken rule in going from `before` to `outcome.state` by `step`. Empty if none. */
@@ -137,8 +140,16 @@ export function checkStep(
     if (n < 0 || n > FRONTIER_SURFACE.applesPerTree || (!appleTree && n !== 0))
       say(`${n} apples on square ${i}`);
     const waiting = (after.regrowIn[i] ?? -1) >= 0;
-    if (waiting && !(appleTree && n === 0))
-      say(`square ${i} waits to regrow but is not a bare apple tree`);
+    const stump = after.stumps[i] ?? NO_FEATURE;
+    if (stump !== NO_FEATURE) {
+      if (stump !== TREE && stump !== APPLE_TREE) say(`square ${i} has a stump of ${stump}`);
+      if (!waiting) say(`the stump on square ${i} is not waiting to grow`);
+      if (after.features[i] !== NO_FEATURE) say(`something grows on the stump on square ${i}`);
+      if (campAt(after.camps, i % width, Math.floor(i / width)) !== null)
+        say(`a stump under a camp on square ${i}`);
+    } else if (waiting && !(appleTree && n === 0)) {
+      say(`square ${i} waits to regrow but is neither a bare apple tree nor a stump`);
+    }
   });
   return problems;
 }

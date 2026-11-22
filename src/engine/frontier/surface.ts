@@ -6,8 +6,8 @@
 // - an apple tree with apples gives one apple a tap;
 // - a tree, or an apple tree with no apples left, is felled (wood).
 //
-// Only then can the block under the square be mined. Animals moving and
-// apples growing back happen at the end of a shift (shift.ts). The numbers are in
+// Only then can the block under the square be mined. Animals moving, and
+// apples and felled trees growing back, happen at the end of a shift (shift.ts). The numbers are in
 // src/data/frontier.ts.
 
 import type { ItemStack } from '../../data';
@@ -85,10 +85,12 @@ export function harvestAt(state: FrontierState, x: number, y: number): FrontierH
   }
   if (feature === TREE || feature === APPLE_TREE) {
     const features = replaced(state.features, i, NO_FEATURE);
-    // A felled tree regrows nothing: an apple tree's wait for its apples ends with it.
-    const regrowIn = replaced(state.regrowIn, i, -1);
+    // The stump grows the same kind of tree back some shifts later (question
+    // 157). An apple tree's wait for its apples ends with it: it comes back full.
+    const stumps = replaced(state.stumps, i, feature);
+    const regrowIn = replaced(state.regrowIn, i, FRONTIER_SHIFT.treeRegrowShifts);
     return take(
-      { ...state, features, regrowIn },
+      { ...state, features, stumps, regrowIn },
       { item: 'wood', count: FRONTIER_SURFACE.woodPerTree },
       'felled',
     );

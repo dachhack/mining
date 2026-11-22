@@ -34,18 +34,18 @@ Lab 2 becomes the game (`docs/plans/lab2-becomes-the-game.md`). Its rules are mo
 
 Recorded with the new simulator's policies (`tools/frontierPolicies.ts`, plan B3), each for at most 30 shifts:
 
-| File                               | What it is                                                                                                      |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `frontier/gatherer-seed-1.json`    | The gatherer: places two more camps, mines, upgrades a camp to level 2, and goes hungry once it spends its wood |
-| `frontier/gatherer-seed-7.json`    | The gatherer on another seed: hungry from shift 4, after placing camps, and a rest when the crew is low         |
-| `frontier/careful-seed-3.json`     | The careful policy: keeps wood and food back for upkeep, places two more camps, never hungry                    |
-| `frontier/digger-seed-5.json`      | The digger: a pit 5 levels deep next to the first camp, gathering only for upkeep                               |
-| `frontier/random-seed-6-lost.json` | The random policy: never keeps anything for upkeep, and loses the crew to hunger at shift 26                    |
+| File                                 | What it is                                                                                         |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `frontier/gatherer-seed-1.json`      | The gatherer: places two more camps, mines, upgrades a camp to level 2, and is never hungry        |
+| `frontier/gatherer-seed-26.json`     | The gatherer on another seed: hungry early, places two camps, rests at camp 1 when the crew is low |
+| `frontier/careful-seed-3.json`       | The careful policy: keeps wood and food back for upkeep, places two more camps, never hungry       |
+| `frontier/digger-seed-5.json`        | The digger: a pit 5 levels deep next to the first camp, gathering only for upkeep                  |
+| `frontier/random-seed-155-lost.json` | The random policy: never keeps wood back for upkeep, and loses the crew at shift 14                |
 
 Each file holds:
 
 - `seed`: what `createFrontier` is called with.
-- `steps`: every step in order: `"tap X,Y"`, `"place X,Y"`, `"upgrade ID"`, `"demolish ID"`, `"endShift"`, `"rest"` or `"close"`. A step the rules refuse (including a tap with no taps left in the shift) fails the replay.
+- `steps`: every step in order: `"tap X,Y"`, `"place X,Y"`, `"upgrade ID"`, `"demolish ID"`, `"endShift"`, `"rest ID"` (at camp ID) or `"close"`. A step the rules refuse (including a tap with no taps left in the shift) fails the replay.
 - `expectedHash`: `hashFrontier` of the state after the last step.
 - `engineVersion`: the engine version it was recorded on. A replay is only expected to match on that version.
 - `stepCount`, `description` and `recordedWith` (the policy): for the reader.

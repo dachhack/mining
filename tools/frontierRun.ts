@@ -20,7 +20,7 @@ import { NO_FEATURE } from '../src/engine/frontier/state';
 
 /**
  * One step of the new game, as a short text: "tap X,Y", "place X,Y",
- * "upgrade ID", "demolish ID", "endShift", "rest" or "close".
+ * "upgrade ID", "demolish ID", "endShift", "rest ID" (at camp ID) or "close".
  */
 export type FrontierStep = string;
 
@@ -53,17 +53,23 @@ function squareOf(text: string): { x: number; y: number } {
   return { x, y };
 }
 
+/** Rest at the first camp (question 156: rest only at a camp); End shift if no camp stands. */
+export function restStep(state: FrontierState): FrontierStep {
+  const camp = state.camps[0];
+  return camp === undefined ? 'endShift' : `rest ${camp.id}`;
+}
+
 /** The engine's action for a step. Throws for text that is not a step. */
 export function actionOf(step: FrontierStep): FrontierAction {
   const [verb, arg] = step.split(' ');
-  if (verb === 'endShift' || verb === 'rest' || verb === 'close') {
+  if (verb === 'endShift' || verb === 'close') {
     return { kind: verb };
+  }
+  if ((verb === 'upgrade' || verb === 'demolish' || verb === 'rest') && arg !== undefined) {
+    return { kind: verb, id: Number(arg) };
   }
   if ((verb === 'tap' || verb === 'place') && arg !== undefined) {
     return { kind: verb, ...squareOf(arg) };
-  }
-  if ((verb === 'upgrade' || verb === 'demolish') && arg !== undefined) {
-    return { kind: verb, id: Number(arg) };
   }
   throw new Error(`"${step}" is not a step of the new game`);
 }
@@ -112,7 +118,7 @@ const GATHERER_CAMPS = 3;
 export function gathererStep(state: FrontierState): FrontierStep | null {
   if (state.status !== 'active') return null;
   if (state.tapsLeft === 0) {
-    return state.health <= GATHERER_REST_AT ? 'rest' : 'endShift';
+    return state.health <= GATHERER_REST_AT ? restStep(state) : 'endShift';
   }
   const byLevel = [...state.camps].sort((a, b) => a.level - b.level || a.id - b.id);
   for (const camp of byLevel) {

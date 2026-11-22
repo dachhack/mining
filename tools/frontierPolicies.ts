@@ -13,7 +13,7 @@
 // - digger:   digs a pit next to the first camp, as deep as the camps let
 //             it, gathering only to pay upkeep.
 
-import { FRONTIER_SHIFT } from '../src/data/frontier';
+import { FRONTIER_FOODS, FRONTIER_SHIFT } from '../src/data/frontier';
 import {
   campAt,
   coverLevels,
@@ -28,7 +28,7 @@ import type { FrontierState } from '../src/engine';
 import { nextFloat } from '../src/engine/rng';
 import type { RngState } from '../src/engine/rng';
 import { NO_FEATURE } from '../src/engine/frontier/state';
-import { gathererStep } from './frontierRun';
+import { gathererStep, restStep } from './frontierRun';
 import type { FrontierStep } from './frontierRun';
 
 export const FRONTIER_POLICY_NAMES = ['random', 'gatherer', 'careful', 'digger'] as const;
@@ -93,9 +93,18 @@ function upkeepAhead(state: FrontierState, item: 'wood' | 'food', shifts: number
   return need;
 }
 
-/** Food held: apples and animals. */
+/** Food held, in upkeep's units: apples, grass (FRONTIER_FOODS says how much is 1 food) and animals. */
 function foodHeld(state: FrontierState): number {
-  return (state.inventory.get('apple') ?? 0) + (state.inventory.get('animal') ?? 0);
+  let food = 0;
+  for (const f of FRONTIER_FOODS) {
+    food += Math.floor((state.inventory.get(f.item) ?? 0) / f.count);
+  }
+  return food;
+}
+
+/** True if `item` can pay food upkeep. */
+function isFood(item: string | undefined): boolean {
+  return FRONTIER_FOODS.some((f) => f.item === item);
 }
 
 /**
@@ -106,7 +115,7 @@ function foodHeld(state: FrontierState): number {
 function carefulStep(state: FrontierState): FrontierStep | null {
   if (state.status !== 'active') return null;
   if (state.tapsLeft === 0) {
-    return state.health <= FRONTIER_SHIFT.startHealth / 2 ? 'rest' : 'endShift';
+    return state.health <= FRONTIER_SHIFT.startHealth / 2 ? restStep(state) : 'endShift';
   }
   const woodNeed = upkeepAhead(state, 'wood', 4);
   const foodNeed = upkeepAhead(state, 'food', 4);
@@ -117,7 +126,7 @@ function carefulStep(state: FrontierState): FrontierStep | null {
         ? 'food'
         : null;
   if (short !== null) {
-    // Gather what upkeep needs first: trees for wood; apples, then animals, for food.
+    // Gather what upkeep needs first: trees for wood; apples, grass or animals for food.
     const near = state.camps[state.camps.length - 1] ?? { x: 0, y: 0 };
     const taps = usefulTaps(state).sort(
       (a, b) =>
@@ -127,7 +136,7 @@ function carefulStep(state: FrontierState): FrontierStep | null {
     );
     const wanted = taps.find((s) => {
       const item = previewTap(state, s.x, s.y).gain[0]?.item;
-      return short === 'wood' ? item === 'wood' : item === 'apple' || item === 'animal';
+      return short === 'wood' ? item === 'wood' : isFood(item);
     });
     if (wanted !== undefined) return `tap ${wanted.x},${wanted.y}`;
   }
@@ -147,7 +156,7 @@ function carefulStep(state: FrontierState): FrontierStep | null {
 function diggerStep(state: FrontierState): FrontierStep | null {
   if (state.status !== 'active') return null;
   if (state.tapsLeft === 0) {
-    return state.health <= FRONTIER_SHIFT.startHealth / 2 ? 'rest' : 'endShift';
+    return state.health <= FRONTIER_SHIFT.startHealth / 2 ? restStep(state) : 'endShift';
   }
   const woodShort = (state.inventory.get('wood') ?? 0) < upkeepAhead(state, 'wood', 2);
   const foodShort = foodHeld(state) < upkeepAhead(state, 'food', 2);
@@ -164,7 +173,7 @@ function diggerStep(state: FrontierState): FrontierStep | null {
   if (woodShort || foodShort) {
     const wanted = taps.find((s) => {
       const item = previewTap(state, s.x, s.y).gain[0]?.item;
-      return woodShort ? item === 'wood' : item === 'apple' || item === 'animal';
+      return woodShort ? item === 'wood' : isFood(item);
     });
     if (wanted !== undefined) return `tap ${wanted.x},${wanted.y}`;
   }

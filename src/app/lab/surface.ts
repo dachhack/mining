@@ -21,8 +21,10 @@ export interface Surface {
   features: Feature[];
   /** Apples left on each square's apple tree (0 for other squares). */
   apples: number[];
-  /** For an apple tree picked bare, the shifts until its apples come back; -1 for every other square. */
+  /** The shifts until a bare apple tree's apples, or a stump's tree, grow back; -1 for every other square. */
   regrowIn: number[];
+  /** Where a tree was felled, the kind of tree that grows back (NO_FEATURE elsewhere). */
+  stumps: Feature[];
   animals: Animal[];
   /** The id the next animal gets. */
   nextAnimalId: number;

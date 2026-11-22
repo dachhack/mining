@@ -16,6 +16,7 @@ import { LAB_NEW_CAMP_COST, LAB_SURFACE } from '../../src/data/labCamps';
 import {
   PREPARED_LAB2_KEY,
   endShift,
+  restCrew,
   upgradeCostFrom,
   campRadius,
   demolishCamp,
@@ -1120,6 +1121,28 @@ test('Close mine asks once, then ends the run: nothing more can be done', async 
   await page.getByRole('button', { name: 'New world' }).click();
   await expect(page.getByTestId('lab2-hud')).toHaveAttribute('data-status', 'active');
   await expect(page.getByTestId('lab2-over')).toBeHidden();
+});
+
+test('Rest is in a camp’s panel: the crew rests there, then the shift ends', async ({ page }) => {
+  // Owner, question 156: "Only at a camp". The End shift bar has no Rest.
+  const canvas = await openLab2(page);
+  const hud = page.getByTestId('lab2-hud');
+  await expect(page.locator('.lab2-shift-buttons').getByTestId('lab2-rest')).toHaveCount(0);
+  const start = newCampWorld(SEED);
+  const camp = start.camps[0] ?? { id: 1, x: 0, y: 0, level: 1 };
+  // A shift with nothing held: upkeep goes unpaid and the crew is hurt.
+  const hungry = endShift(start).world;
+  await page.getByTestId('lab2-end-shift').click();
+  await expect(hud).toHaveAttribute('data-health', String(hungry.turn.health));
+  expect(hungry.turn.health).toBeLessThan(FRONTIER_SHIFT.startHealth);
+  // Tap the camp, then Rest here.
+  await tapSquare(page, canvas, camp);
+  await expect(page.getByTestId('lab2-camp-title')).toContainText(`Camp ${camp.id}`);
+  const rested = restCrew(hungry, camp.id);
+  await page.getByTestId('lab2-rest').click();
+  await expect(hud).toHaveAttribute('data-shift', String(rested.world.turn.shift));
+  await expect(hud).toHaveAttribute('data-health', String(rested.world.turn.health));
+  await expect(page.getByTestId('lab-hint')).toContainText('Rested.');
 });
 
 test('undo takes back a placed camp: the camp, its cost and its light', async ({ page }) => {

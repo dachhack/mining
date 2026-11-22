@@ -317,6 +317,7 @@ export function createFrontier(seed: number): FrontierState {
     inventory: new Map(),
     mined: 0,
     regrowIn: new Array<number>(cube.size.x * cube.size.y).fill(-1),
+    stumps: new Array<Feature>(cube.size.x * cube.size.y).fill(NO_FEATURE),
     shift: 1,
     tapsLeft: FRONTIER_SHIFT.taps,
     health: FRONTIER_SHIFT.startHealth,

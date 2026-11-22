@@ -6,7 +6,7 @@
 //
 // A play log is JSON: { engineVersion, seed, steps }, where each step is one
 // of the steps of tools/frontierRun.ts ("tap 3,4", "place 5,6", "upgrade 2",
-// "demolish 1", "endShift", "rest", "close"). Only steps that did something
+// "demolish 1", "endShift", "rest 1", "close"). Only steps that did something
 // are logged; an undone step is taken out of the log. Replaying the steps on
 // the seed gives the same run, on the engine version the log names.
 
@@ -40,7 +40,7 @@ import {
   upkeepDue,
 } from '../../src/engine';
 import type { FrontierAction, FrontierState, ShiftLog, ShiftReport } from '../../src/engine';
-import { APPLE_TREE, GRASS, TREE } from '../../src/engine/frontier/state';
+import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from '../../src/engine/frontier/state';
 import { actionOf, replayFrontier } from '../frontierRun';
 import type { FrontierStep } from '../frontierRun';
 import { frontierHelpText } from './frontierHelp';
@@ -181,6 +181,7 @@ function shiftLine(report: ShiftReport, state: FrontierState): string {
       : '';
   const more = [
     report.regrown > 0 ? `${report.regrown} apple tree(s) regrew` : '',
+    report.treesRegrown > 0 ? `${report.treesRegrown} felled tree(s) grew back` : '',
     report.newAnimals > 0 ? 'an animal walked in' : '',
   ].filter((t) => t !== '');
   const end = state.status === 'lost' ? ' The crew is lost: the run is over.' : '';
@@ -266,7 +267,7 @@ function undo(session: FrontierSession): StepResult {
 /**
  * The step a typed choice stands for, or `null` if it is not one. Accepts
  * "tap 3,4" (or "t 3 4"), "place 3,4", "upgrade 2", "demolish 1", "end",
- * "rest", "close", "undo", or the number of a listed choice.
+ * "rest 1" (or "rest" with one camp), "close", "undo", or the number of a listed choice.
  */
 export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | null {
   const text = typed.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -278,7 +279,7 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
     const verb = square[1] === 't' ? 'tap' : square[1] === 'p' ? 'place' : (square[1] ?? '');
     return `${verb} ${square[2] ?? ''},${square[3] ?? ''}`;
   }
-  const camp = /^(upgrade|demolish) (\d+)$/.exec(text);
+  const camp = /^(upgrade|demolish|rest) (\d+)$/.exec(text);
   if (camp !== null) {
     return `${camp[1] ?? ''} ${camp[2] ?? ''}`;
   }
@@ -286,11 +287,15 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
     end: 'endShift',
     'end shift': 'endShift',
     endshift: 'endShift',
-    rest: 'rest',
     close: 'close',
     'close mine': 'close',
     undo: 'undo',
   };
+  if (text === 'rest') {
+    // Rest is at a camp: "rest" alone names one only when there is one choice.
+    const rests = listed.filter((s) => s.startsWith('rest '));
+    return rests.length === 1 ? (rests[0] ?? null) : null;
+  }
   return words[text] ?? null;
 }
 
@@ -300,7 +305,7 @@ const LISTED_PLACES = 5;
 /**
  * The choices listed under the view, numbered: every upgrade and demolish
  * that would work, the places for a new camp that light the most new ground
- * (if one can be paid for), then undo, end shift, rest and close. Taps are
+ * (if one can be paid for), then undo, end shift, rest at each camp, and close. Taps are
  * not listed one by one (there are hundreds): the view counts them, and
  * "tap X,Y" takes any of them.
  */
@@ -330,7 +335,7 @@ export function listedSteps(session: FrontierSession): FrontierStep[] {
     }
   }
   if (shiftUndoCount(session.shiftLog) > 0) steps.push('undo');
-  steps.push('endShift', 'rest', 'close');
+  steps.push('endShift', ...state.camps.map((c): FrontierStep => `rest ${c.id}`), 'close');
   return steps;
 }
 
@@ -503,6 +508,11 @@ export function lookText(session: FrontierSession, x: number, y: number): string
   if (feature === GRASS) parts.push('grass on it');
   if (feature === TREE) parts.push('a tree on it');
   if (feature === APPLE_TREE) parts.push(`an apple tree with ${state.apples[i] ?? 0} apple(s)`);
+  const stump = state.stumps[i] ?? NO_FEATURE;
+  if (stump !== NO_FEATURE) {
+    const tree = stump === APPLE_TREE ? 'an apple tree' : 'a tree';
+    parts.push(`a stump: ${tree} grows back in ${state.regrowIn[i] ?? 0} shift(s)`);
+  }
   if (animalAt(state, x, y) !== null) parts.push('an animal on it');
   const camp = campAt(state.camps, x, y);
   if (camp !== null) parts.push(`camp ${camp.id}'s ground`);

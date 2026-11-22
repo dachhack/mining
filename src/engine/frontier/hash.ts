@@ -31,6 +31,7 @@ export function hashFrontier(state: FrontierState): string {
       inventory,
       mined: state.mined,
       regrowIn: state.regrowIn,
+      stumps: state.stumps,
       shift: state.shift,
       tapsLeft: state.tapsLeft,
       health: state.health,
