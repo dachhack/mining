@@ -54,8 +54,67 @@ async function pointOf(canvas: Locator, square: Square): Promise<{ x: number; y:
   };
 }
 
-/** Tap square (x, y), as a finger would. */
+/** True if the middle of square (x, y) is on the map, at least a square in from its edges. */
+async function inView(canvas: Locator, square: Square): Promise<boolean> {
+  const box = await canvas.boundingBox();
+  if (box === null) {
+    return false;
+  }
+  const point = await pointOf(canvas, square);
+  const margin = (await camera(canvas)).cellPx;
+  return (
+    point.x >= box.x + margin &&
+    point.x <= box.x + box.width - margin &&
+    point.y >= box.y + margin &&
+    point.y <= box.y + box.height - margin
+  );
+}
+
+/**
+ * Bring square (x, y) into view, as a player would. A camp's light reaches
+ * past the edges of the map at its normal zoom (radius 9: 19 squares across,
+ * 14 on screen), so when the square is not well inside the map, drag the map
+ * with one finger towards the middle, through the browser's own touch input
+ * (the Chrome DevTools Protocol), as touch.spec.ts does. A drag is not a tap.
+ */
+async function showSquare(page: Page, canvas: Locator, square: Square): Promise<void> {
+  for (let drag = 0; drag < 4 && !(await inView(canvas, square)); drag += 1) {
+    const box = await canvas.boundingBox();
+    if (box === null) {
+      return;
+    }
+    const middle = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const point = await pointOf(canvas, square);
+    // The map moves with the finger, so moving it by (middle - point) brings
+    // the square to the middle. One drag stays inside the map; a long way
+    // takes several.
+    const most = { x: box.width * 0.4, y: box.height * 0.4 };
+    const move = {
+      x: Math.max(-most.x, Math.min(most.x, middle.x - point.x)),
+      y: Math.max(-most.y, Math.min(most.y, middle.y - point.y)),
+    };
+    const client = await page.context().newCDPSession(page);
+    const at = (t: number) => ({
+      x: middle.x + move.x * (t - 0.5),
+      y: middle.y + move.y * (t - 0.5),
+      id: 0,
+    });
+    await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [at(0)] });
+    for (let step = 1; step <= 6; step += 1) {
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [at(step / 6)],
+      });
+    }
+    await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await client.detach();
+  }
+  expect(await inView(canvas, square), `square ${square.x},${square.y} in view`).toBe(true);
+}
+
+/** Tap square (x, y), as a finger would, first dragging the map to bring it into view if need be. */
 async function tapSquare(page: Page, canvas: Locator, square: Square): Promise<void> {
+  await showSquare(page, canvas, square);
   const point = await pointOf(canvas, square);
   await page.touchscreen.tap(point.x, point.y);
 }
@@ -300,10 +359,16 @@ test('a second camp on level ground lifts the fog; then the first is demolished 
   const camp = start.camps[0] ?? { x: 0, y: 0 };
   // The new camp's 3 x 3 goes just inside the east edge of the first ring,
   // so its ring also covers the first camp's base. Its patch is left undug.
+  // That is about one radius out (owner, question 138: camps no longer have
+  // to touch to spread the light): 8 squares, off the screen at the opening
+  // zoom, so the map is dragged to it first (tapSquare).
   const target = { x: camp.x + campRadius(1) - 1, y: camp.y };
+  expect(target.x - camp.x).toBeGreaterThanOrEqual(8);
   const plan = tapsUntil(start, LAB_NEW_CAMP_COST, camp, footprintOf(target.x, target.y));
   expect(plan).not.toBeNull();
   if (plan === null) return;
+  // The new camp lights a wide band of new ground, not a sliver.
+  expect(newlyCovered(plan.world, target.x, target.y).length).toBeGreaterThan(100);
 
   // At the start, the first camp cannot be demolished: nothing else covers it.
   await tapSquare(page, canvas, camp);
@@ -506,7 +571,12 @@ test('the map never moves while the tool and the panels open and close', async (
   await unmoved();
 
   // A refused tap (fog), a mine, and a too-steep refusal: still no movement.
-  await tapFixed(fogSquare(world));
+  // The fog square is on screen at the opening zoom: diagonally out from the
+  // camp, just past its ring (radius 9), not straight out, which is off screen.
+  const fog = { x: camp.x + 6, y: camp.y + 8 };
+  expect(sightMap(world)[fog.x + world.lab.state.size.x * fog.y]).toBe('fog');
+  expect(await inView(canvas, fog)).toBe(true);
+  await tapFixed(fog);
   await expect(canvas).toHaveAttribute('data-last-tap', /^fog /);
   const lit = { x: camp.x - 2, y: camp.y }; // just outside the camp's 3 x 3
   // Whatever grows there is taken first, then the block is mined...
@@ -806,6 +876,20 @@ for (const phone of PHONES_WITH_BARS) {
       height: innerHeight - phone.top - phone.bottom,
     };
     await expectInside(page.locator('.lab-top'), free);
+    // The tray at rest, with the key's two rows at its bottom: in the owner's
+    // screenshot from the PR #123 build, the key ran under the gesture bar.
+    await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'idle');
+    await expectInside(page.getByTestId('lab2-tray'), free);
+    const key = page.locator('.lab2-tray .lab-key');
+    await expect(key).toBeVisible();
+    await expectInside(key, free);
+    for (const entry of await key.locator('.lab-key-entry').all()) {
+      const box = await entry.boundingBox();
+      // Entries scrolled sideways out of view are not checked; every row is.
+      if (box !== null && box.x + box.width <= phone.width - phone.right) {
+        await expectInside(entry, free);
+      }
+    }
 
     await page.getByTestId('lab2-camp-tool').click();
     await expect(page.getByTestId('lab-hint')).toHaveText(

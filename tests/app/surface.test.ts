@@ -34,8 +34,8 @@ import {
 import type { Feature, Surface } from '../../src/app/lab/surface';
 import { buildState } from '../engine/helpers';
 
-const SIDE = 15;
-const MID = 7;
+const SIDE = 25; // wide enough for a level-1 ring (radius 9) and a camp at its edge
+const MID = Math.floor(SIDE / 2);
 
 /** A SIDE x SIDE cube, 3 layers: dirt over stone over stone. */
 function cube() {
