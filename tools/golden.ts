@@ -14,8 +14,12 @@
 //   npm run golden -- --record-all
 //       Record every run in `STANDARD_RUNS` below again: the whole set in
 //       tests/golden. Use when a rule change makes recorded decisions illegal.
+//   npm run golden -- --frontier
+//       Record the new game's golden runs (Lab 2 becomes the game, plan A3)
+//       in tests/golden/frontier again: the gatherer policy of
+//       tools/frontierRun.ts on the seeds in `FRONTIER_RUNS` below.
 
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import * as prettier from 'prettier';
 import { CONTRACT_IDS, DEFAULT_LOADOUT_ID, GAME_DATA, validateData } from '../src/data';
@@ -24,6 +28,8 @@ import { POLICY_NAMES, isPolicyName, makePolicy } from './policies';
 import { TOOL_KIT } from './simKit';
 import { playRun, replayDecisions, statusText } from './simRun';
 import type { GoldenRun } from './simRun';
+import { recordGatherer } from './frontierRun';
+import type { FrontierGolden } from './frontierRun';
 
 const GOLDEN_DIR = path.join(import.meta.dirname, '..', 'tests', 'golden');
 /** A recorded run that has not ended after this many shifts is stopped. */
@@ -175,7 +181,7 @@ function wholeNumber(text: string | undefined, what: string): number {
 }
 
 /** Write a golden file, formatted as `npm run lint` (Prettier) expects. */
-async function writeGolden(file: string, golden: GoldenRun): Promise<void> {
+async function writeGolden(file: string, golden: GoldenRun | FrontierGolden): Promise<void> {
   // `await` waits for Prettier's answer, like Python's `await`.
   const config = await prettier.resolveConfig(file);
   const text = await prettier.format(JSON.stringify(golden), { ...config, filepath: file });
@@ -294,6 +300,40 @@ async function record(spec: RecordSpec): Promise<void> {
   );
 }
 
+/**
+ * The new game's golden runs (plan A3), in tests/golden/frontier: the
+ * gatherer policy (tools/frontierRun.ts) on these seeds. `--frontier`
+ * records them all again; there is nothing to rehash separately, since the
+ * gatherer always plays the same way on a seed.
+ */
+const FRONTIER_RUNS: { name: string; seed: number; maxSteps: number; description: string }[] = [
+  {
+    name: 'gatherer-seed-1',
+    seed: 1,
+    maxSteps: 400,
+    description:
+      'The gatherer: takes plants and animals, places two more camps where they light the most new ground, mines clay and stone, and upgrades camps to level 2',
+  },
+  {
+    name: 'gatherer-seed-7',
+    seed: 7,
+    maxSteps: 400,
+    description: 'The gatherer on another seed: three camps, one upgraded, with clay mined',
+  },
+];
+
+async function recordFrontier(): Promise<void> {
+  const dir = path.join(GOLDEN_DIR, 'frontier');
+  mkdirSync(dir, { recursive: true });
+  for (const run of FRONTIER_RUNS) {
+    const golden = recordGatherer(run.seed, run.maxSteps, run.description);
+    await writeGolden(path.join(dir, `${run.name}.json`), golden);
+    console.log(
+      `frontier/${run.name}.json: ${golden.stepCount} steps, hash ${golden.expectedHash}`,
+    );
+  }
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const problems = validateData(GAME_DATA);
@@ -306,10 +346,12 @@ async function main(): Promise<void> {
     for (const spec of STANDARD_RUNS) {
       await record(spec);
     }
+  } else if (args.length === 1 && args[0] === '--frontier') {
+    await recordFrontier();
   } else if (args.includes('--record')) {
     await record(parseRecordArgs(args));
   } else {
-    fail('give --rehash, --record-all or --record');
+    fail('give --rehash, --record-all, --record or --frontier');
   }
 }
 

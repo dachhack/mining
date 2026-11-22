@@ -526,5 +526,5 @@ describe('reach (owner, question 138: "Bigger light radius")', () => {
       const shown = sightMap(w).filter((s) => s === 'shown').length;
       expect(shown, `seed ${seed}`).toBeLessThan((size.x * size.y) / 3);
     }
-  });
+  }, 60_000); // 200 whole worlds: about 2.4 s alone, but over 5 s on CI with every suite running at once
 });

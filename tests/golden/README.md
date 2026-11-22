@@ -28,6 +28,25 @@ Each file holds:
 - `extraItems` (one file only): items the run started with on top of its loadout, the sim-only tool kit of `tools/simKit.ts`. A replay puts them in the stockpile before the first decision.
 - `description` and `recordedWith`: for the reader. A replay uses only the decisions, so changing a policy in `tools/policies.ts` does not change a golden run.
 
+## The new game's runs (`frontier/`)
+
+Lab 2 becomes the game (`docs/plans/lab2-becomes-the-game.md`). Its rules are moving into the engine beside the old game's, and they get their own golden runs from plan step A3. `frontier.test.ts` replays every `frontier/*.json`.
+
+| File                            | What it is                                                                                                                                                    |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `frontier/gatherer-seed-1.json` | The gatherer policy (`tools/frontierRun.ts`): takes plants and animals, places two more camps where they light the most new ground, mines, and upgrades camps |
+| `frontier/gatherer-seed-7.json` | The gatherer on another seed: three camps, one upgraded, with clay mined                                                                                      |
+
+Each file holds:
+
+- `seed`: what `createFrontier` is called with.
+- `steps`: every step in order: `"tap X,Y"`, `"place X,Y"`, `"upgrade ID"` or `"demolish ID"`. A step the rules refuse fails the replay.
+- `expectedHash`: `hashFrontier` of the state after the last step.
+- `engineVersion`: the engine version it was recorded on. A replay is only expected to match on that version.
+- `stepCount`, `description` and `recordedWith`: for the reader.
+
+If the new rules change on purpose, record the runs again with `npm run golden -- --frontier`, and say in the PR why the hashes changed. The gatherer always plays the same way on a seed, so there is no separate rehash.
+
 ## When a golden test fails
 
 First decide whether the change was meant. A golden test that fails after a change that was not supposed to touch the rules has found a bug: fix the change, not the file.
