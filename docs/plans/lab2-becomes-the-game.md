@@ -1,6 +1,6 @@
 # Plan: Lab 2 becomes the game
 
-Status: proposed, for the owner. No code has changed yet. Questions 145 to 154 in `docs/owner-questions.md` are open for you; each one says the default this plan assumes.
+Status: agreed with the owner (2026-11-22). No code has changed yet. The owner answered questions 145 to 148 and 153; 149 to 152 and 154 follow the defaults below, and the owner has been told (`docs/owner-questions.md`).
 
 ## What you asked for
 
@@ -20,7 +20,7 @@ Status: proposed, for the owner. No code has changed yet. Questions 145 to 154 i
 ## The short version
 
 1. **Move the rules first.** Lab 2's rules move into the engine (`src/engine`), next to the old game. For a while the app has both, and Lab 2's screen runs on the engine. Nothing is removed yet, so the APK always works.
-2. **Then add shifts:** an action budget each shift, an End shift button, animals and apples that move on with the shifts, crew health and upkeep.
+2. **Then add shifts:** 10 taps a shift, an End shift button, animals and apples that move on with the shifts, and upkeep in food and wood that hurts the crew when it can't be paid.
 3. **Then switch:** the start screen opens the new game. The old game screen and both labs go.
 4. **Then tidy up:** the old rules, tools and tests that nothing uses any more are removed, and the design doc becomes v0.3.
 
@@ -66,7 +66,7 @@ Lab 2's animals and apples run on a clock in milliseconds. The engine has no clo
 - **New animals** walk in every few shifts.
 - **Apples** regrow some shifts after a tree is picked bare.
 
-On screen the animals can still slide from square to square when a shift ends, so the map stays alive. Between shifts they stand still, which also makes them fair to catch. The numbers are questions 149 and 150.
+On screen the animals can still slide from square to square when a shift ends, so the map stays alive. Between shifts they stand still, which also makes them fair to catch. The numbers are questions 149 and 150 (defaults, owner told): animals step at End shift and a new one walks in every few shifts; apples regrow about 5 shifts after a tree is picked bare.
 
 ---
 
@@ -74,39 +74,41 @@ On screen the animals can still slide from square to square when a shift ends, s
 
 ### What a shift is
 
-A shift is one turn. The old game's shape still fits:
+A shift is one turn:
 
-1. **The player's turn.** The player has a budget of **action points (AP)** to spend. The old default is 5 AP a shift.
-2. **End shift**, a button. Then the world moves on: animals step, apples regrow, upkeep is paid, and the crew's health changes.
-
-**Default:** keep AP. Each action costs AP:
-
-- mining costs what its block costs, as in the old game (dirt 1, stone 2 and so on);
-- cutting grass, felling a tree, picking an apple or catching an animal costs 1;
-- placing, upgrading or demolishing a camp costs the rest of the shift.
-
-The other choices are a fixed number of taps per shift, or no budget at all, where the player ends the shift whenever they like. Questions 145 and 146.
+1. **The player's turn.** The player has a fixed number of **taps** a shift: [Default] **10**, in `src/data`. **Every tap costs 1**, whatever it does: mining any block, cutting grass, felling a tree, picking an apple, catching an animal, and placing, upgrading or demolishing a camp (owner, questions 145 and 146: "Fixed number of taps"). A tap that does nothing (fog, a refused block) costs nothing.
+2. **End shift**, a button. It can be pressed with taps left; they are lost. Then the world moves on, in this order:
+   - the animals step, and a new one may walk in;
+   - apples regrow;
+   - upkeep is paid;
+   - the crew's health changes.
 
 ### Upkeep and crew health
 
-Upkeep and crew health come back together. With the hazards gone for now, upkeep is the only thing that can hurt the crew, so it needs to cost something the player gathers.
+Owner, question 147: "Food and wood"; question 148: "Hunger only".
 
-- **Default:** the crew eats. Each shift's upkeep is food: apples or animals (for example 1 food a shift, plus 1 per camp every few shifts).
-- **Unpaid upkeep** costs crew health. Resting at a camp restores it.
-- **At 0 health** the run is lost.
+- **Upkeep [Default]:**
+  - 1 wood every shift;
+  - 1 food every 2 shifts (an apple or an animal: apples are spent first, being the commoner);
+  - 1 more wood every 4 shifts for each camp after the first.
 
-The other choice is the old fuel (coal), but coal is underground and the surface no longer has any, so the first shifts would be hard. Questions 147 and 148.
+  These numbers are a starting point. The survey (section 4) measures them before you playtest, and they live in `src/data`.
+
+- **Hunger:** for each item of upkeep that can't be paid, the crew loses 1 health. Crew health starts at 10 [Default].
+- **Resting at a camp** restores crew health to full. It takes the rest of the shift, as in the old game.
+- **At 0 health** the run is lost. Hunger is the only thing that hurts the crew until the hazards come back.
+- **Saving:** the game is saved every shift.
 
 ### Undo and shifts
 
-**Default:** Undo works within the current shift only. Ending a shift runs the world on (animals, apples, upkeep, health); undoing across it would turn time back, which you have ruled out. Question 151.
+Undo works within the current shift only (question 151, default, owner told). Ending a shift moves the world on (animals, apples, upkeep, health), and undoing across it would turn time back, which you ruled out in question 141. Undoing a tap gives the tap back.
 
 ### How a run ends
 
-- **Until contracts are built:** a run ends when the crew is lost, or when the player closes the mine (as now).
-- **Saving:** a run is saved every shift and carries on when the app opens again.
+Question 152 (default, owner told):
 
-Question 152.
+- **Until contracts are built:** a run ends when the crew is lost, or when the player closes the mine.
+- **Saving:** a run is saved every shift and carries on when the app opens again.
 
 ---
 
@@ -117,7 +119,7 @@ Question 152.
 | Old rule                                                           | Plan               | Why                                                                             |
 | ------------------------------------------------------------------ | ------------------ | ------------------------------------------------------------------------------- |
 | The level rule (a square at most 1 level below its neighbours)     | **Stays**          | [Decided], and Lab 2 already uses it                                            |
-| Mining costs per block type (AP)                                   | **Stays**          | Needed for AP                                                                   |
+| Mining costs per block type (AP)                                   | Dropped            | Every tap costs 1 now (questions 145 and 146)                                   |
 | Caverns under the surface: breaking in drops the square to rubble  | **Stays**          | Lab 2's mining already does this                                                |
 | Close the mine (ends the run alive)                                | **Stays**          | The only way to finish until contracts                                          |
 | Resting at a camp restores crew health                             | **Stays**          | Crew health needs a way back                                                    |
@@ -127,12 +129,12 @@ Question 152.
 | Tells (damp, pitted, warm stone)                                   | Dropped for now    | Only useful with the hazards                                                    |
 | Pumps, vents, sealant, scanner, drill                              | Dropped for now    | Camp tools for the hazards                                                      |
 | Smelting ingots, the old camp recipes                              | Dropped for now    | The recipe book replaces crafting. Recipes can be added to it later             |
-| Fuel and crafting fuel from coal                                   | Dropped for now    | Unless you choose fuel for upkeep (question 147)                                |
+| Fuel and crafting fuel from coal                                   | Dropped for now    | Upkeep is food and wood (question 147)                                          |
 | The old camps: camp kit, mining discount near a camp, decommission | Replaced           | By Lab 2's camps: place, upgrade, demolish, reach                               |
 | Depth bands                                                        | **Stays**          | They shape the cube. Ore and keystones stay deep, behind camp levels            |
 | Contracts                                                          | Not built yet (M4) | Unchanged plan                                                                  |
 
-So that you can choose **which comes back first**, the dropped list in one line: slumps and supports; water; gas; lava; explosives and unstable ore; tells and scanning; pumps, vents and sealant; the drill; smelting and ingots; fuel. Question 153.
+**First back:** wall slumps and supports (owner, question 153). After that, from the rest of the list: water; gas; lava; explosives and unstable ore; tells and scanning; pumps, vents and sealant; the drill; smelting and ingots; fuel.
 
 ---
 
@@ -146,7 +148,8 @@ The doc is rewritten for the new game, with v0.2 kept in the git history as v0.1
 - **Hazards:** "All four" becomes none for now, to come back one at a time.
 - **Base:** "field crafting plus camps at depth" becomes Lab 2's camps (place on level ground, upgrade, demolish), and the recipe book replaces crafting.
 - **Player:** still no avatar, and a tap still mines. A tap now also gathers from the surface.
-- **Pacing:** turn-based, in shifts. Unchanged in name; its numbers are questions 145 to 148.
+- **Pacing:** turn-based, in shifts of 10 taps, every tap costing 1, with upkeep in food and wood and hunger the only harm (questions 145 to 148).
+- **Crew health:** what hurts the crew is hunger only, for now.
 
 The level rule, the cube, determinism and meta-progression rows stay as they are.
 
@@ -164,9 +167,9 @@ The level rule, the cube, determinism and meta-progression rows stay as they are
 
 | Tool                                                                               | Plan                                                                                                                                                   |
 | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `npm run play` (text play, used by playtest agents)                                | **Rewritten** for the new game: fog, camps, the surface, AP and End shift. Playtesting needs it, so it comes early (B2)                                |
+| `npm run play` (text play, used by playtest agents)                                | **Rewritten** for the new game: fog, camps, the surface, taps and End shift. Playtesting needs it, so it comes early (B2)                              |
 | `npm run sim` and its policies (random, pit, greedy, camp, terrace)                | **Rewritten.** Keep `random`; replace the rest with policies that fit the new game: a gatherer that expands its camps, and a digger that heads for ore |
-| `npm run sim -- --acceptance` (rules checked after every step, every run replayed) | **Rewritten** for the new rules: same idea, new checks (fog, camp levels, AP, upkeep)                                                                  |
+| `npm run sim -- --acceptance` (rules checked after every step, every run replayed) | **Rewritten** for the new rules: same idea, new checks (fog, camp levels, taps, upkeep)                                                                |
 | `npm run sim -- --survey depth` (the depth survey)                                 | **Retired** with the hazards. A new survey (can a run pay its upkeep? how far do camps spread?) once shifts are in                                     |
 | `npm run ascii` (prints layers of a cube)                                          | **Stays.** The cube is still a cube                                                                                                                    |
 | `npm run golden`                                                                   | **Stays**, on the new golden runs                                                                                                                      |
@@ -179,7 +182,7 @@ The level rule, the cube, determinism and meta-progression rows stay as they are
 - **Lab 1:** its screen, its code (`src/app/lab/labScreen.ts` and what only it uses) and its e2e tests (`tests/e2e/lab.spec.ts`) are removed.
 - **Lab 2:** its screen doesn't vanish; it _becomes_ the game screen. Its code moves out of `src/app/lab/` into the game's own folder, and `tests/e2e/lab2.spec.ts` becomes the game's e2e tests.
 - **The old game screen** (`src/app/preview.ts`, `src/app/map/`, the text views it shares with `npm run play`) is removed once the new `npm run play` stands on its own. Its e2e tests go with it: `preview`, `camps`, `crewForecast`, `marks`, `slump`, `tapMap`, `tools`, `touch` and `showcase`. Their useful checks (touch, system bars, layout) are kept on the new screen.
-- **`docs/ui-labs/`:** the screenshots stay as a record of how the game was designed, with a line saying the labs are gone. Question 154.
+- **`docs/ui-labs/`:** the screenshots stay as a record of how the game was designed, with a line saying the labs are gone. Question 154 (default, owner told).
 - **The APK keeps working at every step.** No PR removes a screen before the one replacing it is in, and every PR's CI builds the APK.
 
 ---
@@ -195,7 +198,7 @@ Each PR is small, keeps the APK working, has its own tests, and says whether it 
 | **A1** | The new world's data and generation, beside the old: clay as a real block; wood, grass, apples and animals as items; no timber-root; plants only on dirt; surface features; animals placed at the start; the first camp's patch. A new `createWorld` beside `createRun` | Unit: the same world for a seed; the lab's reachability tests (200 seeds) on the engine | **Bumps** to 0.6.0; STATE_VERSION up |
 | **A2** | Fog and Lab 2's camps in the engine: sight, place, upgrade, demolish, camp levels and what they mine. Lab 2's screen switches to them                                                                                                                                   | Unit: Lab 2's camp and fog tests, moved. First new golden runs                          | STATE_VERSION up                     |
 | **A3** | The surface in the engine: harvesting grass, trees and apples, catching animals, and mining under the fog and level rules                                                                                                                                               | Unit: Lab 2's surface tests, moved                                                      | —                                    |
-| **A4** | Shifts: AP, End shift, animals and apples moving on at the end of a shift, upkeep and crew health, rest, close the mine. Lab 2's screen gets the HUD (AP, health, shift) and End shift                                                                                  | Unit: shift order and upkeep; e2e: a few shifts played                                  | STATE_VERSION up                     |
+| **A4** | Shifts: 10 taps, End shift, animals and apples moving on at the end of a shift, upkeep in food and wood, hunger, rest, close the mine. Lab 2's screen gets the HUD (taps left, health, shift) and End shift                                                             | Unit: shift order and upkeep; e2e: a few shifts played                                  | STATE_VERSION up                     |
 | **A5** | Undo on the engine: replay the shift without the last undoable action; harvests skipped, as now                                                                                                                                                                         | Unit: exactness; e2e: Lab 2's undo tests                                                | —                                    |
 
 ### Phase B: the switch
@@ -217,12 +220,12 @@ Each PR is small, keeps the APK working, has its own tests, and says whether it 
 
 ### Phase D: the old rules come back, one PR each, in your order
 
-For example: slumps and supports; then water; then gas. Each is its own small batch, playtested before the next.
+First: **wall slumps and supports** (owner, question 153). Then the rest in an order you choose then. Each is its own small batch, playtested before the next.
 
 ---
 
 ## 7. Risks
 
 - **Two rule sets at once** (phases A and B). The app holds both for a while. A clear folder and naming split in the engine keeps them apart, and C2 removes the old one.
-- **Pacing.** AP numbers chosen for hazards may feel wrong for gathering. The new survey (section 4) measures that before you playtest.
+- **Pacing.** 10 taps a shift and the upkeep amounts are guesses. The new survey (section 4) measures whether a run can feed its crew and spread its camps before you playtest.
 - **Saves.** Old saves can't load into the new game (STATE_VERSION). The app starts a fresh run instead of failing.
