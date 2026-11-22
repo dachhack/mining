@@ -925,25 +925,36 @@ describe('isLegalAction: one action checked without building the list', () => {
 
 describe('a generated run that uses a camp-made tool', () => {
   // No recorded golden run reaches a camp tool: the policies never craft one.
-  // This plays seed 1 by hand instead: found a camp, mine stone and coal
-  // near it, craft sealant, seal the dug square. The hash pins the result.
+  // This plays seed 1 by hand instead: found a camp; dig for the coal in
+  // layer 1 under x14 y14 (the top layer holds none since question 140: the
+  // four squares round it, then its top, and its coal in the next shift);
+  // mine the stone beside the camp, craft sealant, seal the stone square.
+  // The hash pins the result. The squares are the ones tests/e2e/squares.ts
+  // finds for tools.spec.ts on the same seed.
   it('seed 1: camp, sealant, seal; the final state has the recorded hash', () => {
     let state = createRun(1, 'none', 'standard');
     const steps: (object | 'endShift')[] = [
-      { type: 'foundCamp', x: 17, y: 12 },
+      { type: 'foundCamp', x: 17, y: 10 },
       'endShift',
-      { type: 'mine', x: 16, y: 10 },
+      { type: 'mine', x: 14, y: 13 },
+      { type: 'mine', x: 15, y: 14 },
       { type: 'mine', x: 14, y: 15 },
+      { type: 'mine', x: 13, y: 14 },
+      { type: 'mine', x: 14, y: 14 },
+      'endShift',
+      { type: 'mine', x: 14, y: 14 },
+      { type: 'mine', x: 19, y: 10 },
       { type: 'craft', recipe: 'sealant' },
-      { type: 'seal', x: 16, y: 10 },
+      { type: 'seal', x: 19, y: 10 },
       'endShift',
     ];
     for (const step of steps) {
       state = step === 'endShift' ? endShift(state).state : act(state, step).state;
     }
-    expect(depthAt(state, 16, 10)).toBe(0);
-    expect(blockAt(state, { x: 16, y: 10, z: 0 })).toBe(BLOCKS.sealed.code);
+    expect(depthAt(state, 19, 10)).toBe(0);
+    expect(blockAt(state, { x: 19, y: 10, z: 0 })).toBe(BLOCKS.sealed.code);
+    expect(depthAt(state, 14, 14)).toBe(2);
     expect(countItem(state, 'sealant')).toBe(0);
-    expect(hashState(state)).toBe('94b77867c729415f');
+    expect(hashState(state)).toBe('3f04cc5f23b57097');
   });
 });

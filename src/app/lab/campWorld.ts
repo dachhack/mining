@@ -365,38 +365,33 @@ export function startSquare(state: GameState, surface?: Surface): { x: number; y
 }
 
 /**
+/**
  * Lab 2's own cube, made from the game's (Lab 2 only: the cube is copied, so
- * the game's own generation, and Lab 1, are not changed):
+ * the game's own generation, and Lab 1, are not changed): no timber-root
+ * anywhere (owner: "Let's get rid of the roots square"). Every timber-root
+ * cell, in any layer, is `LAB_SURFACE.timberRootBecomes` (dirt) instead. In
+ * Lab 2, wood comes from trees ("Wood is timber").
  *
- * - no coal at the surface (owner: "No coal at surface"): every coal seam
- *   in the top layer is `LAB_SURFACE.surfaceCoalBecomes` (stone) instead;
- *   coal deeper down stays;
- * - no timber-root anywhere (owner: "Let's get rid of the roots square"):
- *   every timber-root cell, in any layer, is `LAB_SURFACE.timberRootBecomes`
- *   (dirt) instead. In Lab 2, wood comes from trees ("Wood is timber").
+ * (Lab 2 used to turn surface coal into stone here too. The game's own
+ * generation now does that, question 140, so Lab 2 no longer needs to.)
  */
 export function labCube(lab: LabWorld): LabWorld {
   const state = lab.state;
-  const coal = BLOCKS.coalSeam.code;
-  const coalBecomes = BLOCKS[LAB_SURFACE.surfaceCoalBecomes].code;
   const root = BLOCKS.timberRoot.code;
   const rootBecomes = BLOCKS[LAB_SURFACE.timberRootBecomes].code;
-  // Layer 0 is the top layer: its cells are the first x * y entries of the cube.
-  const topCells = state.size.x * state.size.y;
   // `slice()` copies the typed array, like `list[:]` in Python.
   const blocks = state.blocks.slice();
   for (let i = 0; i < blocks.length; i += 1) {
     if (blocks[i] === root) {
       blocks[i] = rootBecomes;
-    } else if (i < topCells && blocks[i] === coal) {
-      blocks[i] = coalBecomes;
     }
   }
   return labWorldFromState(lab.seed, { ...state, blocks });
 }
 
 /**
- * A new Lab 2 world on `seed`: the game's cube, its surface (grass, trees,
+ * A new Lab 2 world on `seed`: the game's cube (no coal at the surface,
+ * question 140; no timber-root in Lab 2, `labCube`), its surface (grass, trees,
  * apple trees, animals, clay), and one free level-1 camp near the middle on
  * a patch whose ring pays for the next camp.
  */

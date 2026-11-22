@@ -89,13 +89,13 @@ describe('golden runs', { timeout: 30000 }, () => {
   // A hash only pins a rule if the run exercises it. The tests below fail if
   // a new recording no longer covers what its file is there for.
 
-  it('pit-seed-11.json digs a terraced pit, cuts trees, crafts fuel and closes the mine', () => {
-    const golden = loadGolden('pit-seed-11.json');
+  it('pit-seed-2.json digs a terraced pit, cuts trees, crafts fuel and closes the mine', () => {
+    const golden = loadGolden('pit-seed-2.json');
     expect(golden.decisions.some((decision) => decision.startsWith('cutTree'))).toBe(true);
     expect(golden.decisions.some((decision) => decision.startsWith('craft fuel'))).toBe(true);
     expect(golden.decisions[golden.decisions.length - 1]).toBe('closeMine ap 0');
 
-    const state = replayFile('pit-seed-11.json');
+    const state = replayFile('pit-seed-2.json');
     let deepest = 0;
     for (let y = 0; y < state.size.y; y += 1) {
       for (let x = 0; x < state.size.x; x += 1) {
@@ -115,8 +115,8 @@ describe('golden runs', { timeout: 30000 }, () => {
 
   // Pit walls slump (design doc 6.1; issue #94). The pit policy never makes a
   // square unstable knowingly, so its pit ends with nothing waiting to fall.
-  it('pit-seed-11.json leaves a pit with no unstable square', () => {
-    expect(unstableSquares(replayFile('pit-seed-11.json'))).toEqual([]);
+  it('pit-seed-2.json leaves a pit with no unstable square', () => {
+    expect(unstableSquares(replayFile('pit-seed-2.json'))).toEqual([]);
   });
 
   // On this seed a square turns out unstable that the policy cannot mine
@@ -239,11 +239,11 @@ describe('golden runs', { timeout: 30000 }, () => {
   // The surface forest (issue #70; design doc 3.2): this run cuts trees. A
   // stump left alone grows a tree again; a stump whose square is mined never
   // does. The hash pins cutting, stumps, regrowth and "no regrowth once mined".
-  it('random-seed-4-forest.json cuts trees; some grow back, and none on a mined square', () => {
-    const golden = loadGolden('random-seed-4-forest.json');
+  it('random-seed-6-forest.json cuts trees; some grow back, and none on a mined square', () => {
+    const golden = loadGolden('random-seed-6-forest.json');
     const cuts = golden.decisions.filter((decision) => decision.startsWith('cutTree'));
     expect(cuts.length).toBeGreaterThan(0);
-    const state = replayFile('random-seed-4-forest.json');
+    const state = replayFile('random-seed-6-forest.json');
     let stumps = 0;
     let regrown = 0;
     let minedAfterCut = 0;
@@ -352,14 +352,14 @@ describe('golden runs', { timeout: 30000 }, () => {
   // starts with the sim-only tool kit (tools/simKit.ts). The hash pins a
   // charge's blast, the crew's 6 damage from it, pumps, vents, sealant and
   // scans as the dispatcher runs them.
-  it('random-kit-seed-2-blast.json uses every camp-made tool and is hurt by its own blast', () => {
-    const golden = loadGolden('random-kit-seed-2-blast.json');
+  it('random-kit-seed-24-blast.json uses every camp-made tool and is hurt by its own blast', () => {
+    const golden = loadGolden('random-kit-seed-24-blast.json');
     expect(golden.extraItems).toBeDefined();
     const types = typesIn(golden);
     for (const type of ['placeExplosive', 'placePump', 'placeVent', 'seal', 'scan']) {
       expect(types, type).toContain(type);
     }
-    const state = replayFile('random-kit-seed-2-blast.json');
+    const state = replayFile('random-kit-seed-24-blast.json');
     expect(state.crew.health).toBeLessThan(CREW.startHealth);
     // Every charge went off in the shift it was placed: none is still armed.
     expect(state.armed).toEqual([]);

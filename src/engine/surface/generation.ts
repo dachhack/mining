@@ -13,7 +13,8 @@
 //    `pathEdges` different edges of the cube.
 // 4. Stone outcrops: each tree cell over stone becomes an outcrop with the
 //    chance in the data.
-// Coal in sight at the start is a separate step, `ensureCoalInSight`.
+// There is no coal-in-sight step any more: the top layer holds no coal at all
+// (owner, 2026-11-22, question 140; `generateCube`, decision note 0052).
 //
 // There is no miner and nobody walks (design doc v0.2), so there is no start
 // cell: no start clearing, and paths are scenery. A path is open ground over
@@ -29,7 +30,7 @@
 import { BLOCKS, SURFACE, WORLD } from '../../data';
 import type { Vec3 } from '../../data';
 import { nextFloat, nextInt } from '../rng';
-import { blockAt, setBlock } from '../state';
+import { blockAt } from '../state';
 import type { GameState } from '../state';
 import { setSurfaceKind, surfaceCells, surfaceKindAt } from './state';
 
@@ -223,52 +224,4 @@ export function generateSurface(state: GameState): void {
       setSurfaceKind(state, cell, SURFACE.kinds.outcrop.code);
     }
   }
-}
-
-/**
- * Coal in sight at the start (owner, question 67, re-expressed without a
- * start cell in design doc v0.2 section 3.2): at least one square on open
- * ground has coal as its top block. `createRun` calls this after
- * `generateSurface`, before the first reveal.
- *
- * If some open-ground square already has coal in layer 0, nothing changes
- * and no random number is drawn. Otherwise one open-ground square is picked
- * at random and its layer-0 block becomes coal. It replaces plain rock
- * (`coalInSightReplaces`), never an outcrop's stone (stone is the outcrop's
- * rule); if no plain rock qualifies, any open-ground block that is not an
- * outcrop's is replaced (this has not happened on any seed tested).
- *
- * Only layer-0 blocks the player sees at the start are read: nothing under a
- * tree and nothing below layer 0 (issue #88 item 1). So whether coal was
- * added, and where, says nothing about what is hidden.
- */
-export function ensureCoalInSight(state: GameState): void {
-  const gen = SURFACE.generation;
-  const coal = blockCode(gen.coalInSightBlock);
-
-  // The layer-0 blocks the player sees at the start: every square with no
-  // tree on it, row by row.
-  const seen: Vec3[] = [];
-  for (const cell of surfaceCells(state)) {
-    if (surfaceKindAt(state, cell) !== SURFACE.kinds.tree.code) {
-      seen.push({ x: cell.x, y: cell.y, z: 0 });
-    }
-  }
-  if (seen.some((ground) => blockAt(state, ground) === coal)) {
-    return;
-  }
-
-  const replaceable = gen.coalInSightReplaces.map(blockCode);
-  const places = seen.filter(
-    (ground) =>
-      surfaceKindAt(state, surfaceCell(ground.x, ground.y)) !== SURFACE.kinds.outcrop.code,
-  );
-  const plainRock = places.filter((ground) => replaceable.includes(blockAt(state, ground)));
-  const choices = plainRock.length > 0 ? plainRock : places;
-  const chosen = choices[nextInt(state.rng, choices.length)];
-  if (chosen === undefined) {
-    // Cannot happen on a generated surface: there is always a path or a meadow.
-    throw new Error('No open ground to put coal in');
-  }
-  setBlock(state, chosen, coal);
 }

@@ -256,6 +256,28 @@ export function validateData(data: GameData): string[] {
       problems.push(`depth band "${band.id}" has no entry in generation.bands`);
     }
   }
+  // Coal near the surface: none on the top layer, some in layer 1. The top-up
+  // in layer 1 grows veins of the coal's own size, so the coal must be a vein
+  // of the band that holds layer 1.
+  const surfaceCoal = generation.surfaceCoal;
+  requireDiggableBlock(surfaceCoal.block, 'generation.surfaceCoal.block');
+  requireDiggableBlock(surfaceCoal.surfaceBecomes, 'generation.surfaceCoal.surfaceBecomes');
+  if (surfaceCoal.surfaceBecomes === surfaceCoal.block) {
+    problems.push('generation.surfaceCoal.surfaceBecomes must not be the coal block itself');
+  }
+  requireWholeAtLeast(surfaceCoal.firstLayerMinimum, 0, 'generation.surfaceCoal.firstLayerMinimum');
+  const layerOneBand = world.depthBands.find((band) => band.firstLayer <= 1 && band.lastLayer >= 1);
+  const layerOneGeneration = generation.bands.find(
+    (bandDef) => bandDef.bandId === layerOneBand?.id,
+  );
+  if (
+    layerOneGeneration !== undefined &&
+    !layerOneGeneration.veins.some((vein) => vein.block === surfaceCoal.block)
+  ) {
+    problems.push(
+      `generation.surfaceCoal.block "${surfaceCoal.block}" must be a vein of band "${layerOneGeneration.bandId}", which holds layer 1`,
+    );
+  }
 
   // --- Structures ---
   const structureCodes = new Map<number, string>();

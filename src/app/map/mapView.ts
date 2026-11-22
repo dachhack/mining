@@ -41,7 +41,8 @@ export interface TapMap {
    * Show `state`, with `marks` drawn over it (the square a refused tap was
    * on, the neighbours that are too high, the squares a mine would make
    * unstable). `fresh` is true for a new or
-   * resumed run: the map then opens on the pit, or on the nearest coal.
+   * resumed run: the map then opens on the pit, or on the open ground
+   * nearest the middle.
    */
   show(state: GameState, fresh: boolean, marks: MapMarks): void;
 }
@@ -1804,7 +1805,7 @@ export function createTapMap(
     state = next;
     marks = nextMarks;
     // A new or resumed run opens on its pit, or, with nothing dug yet, on the
-    // nearest coal in sight (`openingSquare`), at the zoom the player last
+    // open ground nearest the middle (`openingSquare`), at the zoom the player last
     // used; otherwise the map stays where the player left it.
     if (fresh) {
       const opening = openingSquare(next);

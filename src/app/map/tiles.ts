@@ -463,10 +463,10 @@ export function buildTiles(state: GameState, window: TileWindow): Tile[][] {
  * The square a new or resumed run's map opens on (issue #110). The middle of
  * the surface is forest on most seeds, so:
  * - if anything has been dug, the middle of the dug squares (the pit);
- * - otherwise the open-ground square with coal on top that is nearest the
- *   middle of the map (design doc 3.2: there is always at least one);
- * - otherwise the open ground nearest the middle; otherwise the middle.
- * Reads only depths, trees and seen top blocks.
+ * - otherwise the open ground nearest the middle of the map;
+ * - otherwise the middle.
+ * (It used to prefer the coal in sight nearest the middle; the top layer
+ * holds no coal since question 140.) Reads only depths and trees.
  */
 export function openingSquare(state: GameState): { x: number; y: number } {
   const midX = (state.size.x - 1) / 2;
@@ -476,9 +476,7 @@ export function openingSquare(state: GameState): { x: number; y: number } {
   let maxX = -1;
   let minY = state.size.y;
   let maxY = -1;
-  // The nearest coal on open ground, and the nearest open ground, with their distances.
-  let coal: { x: number; y: number } | null = null;
-  let coalDistance = Infinity;
+  // The nearest open ground, with its distance.
   let open: { x: number; y: number } | null = null;
   let openDistance = Infinity;
   for (let y = 0; y < state.size.y; y += 1) {
@@ -498,14 +496,10 @@ export function openingSquare(state: GameState): { x: number; y: number } {
         open = { x, y };
         openDistance = distance;
       }
-      if (square.top.block === BLOCKS.coalSeam.code && distance < coalDistance) {
-        coal = { x, y };
-        coalDistance = distance;
-      }
     }
   }
   if (maxX >= 0) {
     return { x: Math.round((minX + maxX) / 2), y: Math.round((minY + maxY) / 2) };
   }
-  return coal ?? open ?? { x: Math.round(midX), y: Math.round(midY) };
+  return open ?? { x: Math.round(midX), y: Math.round(midY) };
 }

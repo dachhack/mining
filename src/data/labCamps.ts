@@ -138,13 +138,9 @@ export const LAB_SURFACE = {
    * and doesn't grow on coal or stone").
    */
   plantsGrowOn: ['dirt'] as BlockId[],
-  /**
-   * No coal at the surface in Lab 2 (owner: "No coal at surface"): a coal
-   * seam in the top layer of the game's cube is this block instead. Stone,
-   * because seams lie in rock: a bare stone patch is where coal may lie
-   * beneath. The game's own cube is not changed (question 140).
-   */
-  surfaceCoalBecomes: 'stone' as BlockId,
+  // No coal at the surface (owner: "No coal at surface") is now the game's
+  // own rule (`GENERATION.surfaceCoal`, question 140, decision note 0052), so
+  // Lab 2 no longer swaps it out.
   /**
    * No timber-root in Lab 2 (owner: "Let's get rid of the roots square";
    * "Wood is timber": wood comes from trees). Every timber-root cell of the

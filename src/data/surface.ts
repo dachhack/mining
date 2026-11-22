@@ -59,15 +59,6 @@ export interface SurfaceGenerationData {
   /** The block an outcrop stands over, and the chance each such cell under the forest becomes one. */
   outcropBlock: string;
   outcropChance: number;
-  /**
-   * Coal in sight at the start (owner, PR #72: "Coal visible near start").
-   * Every new run shows at least one `coalInSightBlock` as the top block of a
-   * square on open ground (design doc 3.2). If generation made none, one
-   * layer-0 block under open ground is picked at random and replaced: plain
-   * rock (`coalInSightReplaces`), never an outcrop's stone.
-   */
-  coalInSightBlock: string;
-  coalInSightReplaces: string[];
 }
 
 export interface SurfaceData {
@@ -109,9 +100,8 @@ export const SURFACE: SurfaceData = {
     pathWanderSteps: 6,
     outcropBlock: 'stone',
     outcropChance: 0.3,
-    // Owner's decision on PR #72.
-    coalInSightBlock: 'coalSeam',
-    coalInSightReplaces: ['dirt', 'stone'],
+    // Coal in sight at the start (owner, PR #72) is gone: the top layer holds
+    // no coal at all (owner, 2026-11-22, question 140; decision note 0052).
   },
 };
 
@@ -195,9 +185,5 @@ export function validateSurfaceData(
   wholeAtLeast(gen.pathWanderSteps, 0, 'generation.pathWanderSteps');
   knownBlock(gen.outcropBlock, 'generation.outcropBlock');
   chance(gen.outcropChance, 'generation.outcropChance');
-  knownBlock(gen.coalInSightBlock, 'generation.coalInSightBlock');
-  for (const id of gen.coalInSightReplaces) {
-    knownBlock(id, 'generation.coalInSightReplaces');
-  }
   return problems;
 }

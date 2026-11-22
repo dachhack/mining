@@ -175,14 +175,64 @@ test('the map never moves while the counter fills up', async ({ page }) => {
   const world = newLabWorld(SEED);
 
   // On screen, one untouched square for each kind of item a top block yields
-  // (stone, coal, timber, ...), found with the engine.
-  const firstOfItem = new Map<string, { x: number; y: number }>();
-  for (let y = Math.ceil(cam.y); y < Math.floor(cam.y) + 10; y += 1) {
-    for (let x = Math.ceil(cam.x); x < Math.floor(cam.x) + 10; x += 1) {
+  // (stone, timber, ...), found with the engine, each mined with one tap.
+  // The top layer holds no coal (question 140), so coal is dug for: the four
+  // neighbours of a square with coal under it, then the square, then its
+  // coal (the level rule needs the neighbours 1 deep). Played out with the
+  // engine, in the order the test taps.
+  type Square = { x: number; y: number };
+  const firstOfItem = new Map<string, Square & { taps: Square[] }>();
+  const x0 = Math.ceil(cam.x);
+  const y0 = Math.ceil(cam.y);
+  // Every whole square on screen (coal under the top is rare: one seam
+  // block in 60 squares on this seed).
+  const mapBox = await canvas.boundingBox();
+  if (mapBox === null) {
+    throw new Error('the map is not on screen');
+  }
+  const x1 = Math.min(32, Math.floor(cam.x + mapBox.width / cam.cellPx));
+  const y1 = Math.min(32, Math.floor(cam.y + mapBox.height / cam.cellPx));
+  const onScreen = (sq: Square) => sq.x >= x0 && sq.x < x1 && sq.y >= y0 && sq.y < y1;
+  let afterTaps = world;
+  for (let y = y0; y < y1; y += 1) {
+    for (let x = x0; x < x1; x += 1) {
       const block = blockDefByCode(topBlockAt(world.state, x, y));
       const item = block.yields[0]?.item;
-      if (item !== undefined && !firstOfItem.has(item) && labTap(world, x, y).result.mined) {
-        firstOfItem.set(item, { x, y });
+      const tap = labTap(afterTaps, x, y);
+      if (item !== undefined && !firstOfItem.has(item) && tap.result.mined) {
+        firstOfItem.set(item, { x, y, taps: [{ x, y }] });
+        afterTaps = tap.world;
+      }
+    }
+  }
+  const tapped = (): Square[] => [...firstOfItem.values()].flatMap((entry) => entry.taps);
+  for (let y = y0; y < y1 && firstOfItem.size < 3; y += 1) {
+    for (let x = x0; x < x1 && firstOfItem.size < 3; x += 1) {
+      const plus = [
+        { x, y: y - 1 },
+        { x: x + 1, y },
+        { x, y: y + 1 },
+        { x: x - 1, y },
+      ];
+      const plan = [...plus, { x, y }, { x, y }];
+      // Keep clear of the squares already tapped, and of their neighbours.
+      const clear = plan.every(
+        (sq) =>
+          onScreen(sq) &&
+          tapped().every((done) => Math.abs(done.x - sq.x) + Math.abs(done.y - sq.y) > 1),
+      );
+      if (!clear) continue;
+      let w = afterTaps;
+      let last: ReturnType<typeof labTap> | null = null;
+      for (const sq of plan) {
+        last = labTap(w, sq.x, sq.y);
+        if (!last.result.mined) break;
+        w = last.world;
+      }
+      const item = last?.result.mined ? last.result.yields[0]?.item : undefined;
+      if (item !== undefined && !firstOfItem.has(item)) {
+        firstOfItem.set(item, { x, y, taps: plan });
+        afterTaps = w;
       }
     }
   }
@@ -199,11 +249,14 @@ test('the map never moves while the counter fills up', async ({ page }) => {
   // player's finger does: if the map had moved, the tap would land on
   // another square and `data-last-tap` would name it.
   for (const [item, square] of firstOfItem) {
-    await page.touchscreen.tap(
-      before.x + (square.x - cam.x + 0.5) * cam.cellPx,
-      before.y + (square.y - cam.y + 0.5) * cam.cellPx,
-    );
-    await expect(canvas).toHaveAttribute('data-last-tap', `mined ${square.x},${square.y}`);
+    for (const tap of square.taps) {
+      await page.touchscreen.tap(
+        before.x + (tap.x - cam.x + 0.5) * cam.cellPx,
+        before.y + (tap.y - cam.y + 0.5) * cam.cellPx,
+      );
+      await expect(canvas).toHaveAttribute('data-last-tap', `mined ${tap.x},${tap.y}`);
+      expect(await canvas.boundingBox()).toEqual(before);
+    }
     await expect(page.getByTestId(`lab-res-${item}`)).toBeVisible();
     expect(await canvas.boundingBox()).toEqual(before);
   }

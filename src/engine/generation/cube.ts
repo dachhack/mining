@@ -1,16 +1,18 @@
 // Cube generation (design doc 3, 3.1, 3.3; decision note 0005 items 3 and 4).
 //
-// Two passes, both driven only by the seeded generator:
+// Three passes, all driven only by the seeded generator:
 // 1. Rock. Every cell becomes one of its band's plain rocks, picked by weight.
 // 2. Veins. Band by band and ore by ore, groups of connected ore blocks
 //    replace some of that rock.
+// 3. Coal near the surface (owner, 2026-11-22, question 140; decision note
+//    0052): no coal on the top layer, and at least a minimum in layer 1.
 //
 // Underground spaces (caverns and pockets) are opened afterwards, by
 // `generateSpaces` in spaces.ts.
 //
 // Every number used here is in src/data/generation.ts.
 
-import { BLOCKS, GENERATION } from '../../data';
+import { BLOCKS, GENERATION, WORLD } from '../../data';
 import type { BandGenerationDef, CubeSize, RockWeight, Vec3, VeinDef } from '../../data';
 import { cellCount, cellIndex, cellPosition, inGrid } from '../state';
 import { nextFloat, nextInt } from '../rng';
@@ -212,6 +214,107 @@ function placeVeins(
 }
 
 /**
+ * Pass 3: coal near the surface (owner, 2026-11-22: "No coal at surface in
+ * the real game, but make sure there is some coal at the first level after
+ * the surface"). Every number is in `GENERATION.surfaceCoal`.
+ *
+ * - Every coal cell in layer 0 becomes `surfaceBecomes` (stone). No random
+ *   number is drawn for this.
+ * - Then, if layer 1 holds fewer coal cells than the minimum, more coal
+ *   veins are grown in layer 1's plain rock until it holds at least that
+ *   many. Each is the size of a normal coal vein, and stays in layer 1. If
+ *   layer 1 already holds enough, no random number is drawn, so the rest of
+ *   the cube, and everything generated after it, is as it would have been.
+ *
+ * The minimum is written for the full-size 32 x 32 cube; a smaller cube
+ * needs the same share of its layer, rounded up. In a cube so shallow that
+ * layer 1 lies in a band without coal veins (only test cubes), there is no
+ * top-up.
+ *
+ * This runs before the underground spaces are opened. A space replaces plain
+ * rock only, never ore, and never reaches layer 0, so the coal placed here
+ * stays.
+ */
+export function placeSurfaceCoal(
+  blocks: Uint8Array,
+  size: CubeSize,
+  bands: { bandId: string; layers: number[] }[],
+  rng: RngState,
+): void {
+  const rule = GENERATION.surfaceCoal;
+  const coal = blockCode(rule.block);
+  const surfaceBecomes = blockCode(rule.surfaceBecomes);
+  const cellsPerLayer = size.x * size.y;
+
+  // Layer 0: no coal. Its cells are the first x * y entries of the cube.
+  for (let cell = 0; cell < cellsPerLayer; cell += 1) {
+    if (blocks[cell] === coal) {
+      blocks[cell] = surfaceBecomes;
+    }
+  }
+
+  // Layer 1: at least the minimum. Find the band that holds it, and that
+  // band's coal vein.
+  const layerOneBand = bands.find((band) => band.layers.includes(1));
+  if (layerOneBand === undefined) {
+    return; // A cube one layer deep has no layer 1.
+  }
+  const bandDef = bandDefFor(layerOneBand.bandId);
+  const vein = bandDef.veins.find((entry) => entry.block === rule.block);
+  if (vein === undefined) {
+    return; // Only in a very shallow test cube.
+  }
+  const fullSizeCellsPerLayer = WORLD.size.x * WORLD.size.y;
+  const needed = Math.ceil((rule.firstLayerMinimum * cellsPerLayer) / fullSizeCellsPerLayer);
+
+  // Layer 1's cells run from `cellsPerLayer` to `2 * cellsPerLayer - 1`.
+  const firstCell = cellsPerLayer;
+  let have = 0;
+  for (let cell = firstCell; cell < firstCell + cellsPerLayer; cell += 1) {
+    if (blocks[cell] === coal) {
+      have += 1;
+    }
+  }
+  if (have >= needed) {
+    return;
+  }
+
+  // Only layer 1's plain rock may become coal, so a new vein stays in the
+  // layer and never eats another vein.
+  const rockCodes = bandDef.rock.map((rock) => blockCode(rock.block));
+  const canReplace = new Uint8Array(blocks.length);
+  for (let cell = firstCell; cell < firstCell + cellsPerLayer; cell += 1) {
+    if (rockCodes.includes(blocks[cell] as number)) {
+      canReplace[cell] = 1;
+    }
+  }
+  while (have < needed) {
+    const targetSize = vein.minSize + nextInt(rng, vein.maxSize - vein.minSize + 1);
+    let grown: number[] | null = null;
+    for (let attempt = 0; attempt < GENERATION.veinPlacementTries && grown === null; attempt += 1) {
+      const startIndex = firstCell + nextInt(rng, cellsPerLayer);
+      if (canReplace[startIndex] === 1) {
+        grown = growGroup(
+          blocks,
+          canReplace,
+          size,
+          startIndex,
+          coal,
+          vein.minSize,
+          targetSize,
+          rng,
+        );
+      }
+    }
+    if (grown === null) {
+      // Every try failed: layer 1 has no room left. Not seen on any seed tested.
+      return;
+    }
+    have += grown.length;
+  }
+}
+
+/**
  * Generate the blocks of a new cube.
  *
  * Contract:
@@ -228,7 +331,11 @@ function placeVeins(
  *   (spaces.ts) opens the caverns and pockets afterwards.
  * - Ore is in veins (design doc 3.3): each vein is a 6-connected group of at
  *   least the ore's `minSize` blocks, all in one band. Two veins of the same
- *   ore may touch and so look like one larger vein.
+ *   ore may touch and so look like one larger vein. The one exception is
+ *   coal that reached layer 0: it is stone there (pass 3), so what is left
+ *   of that vein below may be smaller than `minSize`.
+ * - Layer 0 holds no coal, and layer 1 holds at least the minimum of
+ *   `GENERATION.surfaceCoal` (see `placeSurfaceCoal`).
  */
 export function generateCube(size: CubeSize, rng: RngState): Uint8Array {
   const blocks = new Uint8Array(cellCount(size));
@@ -268,6 +375,9 @@ export function generateCube(size: CubeSize, rng: RngState): Uint8Array {
       placeVeins(blocks, canReplace, size, band.layers, vein, rng);
     }
   }
+
+  // Pass 3: no coal on the top layer, and at least a minimum in layer 1.
+  placeSurfaceCoal(blocks, size, bands, rng);
 
   return blocks;
 }

@@ -80,17 +80,6 @@ vi.mock('../../src/engine/reveal', () => ({
   },
 }));
 
-// Coal in sight at the start: here it only records that `createRun` calls
-// it, and when.
-vi.mock('../../src/engine/surface/generation', async () => ({
-  ...(await vi.importActual<typeof import('../../src/engine/surface/generation')>(
-    '../../src/engine/surface/generation',
-  )),
-  ensureCoalInSight: (): void => {
-    calls.push('ensureCoalInSight');
-  },
-}));
-
 vi.mock('../../src/engine/tells', () => ({
   updateMineralTraces: (): void => {
     calls.push('updateMineralTraces');
@@ -285,8 +274,9 @@ describe('previewCubePhase', () => {
 describe('createRun', () => {
   it('reveals what can be seen from the start', () => {
     createRun(1, 'none', 'standard');
-    // Coal in sight is made sure of first, then the first reveal shows it.
-    expect(calls).toEqual(['ensureCoalInSight', 'updateReveal', 'updateMineralTraces']);
+    // The first reveal, then the first traces. (Coal in sight, which came
+    // first, is gone with question 140.)
+    expect(calls).toEqual(['updateReveal', 'updateMineralTraces']);
   });
 });
 

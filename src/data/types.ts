@@ -217,6 +217,25 @@ export interface GenerationData {
   veinPlacementTries: number;
   /** The same for one underground space. */
   spacePlacementTries: number;
+  /** No coal on the top layer, and some coal in the layer below it. */
+  surfaceCoal: SurfaceCoalDef;
+}
+
+/**
+ * Coal near the surface (owner, 2026-11-22, question 140; decision note
+ * 0052): "No coal at surface in the real game, but make sure there is some
+ * coal at the first level after the surface."
+ */
+export interface SurfaceCoalDef {
+  /** Block id: the coal. It must be a vein of the band that holds layer 1. */
+  block: string;
+  /** Block id: what a `block` cell in layer 0 (the top layer) becomes instead. */
+  surfaceBecomes: string;
+  /**
+   * Layer 1 holds at least this many `block` cells on the full-size 32 x 32
+   * cube. A smaller cube needs the same share of its layer, rounded up.
+   */
+  firstLayerMinimum: number;
 }
 
 /** The mineral-traces tell: rock near ore shows it (decision note 0012). */

@@ -441,34 +441,31 @@ describe('what grows where, and no coal at the surface (owner, after the PR #126
     }
   });
 
-  it('a coal seam on the top layer is stone in Lab 2, and timber-root (any layer) is dirt; nothing else changes', () => {
+  it('Lab 2 has no coal at the surface; its cube is the game’s, apart from timber-root (dirt)', () => {
+    // No coal at the surface is now the game's own rule (question 140), so
+    // Lab 2 no longer swaps it; it only turns timber-root into dirt.
     const coal = BLOCKS.coalSeam.code;
-    const becomes = BLOCKS[LAB_SURFACE.surfaceCoalBecomes].code;
     const root = BLOCKS.timberRoot.code;
     const rootBecomes = BLOCKS[LAB_SURFACE.timberRootBecomes].code;
-    let swapped = 0;
     let rootsSwapped = 0;
     for (let seed = 1; seed <= 50; seed += 1) {
       const game = newLabWorld(seed).state;
       const lab = newCampWorld(seed).lab.state;
-      // The cube's cells in order, the top layer (z = 0) first: x * y of them.
-      const topCells = game.size.x * game.size.y;
       for (let i = 0; i < game.blocks.length; i += 1) {
         const before = game.blocks[i];
         const after = lab.blocks[i];
-        if (i < topCells && before === coal) {
-          expect(after).toBe(becomes);
-          swapped += 1;
-        } else if (before === root) {
+        if (before === root) {
           expect(after).toBe(rootBecomes);
           rootsSwapped += 1;
         } else if (after !== before) {
           expect.fail(`seed ${seed}, cell ${i}: ${before} became ${after}`);
         }
       }
+      // The cube's cells in order, the top layer (z = 0) first: x * y of them.
+      const top = Array.from(lab.blocks.subarray(0, lab.size.x * lab.size.y));
+      expect(top.includes(coal), `seed ${seed}`).toBe(false);
     }
-    // The game's cube does have surface coal and timber-root, so both swaps were tested.
-    expect(swapped).toBeGreaterThan(0);
+    // The game's cube does have timber-root, so the swap was tested.
     expect(rootsSwapped).toBeGreaterThan(0);
   });
 
@@ -476,14 +473,5 @@ describe('what grows where, and no coal at the surface (owner, after the PR #126
     const before = hashState(newLabWorld(7).state);
     newCampWorld(7);
     expect(hashState(newLabWorld(7).state)).toBe(before);
-    // And Lab 1's world (the game's cube) still has its surface coal somewhere.
-    let coalOnTop = 0;
-    for (let seed = 1; seed <= 20; seed += 1) {
-      const s = newLabWorld(seed).state;
-      for (let i = 0; i < s.size.x * s.size.y; i += 1) {
-        if (s.blocks[i] === BLOCKS.coalSeam.code) coalOnTop += 1;
-      }
-    }
-    expect(coalOnTop).toBeGreaterThan(0);
   });
 });

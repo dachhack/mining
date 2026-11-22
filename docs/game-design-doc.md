@@ -64,7 +64,7 @@ These replace three v0.1 rows: World ("mined from the top down by selecting bloc
 The surface is the open air above `z = 0`, one cell per square. It is mostly forest (owner, issue #70; decision note 0020).
 
 - **Surface cells [Default]:** each square starts as a *tree*, a *meadow*, a *dirt path* or a *stone outcrop*; about 65% start as trees. Meadows, paths and outcrops are open ground: the layer-0 block under them is the square's top block and is seen from the start. With no miner there is no start clearing and nobody walks: paths and meadows are scenery, laid out by the v0.1 generator less its start clearing. A path is open ground over whatever is there (it no longer wears stone to dirt; decision note 0020 Consequences).
-- **Coal in sight [Default]:** at least one square on open ground has coal as its top block at the start. Generation turns a plain-rock layer-0 block under open ground into coal if none is (owner, question 67, re-expressed without a start cell).
+- **No coal at the surface, some just below [Decided; number Default]:** the top layer (`z = 0`) holds no coal: generation turns any coal seam there into stone, so a bare stone patch may hint at coal beneath. Layer 1 holds at least 12 coal seam blocks on every seed; if the veins leave fewer, generation grows more coal veins in layer 1's plain rock until it does (owner, 2026-11-22, question 140: "No coal at surface in the real game, but make sure there is some coal at the first level after the surface"; decision note 0052). This replaces *coal in sight* (owner, question 67), which put coal on open ground at the start.
 - **Trees:** a tree is a square's top. It hides the layer-0 block under it, even when a neighbouring square has been dug (question 92). A tree square is at depth 0 and holds its ground: it never slumps (question 92).
 - **Cutting [Default]:** tap a tree to cut it: 2 AP, gives 2 timber. It leaves a *stump*, which is open ground, and the block under it becomes the square's top block and is shown.
 - **Regrowth:** a stump grows a tree again after 10 shifts (owner), counting the shift of the cut, at the end of a shift (after the cube phase, before upkeep). Once its square has been mined it never grows a tree again (owner: "Trees grow back if their spot isnt mined in a few turns"). A regrown tree hides the block under it again; the block stays known. Meadows, paths and outcrops never grow trees.
@@ -73,7 +73,7 @@ The surface is the open air above `z = 0`, one cell per square. It is mostly for
 
 | Band | Layers | Materials | Hazards introduced |
 |---|---|---|---|
-| Upper | 0–3 | Dirt, stone, coal, timber-root | Slumping dirt, small caverns |
+| Upper | 0–3 | Dirt, stone, coal (none in layer 0; section 3.2), timber-root | Slumping dirt, small caverns |
 | Middle | 4–11 | Stone and hard rock, iron, copper | Water pockets, gas pockets, caverns |
 | Deep | 12–31 | Hard rock, crystal, rare ore, relics | Lava, unstable ore, large caverns |
 

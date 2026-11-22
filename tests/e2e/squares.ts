@@ -149,12 +149,31 @@ export interface CampSpot {
   centre: Square;
   /** A stone square on open ground, one step from the patch. */
   stoneBeside: Square;
-  /** A coal square on open ground where mining is cheaper once the camp stands. */
-  coalNear: Square;
   /** An untouched square on open ground that is none of the above and not in the patch. */
   spare: Square;
   /** The name of the block under `stoneBeside`'s top block (hidden from the player). */
   underStone: string;
+}
+
+/**
+ * A camp spot with coal to dig for. The top layer holds no coal (question
+ * 140), so the coal is in layer 1 under `coal`. With the camp standing:
+ * - shift 2: mine each square of `around` (`coal`'s four neighbours), then
+ *   `coal`'s top: 5 mines at 1 AP each near the camp, the whole shift;
+ * - shift 3: `coal` is now 1 level lower than all its neighbours, so its
+ *   coal can be mined; then mine `stoneBeside`, craft sealant and seal it.
+ *   `stoneBeside` is not next to `coal`, which ends 2 deep, so sealing it
+ *   back to ground level keeps the level rule.
+ * `spare` is none of these squares.
+ */
+export interface CampSpotWithCoal extends CampSpot {
+  coal: Square;
+  around: Square[];
+  /**
+   * True if mining the coal would leave squares unstable (the pit round it
+   * is only 1 deep): the map then asks for a second tap before it mines.
+   */
+  coalRisky: boolean;
 }
 
 /** The squares of the 3 x 3 patch round `centre`. */
@@ -168,12 +187,106 @@ function patchOf(centre: Square): Square[] {
   return squares;
 }
 
+/** The face neighbours of a square that are inside the cube. */
+function neighboursOf(state: GameState, square: Square): Square[] {
+  return [
+    { x: square.x, y: square.y - 1 },
+    { x: square.x + 1, y: square.y },
+    { x: square.x, y: square.y + 1 },
+    { x: square.x - 1, y: square.y },
+  ].filter((n) => n.x >= 0 && n.y >= 0 && n.x < state.size.x && n.y < state.size.y);
+}
+
+function sameSquare(a: Square, b: Square): boolean {
+  return a.x === b.x && a.y === b.y;
+}
+
+/** Take the legal craft of this recipe; throws if there is none. */
+function craft(state: GameState, recipe: string): GameState {
+  const action = legalActions(state).find(
+    (legal) => legal.type === 'craft' && 'recipe' in legal && legal.recipe === recipe,
+  );
+  if (action === undefined) {
+    throw new Error(`No legal craft of ${recipe}`);
+  }
+  return applyAction(state, action).state;
+}
+
 /**
- * A place for a camp with stone beside it and coal near it, all on screen.
- * "Near" is checked by founding the camp in a copy of the run and asking the
- * engine whether the coal square is within the camp's reach.
+ * A square to dig for coal as `CampSpotWithCoal` describes, with
+ * `stoneBeside` sealed at the end, played out with the engine on a copy of
+ * the run; or `undefined` if there is none. `withCamp` is the run with the
+ * camp founded.
  */
+function findCoalDig(
+  withCamp: GameState,
+  view: View,
+  patch: Square[],
+  stoneBeside: Square,
+): { coal: Square; around: Square[]; coalRisky: boolean } | undefined {
+  for (const coal of squaresOf(view)) {
+    if (blockDefAt(withCamp, { x: coal.x, y: coal.y, z: 1 }).name !== BLOCKS.coalSeam.name) {
+      continue;
+    }
+    const around = neighboursOf(withCamp, coal);
+    if (around.length !== 4) {
+      continue; // On the edge of the cube: the dig would not take exactly one shift.
+    }
+    const clear = [coal, ...around].every(
+      (square) =>
+        inView(view, square.x, square.y) &&
+        !hasTree(withCamp, square.x, square.y) &&
+        !patch.some((p) => sameSquare(p, square)) &&
+        !sameSquare(square, stoneBeside),
+    );
+    if (!clear) {
+      continue;
+    }
+    let coalRisky: boolean;
+    try {
+      let state = endShift(withCamp).state;
+      for (const square of [...around, coal]) {
+        state = take(state, 'mine', square);
+      }
+      state = endShift(state).state;
+      coalRisky = unstableAfterMine(state, coal.x, coal.y).length > 0;
+      state = take(state, 'mine', coal);
+      if ((state.stockpile['coal'] ?? 0) < 1) {
+        continue;
+      }
+      state = take(state, 'mine', stoneBeside);
+      state = craft(state, 'sealant');
+      take(state, 'seal', stoneBeside);
+    } catch {
+      continue; // Some step was not legal (no AP left, the level rule, ...).
+    }
+    return { coal, around, coalRisky };
+  }
+  return undefined;
+}
+
+/** A place for a camp with stone beside it, all on screen. */
 export function findCampSpot(state: GameState, view: View): CampSpot {
+  const spot = findSpot(state, view, false);
+  return {
+    centre: spot.centre,
+    stoneBeside: spot.stoneBeside,
+    spare: spot.spare,
+    underStone: spot.underStone,
+  };
+}
+
+/**
+ * A place for a camp with stone beside it and coal to dig for near it, all
+ * on screen. The dig is checked by playing it out with the engine on a copy
+ * of the run.
+ */
+export function findCampSpotWithCoal(state: GameState, view: View): CampSpotWithCoal {
+  return findSpot(state, view, true);
+}
+
+/** The first camp spot that fits; with `wantCoal`, also a coal dig (else `coal` is unused). */
+function findSpot(state: GameState, view: View, wantCoal: boolean): CampSpotWithCoal {
   const onScreen = squaresOf(view);
   for (const centre of onScreen) {
     const patch = patchOf(centre);
@@ -188,39 +301,46 @@ export function findCampSpot(state: GameState, view: View): CampSpot {
     if (camp === undefined) {
       continue;
     }
-    const stoneBeside = onScreen.find(
-      (square) =>
-        stepsFromCamp(camp, square.x, square.y) === 1 &&
-        topIs(state, square.x, square.y, BLOCKS.stone.code),
-    );
-    const coalNear = onScreen.find(
-      (square) =>
-        topIs(state, square.x, square.y, BLOCKS.coalSeam.code) &&
-        stepsFromCamp(camp, square.x, square.y) >= 1 &&
-        // A cheaper mine there is on the list once the camp stands.
-        legalActions(endShift(withCamp).state).some(
-          (action) =>
-            action.type === 'mine' &&
-            action.x === square.x &&
-            action.y === square.y &&
-            action.ap < (BLOCKS.coalSeam.mineCost ?? 0),
-        ),
-    );
-    if (stoneBeside === undefined || coalNear === undefined) {
-      continue;
+    for (const stoneBeside of onScreen) {
+      if (
+        stepsFromCamp(camp, stoneBeside.x, stoneBeside.y) !== 1 ||
+        !topIs(state, stoneBeside.x, stoneBeside.y, BLOCKS.stone.code)
+      ) {
+        continue;
+      }
+      const dig = wantCoal
+        ? findCoalDig(withCamp, view, patch, stoneBeside)
+        : { coal: stoneBeside, around: [], coalRisky: false };
+      if (dig === undefined) {
+        continue;
+      }
+      const dug = [stoneBeside, dig.coal, ...dig.around];
+      const spare = onScreen.find(
+        (square) =>
+          topIs(state, square.x, square.y, BLOCKS.dirt.code) &&
+          stepsFromCamp(camp, square.x, square.y) >= 1 &&
+          !dug.some((d) => sameSquare(d, square)),
+      );
+      if (spare === undefined) {
+        continue;
+      }
+      const underStone = blockDefAt(state, { x: stoneBeside.x, y: stoneBeside.y, z: 1 }).name;
+      return {
+        centre,
+        stoneBeside,
+        coal: dig.coal,
+        around: dig.around,
+        coalRisky: dig.coalRisky,
+        spare,
+        underStone,
+      };
     }
-    const spare = onScreen.find(
-      (square) =>
-        topIs(state, square.x, square.y, BLOCKS.dirt.code) &&
-        stepsFromCamp(camp, square.x, square.y) >= 1,
-    );
-    if (spare === undefined) {
-      continue;
-    }
-    const underStone = blockDefAt(state, { x: stoneBeside.x, y: stoneBeside.y, z: 1 }).name;
-    return { centre, stoneBeside, coalNear, spare, underStone };
   }
-  throw new Error('No camp site with stone beside it and coal near it is on screen');
+  throw new Error(
+    wantCoal
+      ? 'No camp site with stone beside it and coal to dig for near it is on screen'
+      : 'No camp site with stone beside it is on screen',
+  );
 }
 
 export interface TreePatch {

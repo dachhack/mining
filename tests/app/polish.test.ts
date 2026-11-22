@@ -1,6 +1,6 @@
 // T14 (issue #110): what the phone map and the phone's text gained. The
 // tiles carry the tells, the worked squares and the edge of the area where
-// mining is cheaper; the map opens on the pit or on the nearest coal; the
+// mining is cheaper; the map opens on the pit or on open ground; the
 // forecast is one line for each thing, the most dangerous first; and the
 // phone has its own wording wherever the play tool names a command to type.
 
@@ -119,10 +119,12 @@ describe('the edge of the area where mining is cheaper', () => {
 });
 
 describe('where the map opens (issue #110)', () => {
-  it('on the coal in sight nearest the middle, on a new run', () => {
-    // Seed 110: coal on open ground at x16 y12, four steps from the middle.
+  it('on the open ground nearest the middle, on a new run', () => {
+    // Seed 110: open ground at x15 y15, a step from the middle (15.5, 15.5).
+    // (It opened on the nearest coal in sight until question 140 took coal
+    // off the top layer.)
     const state = createRun(110, 'none', 'standard');
-    expect(openingSquare(state)).toEqual({ x: 16, y: 12 });
+    expect(openingSquare(state)).toEqual({ x: 15, y: 15 });
   });
 
   it('on the middle of the pit once something is dug', () => {
@@ -130,7 +132,7 @@ describe('where the map opens (issue #110)', () => {
     expect(openingSquare(pit(rows))).toEqual({ x: 4, y: 3 });
   });
 
-  it('on the nearest open ground when no coal shows; on the middle under an unbroken forest', () => {
+  it('on the nearest open ground; on the middle under an unbroken forest', () => {
     const open = buildState({
       layers: [['#####'], ['#####']],
       surface: ['TTTT.'],
