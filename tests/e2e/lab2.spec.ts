@@ -237,10 +237,13 @@ test('the start screen leads to lab 2, which opens in fog round one camp', async
 
 test('the key fits the tray: no entry is cut by its fixed height', async ({ page }) => {
   // Review of PR #122: with the surface's kinds added, a third row of the key
-  // was cut in half by the tray. Seed 110 opens with seven kinds in sight.
+  // was cut in half by the tray. Seed 110 opens with six kinds in sight
+  // (dirt, stone, timber-root, grass, tree, apple tree: no coal at the
+  // surface since the owner's playtest of the PR #126 build), filling both
+  // of the key's rows.
   await openLab2(page);
   const key = page.getByTestId('lab2-tray').locator('.lab-key');
-  await expect(key.locator('.lab-key-entry')).toHaveCount(7);
+  await expect(key.locator('.lab-key-entry')).toHaveCount(6);
   const fit = await key.evaluate((el) => {
     const box = el.getBoundingClientRect();
     const entries = Array.from(el.children).map((child) => child.getBoundingClientRect());

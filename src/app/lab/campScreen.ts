@@ -69,8 +69,8 @@ import {
   clayTexture,
   drawAnimal,
   drawAppleTree,
+  drawForest,
   drawGrass,
-  drawTree,
   featureSwatch,
   labItemIcon,
 } from './surfaceArt';
@@ -299,7 +299,7 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
           box,
           clay,
         );
-        drawFeature(ctx, i, box, x, y);
+        drawFeature(ctx, i, box, x, y, { px, py, c });
         if (sight === 'greyed') {
           drawGreyed(ctx, px, py, c);
         }
@@ -346,21 +346,46 @@ export function mountCampLab(root: HTMLElement, seed: number | null, onBack: () 
     canvas.dataset['animals'] = world.surface.animals.map((a) => `${a.x},${a.y}`).join(' ');
   }
 
-  /** What grows on square `i` (grass, a tree, an apple tree), drawn over its block. */
+  /** True if square (x, y) is on the map, not in fog, and has a tree or an apple tree: part of a forest. */
+  function forestAt(x: number, y: number): boolean {
+    const size = world.lab.state.size;
+    if (x < 0 || y < 0 || x >= size.x || y >= size.y || sightOf(x, y) === 'fog') {
+      return false;
+    }
+    const feature = world.surface.features[x + size.x * y];
+    return feature === TREE || feature === APPLE_TREE;
+  }
+
+  /**
+   * What grows on square `i` (grass, a tree, an apple tree), drawn over its
+   * block and hiding it. Trees join the forest squares beside them.
+   */
   function drawFeature(
     ctx: CanvasRenderingContext2D,
     i: number,
     box: SquareBox,
     x: number,
     y: number,
+    cell: { px: number; py: number; c: number },
   ): void {
     const feature = world.surface.features[i];
     if (feature === GRASS) {
       drawGrass(ctx, box, x, y);
-    } else if (feature === TREE) {
-      drawTree(ctx, box);
-    } else if (feature === APPLE_TREE) {
-      drawAppleTree(ctx, box, world.surface.apples[i] ?? 0);
+      return;
+    }
+    if (feature !== TREE && feature !== APPLE_TREE) {
+      return;
+    }
+    const joins = {
+      n: forestAt(x, y - 1),
+      e: forestAt(x + 1, y),
+      s: forestAt(x, y + 1),
+      w: forestAt(x - 1, y),
+    };
+    if (feature === TREE) {
+      drawForest(ctx, cell, box, x, y, joins);
+    } else {
+      drawAppleTree(ctx, cell, box, x, y, joins, world.surface.apples[i] ?? 0);
     }
   }
 

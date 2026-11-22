@@ -11,7 +11,7 @@ import type { SquareBox } from './labDraw';
 
 export const SURFACE_PAINT = {
   clay: { base: '#b8673f', dark: '#97502f', light: '#cf8458', streak: '#a95c38' },
-  grass: { blade: '#6fae3d', bladeDark: '#4c8a2a', tip: '#9fd162' },
+  grass: { base: '#4f8a2c', blade: '#6fae3d', bladeDark: '#3c7022', tip: '#9fd162' },
   tree: { canopy: '#2f6b2c', canopyDark: '#1f4d1e', canopyLight: '#4b8f3c', trunk: '#5a3b22' },
   appleTree: {
     canopy: '#4f8f36',
@@ -92,7 +92,11 @@ export function clayTexture(x: number, y: number): HTMLCanvasElement | null {
 
 // ----- Surface features -----
 
-/** Grass: a few tufts of blades over the square's ground. */
+/**
+ * Grass: a lawn over the whole square, so the block under it is hidden until
+ * the grass is cut (owner, after the PR #126 playtest: "Tree and grass cover
+ * entire square so you can't see what's below").
+ */
 export function drawGrass(
   ctx: CanvasRenderingContext2D,
   box: SquareBox,
@@ -103,33 +107,143 @@ export function drawGrass(
   const p = SURFACE_PAINT.grass;
   const { left, top, inner } = box;
   ctx.save();
+  ctx.fillStyle = p.base;
+  ctx.fillRect(left, top, inner, inner);
+  // Soft darker patches, so a meadow is not one flat colour.
+  for (let i = 0; i < 3; i += 1) {
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = p.bladeDark;
+    ctx.beginPath();
+    ctx.ellipse(
+      left + inner * random(),
+      top + inner * random(),
+      inner * (0.15 + random() * 0.15),
+      inner * (0.08 + random() * 0.08),
+      random() * Math.PI,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  // Blades all over the square.
   ctx.lineCap = 'round';
-  for (let tuft = 0; tuft < 4; tuft += 1) {
-    const bx = left + inner * (0.18 + random() * 0.64);
-    const by = top + inner * (0.3 + random() * 0.55);
-    for (let blade = 0; blade < 4; blade += 1) {
-      const lean = (random() - 0.5) * inner * 0.22;
-      const h = inner * (0.16 + random() * 0.14);
-      ctx.strokeStyle = blade % 2 === 0 ? p.blade : p.bladeDark;
-      ctx.lineWidth = Math.max(1, inner * 0.045);
-      ctx.beginPath();
-      ctx.moveTo(bx + (blade - 1.5) * inner * 0.03, by);
-      ctx.quadraticCurveTo(bx + lean * 0.4, by - h * 0.6, bx + lean, by - h);
-      ctx.stroke();
-    }
+  ctx.lineWidth = Math.max(1, inner * 0.04);
+  for (let blade = 0; blade < 18; blade += 1) {
+    const bx = left + inner * (0.06 + random() * 0.88);
+    const by = top + inner * (0.2 + random() * 0.78);
+    const lean = (random() - 0.5) * inner * 0.16;
+    const h = inner * (0.12 + random() * 0.12);
+    ctx.strokeStyle = blade % 3 === 0 ? p.tip : blade % 3 === 1 ? p.blade : p.bladeDark;
+    ctx.beginPath();
+    ctx.moveTo(bx, by);
+    ctx.quadraticCurveTo(bx + lean * 0.4, by - h * 0.6, bx + lean, by - h);
+    ctx.stroke();
   }
   ctx.restore();
 }
 
-/** A round canopy seen from above, with a darker rim and a light spot: a tree, or an apple tree. */
-function canopy(
+/** Which of a square's four neighbours belong to the same forest: the square joins them at that edge. */
+export interface ForestJoins {
+  n: boolean;
+  e: boolean;
+  s: boolean;
+  w: boolean;
+}
+
+/** A square's whole cell, gap included: its top-left corner and its size in pixels. */
+export interface CellRect {
+  px: number;
+  py: number;
+  c: number;
+}
+
+/**
+ * Forest: the whole square covered by tree tops, joined to the neighbouring
+ * forest squares at their shared edges, so a group of trees reads as one
+ * forest, not separate trees (owner: "trees edges connect to make forest").
+ *
+ * The tree tops are round blobs laid out on one grid over the whole map
+ * (two to a square each way), not per square, so a blob near an edge is
+ * drawn, cut at the edge, by both squares it overlaps, and the forest has
+ * no seams. Toward a joined neighbour the square covers the grid line
+ * between them; toward any other side it stops at its own inner box, with
+ * a darker rim.
+ */
+export function drawForest(
+  ctx: CanvasRenderingContext2D,
+  cell: CellRect,
+  box: SquareBox,
+  x: number,
+  y: number,
+  joins: ForestJoins,
+): void {
+  const p = SURFACE_PAINT.tree;
+  const { px, py, c } = cell;
+  const left = joins.w ? px : box.left;
+  const right = joins.e ? px + c : box.left + box.inner;
+  const top = joins.n ? py : box.top;
+  const bottom = joins.s ? py + c : box.top + box.inner;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(left, top, right - left, bottom - top);
+  ctx.clip();
+  ctx.fillStyle = p.canopyDark;
+  ctx.fillRect(left, top, right - left, bottom - top);
+  // The blobs whose middles are near this square, in the same order for every square.
+  for (let j = 2 * y - 2; j <= 2 * y + 3; j += 1) {
+    for (let i = 2 * x - 2; i <= 2 * x + 3; i += 1) {
+      const random = painter(i * 7919 + j * 104729 + 13);
+      // The blob's middle and radius, in squares, then in pixels.
+      const bx = (i + 0.5) / 2 + (random() - 0.5) * 0.22;
+      const by = (j + 0.5) / 2 + (random() - 0.5) * 0.22;
+      const r = (0.34 + random() * 0.08) * c;
+      const cx = px + (bx - x) * c;
+      const cy = py + (by - y) * c;
+      const gradient = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.4, r * 0.1, cx, cy, r);
+      gradient.addColorStop(0, p.canopyLight);
+      gradient.addColorStop(0.6, p.canopy);
+      gradient.addColorStop(1, p.canopyDark);
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  // A darker rim along the forest's edge.
+  ctx.strokeStyle = 'rgba(10, 25, 10, 0.55)';
+  ctx.lineWidth = Math.max(1, c * 0.06);
+  const half = ctx.lineWidth / 2;
+  ctx.beginPath();
+  if (!joins.n) {
+    ctx.moveTo(left, top + half);
+    ctx.lineTo(right, top + half);
+  }
+  if (!joins.s) {
+    ctx.moveTo(left, bottom - half);
+    ctx.lineTo(right, bottom - half);
+  }
+  if (!joins.w) {
+    ctx.moveTo(left + half, top);
+    ctx.lineTo(left + half, bottom);
+  }
+  if (!joins.e) {
+    ctx.moveTo(right - half, top);
+    ctx.lineTo(right - half, bottom);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** A round crown seen from above, with a darker rim and a light spot: an apple tree's. */
+function crown(
   ctx: CanvasRenderingContext2D,
   box: SquareBox,
   colours: { canopy: string; canopyDark: string; canopyLight: string },
 ): { cx: number; cy: number; r: number } {
   const cx = box.left + box.inner / 2;
   const cy = box.top + box.inner / 2;
-  const r = box.inner * 0.44;
+  const r = box.inner * 0.42;
   ctx.save();
   ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
   ctx.beginPath();
@@ -145,23 +259,32 @@ function canopy(
   for (let k = 0; k <= 12; k += 1) {
     const angle = (k / 12) * Math.PI * 2;
     const bump = r * (0.9 + 0.1 * Math.cos(angle * 5));
-    const px = cx + Math.cos(angle) * bump;
-    const py = cy + Math.sin(angle) * bump;
-    if (k === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
+    const pointX = cx + Math.cos(angle) * bump;
+    const pointY = cy + Math.sin(angle) * bump;
+    if (k === 0) ctx.moveTo(pointX, pointY);
+    else ctx.lineTo(pointX, pointY);
   }
   ctx.fill();
   ctx.restore();
   return { cx, cy, r };
 }
 
-export function drawTree(ctx: CanvasRenderingContext2D, box: SquareBox): void {
-  canopy(ctx, box, SURFACE_PAINT.tree);
-}
-
-/** An apple tree: a lighter canopy with its apples (up to 3) on it; bare once picked. */
-export function drawAppleTree(ctx: CanvasRenderingContext2D, box: SquareBox, apples: number): void {
-  const { cx, cy, r } = canopy(ctx, box, SURFACE_PAINT.appleTree);
+/**
+ * An apple tree: part of the forest (it joins its neighbours like a tree),
+ * with its own lighter crown in the middle and its apples (up to 3) on it;
+ * the crown is bare once they are picked.
+ */
+export function drawAppleTree(
+  ctx: CanvasRenderingContext2D,
+  cell: CellRect,
+  box: SquareBox,
+  x: number,
+  y: number,
+  joins: ForestJoins,
+  apples: number,
+): void {
+  drawForest(ctx, cell, box, x, y, joins);
+  const { cx, cy, r } = crown(ctx, box, SURFACE_PAINT.appleTree);
   const spots = [
     { dx: -0.38, dy: -0.15 },
     { dx: 0.32, dy: -0.32 },
@@ -326,12 +449,12 @@ export function featureSwatch(
   swatch.height = s;
   const ctx = swatch.getContext('2d');
   if (ctx !== null) {
-    ctx.fillStyle = '#8b5a34'; // the dirt the features stand on
-    ctx.fillRect(0, 0, s, s);
     const box = { left: 0, top: 0, inner: s };
+    const cell = { px: 0, py: 0, c: s };
+    const alone = { n: false, e: false, s: false, w: false };
     if (kind === 'grass') drawGrass(ctx, box, 3, 5);
-    else if (kind === 'tree') drawTree(ctx, box);
-    else drawAppleTree(ctx, box, 3);
+    else if (kind === 'tree') drawForest(ctx, cell, box, 3, 5, alone);
+    else drawAppleTree(ctx, cell, box, 3, 5, alone, 3);
   }
   return swatch;
 }
