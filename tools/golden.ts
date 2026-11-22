@@ -319,41 +319,49 @@ const FRONTIER_RUNS: {
     name: 'gatherer-seed-1',
     seed: 1,
     policy: 'gatherer',
-    maxShifts: 30,
+    maxShifts: 10,
     description:
-      'The gatherer for 30 shifts: takes plants and animals, places two more camps where they light the most new ground, mines, upgrades a camp to level 2, and is never hungry in 30 shifts',
+      'The gatherer for 10 shifts of 100 taps: takes plants and animals, places two more camps where they light the most new ground, mines 560 blocks, upgrades three times, and is never hungry',
   },
   {
     name: 'gatherer-seed-26',
     seed: 26,
     policy: 'gatherer',
-    maxShifts: 30,
+    maxShifts: 10,
     description:
-      'The gatherer on another seed: hungry early, places two camps, rests at camp 1 when the crew is low, then upgrades it',
+      'The gatherer on another seed: places two more camps and brings a camp to level 3, never hungry',
   },
   {
     name: 'careful-seed-3',
     seed: 3,
     policy: 'careful',
-    maxShifts: 30,
+    maxShifts: 10,
     description:
-      'The careful policy: keeps wood and food back for upkeep, places two more camps, and is never hungry in 30 shifts',
+      'The careful policy: keeps wood and food back for upkeep, places two more camps and brings one to level 3; short only at the end of the first shift',
   },
   {
     name: 'digger-seed-5',
     seed: 5,
     policy: 'digger',
-    maxShifts: 30,
+    maxShifts: 10,
     description:
       'The digger: a pit 5 levels deep next to the first camp under the level rule, gathering only for upkeep',
   },
   {
-    name: 'random-seed-155-lost',
-    seed: 155,
+    name: 'random-seed-6',
+    seed: 6,
     policy: 'random',
-    maxShifts: 30,
+    maxShifts: 10,
     description:
-      'The random policy: never keeps wood back for upkeep, goes short from shift 5, and loses the crew at shift 14',
+      'The random policy: a useful step at random, ending each shift when its taps run out; it upgrades a camp to level 3 and is never hungry',
+  },
+  {
+    name: 'idle-seed-2-lost',
+    seed: 2,
+    policy: 'idle',
+    maxShifts: 40,
+    description:
+      'The idle policy: gathers nothing, rests at camp 1 once the crew is at half health, then starves at shift 11',
   },
 ];
 

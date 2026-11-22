@@ -55,8 +55,9 @@ describe('taps (plan A4)', () => {
   });
 
   it('refuses every tap once the shift has none left, until End shift', () => {
-    let w = world({ top: '#' });
-    for (let i = 0; i < FRONTIER_SHIFT.taps; i += 1) {
+    // The last few taps of a shift (a full shift is FRONTIER_SHIFT.taps).
+    let w: FrontierState = { ...world({ top: '#' }), tapsLeft: 8 };
+    for (let i = 0; i < 8; i += 1) {
       const outcome = frontierAct(w, {
         kind: 'tap',
         x: MID + 2 + (i % 4),
@@ -294,16 +295,57 @@ describe('felled trees grow back (owner, question 157: "Trees regrow slowly")', 
     expect(later.report?.treesRegrown).toBe(0);
   });
 
-  it('a camp built over a stump clears it: nothing grows back under a camp', () => {
+  it('a camp built over a tree or a stump keeps the stump: it waits under the camp', () => {
+    // Owner: "Trees grow back as long as you don't mine the ground directly under them."
     const next = { x: MID + NEXT, y: MID };
-    let w = world({ features: [{ ...next, feature: TREE }], inventory: rich() });
+    const beside = { x: next.x + 1, y: next.y };
+    let w = world({
+      features: [
+        { ...next, feature: TREE },
+        { ...beside, feature: APPLE_TREE, apples: 2 },
+      ],
+      inventory: rich(),
+    });
     const j = next.x + SIDE * next.y;
+    const k = beside.x + SIDE * beside.y;
     w = frontierAct(w, { kind: 'tap', x: next.x, y: next.y }).state; // felled
     expect(w.stumps[j]).toBe(TREE);
     const placed = frontierAct(w, { kind: 'place', x: next.x, y: next.y });
     expect(placed.done).toBe(true);
-    expect(placed.state.stumps[j]).toBe(NO_FEATURE);
-    expect(placed.state.regrowIn[j]).toBe(-1);
+    // The felled tree's stump stays, and the apple tree cleared for the camp leaves one.
+    expect(placed.state.stumps[j]).toBe(TREE);
+    expect(placed.state.stumps[k]).toBe(APPLE_TREE);
+    expect(placed.state.features[k]).toBe(NO_FEATURE);
+    expect(placed.state.regrowIn[k]).toBe(FRONTIER_SHIFT.treeRegrowShifts);
+    // Long after they are due, nothing grows on the camp's ground: the stumps wait.
+    const later = shifts(
+      holding(placed.state, { wood: 999, apple: 999 }),
+      2 * FRONTIER_SHIFT.treeRegrowShifts,
+    );
+    expect(later.features[j]).toBe(NO_FEATURE);
+    expect(later.stumps[j]).toBe(TREE);
+    expect(later.regrowIn[j]).toBe(1);
+  });
+
+  it('a stump under a camp grows back once the camp is demolished', () => {
+    const i0 = MID + SIDE * MID; // the first camp's middle square
+    const w0 = world({ inventory: rich() });
+    const stumps = [...w0.stumps];
+    stumps[i0] = TREE;
+    const regrowIn = [...w0.regrowIn];
+    regrowIn[i0] = 1;
+    const w = { ...w0, stumps, regrowIn };
+    const waited = endFrontierShift(w).state;
+    expect(waited.features[i0]).toBe(NO_FEATURE);
+    expect(waited.regrowIn[i0]).toBe(1);
+    // A second camp covers the first one's ground, so the first can be demolished.
+    const placed = frontierAct(waited, { kind: 'place', x: MID + NEXT, y: MID }).state;
+    const demolished = frontierAct(placed, { kind: 'demolish', id: 1 });
+    expect(demolished.done).toBe(true);
+    const grown = endFrontierShift(holding(demolished.state, { wood: 99, apple: 99 }));
+    expect(grown.state.features[i0]).toBe(TREE);
+    expect(grown.state.stumps[i0]).toBe(NO_FEATURE);
+    expect(grown.report?.treesRegrown).toBe(1);
   });
 
   it('waits a shift more while an animal stands on the stump', () => {
