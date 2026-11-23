@@ -8,10 +8,12 @@
 //             smelter it can build, a recipe it can make, a lantern it
 //             can hang),
 //             ending the shift when out of taps; it never closes the mine.
-// - gatherer: tools/frontierRun.ts: upgrades, places up to 3 camps, takes
+// - gatherer: tools/frontierRun.ts: builds a smelter, smelts and makes the
+//             tools and lanterns, upgrades, places up to 3 camps, takes
 //             plants and animals, mines; spends everything as it comes.
-// - careful:  the gatherer, but it keeps wood and food back for upkeep, and
-//             rests when the crew's health is low.
+// - careful:  the gatherer, but it keeps wood and food back for upkeep (no
+//             camp, upgrade or wood-using recipe while short), and rests
+//             when the crew's health is low.
 // - digger:   digs a pit next to the first camp, as deep as the camps let
 //             it, gathering only to pay upkeep.
 // - idle:     gathers nothing: it ends every shift, rests at a camp when the
@@ -131,6 +133,14 @@ function isFood(item: string | undefined): boolean {
   return FRONTIER_FOODS.some((f) => f.item === item);
 }
 
+/** True if `step` spends what upkeep needs: a camp, an upgrade, or a recipe with wood or food in it. */
+function spendsUpkeep(step: FrontierStep): boolean {
+  if (step.startsWith('place') || step.startsWith('upgrade')) return true;
+  if (!step.startsWith('make ')) return false;
+  const recipe = FRONTIER_RECIPES.find((r) => r.id === step.slice('make '.length));
+  return (recipe?.inputs ?? []).some((stack) => stack.item === 'wood' || isFood(stack.item));
+}
+
 /**
  * The careful policy: before ending a shift, rest if the crew is low; never
  * spend wood or food on a camp if that leaves too little for the next 4
@@ -165,8 +175,9 @@ function carefulStep(state: FrontierState): FrontierStep | null {
     if (wanted !== undefined) return `tap ${wanted.x},${wanted.y}`;
   }
   const step = gathererStep(state);
-  // The gatherer would spend the stock on a camp or an upgrade: only if upkeep is covered after.
-  if (step !== null && (step.startsWith('place') || step.startsWith('upgrade')) && short !== null) {
+  // The gatherer would spend the stock on a camp, an upgrade, or a recipe
+  // that takes wood or food: only if upkeep is covered after.
+  if (step !== null && spendsUpkeep(step) && short !== null) {
     return 'endShift';
   }
   return step;
