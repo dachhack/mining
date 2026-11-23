@@ -14,6 +14,11 @@
 //   --max-shifts N   stop a run after N shifts (default 40); it is reported as
 //                    outcome "unfinished"
 //   --json           print one JSON document instead of the summary
+//
+// The summary has two lines a policy: the run's outcome, then, for each step
+// of smelting and crafting (levels 2 to 4, smelter, ingot, pickaxe, drill,
+// lantern made and hung), how many runs reached it and the median shift,
+// and the coal, ore and crystal mined (decision note 0060).
 //   --acceptance     play --runs runs of EVERY policy, checking the rules
 //                    after every step (tools/frontierInvariants.ts) and
 //                    replaying every run to the same hash. Prints one line per
@@ -23,7 +28,12 @@
 // The same arguments always print the same output: nothing here depends on
 // the clock (the time taken goes to stderr).
 
-import { FRONTIER_SHIFT } from '../src/data/frontier';
+import {
+  FRONTIER_DRILL,
+  FRONTIER_LANTERN,
+  FRONTIER_PICKAXE,
+  FRONTIER_SHIFT,
+} from '../src/data/frontier';
 import { ENGINE_VERSION, createFrontier, depthAt, frontierAct, hashFrontier } from '../src/engine';
 import type { FrontierState } from '../src/engine';
 import { checkStep } from './frontierInvariants';
@@ -54,7 +64,46 @@ export interface FrontierRunMetrics {
   /** Levels down of the deepest square. */
   deepest: number;
   grassHeld: number;
+  /**
+   * The shift each step of smelting and crafting was first reached in, or -1
+   * if never: a camp at level 2, 3 and 4, a smelter, the first ingot, an
+   * iron pickaxe, an iron drill, a copper lantern made and one hung.
+   */
+  firsts: Record<FirstName, number>;
+  /** What mining gave over the whole run (with the pickaxe's double counted). */
+  mined: { coal: number; rawIronOre: number; rawCopperOre: number; crystal: number };
   finalHash: string;
+}
+
+/** The steps whose first shift a run records (`FrontierRunMetrics.firsts`). */
+export const FIRST_NAMES = [
+  'level2',
+  'level3',
+  'smelter',
+  'ingot',
+  'pickaxe',
+  'drill',
+  'lantern',
+  'lanternHung',
+  'level4',
+] as const;
+export type FirstName = (typeof FIRST_NAMES)[number];
+
+/** Which of FIRST_NAMES `state` has reached. */
+function reached(state: FrontierState): Set<FirstName> {
+  const got = new Set<FirstName>();
+  const top = Math.max(...state.camps.map((c) => c.level));
+  if (top >= 2) got.add('level2');
+  if (top >= 3) got.add('level3');
+  if (top >= 4) got.add('level4');
+  if (state.camps.some((c) => c.smelter)) got.add('smelter');
+  if (state.camps.some((c) => c.lantern)) got.add('lanternHung');
+  const held = (item: string): boolean => (state.inventory.get(item) ?? 0) > 0;
+  if (held('ironIngot') || held('copperIngot')) got.add('ingot');
+  if (held(FRONTIER_PICKAXE.item)) got.add('pickaxe');
+  if (held(FRONTIER_DRILL.item)) got.add('drill');
+  if (held(FRONTIER_LANTERN.item)) got.add('lantern');
+  return got;
 }
 
 /** One run: its steps, its end, and what it did. */
@@ -79,6 +128,8 @@ export function playFrontierRun(
   const problems: string[] = [];
   let healthLost = 0;
   let firstHunger = -1;
+  const firsts = Object.fromEntries(FIRST_NAMES.map((n) => [n, -1])) as Record<FirstName, number>;
+  const mined = { coal: 0, rawIronOre: 0, rawCopperOre: 0, crystal: 0 };
   // A safety cap on steps per shift, so a policy that never ends a shift cannot loop.
   const maxSteps = maxShifts * (FRONTIER_SHIFT.taps + 20);
   while (state.status === 'active' && state.shift <= maxShifts && steps.length < maxSteps) {
@@ -95,7 +146,17 @@ export function playFrontierRun(
       if (firstHunger < 0) firstHunger = outcome.report.shift;
     }
     steps.push(step);
+    if (outcome.tap?.kind === 'mined') {
+      for (const stack of outcome.tap.gain) {
+        if (stack.item in mined) mined[stack.item as keyof typeof mined] += stack.count;
+      }
+    }
+    // A step reached in the shift it was taken in (End shift has moved on by then).
+    const shift = state.shift;
     state = outcome.state;
+    for (const name of reached(state)) {
+      if (firsts[name] < 0) firsts[name] = shift;
+    }
   }
   let deepest = 0;
   for (let y = 0; y < state.cube.size.y; y += 1) {
@@ -124,6 +185,8 @@ export function playFrontierRun(
       blocksMined: state.mined,
       deepest,
       grassHeld: state.inventory.get('grass') ?? 0,
+      firsts,
+      mined,
       finalHash,
     },
   };
@@ -152,6 +215,24 @@ export function summaryLine(policy: string, runs: FrontierRunMetrics[]): string 
     `deepest ${median(runs.map((r) => r.deepest))}`,
     `grass held ${median(runs.map((r) => r.grassHeld))}`,
   ].join(' · ');
+}
+
+/**
+ * A second line for a policy's runs: for each step of smelting and
+ * crafting, how many runs reached it and the median shift they did, e.g.
+ * "smelter 18/20 @6"; then the median ore, coal and crystal mined.
+ */
+export function craftLine(runs: FrontierRunMetrics[]): string {
+  const parts = FIRST_NAMES.map((name) => {
+    const at = runs.map((r) => r.firsts[name]).filter((s) => s >= 0);
+    return `${name} ${at.length}/${runs.length}${at.length > 0 ? ` @${median(at)}` : ''}`;
+  });
+  const m = (key: keyof FrontierRunMetrics['mined']): number =>
+    median(runs.map((r) => r.mined[key]));
+  parts.push(
+    `mined: coal ${m('coal')}, iron ${m('rawIronOre')}, copper ${m('rawCopperOre')}, crystal ${m('crystal')}`,
+  );
+  return `          ${parts.join(' · ')}`;
 }
 
 interface SimOptions {
@@ -224,7 +305,7 @@ export function runFrontierSim(args: string[]): { output: string; exitCode: numb
       problems.push(...result.problems);
     }
     all[policy] = runs;
-    lines.push(summaryLine(policy, runs));
+    lines.push(summaryLine(policy, runs), craftLine(runs));
   }
   if (options.json) {
     const doc = {

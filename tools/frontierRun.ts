@@ -3,15 +3,24 @@
 // golden test (tests/golden/frontier.test.ts) and `npm run golden --
 // --frontier` use it. Everything goes through the engine's public surface.
 
-import { FRONTIER_NEW_CAMP_COST } from '../src/data/frontier';
+import {
+  FRONTIER_DRILL,
+  FRONTIER_LANTERN,
+  FRONTIER_NEW_CAMP_COST,
+  FRONTIER_PICKAXE,
+} from '../src/data/frontier';
 import {
   canAfford,
   coverLevels,
   createFrontier,
   frontierAct,
+  hasSmelter,
+  lanternRefusal,
+  makeRefusal,
   previewTap,
   newlyCovered,
   placeRefusal,
+  smelterRefusal,
   upgradeCostFrom,
   upgradeRefusal,
 } from '../src/engine';
@@ -114,17 +123,55 @@ const GATHERER_REST_AT = 4;
 const GATHERER_CAMPS = 3;
 
 /**
+ * Smelting and crafting, for the gatherer and the careful policy
+ * (docs/plans/smelting-and-crafting.md), in order, the first that can be done:
+ * a smelter at the lowest-numbered camp that may have one, if none stands;
+ * an iron pickaxe, an iron drill (one each); hang a held lantern at the
+ * lowest-numbered camp without one; make a lantern while a camp has none;
+ * smelt iron, then copper. `null` if none can be done now.
+ */
+export function craftStep(state: FrontierState): FrontierStep | null {
+  if (!hasSmelter(state)) {
+    const at = state.camps.find((c) => smelterRefusal(state, c.id) === null);
+    return at === undefined ? null : `buildSmelter ${at.id}`;
+  }
+  const held = (item: string): boolean => (state.inventory.get(item) ?? 0) > 0;
+  if (!held(FRONTIER_PICKAXE.item) && makeRefusal(state, 'iron-pickaxe') === null) {
+    return 'make iron-pickaxe';
+  }
+  if (!held(FRONTIER_DRILL.item) && makeRefusal(state, 'iron-drill') === null) {
+    return 'make iron-drill';
+  }
+  const dark = state.camps.find((c) => !c.lantern);
+  if (dark !== undefined && lanternRefusal(state, dark.id) === null) {
+    return `hangLantern ${dark.id}`;
+  }
+  if (
+    dark !== undefined &&
+    !held(FRONTIER_LANTERN.item) &&
+    makeRefusal(state, 'copper-lantern') === null
+  ) {
+    return 'make copper-lantern';
+  }
+  for (const recipe of ['smelt-iron', 'smelt-copper']) {
+    if (makeRefusal(state, recipe) === null) return `make ${recipe}`;
+  }
+  return null;
+}
+
+/**
  * The gatherer: a plain policy for recording golden runs. In order:
  * 0. with no taps left, end the shift, or rest if the crew's health is at
  *    GATHERER_REST_AT or below (plan A4);
- * 1. upgrade the lowest camp it can pay for;
- * 2. with fewer than 3 camps, place one where it lights the most new
+ * 1. smelt and craft what it can (`craftStep`);
+ * 2. upgrade the lowest camp it can pay for;
+ * 3. with fewer than 3 camps, place one where it lights the most new
  *    ground, if it can pay;
- * 3. catch the lit animal nearest the newest camp;
- * 4. while the next goal (a new camp, or else the lowest camp's upgrade) is
+ * 4. catch the lit animal nearest the newest camp;
+ * 5. while the next goal (a new camp, or else the lowest camp's upgrade) is
  *    short of wood, grass or apples, take the lit plant nearest the newest camp;
- * 5. mine the block nearest the newest camp that it can mine;
- * 6. failing that, take the nearest plant.
+ * 6. mine the block nearest the newest camp that it can mine;
+ * 7. failing that, take the nearest plant.
  * Ties go to the square met first, row by row. `null` when nothing is left to do.
  */
 export function gathererStep(state: FrontierState): FrontierStep | null {
@@ -132,6 +179,8 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
   if (state.tapsLeft === 0) {
     return state.health <= GATHERER_REST_AT ? restStep(state) : 'endShift';
   }
+  const craft = craftStep(state);
+  if (craft !== null) return craft;
   const byLevel = [...state.camps].sort((a, b) => a.level - b.level || a.id - b.id);
   for (const camp of byLevel) {
     if (upgradeCostFrom(camp.level) !== null && upgradeRefusal(state, camp.id) === null) {

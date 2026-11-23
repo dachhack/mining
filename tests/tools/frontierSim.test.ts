@@ -68,4 +68,21 @@ describe('the new game’s simulator (plan B3)', { timeout: 60_000 }, () => {
     const one = runFrontierSim(['--policy', 'careful', '--runs', '2', '--max-shifts', '5']);
     expect(one.output).toContain('careful   2 runs');
   });
+
+  it('records the shift each step of smelting and crafting is first reached in', () => {
+    // The gatherer builds a smelter, smelts, and makes the tools (smelting PR 5).
+    const run = playFrontierRun(1, 'gatherer', 30, true);
+    expect(run.problems).toEqual([]);
+    const f = run.metrics.firsts;
+    expect(f.level2).toBeGreaterThan(0);
+    expect(f.smelter).toBeGreaterThanOrEqual(f.level2);
+    expect(f.ingot).toBeGreaterThanOrEqual(f.smelter);
+    expect(f.pickaxe).toBeGreaterThanOrEqual(f.ingot);
+    expect(run.metrics.mined.rawIronOre).toBeGreaterThan(0);
+    // Never reached is -1, and the summary says how many runs reached each.
+    const idle = playFrontierRun(1, 'idle', 5);
+    expect(idle.metrics.firsts.smelter).toBe(-1);
+    const out = runFrontierSim(['--policy', 'idle', '--runs', '2', '--max-shifts', '3']).output;
+    expect(out).toContain('smelter 0/2');
+  });
 });

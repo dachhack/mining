@@ -321,7 +321,7 @@ const FRONTIER_RUNS: {
     policy: 'gatherer',
     maxShifts: 10,
     description:
-      'The gatherer for 10 shifts of 100 taps: takes plants and animals, places two more camps where they light the most new ground, mines 560 blocks, upgrades three times, and is never hungry',
+      'The gatherer for 10 shifts of 100 taps: takes plants and animals, places two more camps where they light the most new ground, mines 559 blocks, upgrades three times, builds a smelter, and is never hungry',
   },
   {
     name: 'gatherer-seed-26',
@@ -329,7 +329,7 @@ const FRONTIER_RUNS: {
     policy: 'gatherer',
     maxShifts: 10,
     description:
-      'The gatherer on another seed: places two more camps and brings a camp to level 3, never hungry',
+      'The gatherer on another seed: places two more camps, builds a smelter and brings a camp to level 3, never hungry',
   },
   {
     name: 'careful-seed-3',
@@ -337,7 +337,7 @@ const FRONTIER_RUNS: {
     policy: 'careful',
     maxShifts: 10,
     description:
-      'The careful policy: keeps wood and food back for upkeep, places two more camps and brings one to level 3; short only at the end of the first shift',
+      'The careful policy: keeps wood and food back for upkeep, places two more camps, builds a smelter and brings one to level 3; short only at the end of the first shift',
   },
   {
     name: 'digger-seed-5',
