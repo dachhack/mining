@@ -41,7 +41,7 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
     });
   }
 
-  it('between them, they place camps, upgrade one, build a smelter, smelt, make a pickaxe and a drill, mine with them, reach level 4, catch animals, take plants, mine clay, rest, and lose a crew', () => {
+  it('between them, they place camps, upgrade one, build a smelter, smelt, make a pickaxe and a drill, mine with them, hang a lantern, reach level 4, catch animals, take plants, mine clay, rest, and lose a crew', () => {
     const seen = new Set<string>();
     for (const name of files) {
       const golden = load(name);
@@ -75,6 +75,7 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
         'catch',
         'clay',
         'endShift',
+        'hangLantern',
         'lost',
         'make',
         'mine',

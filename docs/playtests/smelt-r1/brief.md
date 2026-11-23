@@ -17,10 +17,10 @@ What to play after smelting and crafting PRs 1 to 4 (engine 0.8.0): the smelter,
 1. **Is the way to ingots readable?** Ingots need three things in turn: a level-2 camp for the smelter, then a level-3 camp to mine ore, then ore and coal. Did the player see that chain from the game (the camp panel, the book's notes, the help), or did they stall not knowing why?
 2. **Do the tools feel worth it?**
    - The pickaxe doubles every mining tap. Did mining feel different after it?
-   - The drill lets every camp mine one level harder. Did the player use it, for example for a new camp, or did it come too late to matter? (Question 166: in the simulator, the drill comes 10 shifts after the first level-3 camp.)
-3. **The lantern and crystal (question 165).**
-   - Crystal lies only at layer 12 and below, at about 1% of the blocks there. In the simulator, 7 runs in 100 make a lantern, near shift 60.
-   - Did the player try for a lantern? How deep did they dig for crystal, and did they find any?
+   - The drill lets every camp mine one level harder. Did the player use it, for example for a new camp, or did it come too late to matter? (Question 166, kept as it is: in the simulator, the drill comes 10 shifts after the first level-3 camp.)
+3. **The lantern (question 165).**
+   - It takes 2 copper ingots + 1 coal (it took crystal, which lies too deep). In the simulator, 88 runs in 100 hang one, at a median shift of 15.
+   - Did the player hang one, and where? Did a wider ring matter to them, or did they spend the copper on level 4 instead?
 4. **Level 4.** It lights most of the 32 × 32 map from one camp and mines nothing new. Did the player want it? What did they do with their ingots after it?
 5. **Apples for level 3.** In the simulator, 11 runs in 100 never reach level 3: they end 1 to 4 apples short of its 10, having felled apple trees for wood. Did any player stall there?
 6. **Anything that looked wrong.** For example: a too-hard message that does not mention the drill, a ring that does not grow when a lantern is hung, or a Make button that is on when the recipe cannot be made.

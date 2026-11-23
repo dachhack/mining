@@ -1,6 +1,6 @@
 # Smelting and crafting: the plan
 
-Status: **agreed with the owner** (2026-11-23, questions 161 to 164). All five PRs are built: the smelter and smelting with its UI (so PR 2 too), the pickaxe and the lantern, the drill and camp level 4, and the simulator's numbers (decision note 0060) with a playtest brief (`docs/playtests/smelt-r1/brief.md`). Open tuning questions: 165 (crystal for the lantern) and 166 (the drill comes late). Every number is a [Default] in `src/data/frontier.ts`.
+Status: **agreed with the owner** (2026-11-23, questions 161 to 164). All five PRs are built: the smelter and smelting with its UI (so PR 2 too), the pickaxe and the lantern, the drill and camp level 4, and the simulator's numbers (decision note 0060) with a playtest brief (`docs/playtests/smelt-r1/brief.md`). Tuning questions answered: 165 (the lantern takes coal instead of crystal) and 166 (the drill stays as it is). Every number is a [Default] in `src/data/frontier.ts`.
 
 The owner chose this as the next feature after playing a3121a6 (question 159). It replaces "fuel first" in Phase D. By shift 22 of that run, with 7 camps, coal (15), raw iron (34) and raw copper (20) were piling up with nothing to spend them on. This gives them a use that makes the main loop (gather, dig, light more ground) better, without adding a new chore. Upkeep stays as easy as it is (question 160).
 
@@ -25,9 +25,9 @@ All four are made with 1 tap each once a smelter stands: the tools in the recipe
 1. **Iron pickaxe** (a tool): [Default] 3 iron ingots + 2 wood.
    - While the store holds one, **every mining tap yields double** (2 stone, 2 coal, 2 raw ore, and so on). Taking from the surface is unchanged.
    - It does not wear out, and a second one adds nothing.
-2. **Copper lantern** (hung at a camp): [Default] 2 copper ingots + 1 crystal.
+2. **Copper lantern** (hung at a camp): [Default] 2 copper ingots + 1 coal. (It took 1 crystal until the simulator showed crystal out of reach: question 165, decision note 0060.)
    - Hung at a camp from its panel ("Hang lantern"), it widens that camp's ring by [Default] **3 squares** on top of its level.
-   - One per camp; it is lost with the camp. Crystal gets its first use.
+   - One per camp; it is lost with the camp.
 3. **Iron drill** (a tool, for harder rock): [Default] 4 iron ingots + 2 copper ingots + 2 wood.
    - While the store holds one, **every camp mines as if it were one level higher**, up to what level 3 mines. A level-1 camp mines hard rock; a level-2 camp mines ore, crystal and relics.
    - The camp's ring stays the ring of its own level.

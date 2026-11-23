@@ -113,7 +113,7 @@ test('a smelter from a level-2 camp, then smelting iron in the recipe book, then
 test('an iron pickaxe doubles a mining tap; a copper lantern hung at a camp widens its ring', async ({
   page,
 }) => {
-  const state = levelTwoWorld({ ironIngot: 3, wood: 2, copperIngot: 2, crystal: 1 }, true);
+  const state = levelTwoWorld({ ironIngot: 3, wood: 2, copperIngot: 2, coal: 1 }, true);
   const canvas = await openGame(page, state);
   const camp = state.camps[0] ?? { x: 0, y: 0 };
 

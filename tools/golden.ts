@@ -356,12 +356,12 @@ const FRONTIER_RUNS: {
       'The random policy: a useful step at random, ending each shift when its taps run out; it upgrades a camp to level 3 and is never hungry',
   },
   {
-    name: 'random-seed-19-level-4',
-    seed: 19,
+    name: 'random-seed-16-tools',
+    seed: 16,
     policy: 'random',
-    maxShifts: 50,
+    maxShifts: 42,
     description:
-      'The random policy on another seed, for 50 shifts: it builds smelters, smelts, makes an iron drill, upgrades a camp to level 4, and in its last shift makes an iron pickaxe and mines with it',
+      'The random policy on another seed, for 42 shifts: it builds smelters, smelts, makes an iron pickaxe, an iron drill and copper lanterns, mines with the tools, hangs a lantern, and in its last shift upgrades a camp to level 4',
   },
   {
     name: 'idle-seed-2-lost',
