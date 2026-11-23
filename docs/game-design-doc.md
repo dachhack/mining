@@ -180,19 +180,23 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
   | 1 | 9 | Dirt, rubble, stone, coal, clay | — (the first camp is free) |
   | 2 | 12 | + hard rock | 20 wood, 10 clay, 15 stone, 1 animal |
   | 3 | 15 | + iron, copper, crystal, unstable ore, relics, the keystone | 40 wood, 20 clay, 40 stone, 3 animals, 10 apples |
+  | 4 | 18 | nothing new: level 3 mines every block that can be mined | 40 wood, 8 iron ingots, 6 copper ingots, 20 stone |
+
+  Level 4 (owner, question 163) is [Default] in ring and cost; its ingots need a smelter somewhere first.
 
 - **Demolishing** a camp needs other camps' circles to cover its whole 3×3 (question 134). It gives nothing back; its ground can then be mined, and what only it lit turns grey.
-- **A smelter** (owner, question 161) can be built at a camp of level 2 or more, from its panel, for [Default] 20 stone and 10 clay and 1 tap. One per camp; it is lost with the camp. While one stands anywhere, the recipe book can smelt: [Default] 2 raw ore + 1 coal make 2 ingots, 1 tap (question 162). The drill and camp level 4 come next (`docs/plans/smelting-and-crafting.md`).
+- **A smelter** (owner, question 161) can be built at a camp of level 2 or more, from its panel, for [Default] 20 stone and 10 clay and 1 tap. One per camp; it is lost with the camp. While one stands anywhere, the recipe book can smelt: [Default] 2 raw ore + 1 coal make 2 ingots, 1 tap (question 162). (`docs/plans/smelting-and-crafting.md`.)
 - **Made from ingots** (question 163), in the recipe book while a smelter stands, 1 tap each:
   - **The iron pickaxe**, [Default] 3 iron ingots + 2 wood. While the store holds one, every mining tap yields [Default] twice as much. Taking from the surface is unchanged. It does not wear out, and a second one adds nothing.
   - **The copper lantern**, [Default] 2 copper ingots + 1 crystal. Hung at a camp from its panel (1 tap), it widens that camp's ring by [Default] 3 squares on top of its level. One per camp; it is lost with the camp.
+  - **The iron drill**, [Default] 4 iron ingots + 2 copper ingots + 2 wood. While the store holds one, every camp mines as if it were [Default] one level higher, but never past what level 3 mines: a level-1 camp mines hard rock, a level-2 camp mines ore, crystal and relics. A camp's ring stays its own level's. It does not wear out, and a second one adds nothing.
 - **The recipe book** lists what a new camp and each upgrade cost, and what is made with a smelter (with a Make button). Pinned recipes show, in the tray, how much of each item the player holds against what is needed. Pins are saved (question 143).
 
 ## 7. Resources
 
 - **Items:** wood, grass, apples, animals, clay, stone, coal, and the ores. Everything gathered goes into one store with no limit.
-- **What uses them:** camps and upgrades (section 6), and upkeep (section 4.2): wood, and grass, apples or animals as food. Stone and clay build smelters; raw ore and coal smelt into iron and copper ingots; iron ingots and wood make the pickaxe; copper ingots and crystal make the lantern (section 6).
-- **Coal and raw iron and copper are smelted into ingots** at a smelter. Ingots make the pickaxe and the lantern; the drill and camp level 4 come next, and the first contract asks for ingots (questions 163 and 164). The rare ores have no use yet.
+- **What uses them:** camps and upgrades (section 6), and upkeep (section 4.2): wood, and grass, apples or animals as food. Stone and clay build smelters; raw ore and coal smelt into iron and copper ingots; iron ingots and wood make the pickaxe; copper ingots and crystal make the lantern; both ingots and wood make the drill; ingots pay for camp level 4 (section 6).
+- **Coal and raw iron and copper are smelted into ingots** at a smelter. Ingots make the pickaxe, the lantern and the drill, and pay for camp level 4; the first contract asks for ingots (questions 163 and 164). The rare ores have no use yet.
 - **There is no crafting for now:** the recipe book replaces it, and recipes can be added to it later.
 
 ## 8. Contracts [Decided]

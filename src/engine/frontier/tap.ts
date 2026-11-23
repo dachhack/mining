@@ -6,7 +6,8 @@
 // 3. a camp's own 3 x 3 is never mined ('camp');
 // 4. grass, a tree or an apple tree is taken before the block under it;
 // 5. the level rule: a square may be at most 1 level below its neighbours ('refused');
-// 6. the camps covering the square must have a level that can mine its top block ('tooHard');
+// 6. the camps covering the square must have a level that can mine its top block,
+//    one level more with a drill in the store, up to level 3's blocks ('tooHard');
 // 7. then the top block is mined, and what it yields goes into the inventory
 //    (doubled while the store holds an iron pickaxe: FRONTIER_PICKAXE).
 //
@@ -20,7 +21,7 @@ import { FRONTIER_PICKAXE, FRONTIER_SURFACE } from '../../data/frontier';
 import { mayMine, topBlockAt } from '../heightmap';
 import type { HigherNeighbour, MineRefusal } from '../heightmap';
 import { labMine } from '../lab';
-import { campAt, coverLevelAt, levelNeededFor, sightAt } from './camps';
+import { campAt, levelNeededFor, miningLevelAt, sightAt } from './camps';
 import { gained, harvestAt } from './surface';
 import type { HarvestKind } from './surface';
 import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from './state';
@@ -105,7 +106,7 @@ export function frontierTap(state: FrontierState, x: number, y: number): Frontie
     };
   }
   const needs = levelNeededFor(topBlockAt(state.cube, x, y));
-  if (needs === null || needs > coverLevelAt(state.camps, x, y)) {
+  if (needs === null || needs > miningLevelAt(state.camps, state.inventory, x, y)) {
     return { ...nothing('tooHard'), needs };
   }
   const mined = labMine(state.cube, x, y);
@@ -172,7 +173,7 @@ export function previewTap(
   if (!mayMine(state.cube, x, y).allowed) return { kind: 'refused', gain: [] };
   const code = topBlockAt(state.cube, x, y);
   const needs = levelNeededFor(code);
-  if (needs === null || needs > coverLevelAt(state.camps, x, y))
+  if (needs === null || needs > miningLevelAt(state.camps, state.inventory, x, y))
     return { kind: 'tooHard', gain: [] };
   return { kind: 'mined', gain: miningGain(state.inventory, blockDefByCode(code).yields) };
 }

@@ -34,7 +34,7 @@ export interface FrontierCampLevel {
  * lights about 130 new squares, three times as many as at 5. The world is
  * only 32 x 32, so the radii cannot simply double: the first camp lights 29%
  * of it at radius 9, a level-2 camp 48% and a level-3 camp 73% (decision
- * note 0046).
+ * note 0046). Level 4 (radius 18) lights most of it from one camp.
  */
 export const FRONTIER_CAMP_LEVELS: FrontierCampLevel[] = [
   {
@@ -64,6 +64,20 @@ export const FRONTIER_CAMP_LEVELS: FrontierCampLevel[] = [
       { item: 'stone', count: 40 },
       { item: 'animal', count: 3 },
       { item: 'apple', count: 10 },
+    ],
+  },
+  {
+    // Level 4 (owner, question 163; docs/plans/smelting-and-crafting.md):
+    // a wider ring and nothing new to mine, since level 3 already mines
+    // every block that can be mined. Its cost has ingots, so it needs a
+    // smelter somewhere first.
+    radius: 18,
+    addsBlocks: [],
+    upgradeCost: [
+      { item: 'wood', count: 40 },
+      { item: 'ironIngot', count: 8 },
+      { item: 'copperIngot', count: 6 },
+      { item: 'stone', count: 20 },
     ],
   },
 ];
@@ -245,6 +259,16 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
     ],
     output: { item: 'copperLantern', count: 1 },
   },
+  {
+    id: 'iron-drill',
+    name: 'Iron drill',
+    inputs: [
+      { item: 'ironIngot', count: 4 },
+      { item: 'copperIngot', count: 2 },
+      { item: 'wood', count: 2 },
+    ],
+    output: { item: 'drill', count: 1 },
+  },
 ];
 
 /**
@@ -255,6 +279,18 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
 export const FRONTIER_PICKAXE = {
   item: 'ironPickaxe' as ItemId,
   yieldTimes: 2,
+};
+
+/**
+ * The iron drill (owner, question 163: a tool for harder rock): while the
+ * store holds `item`, every camp mines as if it were `levelBonus` levels
+ * higher, but never past what level `upToLevel` mines. A camp's ring stays
+ * its own level's. It does not wear out, and a second one adds nothing.
+ */
+export const FRONTIER_DRILL = {
+  item: 'drill' as ItemId,
+  levelBonus: 1,
+  upToLevel: 3,
 };
 
 /**

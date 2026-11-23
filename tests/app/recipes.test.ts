@@ -11,6 +11,7 @@ describe('the recipe book', () => {
       'new-camp',
       'upgrade-2',
       'upgrade-3',
+      'upgrade-4',
       ...FRONTIER_RECIPES.map((r) => r.id),
     ]);
     expect(labRecipes().filter((r) => r.makes === null)).toHaveLength(MAX_CAMP_LEVEL);

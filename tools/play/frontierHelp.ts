@@ -4,6 +4,7 @@
 
 import {
   FRONTIER_CAMP_LEVELS,
+  FRONTIER_DRILL,
   FRONTIER_FOODS,
   FRONTIER_LANTERN,
   FRONTIER_NEW_CAMP_COST,
@@ -26,7 +27,7 @@ export function frontierHelpText(): string {
   const foods = FRONTIER_FOODS.map((f) => `${f.count} ${f.item}`).join(', else ');
   const levels = FRONTIER_CAMP_LEVELS.map(
     (level, i) =>
-      `  Level ${i + 1}: ring ${level.radius}; mines ${level.addsBlocks.join(', ')}${i === 0 ? '' : ' and all of the above'}${level.upgradeCost.length > 0 ? `; upgrade costs ${cost(level.upgradeCost)}` : ''}`,
+      `  Level ${i + 1}: ring ${level.radius}; mines ${level.addsBlocks.length === 0 ? 'nothing new' : `${level.addsBlocks.join(', ')}${i === 0 ? '' : ' and all of the above'}`}${level.upgradeCost.length > 0 ? `; upgrade costs ${cost(level.upgradeCost)}` : ''}`,
   );
   return [
     `Mining Game: the text play interface (engine ${ENGINE_VERSION})`,
@@ -66,6 +67,7 @@ export function frontierHelpText(): string {
     `- "smelter N" builds a smelter at camp N (level ${FRONTIER_SMELTER.minLevel} or more; ${cost(FRONTIER_SMELTER.cost)}; one a camp, lost with it).`,
     `  With a smelter anywhere, "make R" makes recipe R: ${FRONTIER_RECIPES.map((r) => `${r.id} (${cost(r.inputs)} -> ${r.output.count} ${r.output.item})`).join(', ')}.`,
     `  While you hold an iron pickaxe, every mining tap yields ${FRONTIER_PICKAXE.yieldTimes} times as much (a second adds nothing).`,
+    `  While you hold a drill, every camp mines as if it were ${FRONTIER_DRILL.levelBonus} level higher, up to level ${FRONTIER_DRILL.upToLevel}'s blocks (its ring stays the same).`,
     `  "lantern N" hangs a copper lantern from your store at camp N: its ring grows by ${FRONTIER_LANTERN.ringBonus} (one a camp, lost with it).`,
     '  Each costs 1 tap.',
     '- "undo" takes back your last action in this shift and gives the tap back. Catching an',

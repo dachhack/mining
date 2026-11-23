@@ -40,7 +40,7 @@ export interface FrontierCamp {
   id: number;
   x: number;
   y: number;
-  /** 1, 2 or 3: how far it lights and what it lets the player mine (src/data/frontier.ts). */
+  /** 1 to 4: how far it lights and what it lets the player mine (src/data/frontier.ts). */
   level: number;
   /** True once a smelter is built at this camp (docs/plans/smelting-and-crafting.md). */
   smelter: boolean;
