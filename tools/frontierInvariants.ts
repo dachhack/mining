@@ -20,7 +20,8 @@
 // - THE SURFACE: animals stand on open ground at ground level, never two on
 //   a square; an apple tree holds 0 to a full tree's apples, nothing else
 //   holds any; a square waits to regrow only as a bare apple tree or a stump
-//   (a felled tree, with nothing growing on it), and every stump waits;
+//   (a felled tree, with nothing growing on it, on ground never mined), and
+//   every stump waits;
 //   nothing grows on a camp's ground.
 
 import { FRONTIER_SHIFT, FRONTIER_SURFACE } from '../src/data/frontier';
@@ -150,6 +151,8 @@ export function checkStep(
       if (stump !== TREE && stump !== APPLE_TREE) say(`square ${i} has a stump of ${stump}`);
       if (!waiting) say(`the stump on square ${i} is not waiting to grow`);
       if (after.features[i] !== NO_FEATURE) say(`something grows on the stump on square ${i}`);
+      if (depthAt(after.cube, i % width, Math.floor(i / width)) !== 0)
+        say(`a stump on square ${i}, whose ground was mined`);
     } else if (waiting && !(appleTree && n === 0)) {
       say(`square ${i} waits to regrow but is neither a bare apple tree nor a stump`);
     }

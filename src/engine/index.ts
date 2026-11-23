@@ -50,8 +50,13 @@ import type { GameState } from './state';
  *        batch after the 2026-11-22 playtest.
  * 0.6.0: Lab 2 becomes the game (docs/plans/lab2-becomes-the-game.md). Set
  *        by PR A1, the new world beside the old; covers the batch A1 to B1.
+ * 0.7.0: mining a stump's square clears the stump at once (owner, playtest
+ *        of 8842e83). First engine PR of the batch after that playtest. It
+ *        also covers the changes after the playtest of PR #146 (#147: 100
+ *        taps a shift, stumps wait under camps), which should have bumped
+ *        and did not.
  */
-export const ENGINE_VERSION = '0.6.0';
+export const ENGINE_VERSION = '0.7.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
