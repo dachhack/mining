@@ -16,6 +16,8 @@ Working title: **Mining Game**. A turn-based roguelike for Android and iOS. The 
 
 v0.2 is in the git history, as v0.1 is.
 
+**Coming next: progression in five phases** (owner, 2026-11-23; plan `docs/plans/progression-phases.md`, decision note 0061). A run of 100 shifts, from placing camps on the surface, through farming and planning the pit, to contracts in three tiers paid in coins at a market. It changes, with the owner's approval, what each camp level mines and where camps may stand (sections 2 and 6), what the smelter is for (section 6), and how a run ends (sections 5.1 and 8). This doc's rules below are what is built; each section changes as its part of the plan is built.
+
 ---
 
 ## 1. Pillars
@@ -201,6 +203,8 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 
 ## 8. Contracts [Decided]
 
+**Being replaced** by the plan's contracts (`docs/plans/progression-phases.md` section 5): three tiers on a board at the market, paid in coins on delivery; a contract no longer ends the run.
+
 Unchanged from v0.2 in intent, and not built yet: a contract asks for deliverables (ore, relics); the run is won the moment the last one reaches the store (owner, question 89: "Done on delivery"). Until contracts exist, a run ends only as in section 5.1.
 
 ## 9. Meta-progression: unlocks [Decided]
@@ -245,7 +249,7 @@ The targets come with the contracts (section 8).
 
 ## 13. Open questions
 
-1. Run length targets and the contracts (sections 8 and 12).
+1. Run length targets and the contracts (sections 8 and 12): a run is now 100 shifts (owner, 2026-11-23); the progression plan's defaults are questions 167 to 176.
 2. Art direction and audio: pixel art chosen (decision note 0004); details open.
 3. Monetisation: not yet discussed.
 4. Game title.
