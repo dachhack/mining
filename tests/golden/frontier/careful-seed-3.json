@@ -1,7 +1,7 @@
 {
   "description": "The careful policy: keeps wood and food back for upkeep, places two more camps and brings one to level 3; short only at the end of the first shift",
   "recordedWith": "careful",
-  "engineVersion": "0.6.0",
+  "engineVersion": "0.7.0",
   "seed": 3,
   "stepCount": 1010,
   "expectedHash": "7f9a7b96dbe978be",

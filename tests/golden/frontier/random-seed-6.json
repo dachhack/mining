@@ -1,7 +1,7 @@
 {
   "description": "The random policy: a useful step at random, ending each shift when its taps run out; it upgrades a camp to level 3 and is never hungry",
   "recordedWith": "random",
-  "engineVersion": "0.6.0",
+  "engineVersion": "0.7.0",
   "seed": 6,
   "stepCount": 814,
   "expectedHash": "661827d4d906369c",
