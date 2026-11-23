@@ -25,7 +25,14 @@ export interface FrontierCampLevel {
  *
  * A square can be mined if a camp whose radius covers it has a level that
  * can mine its top block; with several camps over a square, the best level
- * counts. A block kind in no level's list cannot be mined in Lab 2 at all.
+ * counts. A block kind in no level's list is mined with a tool instead
+ * (FRONTIER_TOOLS), or not at all.
+ *
+ * What each level mines and the level-2 cost are the progression plan's
+ * (docs/plans/progression-phases.md, section 2.2; owner, 2026-11-23): a
+ * base camp mines only dirt, rubble and clay; level 2 adds stone and coal;
+ * level 3 adds hard rock. Ore, crystal and relics need a tool. The level-2
+ * upgrade costs nothing a base camp cannot dig (no stone).
  *
  * The radii are 9, 12 and 15 (they were 5, 8 and 12). The owner found camps
  * had to touch to spread the light ("It's too close") and asked for a bigger
@@ -40,37 +47,41 @@ export const FRONTIER_CAMP_LEVELS: FrontierCampLevel[] = [
   {
     radius: 9,
     // No timber-root: Lab 2's cube has none (LAB_SURFACE.timberRootBecomes).
-    addsBlocks: ['dirt', 'rubble', 'stone', 'coalSeam', 'clay'],
+    addsBlocks: ['dirt', 'rubble', 'clay'],
     upgradeCost: [],
   },
   {
     radius: 12,
-    addsBlocks: ['hardRock'],
+    addsBlocks: ['stone', 'coalSeam'],
     // Wood too (owner: "Let's make timber needed for each camp upgrade";
-    // "Wood is timber"): a little more than the 15 a new camp costs.
+    // "Wood is timber"): a little more than the 15 a new camp costs. No
+    // stone: a base camp cannot mine it (progression plan section 2.2).
     upgradeCost: [
       { item: 'wood', count: 20 },
       { item: 'clay', count: 10 },
-      { item: 'stone', count: 15 },
-      { item: 'animal', count: 1 },
+      { item: 'grass', count: 10 },
+      { item: 'animal', count: 2 },
     ],
   },
   {
     radius: 15,
-    addsBlocks: ['ironOre', 'copperOre', 'crystal', 'unstableOre', 'relic', 'keystone'],
+    addsBlocks: ['hardRock'],
     upgradeCost: [
       { item: 'wood', count: 40 },
       { item: 'clay', count: 20 },
       { item: 'stone', count: 40 },
       { item: 'animal', count: 3 },
       { item: 'apple', count: 10 },
+      // Hay (progression plan section 6.3): farming pays for the level that
+      // opens the tools.
+      { item: 'hay', count: 10 },
     ],
   },
   {
     // Level 4 (owner, question 163; docs/plans/smelting-and-crafting.md):
-    // a wider ring and nothing new to mine, since level 3 already mines
-    // every block that can be mined. Its cost has ingots, so it needs a
-    // smelter somewhere first.
+    // a wider ring and nothing new to mine: what level 3 does not mine is
+    // mined with tools. Its cost has ingots, so it needs a smelter
+    // somewhere first.
     radius: 18,
     addsBlocks: [],
     upgradeCost: [
@@ -93,6 +104,37 @@ export const FRONTIER_NEW_CAMP_COST: ItemStack[] = [
   { item: 'wood', count: 15 },
   { item: 'grass', count: 15 },
 ];
+
+/**
+ * Where a camp may stand (progression plan section 2.1; owner: "Camps can
+ * only be placed in the top three levels"): its level 3 x 3 must be at a
+ * depth of at most `maxDepth` (0 is the surface).
+ */
+export const FRONTIER_CAMP_PLACE = {
+  maxDepth: 2,
+};
+
+/**
+ * The deep camp (progression plan section 2.4; owner: "New camp type can be
+ * placed down in deeper areas so now the entire depth is unlocked"; its kit
+ * only the market sells). It is placed on level, lit ground at a depth of
+ * `minDepth` or more, deeper than any other camp may stand (owner, after
+ * decision note 0062: "min depth required on the deep camp"; question
+ * 178), for `cost` and 1 tap. Its ring is `radius`; it mines what a camp of
+ * `level` mines, and counts as that level for the market; it is never
+ * upgraded (question 168). It can be demolished, and have a smelter, a pen
+ * and a lantern, as any camp.
+ */
+export const FRONTIER_DEEP_CAMP = {
+  cost: [
+    { item: 'campKit', count: 1 },
+    { item: 'wood', count: 20 },
+    { item: 'stone', count: 20 },
+  ] as ItemStack[],
+  radius: 12,
+  level: 3,
+  minDepth: 3,
+};
 
 /**
  * The free first camp's 3 x 3 patch is centred no further than this many
@@ -175,6 +217,26 @@ export const FRONTIER_SHIFT = {
    * later (owner, question 157: "Trees regrow slowly").
    */
   treeRegrowShifts: 15,
+  /**
+   * Cut grass grows back this many shifts later, if grass grows on a face
+   * neighbour then (progression plan section 6.1). A patch cut bare to its
+   * last tuft stays bare (question 174).
+   */
+  grassRegrowShifts: 4,
+};
+
+/**
+ * Saplings (progression plan section 6.2). Every `saplingEveryFelled`th tree
+ * felled gives a sapling too: counted, not random, so a run replays
+ * exactly. A sapling planted on lit dirt at the surface, or on a stump,
+ * grows into a tree `saplingGrowShifts` shifts later; an apple sapling into
+ * an apple tree full of apples `appleSaplingGrowShifts` later. Apple
+ * saplings are made from apples in the recipe book (FRONTIER_RECIPES).
+ */
+export const FRONTIER_SAPLINGS = {
+  saplingEveryFelled: 2,
+  saplingGrowShifts: 15,
+  appleSaplingGrowShifts: 20,
 };
 
 /**
@@ -187,6 +249,8 @@ export const FRONTIER_SHIFT = {
  */
 export const FRONTIER_FOODS: ItemStack[] = [
   { item: 'grass', count: 3 },
+  // Hay (progression plan section 6.3; question 175): after grass, before apples.
+  { item: 'hay', count: 1 },
   { item: 'apple', count: 1 },
   { item: 'animal', count: 1 },
 ];
@@ -214,6 +278,8 @@ export interface FrontierRecipe {
   name: string;
   inputs: ItemStack[];
   output: ItemStack;
+  /** True if it is made only while a smelter stands somewhere. */
+  needsSmelter: boolean;
 }
 
 /**
@@ -230,6 +296,7 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
       { item: 'coal', count: 1 },
     ],
     output: { item: 'ironIngot', count: 2 },
+    needsSmelter: true,
   },
   {
     id: 'smelt-copper',
@@ -239,6 +306,7 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
       { item: 'coal', count: 1 },
     ],
     output: { item: 'copperIngot', count: 2 },
+    needsSmelter: true,
   },
   // What ingots are for (owner, question 163), PR 3: a tool and a lantern.
   {
@@ -249,6 +317,7 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
       { item: 'wood', count: 2 },
     ],
     output: { item: 'ironPickaxe', count: 1 },
+    needsSmelter: true,
   },
   {
     id: 'copper-lantern',
@@ -258,6 +327,7 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
       { item: 'coal', count: 1 },
     ],
     output: { item: 'copperLantern', count: 1 },
+    needsSmelter: true,
   },
   {
     id: 'iron-drill',
@@ -268,8 +338,44 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
       { item: 'wood', count: 2 },
     ],
     output: { item: 'drill', count: 1 },
+    needsSmelter: true,
+  },
+  // An apple sapling from apples (progression plan section 6.2): no smelter.
+  {
+    id: 'apple-sapling',
+    name: 'Apple sapling',
+    inputs: [{ item: 'apple', count: 3 }],
+    output: { item: 'appleSapling', count: 1 },
+    needsSmelter: false,
+  },
+  // Hay from grass (progression plan section 6.3): no smelter.
+  {
+    id: 'hay',
+    name: 'Hay',
+    inputs: [{ item: 'grass', count: 3 }],
+    output: { item: 'hay', count: 1 },
+    needsSmelter: false,
   },
 ];
+
+/**
+ * Animal pens (progression plan section 6.3). A pen is built at a camp of
+ * level `minLevel` or more, from its panel, for `cost` and 1 tap (level 2,
+ * as the smelter: farming is Phase 2's, and a base camp's panel has no room
+ * for it); one per camp, lost with the camp (its
+ * animals go to the store). It holds up to `capacity` animals, put in from
+ * the store and taken out, 1 tap each; upkeep never eats a penned animal.
+ * A pen with at least 2 animals and room for one more gains an animal every
+ * `breedEveryShifts` shifts, at End shift, eating `hayPerBirth` hay from the
+ * store; with too little hay it waits.
+ */
+export const FRONTIER_PEN = {
+  minLevel: 2,
+  cost: [{ item: 'wood', count: 10 }] as ItemStack[],
+  capacity: 4,
+  breedEveryShifts: 4,
+  hayPerBirth: 2,
+};
 
 /**
  * The iron pickaxe (owner, question 163): while the store holds `item`,
@@ -281,17 +387,38 @@ export const FRONTIER_PICKAXE = {
   yieldTimes: 2,
 };
 
+/** A tool that mines blocks no camp level mines: while the store holds `item`, a lit square's `mines` blocks can be mined. */
+export interface FrontierTool {
+  item: ItemId;
+  mines: BlockId[];
+}
+
 /**
- * The iron drill (owner, question 163: a tool for harder rock): while the
- * store holds `item`, every camp mines as if it were `levelBonus` levels
- * higher, but never past what level `upToLevel` mines. A camp's ring stays
- * its own level's. It does not wear out, and a second one adds nothing.
+ * The iron drill (progression plan section 4; it was "one camp level
+ * higher" until then): while the store holds `item`, any camp's lit
+ * ground's iron and copper ore can be mined. It does not wear out, and a
+ * second one adds nothing. Made at a smelter (FRONTIER_RECIPES) or bought
+ * at the market; the first one has to be bought, since ingots need ore.
  */
-export const FRONTIER_DRILL = {
-  item: 'drill' as ItemId,
-  levelBonus: 1,
-  upToLevel: 3,
+export const FRONTIER_DRILL: FrontierTool = {
+  item: 'drill',
+  mines: ['ironOre', 'copperOre'],
 };
+
+/**
+ * The steel drill (plan section 4; question 172): mines what the iron drill
+ * does, and crystal, unstable ore, relics and the keystone. Bought only.
+ */
+export const FRONTIER_STEEL_DRILL: FrontierTool = {
+  item: 'steelDrill',
+  mines: ['ironOre', 'copperOre', 'crystal', 'unstableOre', 'relic', 'keystone'],
+};
+
+/**
+ * Every tool, cheapest first: a block a tool mines asks for the first tool
+ * here that mines it.
+ */
+export const FRONTIER_TOOLS: FrontierTool[] = [FRONTIER_DRILL, FRONTIER_STEEL_DRILL];
 
 /**
  * The copper lantern (owner, question 163; its recipe takes coal, not
@@ -304,3 +431,253 @@ export const FRONTIER_LANTERN = {
   item: 'copperLantern' as ItemId,
   ringBonus: 3,
 };
+
+// ----- The run and the market (docs/plans/progression-phases.md, PR 1) -----
+
+/**
+ * How long a run lasts (owner, 2026-11-23: "100 shifts or crew lost"). At
+ * the end of shift `shifts` the run is over, and the coins held are the
+ * score (plan section 7; question 176).
+ */
+export const FRONTIER_RUN = {
+  shifts: 100,
+};
+
+/**
+ * One lot at the market: `count` of `item` for `coins` coins. Selling trades
+ * the item for the coins; buying, the coins for the item. A trade is any
+ * whole number of lots, for 1 tap (plan section 3). A lot with `fromLevel`
+ * is traded only while the best camp standing is at least that level.
+ */
+export interface FrontierLot {
+  item: ItemId;
+  count: number;
+  coins: number;
+  fromLevel?: number;
+  /** True for a lot traded only once a tier-1 contract is done (progression plan section 3). */
+  afterTier1?: boolean;
+}
+
+/**
+ * The market (plan section 3). It opens at the start of every shift whose
+ * number is a multiple of `everyShifts[best - 1]`, where `best` is the
+ * highest level of any camp standing (owner: every 10 shifts at level 1,
+ * 5 at level 2, 3 at level 3; level 4 is question 167), and stays open for
+ * that whole shift (question 169). Coins are an item, `coin` (question 170).
+ */
+export const FRONTIER_MARKET = {
+  coin: 'coin' as ItemId,
+  everyShifts: [10, 5, 3, 3],
+  /**
+   * What the player can sell, and what the market pays for it. Surface
+   * goods are cheap; what is dug and made pays more. An item not listed
+   * cannot be sold.
+   */
+  sellPrices: [
+    { item: 'grass', count: 5, coins: 1 },
+    { item: 'wood', count: 2, coins: 1 },
+    { item: 'apple', count: 2, coins: 1 },
+    { item: 'animal', count: 1, coins: 3 },
+    { item: 'clay', count: 2, coins: 1 },
+    // Stone is what most taps dig (twice as much with a pickaxe): at 2 for a
+    // coin, the simulator's gatherer made 4,500 coins in a run from stone
+    // alone, more than the contracts are meant to pay (progression PR 2).
+    { item: 'stone', count: 10, coins: 1 },
+    { item: 'coal', count: 1, coins: 1 },
+    { item: 'rawIronOre', count: 1, coins: 2 },
+    { item: 'rawCopperOre', count: 1, coins: 2 },
+    { item: 'ironIngot', count: 1, coins: 5 },
+    { item: 'copperIngot', count: 1, coins: 5 },
+    { item: 'crystal', count: 1, coins: 20 },
+    { item: 'rareOre', count: 1, coins: 15 },
+    { item: 'relic', count: 1, coins: 40 },
+  ] as FrontierLot[],
+  /**
+   * What the player can buy, and what it costs (question 171). From the
+   * start: an animal, clay, saplings and hay. From a level-3 camp: the tools (plan section
+   * 4), dearer than making them at a smelter.
+   */
+  buyPrices: [
+    { item: 'animal', count: 1, coins: 8 },
+    { item: 'clay', count: 1, coins: 1 },
+    { item: 'sapling', count: 1, coins: 3 },
+    { item: 'appleSapling', count: 1, coins: 6 },
+    { item: 'hay', count: 1, coins: 1 },
+    { item: 'drill', count: 1, coins: 80, fromLevel: 3 },
+    { item: 'steelDrill', count: 1, coins: 250, fromLevel: 3 },
+    { item: 'ironPickaxe', count: 1, coins: 60, fromLevel: 3 },
+    { item: 'copperLantern', count: 1, coins: 40, fromLevel: 3 },
+    // From the first tier-1 contract (phase 4): the deep camp's kit, and
+    // wood and food in bulk, so farming becomes a choice.
+    { item: 'campKit', count: 1, coins: 150, afterTier1: true },
+    { item: 'wood', count: 10, coins: 8, afterTier1: true },
+    { item: 'apple', count: 5, coins: 5, afterTier1: true },
+  ] as FrontierLot[],
+};
+
+// ----- Contracts (docs/plans/progression-phases.md, section 5; PR 5) -----
+
+/** A contract: the items it asks for, all delivered at once, and the coins it pays then. */
+export interface FrontierContractDef {
+  /** A short name for code, steps and tests: 't1-coal'. */
+  id: string;
+  /** 1, 2 or 3. */
+  tier: number;
+  /** What the board calls it. */
+  name: string;
+  asks: ItemStack[];
+  pays: number;
+}
+
+/**
+ * Every contract the board can offer. Each pays well over what its items
+ * fetch at the market (FRONTIER_MARKET.sellPrices), and each tier pays
+ * more than the one below. Every number is a [Default] (plan section 5:
+ * tier 1 pays 50 to 150 coins, tier 2 200 to 500, tier 3 600 to 2,000).
+ */
+export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
+  // Tier 1: coal, stone, raw ore, or ingots for more.
+  {
+    id: 't1-coal',
+    tier: 1,
+    name: 'Coal for the forge',
+    asks: [{ item: 'coal', count: 20 }],
+    pays: 60,
+  },
+  {
+    id: 't1-stone',
+    tier: 1,
+    name: 'Stone for a wall',
+    asks: [{ item: 'stone', count: 100 }],
+    pays: 50,
+  },
+  { id: 't1-iron', tier: 1, name: 'Raw iron', asks: [{ item: 'rawIronOre', count: 20 }], pays: 80 },
+  {
+    id: 't1-copper',
+    tier: 1,
+    name: 'Raw copper',
+    asks: [{ item: 'rawCopperOre', count: 20 }],
+    pays: 80,
+  },
+  {
+    id: 't1-iron-ingots',
+    tier: 1,
+    name: 'Iron ingots',
+    asks: [{ item: 'ironIngot', count: 10 }],
+    pays: 120,
+  },
+  {
+    id: 't1-copper-ingots',
+    tier: 1,
+    name: 'Copper ingots',
+    asks: [{ item: 'copperIngot', count: 10 }],
+    pays: 120,
+  },
+  {
+    id: 't1-mixed',
+    tier: 1,
+    name: 'Coal and iron',
+    asks: [
+      { item: 'coal', count: 10 },
+      { item: 'rawIronOre', count: 10 },
+    ],
+    pays: 75,
+  },
+  // Tier 2: bulk stone, ore and ingots.
+  {
+    id: 't2-stone',
+    tier: 2,
+    name: 'Stone for a bridge',
+    asks: [{ item: 'stone', count: 300 }],
+    pays: 200,
+  },
+  {
+    id: 't2-coal',
+    tier: 2,
+    name: 'Coal for a winter',
+    asks: [{ item: 'coal', count: 80 }],
+    pays: 220,
+  },
+  {
+    id: 't2-iron',
+    tier: 2,
+    name: 'Iron ore in bulk',
+    asks: [{ item: 'rawIronOre', count: 60 }],
+    pays: 250,
+  },
+  {
+    id: 't2-copper-ingots',
+    tier: 2,
+    name: 'Copper for wire',
+    asks: [{ item: 'copperIngot', count: 40 }],
+    pays: 380,
+  },
+  {
+    id: 't2-ingots',
+    tier: 2,
+    name: 'Ingots for a works',
+    asks: [
+      { item: 'ironIngot', count: 30 },
+      { item: 'copperIngot', count: 20 },
+    ],
+    pays: 450,
+  },
+  // Tier 3: crystal, rare ore and relics.
+  { id: 't3-crystal', tier: 3, name: 'Crystal', asks: [{ item: 'crystal', count: 10 }], pays: 700 },
+  { id: 't3-rare', tier: 3, name: 'Rare ore', asks: [{ item: 'rareOre', count: 15 }], pays: 900 },
+  { id: 't3-relics', tier: 3, name: 'Relics', asks: [{ item: 'relic', count: 3 }], pays: 800 },
+  {
+    id: 't3-collection',
+    tier: 3,
+    name: 'A collector’s order',
+    asks: [
+      { item: 'crystal', count: 20 },
+      { item: 'relic', count: 2 },
+    ],
+    pays: 1500,
+  },
+  {
+    id: 't3-keystone',
+    tier: 3,
+    name: 'The keystone',
+    asks: [{ item: 'keystone', count: 1 }],
+    pays: 2000,
+  },
+];
+
+/**
+ * The contract board (plan section 5). On a market day it shows up to
+ * `perTier` contracts of each open tier, drawn from the run's seed and the
+ * shift. Tier 1 opens while the best camp is at least `tier1Level`; tier 2
+ * once a tier-1 contract is done; tier 3 once a tier-2 contract is done.
+ * One contract is held at a time (question 173), with no deadline.
+ */
+export const FRONTIER_BOARD = {
+  perTier: 3,
+  tier1Level: 3,
+};
+
+/**
+ * The phases of a run (progression plan section 1), phase 1 first: what
+ * each is about, and what moves the run on. The engine's `runPhase` says
+ * which one a run is in; the screen and the play interface show these.
+ */
+export const FRONTIER_PHASES: { title: string; next: string }[] = [
+  {
+    title: 'Camps and the landscape',
+    next: 'Upgrade a camp to level 2 (wood, clay, grass, animals).',
+  },
+  {
+    title: 'Farming and planning the pit',
+    next: 'Upgrade a camp to level 3 (stone, clay, apples, animals, hay); keep grass, trees and a pen going.',
+  },
+  {
+    title: 'Tier-1 contracts and tools',
+    next: 'Buy an iron drill at the market, take a tier-1 contract from the board, and deliver it.',
+  },
+  { title: 'Tier-2 contracts', next: 'Deliver a tier-2 contract: ore and ingots in bulk.' },
+  {
+    title: 'Tier-3 contracts and money',
+    next: 'Deliver tier-3 contracts (crystal, rare ore, relics: a steel drill mines them) and end rich.',
+  },
+];

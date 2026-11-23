@@ -16,6 +16,8 @@ Working title: **Mining Game**. A turn-based roguelike for Android and iOS. The 
 
 v0.2 is in the git history, as v0.1 is.
 
+**Coming next: progression in five phases** (owner, 2026-11-23; plan `docs/plans/progression-phases.md`, decision note 0061). A run of 100 shifts, from placing camps on the surface, through farming and planning the pit, to contracts in three tiers paid in coins at a market. It changes, with the owner's approval, what each camp level mines and where camps may stand (sections 2 and 6), what the smelter is for (section 6), and how a run ends (sections 5.1 and 8). This doc's rules below are what is built; each section changes as its part of the plan is built.
+
 ---
 
 ## 1. Pillars
@@ -37,8 +39,8 @@ v0.2 is in the git history, as v0.1 is.
 | Player | No avatar. A tap on a lit square takes what is on it (an animal, grass, an apple, a tree) or mines its top block. An abstract **crew** with a health bar does the work (section 5) |
 | Hazards | **None for now** (owner: "Lab 2 becomes the game"). The old ones come back one at a time, fuel and depth bands first; wall slumps and supports are retired (question 153, section 10) |
 | Harm | **Hunger only** (owner, question 148): each item of upkeep that cannot be paid costs the crew 1 health (section 5) |
-| Base | **Camps** (Lab 2's): placed on a level 3×3 of lit ground, upgraded to see further and dig harder rock, demolished once other camps cover them. The recipe book shows what each costs; there is no crafting for now (section 6) |
-| Win condition | Finish the contract (not built yet; section 8). Until then a run ends when the crew is lost or the player closes the mine (question 152) |
+| Base | **Camps** (Lab 2's): placed on a level 3×3 of lit ground **in the top three levels** (depth 0 to 2; owner, 2026-11-23), upgraded to see further and dig harder rock, demolished once other camps cover them. A base camp mines only dirt and clay; ore, crystal and relics need tools (section 6). The recipe book shows what each costs |
+| Win condition | **A run lasts 100 shifts** (owner, 2026-11-23: "100 shifts or crew lost"), or ends sooner when the crew is lost or the player closes the mine (question 152). The coins held at the end are the score [Default; question 170]; contracts in three tiers pay most of them (section 8) |
 | Meta-progression | Unlocks only (new options between runs); no permanent stat upgrades |
 | Platforms | Android and iOS |
 
@@ -88,19 +90,21 @@ The old bands' hazards (water and gas pockets, lava, unstable ore) are not in pl
 
 ### 3.5 Block types [Default]
 
-| Block | Yields | Mined by camps of level |
+| Block | Yields | Mined by |
 |---|---|---|
-| Dirt | — | 1 |
-| Rubble | — | 1 |
-| Stone | Stone | 1 |
-| Coal seam | Coal | 1 |
-| Clay | Clay | 1 |
-| Hard rock | Stone | 2 |
-| Iron / copper ore | Raw iron / raw copper | 3 |
-| Crystal | Crystal | 3 |
-| Unstable ore | Rare ore | 3 |
-| Relic / keystone | Contract item | 3 |
+| Dirt | — | a camp of level 1 |
+| Rubble | — | a camp of level 1 |
+| Clay | Clay | a camp of level 1 |
+| Stone | Stone | a camp of level 2 |
+| Coal seam | Coal | a camp of level 2 |
+| Hard rock | Stone | a camp of level 3 |
+| Iron / copper ore | Raw iron / raw copper | any camp, with an iron drill (or a steel drill) |
+| Crystal | Crystal | any camp, with a steel drill |
+| Unstable ore | Rare ore | any camp, with a steel drill |
+| Relic / keystone | Contract item | any camp, with a steel drill |
 | Sealed rock, bedrock | — | never |
+
+(Progression plan section 2.2, owner 2026-11-23: "You can't dig hard rock or ore unless your camp is upgraded"; the base camp mines neither rock nor coal.)
 
 Every block costs one tap, whatever it is.
 
@@ -130,18 +134,21 @@ In this order:
 1. **Animals:** each takes 3 steps to an open face neighbour. Every 3rd shift a new one walks in at the map's edge, while there are fewer than 8 (question 149).
 2. **Apples:** an apple tree picked bare has its 3 apples back 5 shifts later (question 150).
 3. **Trees** (owner, question 157: "Trees regrow slowly"): a felled tree leaves a stump, and the same kind of tree grows back on it 15 shifts later; an apple tree comes back with its 3 apples. A tree grows back unless the ground directly under it is mined (owner, after the playtest of PR #146): nothing grows back on a square mined since, because mining digs the stump out, and its ring goes from the map at once (owner, after the playtest of 8842e83). A camp built over a tree leaves a stump, and a stump under a camp waits: it grows back once the camp is demolished. Where an animal stands on the stump, it waits a shift more (decision note 0058).
-4. **Upkeep** (owner, question 147: "Food and wood"):
+4. **Cut grass** (progression plan section 6.1): a square whose grass was cut grows grass again [Default] 4 shifts later (`FRONTIER_SHIFT.grassRegrowShifts`), if it is still unmined dirt with nothing on it and no camp, and grass grew on a face neighbour when the shift ended. Otherwise it waits a shift more, so a patch cut bare to its last tuft stays bare (question 174). Mining the square ends the wait.
+5. **Saplings** planted grow like a felled tree's stump (section 7a).
+6. **Upkeep** (owner, question 147: "Food and wood"):
    - 1 wood every shift;
-   - 1 food every 2nd shift: 3 grass, else an apple, else an animal (questions 155 and 158; decision note 0057);
+   - 1 food every 2nd shift: 3 grass, else 1 hay, else an apple, else an animal from the store, never one in a pen (questions 155, 158 and 175; decision note 0057);
    - 1 more wood every 4th shift for each camp after the first.
-5. **Hunger:** each item of upkeep that cannot be paid costs 1 health (section 5).
-6. The next shift starts with a full set of taps.
+7. **Pens breed** (section 7b), once the upkeep is paid: the crew eats first.
+8. **Hunger:** each item of upkeep that cannot be paid costs 1 health (section 5).
+9. The next shift starts with a full set of taps.
 
 ### 4.3 Mining and the level rule [Decided; numbers Default]
 
 - Only a square's top block can be mined, and only once nothing grows on it.
 - **The level rule** (owner: "After mining, at most 1 step"): after the mine, the square must be no more than 1 level lower than each of its face neighbours. Going deep means digging a terraced pit, about one more ring of squares a level.
-- **The camps' levels:** a block can be mined only if a camp whose circle covers the square has a level that mines it (section 3.5). Where several camps cover a square, the best level counts.
+- **The camps' levels and the tools:** a block can be mined only if a camp whose circle covers the square has a level that mines it (section 3.5). Where several camps cover a square, the best level counts. A block no camp level mines (ore, crystal, relics) can be mined on any camp's lit ground while the store holds a tool that mines it; a tool does not help with a block a camp level mines. A refused tap names one thing: the camp level, or the tool.
 - **A camp's own 3×3 is never mined.**
 - **The order of the checks:** a tap the level rule forbids says so ("too steep") before saying a block is too hard, so an upgrade never promises a block the level rule still forbids.
 
@@ -160,7 +167,8 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 
 ### 5.1 How a run ends, and saving
 
-- A run ends when the crew is lost, or when the player closes the mine (question 152).
+- A run ends after its last shift, [Default] 100 (`FRONTIER_RUN.shifts`; owner, 2026-11-23): when the End shift or rest of that shift is done, the run is **finished**. It ends sooner when the crew is lost (in the last shift too: a lost crew counts first) or when the player closes the mine (question 152).
+- **The score** is the coins held when the run ends [Default; question 170]. The end banner shows it.
 - **Saving:** the run is saved at the start of every shift and carried on when the app opens again. Taps within a shift are not saved.
 
 ## 6. Camps [Decided: Lab 2's camps]
@@ -168,38 +176,81 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 - **A camp** stands on a 3×3 patch. Its circle covers the squares with `dx² + dy² ≤ r² + r` around its middle, where `r` is its ring. Its ground is never mined.
 - **Placing** a new camp needs:
   - a 3×3 that is all lit;
-  - level ground (all nine squares at one depth);
+  - level ground (all nine squares at one depth), at a depth of [Default] 2 or less (`FRONTIER_CAMP_PLACE.maxDepth`; owner: "Camps can only be placed in the top three levels");
   - no other camp's ground in the 3×3;
   - the cost, [Default] 15 wood and 15 grass (question 139).
 
   What grows on the 3×3 is cleared and gives nothing.
 - **Upgrading** widens the ring and adds the blocks the camp can mine:
 
-  | Level | Ring | Mines | Upgrade to this level costs |
-  |---|---|---|---|
-  | 1 | 9 | Dirt, rubble, stone, coal, clay | — (the first camp is free) |
-  | 2 | 12 | + hard rock | 20 wood, 10 clay, 15 stone, 1 animal |
-  | 3 | 15 | + iron, copper, crystal, unstable ore, relics, the keystone | 40 wood, 20 clay, 40 stone, 3 animals, 10 apples |
-  | 4 | 18 | nothing new: level 3 mines every block that can be mined | 40 wood, 8 iron ingots, 6 copper ingots, 20 stone |
+  | Level | Ring | Mines | Upgrade to this level costs | Market every |
+  |---|---|---|---|---|
+  | 1 | 9 | Dirt, rubble, clay | — (the first camp is free) | 10 shifts |
+  | 2 | 12 | + stone, coal | 20 wood, 10 clay, 10 grass, 2 animals | 5 shifts |
+  | 3 | 15 | + hard rock | 40 wood, 20 clay, 40 stone, 3 animals, 10 apples, 10 hay | 3 shifts |
+  | 4 | 18 | nothing new | 40 wood, 8 iron ingots, 6 copper ingots, 20 stone | 3 shifts |
 
-  Level 4 (owner, question 163) is [Default] in ring and cost; its ingots need a smelter somewhere first.
+  What each level mines is the owner's (progression plan section 2.2); the costs, rings and level 4 are [Default]. The level-2 upgrade costs no stone, since a base camp cannot mine it. Level 4's ingots need a smelter somewhere first.
 
+- **The deep camp** (progression plan section 2.4; owner: "New camp type can be placed down in deeper areas so now the entire depth is unlocked") is placed on level, lit ground at a depth of [Default] **3 or more**, deeper than any other camp may stand (owner, question 178: "min depth required on the deep camp"), for [Default] a camp kit, 20 wood and 20 stone (`FRONTIER_DEEP_CAMP`); only the market sells the kit, after a tier-1 contract. Its ring is [Default] 12; it mines what a level-3 camp mines and counts as level 3 for the market; it is never upgraded (question 168). It can be demolished, and have a smelter, a pen and a lantern, as any camp. On the map its tag says D. The camp tool switches to it ("⛏ Deep") while a kit is held.
 - **Demolishing** a camp needs other camps' circles to cover its whole 3×3 (question 134). It gives nothing back; its ground can then be mined, and what only it lit turns grey.
 - **A smelter** (owner, question 161) can be built at a camp of level 2 or more, from its panel, for [Default] 20 stone and 10 clay and 1 tap. One per camp; it is lost with the camp. While one stands anywhere, the recipe book can smelt: [Default] 2 raw ore + 1 coal make 2 ingots, 1 tap (question 162). (`docs/plans/smelting-and-crafting.md`.)
 - **Made from ingots** (question 163), in the recipe book while a smelter stands, 1 tap each:
   - **The iron pickaxe**, [Default] 3 iron ingots + 2 wood. While the store holds one, every mining tap yields [Default] twice as much. Taking from the surface is unchanged. It does not wear out, and a second one adds nothing.
   - **The copper lantern**, [Default] 2 copper ingots + 1 coal (coal, not crystal: question 165). Hung at a camp from its panel (1 tap), it widens that camp's ring by [Default] 3 squares on top of its level. One per camp; it is lost with the camp.
-  - **The iron drill**, [Default] 4 iron ingots + 2 copper ingots + 2 wood. While the store holds one, every camp mines as if it were [Default] one level higher, but never past what level 3 mines: a level-1 camp mines hard rock, a level-2 camp mines ore, crystal and relics. A camp's ring stays its own level's. It does not wear out, and a second one adds nothing.
+  - **The iron drill**, [Default] 4 iron ingots + 2 copper ingots + 2 wood, or bought at the market. While the store holds one, iron and copper ore can be mined on any camp's lit ground (progression plan section 4; until engine 0.9.0 it lifted every camp one level). The first one has to be bought: ingots need ore. It does not wear out, and a second one adds nothing.
+- **The steel drill** (bought only, question 172): mines what the iron drill does, and crystal, unstable ore, relics and the keystone.
 - **The recipe book** lists what a new camp and each upgrade cost, and what is made with a smelter (with a Make button). Pinned recipes show, in the tray, how much of each item the player holds against what is needed. Pins are saved (question 143).
+
+## 6a. The market [Decided cadence; prices Default]
+
+(Progression plan section 3, `docs/plans/progression-phases.md`; built in its PR 1.)
+
+- **When:** the market is open for the whole of every shift whose number is a multiple of its cadence: every **10** shifts while the best camp standing is level 1, every **5** at level 2, every **3** at level 3 (owner, 2026-11-23), and [Default] 3 at level 4 (question 167). Nothing about it is stored; the shift and the camps decide it. The night before says "Market day".
+- **Money** is an item, **coins** (question 170). A run starts with none.
+- **Trading:** on a market day, the player sells or buys any whole number of one item's lots, for **1 tap** a trade. A lot is [Default] (`FRONTIER_MARKET`):
+  - sold: 5 grass, 2 wood, 2 apples or 2 clay for 1 coin; 10 stone for 1 coin; 1 animal for 3; 1 coal for 1; 1 raw iron or copper ore for 2; 1 ingot for 5; 1 crystal for 20; 1 rare ore for 15; 1 relic for 40;
+  - bought: 1 animal for 8 coins; 1 clay for 1 coin; 1 sapling for 3, 1 apple sapling for 6; 1 hay for 1; once a tier-1 contract is done, a camp kit for 150, 10 wood for 8 and 5 apples for 5; and, while the best camp is level 3 or more, an iron drill for 80, a steel drill for 250, an iron pickaxe for 60 and a copper lantern for 40. Saplings and hay join with farming (plan section 6).
+  - Nothing can be bought and sold back at a profit.
+- A trade can be undone, like any action that is not a harvest.
+- **Interface:** a market button (🏪) beside the recipe book, lit on a market day. It opens a card like the book's: what can be sold (the items held) and bought, each with what the player has, and Sell, Sell all and Buy buttons. On other days the card says when the market opens, and its buttons are off. Coins are shown next to Dug in the counter.
+
+## 7a. Saplings [Decided; numbers Default]
+
+(Progression plan section 6.2; built in its PR 3.)
+
+- **Where saplings come from:** every [Default] 2nd tree felled in a run gives a sapling as well as its wood (`FRONTIER_SAPLINGS`; counted, not random). The recipe book makes an apple sapling from [Default] 3 apples, for 1 tap, with no smelter. The market sells both (section 6a).
+- **Planting** costs 1 tap and one sapling, on a lit square of surface dirt that was never mined, with nothing growing on it, no camp and no animal; a stump may be planted over (the new sapling replaces it). Cut grass waiting there no longer grows.
+- **Growing:** a sapling becomes a tree [Default] 15 shifts later, an apple sapling an apple tree full of apples [Default] 20 shifts later, by the stump rules (section 4.2): it waits under an animal or a camp, and mining its square digs it out.
+- **Interface:** while a sapling is held, a 🌱 button in the tray opens the planting mode: choose a sapling or an apple sapling, then each tap on the map plants one, or the hint says why it cannot. A planted sapling is drawn as a small sprout. Planting can be undone.
+
+## 7b. Hay and animal pens [Decided; numbers Default]
+
+(Progression plan section 6.3; built in its PR 4.)
+
+- **Hay** is made in the recipe book from [Default] 3 grass, for 1 tap, with no smelter. It is food for the crew (after grass, before apples; question 175), it feeds a pen's new animals, and level 3 costs 10. The market sells it, 1 coin each.
+- **A pen** is built at a camp of level [Default] 2 or more (as the smelter), from its panel, for [Default] 10 wood and 1 tap (`FRONTIER_PEN`). One per camp; it goes with the camp, and its animals go back to the store.
+- **Animals** are put in from the store, or taken out to it, 1 tap each, up to [Default] 4 in a pen. Upkeep never eats a penned animal.
+- **Breeding:** at End shift, after upkeep, a pen with at least 2 animals and room for one more counts down [Default] 4 shifts, then gains an animal and the store gives up [Default] 2 hay. With too little hay it waits, trying again each shift. A pen that may not breed keeps no count.
+- **Interface:** a camp's panel has "🐑 Build pen", then the pen's count, when the next animal is due, and In and Out buttons. The night says when an animal is born.
 
 ## 7. Resources
 
-- **Items:** wood, grass, apples, animals, clay, stone, coal, and the ores. Everything gathered goes into one store with no limit.
+- **Items:** wood, grass, apples, animals, clay, stone, coal, the ores, and coins (section 6a). Everything gathered goes into one store with no limit.
 - **What uses them:** camps and upgrades (section 6), and upkeep (section 4.2): wood, and grass, apples or animals as food. Stone and clay build smelters; raw ore and coal smelt into iron and copper ingots; iron ingots and wood make the pickaxe; copper ingots and coal make the lantern; both ingots and wood make the drill; ingots pay for camp level 4 (section 6).
 - **Coal and raw iron and copper are smelted into ingots** at a smelter. Ingots make the pickaxe, the lantern and the drill, and pay for camp level 4; the first contract asks for ingots (questions 163 and 164). Crystal and the rare ores have no use yet; a later contract may ask for crystal.
 - **There is no crafting for now:** the recipe book replaces it, and recipes can be added to it later.
 
-## 8. Contracts [Decided]
+## 8. Contracts [Decided: tiers and delivery; the list Default]
+
+(Progression plan sections 1 and 5; built in its PR 5. This replaces v0.2's single contract that won the run.)
+
+- **The board:** on a market day the market's card shows up to [Default] 3 contracts of each open tier (`FRONTIER_BOARD`), drawn from the run's seed and the shift: the same seed and shift always show the same board, and the next market day shows another.
+- **Tiers open in turn:** tier 1 while the best camp is level [Default] 3 or more; tier 2 once a tier-1 contract is delivered; tier 3 once a tier-2 one is.
+- **The contracts** (`FRONTIER_CONTRACTS`, every one [Default]): tier 1 asks for coal, stone, raw ore or ingots, for 50 to 120 coins; tier 2 for the same in bulk, for 200 to 450; tier 3 for crystal, rare ore, relics or the keystone, for 700 to 2,000. Each pays more than its items fetch at the market.
+- **Taking** one costs 1 tap, on a market day, and only one is held at a time (question 173). **Delivering** costs 1 tap on any shift once the store holds everything it asks for: the items leave the store and its coins arrive ("Done on delivery", question 89). **Dropping** it costs 1 tap and gives nothing back. There is no deadline. A contract never ends the run.
+- **Phases** (plan section 1): the run is in phase 1 until a camp reaches level 2, phase 2 until one reaches level 3, phase 3 until a tier-1 contract is delivered, phase 4 until a tier-2 one is, then phase 5 (`runPhase`). The market's card names the phase and what moves it on (`FRONTIER_PHASES`).
+- **Interface:** the top of the market's card shows the phase and its goal, the contract held (have/need for each item, Deliver and Drop), and the board (Take). The market's button glows when the contract held can be delivered.
 
 Unchanged from v0.2 in intent, and not built yet: a contract asks for deliverables (ore, relics); the run is won the moment the last one reaches the store (owner, question 89: "Done on delivery"). Until contracts exist, a run ends only as in section 5.1.
 
@@ -241,11 +292,11 @@ Not set for the new game yet. The simulator (`npm run sim`) measures runs; at th
 
 With 100 taps, upkeep takes about 2 taps a shift: close to trivial, and the owner wants it left that way (question 160).
 
-The targets come with the contracts (section 8).
+**With the progression batch** (engine 0.9.0, 100 shifts a run, 100 runs; decision note 0062): a careful player finishes all 100 runs, reaches phase 3 at a median shift of 12, phase 4 at 21 and phase 5 at 42 (97 runs in 100), delivers a median of 29 contracts and ends with a median of about 3,200 coins. Apples are enough for level 3 when apple trees are left standing (question 177); wood is bought at the market late in a run.
 
 ## 13. Open questions
 
-1. Run length targets and the contracts (sections 8 and 12).
+1. Run length targets and the contracts (sections 8 and 12): a run is now 100 shifts (owner, 2026-11-23); the progression plan's defaults are questions 167 to 176.
 2. Art direction and audio: pixel art chosen (decision note 0004); details open.
 3. Monetisation: not yet discussed.
 4. Game title.

@@ -21,15 +21,34 @@
 import { BLOCKS, blockDefByCode, ITEMS } from '../../data';
 import type { ItemId, ItemStack } from '../../data';
 import {
+  FRONTIER_DEEP_CAMP,
   FRONTIER_DRILL,
   FRONTIER_LANTERN,
+  FRONTIER_MARKET,
+  FRONTIER_PEN,
+  FRONTIER_PHASES,
   FRONTIER_PICKAXE,
+  FRONTIER_RUN,
+  FRONTIER_SAPLINGS,
   FRONTIER_SHIFT,
   FRONTIER_SMELTER,
+  FRONTIER_STEEL_DRILL,
+  FRONTIER_CAMP_PLACE,
 } from '../../data/frontier';
+import type { FrontierContractDef, FrontierLot } from '../../data/frontier';
 import { LAB_ITEMS, LAB_NEW_CAMP_COST } from '../../data/labCamps';
 import type { HigherNeighbour, SquareDirection } from '../../engine';
-import { SQUARE_STEPS, loadFrontier, saveFrontier } from '../../engine';
+import {
+  SQUARE_STEPS,
+  contractBoard,
+  deliverRefusal,
+  heldContract,
+  loadFrontier,
+  mostLots,
+  runPhase,
+  saveFrontier,
+} from '../../engine';
+import type { TradeSide } from '../../engine';
 import { randomSeed } from '../previewSession';
 import { CAMP_LOOK, CAMP_MARKS } from './campLook';
 import {
@@ -45,7 +64,6 @@ import {
   campTap,
   canAfford,
   addedNamesAt,
-  minesAsLevel,
   minesText,
   newCampWorld,
   newlyCovered,
@@ -57,7 +75,17 @@ import {
   footprintOf,
   makeCampRecipe,
   makeRefusal,
+  contractCamp,
+  contractRefusal,
+  penCamp,
+  penRefusal,
+  marketOpen,
+  plantCamp,
+  plantRefusal,
+  nextMarketShift,
   smelterRefusal,
+  tradeCamp,
+  tradeRefusal,
   placeCamp,
   PREPARED_LAB2_KEY,
   placeRefusal,
@@ -98,6 +126,7 @@ import {
   drawAnimal,
   drawAppleTree,
   drawForest,
+  drawSapling,
   drawStump,
   drawGrass,
   featureSwatch,
@@ -123,6 +152,18 @@ const HARVEST_HINTS = {
   caught: 'Animal caught!',
 };
 const GREYED_HINT = 'Out of range now: put a camp nearby to mine here.';
+const PLANT_HINT = `Tap bare dirt: trees in ${FRONTIER_SAPLINGS.saplingGrowShifts} shifts, apples in ${FRONTIER_SAPLINGS.appleSaplingGrowShifts}.`;
+/** Why a sapling cannot be planted, for the hint (progression PR 3). */
+const PLANT_REFUSALS: Record<string, string> = {
+  noTaps: 'No taps left this shift: tap End shift to carry on.',
+  over: 'This run is over. Tap New world to start another.',
+  cost: 'You have none of those left.',
+  notShown: 'Plant only inside a camp’s ring.',
+  camp: 'Not on a camp’s ground.',
+  animal: 'An animal stands there.',
+  ground: 'Saplings grow only on surface dirt that was never dug.',
+  occupied: 'Something grows there already.',
+};
 const PLACE_HINT = 'Tap the middle of a flat, lit 3 × 3 patch for the new camp.';
 const PLACE_CHOSEN_HINT = 'Tap Place camp to build here, or tap another spot.';
 const NOT_LEVEL_TEXT = 'Ground not level: a camp needs a flat 3 × 3.';
@@ -137,16 +178,27 @@ export const RUN_KEY = 'mining-game.run';
 function shiftText(report: ShiftReport, turn: CampTurn, rested: boolean): string {
   const paid = report.paid.map((s) => `${s.count} ${itemName(s.item).toLowerCase()}`).join(', ');
   const lacking = report.unpaid.map((s) => s.item).join(' or ');
-  const start = rested ? `Rested. Shift ${report.shift} over` : `Shift ${report.shift} over`;
+  const start = rested
+    ? `Rested. Shift ${report.shift} of ${FRONTIER_RUN.shifts} over`
+    : `Shift ${report.shift} of ${FRONTIER_RUN.shifts} over`;
   if (turn.status === 'lost') {
     return `${start}: no ${lacking}. The crew is lost.`;
+  }
+  // The last shift (progression plan section 7): the coins held are the score.
+  const born =
+    report.born > 0
+      ? ` ${report.born === 1 ? 'An animal was' : `${report.born} animals were`} born in a pen.`
+      : '';
+  const market = `${born}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
+  if (turn.status === 'finished') {
+    return `${start}. That was the last shift: the run is over.`;
   }
   if (report.healthLost > 0) {
     const part = paid === '' ? '' : `paid ${paid}; `;
     // The crew rests only at a camp (question 156), so say where.
-    return `${start}: ${part}no ${lacking}, −${report.healthLost} health. Tap a camp to rest.`;
+    return `${start}: ${part}no ${lacking}, −${report.healthLost} health. Tap a camp to rest.${market}`;
   }
-  return `${start}: ${paid === '' ? 'nothing due' : `paid ${paid}`}.`;
+  return `${start}: ${paid === '' ? 'nothing due' : `paid ${paid}`}.${market}`;
 }
 
 /** What the place-camp tool says about a target the rules refuse. */
@@ -156,8 +208,16 @@ function placeRefusalText(refusal: PlaceRefusal): string {
   if (refusal === 'notShown') return 'The 3 × 3 must be lit, inside a camp’s ring.';
   if (refusal === 'occupied') return 'It overlaps another camp.';
   if (refusal === 'notLevel') return NOT_LEVEL_TEXT;
+  if (refusal === 'tooShallow')
+    return `A deep camp stands only at depth ${FRONTIER_DEEP_CAMP.minDepth} or more: dig the patch deeper first.`;
+  if (refusal === 'tooDeep')
+    return `Camps stand only in the top ${FRONTIER_CAMP_PLACE.maxDepth + 1} levels: this ground is dug too deep.`;
   return 'Not enough to build it yet: mine more first.';
 }
+
+/** A contract action, as a step (progression PR 5). */
+type ContractStep =
+  { kind: 'takeContract'; id: string } | { kind: 'deliver' } | { kind: 'dropContract' };
 
 /** Something drawn over the map for a short while. */
 interface Effect {
@@ -180,7 +240,11 @@ type Mode =
   | { kind: 'placing'; target: { x: number; y: number } | null }
   | { kind: 'camp'; id: number }
   // The recipe book is open in the tray.
-  | { kind: 'book' };
+  | { kind: 'book' }
+  // The market's card is open (progression PR 1).
+  | { kind: 'market' }
+  // Planting saplings: each tap on the map plants one `item` (progression PR 3).
+  | { kind: 'planting'; item: string };
 
 /** How long each kind of effect lasts, in milliseconds. */
 function effectMs(kind: Effect['kind']): number {
@@ -304,6 +368,8 @@ export function mountCampLab(
     pins = next;
     savePins(pins);
   }
+  /** True while the placing tool places a deep camp, not a camp (progression PR 6). */
+  let placingDeep = false;
   /** What the player did, to undo it (undoHistory.ts). A new world starts with none. */
   let history: UndoHistory = emptyHistory(world);
   /**
@@ -394,12 +460,12 @@ export function mountCampLab(
   // history. Opening the book adds a history entry (same address, so the
   // screen does not reload), and going back from it closes the book.
   window.addEventListener('popstate', () => {
-    if (mode.kind === 'book') {
+    if (mode.kind === 'book' || mode.kind === 'market') {
       setMode({ kind: 'idle' });
     }
   });
   window.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && mode.kind === 'book') closeBook();
+    if (event.key === 'Escape' && (mode.kind === 'book' || mode.kind === 'market')) closeBook();
   });
 
   // ----- Drawing -----
@@ -793,7 +859,10 @@ export function mountCampLab(
       return;
     }
     if (feature !== TREE && feature !== APPLE_TREE) {
-      if ((world.surface.stumps[i] ?? NO_FEATURE) !== NO_FEATURE) {
+      const stump = world.surface.stumps[i] ?? NO_FEATURE;
+      if (stump !== NO_FEATURE && world.surface.planted[i] === true) {
+        drawSapling(ctx, box, stump === APPLE_TREE); // a planted sapling
+      } else if (stump !== NO_FEATURE) {
         drawStump(ctx, box); // a felled tree that will grow back
       }
       return;
@@ -1013,7 +1082,8 @@ export function mountCampLab(
     ctx.font = `800 ${Math.round(tagR * 1.3)}px system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(String(camp.level), tx, ty + tagR * 0.06);
+    // A deep camp's tag says D: it has no level to grow (progression PR 6).
+    ctx.fillText(camp.deep ? 'D' : String(camp.level), tx, ty + tagR * 0.06);
 
     // A smelter: a small flame in a tag at the bottom left.
     if (camp.smelter) {
@@ -1092,7 +1162,8 @@ export function mountCampLab(
         const { px, py } = toPx(i % width, Math.floor(i / width));
         ctx.fillRect(px, py, c, c);
       }
-      drawRing(ctx, target.x, target.y, campRadius(1), c, 1, true);
+      const ring = placingDeep ? FRONTIER_DEEP_CAMP.radius : campRadius(1);
+      drawRing(ctx, target.x, target.y, ring, c, 1, true);
     }
     const pulse =
       0.6 +
@@ -1144,7 +1215,18 @@ export function mountCampLab(
     ctx.globalAlpha = 0.55;
     drawCampMarker(
       ctx,
-      { id: 0, x: target.x, y: target.y, level: 1, smelter: false, lantern: false },
+      {
+        id: 0,
+        x: target.x,
+        y: target.y,
+        level: 1,
+        smelter: false,
+        lantern: false,
+        pen: false,
+        penned: 0,
+        breedIn: 0,
+        deep: false,
+      },
       c,
       false,
     );
@@ -1238,7 +1320,17 @@ export function mountCampLab(
       element('span', 'lab-chip-count', String(world.lab.mined)),
       element('span', 'lab-chip-name', 'Dug'),
     );
-    const chips: HTMLElement[] = [dug];
+    // Coins (progression PR 1): the run's score, so always shown, next to Dug.
+    const coins = counts.get(FRONTIER_MARKET.coin) ?? 0;
+    const coinChip = element('div', 'lab-chip lab-chip-dug');
+    coinChip.dataset['testid'] = 'lab-coins';
+    coinChip.dataset['count'] = String(coins);
+    coinChip.append(
+      element('span', 'lab-chip-glyph', '🪙'),
+      element('span', 'lab-chip-count', String(coins)),
+      element('span', 'lab-chip-name', 'Coins'),
+    );
+    const chips: HTMLElement[] = [dug, coinChip];
     const chip = (item: string, count: number, icon: HTMLCanvasElement): void => {
       const made = element('div', 'lab-chip');
       made.dataset['testid'] = `lab-res-${item}`;
@@ -1277,7 +1369,11 @@ export function mountCampLab(
       'copperIngot',
       FRONTIER_PICKAXE.item,
       FRONTIER_DRILL.item,
+      FRONTIER_STEEL_DRILL.item,
       FRONTIER_LANTERN.item,
+      'sapling',
+      'appleSapling',
+      'hay',
     ]) {
       const count = counts.get(item) ?? 0;
       if (count > 0) all.push({ item, count, icon: () => labItemIcon(item, 'lab-chip-icon') });
@@ -1345,13 +1441,19 @@ export function mountCampLab(
 
   function showTray(): void {
     tray.dataset['mode'] = mode.kind;
-    bookCard.hidden = mode.kind !== 'book';
+    bookCard.hidden = mode.kind !== 'book' && mode.kind !== 'market';
+    bookCard.setAttribute('aria-label', mode.kind === 'market' ? 'Market' : 'Recipe book');
     if (mode.kind === 'idle') {
       showIdleTray();
     } else if (mode.kind === 'book') {
       // The tray behind the card stays as it is when nothing is open.
       showIdleTray();
       showBookCard();
+    } else if (mode.kind === 'market') {
+      showIdleTray();
+      showMarketCard();
+    } else if (mode.kind === 'planting') {
+      showPlantingTray(mode.item);
     } else if (mode.kind === 'placing') {
       showPlacingTray(mode.target);
     } else {
@@ -1376,6 +1478,24 @@ export function mountCampLab(
     book.setAttribute('aria-label', 'Recipe book');
     book.title = 'Recipe book';
     book.addEventListener('click', openBook);
+    // The market (progression PR 1): lit on a market day; on other days it
+    // opens the card too, to show the prices and when the market opens.
+    const open = marketOpen(world);
+    // It glows on a market day, and when the contract held can be delivered (progression PR 5).
+    const deliverable = deliverRefusal(toFrontier(world)) === null;
+    const market = button(
+      open || deliverable ? 'lab2-book-button lab2-market-open' : 'lab2-book-button',
+      '🏪',
+    );
+    market.dataset['deliverable'] = String(deliverable);
+    market.dataset['testid'] = 'lab2-market';
+    market.dataset['open'] = String(open);
+    const marketLabel = open
+      ? 'Market: open this shift'
+      : `Market: opens on shift ${nextMarketShift(world)}`;
+    market.setAttribute('aria-label', marketLabel);
+    market.title = marketLabel;
+    market.addEventListener('click', openMarket);
     const tool = button('lab2-tool', '');
     tool.dataset['testid'] = 'lab2-camp-tool';
     tool.setAttribute('aria-label', 'New camp: choose where');
@@ -1387,7 +1507,20 @@ export function mountCampLab(
     tool.append(element('span', 'lab2-tool-glyph', '⛺'), element('span', 'lab2-tool-plus', '+'));
     tool.addEventListener('click', () => setMode({ kind: 'placing', target: null }));
     const side = pinStrip();
-    head.append(book, tool, side);
+    head.append(book, market, tool);
+    // Planting (progression PR 3): shown only while a sapling is held.
+    const held = (item: string): number => world.lab.counts.get(item) ?? 0;
+    if (held('sapling') > 0 || held('appleSapling') > 0) {
+      const sow = button('lab2-book-button', '🌱');
+      sow.dataset['testid'] = 'lab2-plant-tool';
+      sow.setAttribute('aria-label', 'Plant a sapling');
+      sow.title = 'Plant a sapling';
+      sow.addEventListener('click', () =>
+        setMode({ kind: 'planting', item: held('sapling') > 0 ? 'sapling' : 'appleSapling' }),
+      );
+      head.append(sow);
+    }
+    head.append(side);
     const key = labKey();
     // The key lists the kinds you can see: lit and greyed squares, never what is under the fog.
     const seenTops = tops.filter((_, i) => (sights[i] ?? 'fog') !== 'fog');
@@ -1445,7 +1578,11 @@ export function mountCampLab(
             ? '🔩'
             : item === FRONTIER_LANTERN.item
               ? '🏮'
-              : '🔥';
+              : item === 'appleSapling'
+                ? '🌱'
+                : item === 'hay'
+                  ? '🌾'
+                  : '🔥';
     const icon = element('span', 'lab2-recipe-icon', face);
     if (recipe.level > 1) {
       icon.append(element('span', 'lab2-recipe-level', String(recipe.level)));
@@ -1514,9 +1651,17 @@ export function mountCampLab(
     setMode({ kind: 'book' });
   }
 
-  /** Close the recipe book card: going back takes away its history entry, and `popstate` closes it. */
+  /** Open the market's card, as the recipe book's: the same card, the back button closes it. */
+  function openMarket(): void {
+    if (mode.kind === 'market') return;
+    bookNote.textContent = '';
+    window.history.pushState({ lab2Book: true }, '');
+    setMode({ kind: 'market' });
+  }
+
+  /** Close the recipe book or market card: going back takes away its history entry, and `popstate` closes it. */
   function closeBook(): void {
-    if (mode.kind !== 'book') return;
+    if (mode.kind !== 'book' && mode.kind !== 'market') return;
     const state: unknown = window.history.state;
     const ours = typeof state === 'object' && state !== null && 'lab2Book' in state;
     if (ours) {
@@ -1601,13 +1746,194 @@ export function mountCampLab(
     bookCard.replaceChildren(inner);
   }
 
+  /**
+   * The market's card (progression PR 1): what it buys and sells, a lot at
+   * a time, with Sell / Sell all / Buy buttons, each 1 tap. On other days it
+   * shows the prices and when it opens, with the buttons off.
+   */
+  function showMarketCard(): void {
+    const head = element('div', 'lab2-panel-head');
+    const coins = world.lab.counts.get(FRONTIER_MARKET.coin) ?? 0;
+    head.append(element('span', 'lab2-panel-title', `🏪 Market · 🪙 ${coins}`));
+    const close = button('lab2-close', '×');
+    close.setAttribute('aria-label', 'Close the market');
+    close.dataset['testid'] = 'lab2-market-close';
+    close.addEventListener('click', closeBook);
+    head.append(close);
+    const open = marketOpen(world);
+    const when = element(
+      'p',
+      'lab2-market-when',
+      open
+        ? 'Open this shift. Each trade costs 1 tap.'
+        : `Closed. It opens on shift ${nextMarketShift(world)}: every ${FRONTIER_MARKET.everyShifts.join(', ')} shifts with your best camp at level 1, 2, 3.`,
+    );
+    when.dataset['testid'] = 'lab2-market-when';
+    const list = element('div', 'lab2-book-list');
+    list.dataset['testid'] = 'lab2-market-list';
+    const section = (title: string): void => {
+      list.append(element('span', 'lab2-market-section', title));
+    };
+    // Goals and contracts (progression PR 5): the phase and what moves it
+    // on, the contract held (deliverable on any shift), and the board.
+    const state = toFrontier(world);
+    const phase = runPhase(state);
+    const goal = FRONTIER_PHASES[phase - 1];
+    section(`Phase ${phase} of 5${goal === undefined ? '' : ` · ${goal.title}`}`);
+    const next = element('p', 'lab2-market-when', goal?.next ?? '');
+    next.dataset['testid'] = 'lab2-goal';
+    list.append(next);
+    const held = heldContract(state);
+    if (held !== null) {
+      section('Your contract');
+      list.append(contractRow(held, 'held'));
+    }
+    // The one held is shown above, not again on the board.
+    const board = contractBoard(state).filter((c) => c.id !== held?.id);
+    if (board.length > 0) {
+      section('Contract board');
+      for (const offer of board) list.append(contractRow(offer, 'offer'));
+    }
+    section('Sell');
+    for (const lot of FRONTIER_MARKET.sellPrices) {
+      if ((world.lab.counts.get(lot.item) ?? 0) > 0) list.append(marketRow('sell', lot));
+    }
+    section('Buy');
+    for (const lot of FRONTIER_MARKET.buyPrices) list.append(marketRow('buy', lot));
+    const inner = element('div', 'lab2-book-inner');
+    inner.append(head, when, bookNote, list);
+    bookCard.replaceChildren(inner);
+  }
+
+  /**
+   * A contract: its name, tier and pay, what it asks for (have/need), and
+   * Take for one on the board, or Deliver and Drop for the one held.
+   */
+  function contractRow(contract: FrontierContractDef, as: 'held' | 'offer'): HTMLElement {
+    const row = element('div', 'lab2-recipe');
+    row.dataset['testid'] = `lab2-contract-${as}-${contract.id}`;
+    const text = element('div', 'lab2-recipe-text');
+    text.append(
+      element(
+        'span',
+        'lab2-recipe-name',
+        `T${contract.tier} · ${contract.name} → ${contract.pays} 🪙`,
+      ),
+      costRow(contract.asks, `lab2-contract-${contract.id}`),
+    );
+    const buttons = element('div', 'lab2-recipe-buttons lab2-market-buttons');
+    const actions: { label: string; action: ContractStep }[] =
+      as === 'offer'
+        ? [{ label: 'Take', action: { kind: 'takeContract', id: contract.id } }]
+        : [
+            { label: 'Drop', action: { kind: 'dropContract' } },
+            { label: 'Deliver', action: { kind: 'deliver' } },
+          ];
+    for (const { label, action } of actions) {
+      const b = button(label === 'Drop' ? 'lab2-recipe-pin' : 'lab2-recipe-make', label);
+      b.dataset['testid'] = `lab2-contract-${label.toLowerCase()}-${contract.id}`;
+      b.disabled = contractRefusal(world, action) !== null;
+      b.addEventListener('click', () => contractInMarket(action, contract));
+      buttons.append(b);
+    }
+    row.append(text, buttons);
+    return row;
+  }
+
+  /** Take, deliver or drop a contract from the market's card, for 1 tap. */
+  function contractInMarket(action: ContractStep, contract: FrontierContractDef): void {
+    const next = contractCamp(world, action);
+    if (next === world) return; // the button is off whenever this would happen
+    remember(action);
+    const notes = {
+      takeContract: `Taken: ${contract.name}. Deliver it on any shift once you hold everything.`,
+      deliver: `Delivered: ${contract.name}, for ${contract.pays} coins.`,
+      dropContract: `Dropped: ${contract.name}.`,
+    };
+    bookNote.textContent = notes[action.kind];
+    setWorld(next);
+  }
+
+  /** One lot at the market: what it takes (have/need) and gives, and its buttons. */
+  function marketRow(side: TradeSide, lot: FrontierLot): HTMLElement {
+    const row = element('div', 'lab2-recipe');
+    row.dataset['testid'] = `lab2-${side}-${lot.item}`;
+    const text = element('div', 'lab2-recipe-text');
+    const goods = countText(lot.count, lot.item);
+    const coins = `${lot.coins} 🪙`;
+    // What the trade gives up, with the item's icon: the goods to sell, or the coins to buy with.
+    const gives = side === 'sell' ? lot.item : FRONTIER_MARKET.coin;
+    const held = world.lab.counts.get(gives) ?? 0;
+    const have = element('span', 'lab2-recipe-does', `Have ${countText(held, gives)}`);
+    have.dataset['testid'] = `lab2-${side}-have-${lot.item}`;
+    // The lab's own icon for the item, else the icon of the block that yields it.
+    const block = resourceEntries(new Map([[lot.item, 1]]))[0]?.iconBlock;
+    const icon =
+      labItemIcon(lot.item, 'lab2-cost-icon') ??
+      (block === undefined ? null : blockIcon(block, 'lab2-cost-icon'));
+    const name = element(
+      'span',
+      'lab2-recipe-name',
+      side === 'sell' ? `${goods} → ${coins}` : `${coins} → ${goods}`,
+    );
+    text.append(name, have);
+    const buttons = element('div', 'lab2-recipe-buttons lab2-market-buttons');
+    if (side === 'sell') {
+      const most = mostLots(toFrontier(world), side, lot.item);
+      const all = button('lab2-recipe-pin', `All ×${most}`);
+      all.dataset['testid'] = `lab2-sell-all-${lot.item}`;
+      all.disabled = most < 2 || tradeRefusal(world, side, lot.item, most) !== null;
+      all.addEventListener('click', () => tradeInMarket(side, lot, most));
+      buttons.append(all);
+    }
+    const one = button('lab2-recipe-make', side === 'sell' ? 'Sell' : 'Buy');
+    one.dataset['testid'] = `lab2-${side}-one-${lot.item}`;
+    one.disabled = tradeRefusal(world, side, lot.item, 1) !== null;
+    one.addEventListener('click', () => tradeInMarket(side, lot, 1));
+    buttons.append(one);
+    if (icon !== null) row.append(icon);
+    row.append(text, buttons);
+    return row;
+  }
+
+  /** "1 animal", "5 grass", "40 coins": a count and an item's name, singular for 1. */
+  function countText(count: number, item: string): string {
+    const name = itemName(item).toLowerCase();
+    // The data's names are plural where it reads better ("Animals", "Apples", "Coins").
+    return `${count} ${count === 1 && name.endsWith('s') ? name.slice(0, -1) : name}`;
+  }
+
+  /** Trade `lots` lots at the market, for 1 tap, keeping the card's scroll where it was. */
+  function tradeInMarket(side: TradeSide, lot: FrontierLot, lots: number): void {
+    const next = tradeCamp(world, side, lot.item, lots);
+    if (next === world) {
+      return; // the button is off whenever this would happen
+    }
+    remember({ kind: side, item: lot.item, lots });
+    const list = bookCard.querySelector('.lab2-book-list');
+    const scroll = list === null ? 0 : list.scrollTop;
+    const goods = countText(lot.count * lots, lot.item);
+    const coins = countText(lot.coins * lots, FRONTIER_MARKET.coin);
+    bookNote.textContent =
+      side === 'sell' ? `Sold ${goods} for ${coins}.` : `Bought ${goods} for ${coins}.`;
+    setWorld(next);
+    const fresh = bookCard.querySelector('.lab2-book-list');
+    if (fresh !== null) fresh.scrollTop = scroll;
+  }
+
   /** What a made thing does, for the book; `null` for ingots, which only go into other recipes. */
   function whatItDoes(makes: { item: string } | null): string | null {
     if (makes?.item === FRONTIER_PICKAXE.item) {
       return `Every mining tap gives ${FRONTIER_PICKAXE.yieldTimes}×, while you have one.`;
     }
     if (makes?.item === FRONTIER_DRILL.item) {
-      return `Every camp mines one level harder, up to level ${FRONTIER_DRILL.upToLevel}'s blocks.`;
+      return 'Mines iron and copper ore on any camp’s ground, while you have one.';
+    }
+    if (makes?.item === 'hay') {
+      return `Food for the crew, and ${FRONTIER_PEN.hayPerBirth} feeds a pen's new animal. No smelter needed.`;
+    }
+    if (makes?.item === 'appleSapling') {
+      return `Plant it with 🌱: an apple tree in ${FRONTIER_SAPLINGS.appleSaplingGrowShifts} shifts. No smelter needed.`;
     }
     if (makes?.item === FRONTIER_LANTERN.item) {
       return `Hang it at a camp from its panel: ring +${FRONTIER_LANTERN.ringBonus}.`;
@@ -1631,12 +1957,78 @@ export function mountCampLab(
     if (fresh !== null) fresh.scrollTop = scroll;
   }
 
+  /**
+   * The planting tray (progression PR 3): which sapling to plant, how many
+   * are held, and ×. Each tap on lit dirt plants one, for 1 tap, until ×.
+   */
+  function showPlantingTray(item: string): void {
+    const head = element('div', 'lab2-panel-head');
+    head.append(element('span', 'lab2-panel-title', '🌱 Plant'));
+    const cancel = button('lab2-close', '×');
+    cancel.setAttribute('aria-label', 'Stop planting');
+    cancel.dataset['testid'] = 'lab2-plant-cancel';
+    cancel.addEventListener('click', () => setMode({ kind: 'idle' }));
+    head.append(cancel);
+    const body = element('p', 'lab2-panel-line', PLANT_HINT);
+    body.dataset['testid'] = 'lab2-plant-line';
+    const actions = element('div', 'lab2-actions');
+    for (const kind of ['sapling', 'appleSapling']) {
+      const count = world.lab.counts.get(kind) ?? 0;
+      const choose = button(
+        kind === item ? 'lab2-button lab2-button-main' : 'lab2-button',
+        `${kind === 'sapling' ? '🌲 Sapling' : '🍎 Apple'} ×${count}`,
+      );
+      choose.dataset['testid'] = `lab2-plant-${kind}`;
+      choose.setAttribute('aria-pressed', String(kind === item));
+      choose.disabled = count === 0;
+      choose.addEventListener('click', () => setMode({ kind: 'planting', item: kind }));
+      actions.append(choose);
+    }
+    tray.replaceChildren(head, body, actions);
+  }
+
+  /** A tap on the map while planting: plant one there, or say why not. */
+  function tapWhilePlanting(x: number, y: number, item: string): void {
+    canvas.dataset['lastTap'] = `plant ${x},${y}`;
+    const why = plantRefusal(world, x, y, item);
+    if (why !== null) {
+      setHint(PLANT_REFUSALS[why] ?? 'A sapling cannot go there.', true);
+      return;
+    }
+    remember({ kind: 'plant', x, y, item });
+    setWorld(plantCamp(world, x, y, item));
+    const left = world.lab.counts.get(item) ?? 0;
+    setHint(
+      `Planted. ${left === 0 ? 'None left.' : `${left} left.`} It grows unless its ground is dug.`,
+      false,
+    );
+    if (left === 0) {
+      const other = item === 'sapling' ? 'appleSapling' : 'sapling';
+      setMode(
+        (world.lab.counts.get(other) ?? 0) > 0
+          ? { kind: 'planting', item: other }
+          : { kind: 'idle' },
+      );
+    }
+  }
+
   function showPlacingTray(target: { x: number; y: number } | null): void {
     // Cancel is the × in the head, as in a camp's panel, so the row below has
     // room for the cost and "Place camp" even on a narrow phone (owner's bug
     // report: "Place camp doesn't show").
     const head = element('div', 'lab2-panel-head');
-    head.append(element('span', 'lab2-panel-title', '⛺ New camp'));
+    head.append(element('span', 'lab2-panel-title', placingDeep ? '⛏ Deep camp' : '⛺ New camp'));
+    // Holding a camp kit (progression PR 6): switch between a camp and a deep camp.
+    if ((world.lab.counts.get('campKit') ?? 0) > 0 || placingDeep) {
+      const swap = button('lab2-button', placingDeep ? '⛺ Camp' : '⛏ Deep');
+      swap.dataset['testid'] = 'lab2-place-deep';
+      swap.setAttribute('aria-pressed', String(placingDeep));
+      swap.addEventListener('click', () => {
+        placingDeep = !placingDeep;
+        setMode(mode);
+      });
+      head.append(swap);
+    }
     const cancel = button('lab2-close', '×');
     cancel.setAttribute('aria-label', 'Cancel');
     cancel.dataset['testid'] = 'lab2-place-cancel';
@@ -1646,10 +2038,13 @@ export function mountCampLab(
     // The line says why "Place camp" is off, whenever it is.
     const body = element('p', 'lab2-panel-line');
     body.dataset['testid'] = 'lab2-place-line';
-    const refusal = target === null ? null : placeRefusal(world, target.x, target.y);
-    const missing = missingText(LAB_NEW_CAMP_COST);
+    const refusal = target === null ? null : placeRefusal(world, target.x, target.y, placingDeep);
+    const placeCost = placingDeep ? FRONTIER_DEEP_CAMP.cost : LAB_NEW_CAMP_COST;
+    const missing = missingText(placeCost);
     if (target === null) {
-      body.textContent = PLACE_HINT;
+      body.textContent = placingDeep
+        ? `Level ground at depth ${FRONTIER_DEEP_CAMP.minDepth}+. Ring ${FRONTIER_DEEP_CAMP.radius}; mines as level ${FRONTIER_DEEP_CAMP.level}.`
+        : PLACE_HINT;
     } else if (refusal !== null && refusal !== 'cost') {
       body.textContent = placeRefusalText(refusal);
       body.classList.add('lab2-panel-warn');
@@ -1665,7 +2060,10 @@ export function mountCampLab(
     }
 
     const actions = element('div', 'lab2-actions');
-    const confirm = button('lab2-button lab2-button-main', 'Place camp');
+    const confirm = button(
+      'lab2-button lab2-button-main',
+      placingDeep ? 'Place deep' : 'Place camp',
+    );
     confirm.dataset['testid'] = 'lab2-place-confirm';
     confirm.disabled = target === null || refusal !== null;
     // A disabled button keeps its outline and text, and says why in its tooltip too.
@@ -1682,7 +2080,7 @@ export function mountCampLab(
         confirmPlace(target.x, target.y);
       }
     });
-    actions.append(costRow(LAB_NEW_CAMP_COST), confirm);
+    actions.append(costRow(placeCost), confirm);
     tray.replaceChildren(head, body, actions);
   }
 
@@ -1701,7 +2099,11 @@ export function mountCampLab(
 
   function showCampTray(camp: Camp): void {
     const head = element('div', 'lab2-panel-head');
-    const title = element('span', 'lab2-panel-title', `⛺ Camp ${camp.id} · Level ${camp.level}`);
+    const title = element(
+      'span',
+      'lab2-panel-title',
+      camp.deep ? `⛏ Deep camp ${camp.id}` : `⛺ Camp ${camp.id} · Level ${camp.level}`,
+    );
     title.dataset['testid'] = 'lab2-camp-title';
     head.append(title);
     // Demolish: only once other camps cover all of this one's base. Otherwise
@@ -1730,18 +2132,23 @@ export function mountCampLab(
     const line = element('p', 'lab2-panel-line');
     line.dataset['testid'] = 'lab2-camp-line';
     // With a lantern, the ring is its level's plus the lantern's (said on the lantern's line below).
-    // With a drill in the store, the camp mines as if a level higher, up to FRONTIER_DRILL.upToLevel.
-    const mines = minesAsLevel(camp.level, world.lab.counts);
-    // 🔩: the drill raises what it mines (kept short, so the line fits a phone).
-    const withDrill = mines > camp.level ? '🔩 ' : '';
-    line.textContent = `Ring ${campRing(camp)} · ${withDrill}mines ${minesText(mines)}`;
+    // A drill in the store adds ore (🔩) and a steel drill crystal and relics too (⚙️), on any camp's ground.
+    const held = (item: string): boolean => (world.lab.counts.get(item) ?? 0) > 0;
+    const tools = held(FRONTIER_STEEL_DRILL.item)
+      ? ' · ⚙️ + ore, crystal, relics'
+      : held(FRONTIER_DRILL.item)
+        ? ' · 🔩 + ore'
+        : '';
+    line.textContent = `Ring ${campRing(camp)} · mines ${minesText(camp.level)}${tools}`;
 
     // Next: what the upgrade gives, and what it costs.
     const next = element('p', 'lab2-panel-line lab2-panel-next');
     next.dataset['testid'] = 'lab2-camp-next';
     const actions = element('div', 'lab2-actions');
-    const cost = upgradeCostFrom(camp.level);
-    if (cost === null) {
+    const cost = camp.deep ? null : upgradeCostFrom(camp.level);
+    if (camp.deep) {
+      next.textContent = 'A deep camp is never upgraded.';
+    } else if (cost === null) {
       next.textContent = `Top level: the widest ring, and every block the lab has.`;
     } else {
       const up = camp.level + 1;
@@ -1776,6 +2183,42 @@ export function mountCampLab(
       build.dataset['testid'] = 'lab2-build-smelter';
       build.disabled = smelterRefusal(world, camp.id) !== null;
       build.addEventListener('click', () => confirmSmelter(camp.id));
+      row.append(build);
+      tray.append(row);
+    }
+
+    // The animal pen (progression PR 4): build one, or move animals in and out.
+    if (camp.pen) {
+      const row = element('div', 'lab2-actions');
+      // Short, so it fits beside its buttons on a phone: "🐑 2/4 · lamb in 3".
+      const breeding =
+        camp.breedIn > 0 ? ` · lamb in ${camp.breedIn}` : camp.penned < 2 ? ' · 2 breed' : '';
+      const has = element(
+        'span',
+        'lab2-panel-line',
+        `🐑 ${camp.penned}/${FRONTIER_PEN.capacity}${breeding}`,
+      );
+      has.title = `Pen: ${camp.penned} of ${FRONTIER_PEN.capacity}. Two or more breed every ${FRONTIER_PEN.breedEveryShifts} shifts, eating ${FRONTIER_PEN.hayPerBirth} hay.`;
+      has.dataset['testid'] = 'lab2-camp-pen';
+      const putIn = button('lab2-button', 'In');
+      putIn.dataset['testid'] = 'lab2-pen-in';
+      putIn.setAttribute('aria-label', 'Put an animal in the pen');
+      putIn.disabled = penRefusal(world, 'penIn', camp.id) !== null;
+      putIn.addEventListener('click', () => confirmPen('penIn', camp.id));
+      const takeOut = button('lab2-button', 'Out');
+      takeOut.dataset['testid'] = 'lab2-pen-out';
+      takeOut.setAttribute('aria-label', 'Take an animal out of the pen');
+      takeOut.disabled = penRefusal(world, 'penOut', camp.id) !== null;
+      takeOut.addEventListener('click', () => confirmPen('penOut', camp.id));
+      row.append(has, putIn, takeOut);
+      tray.append(row);
+    } else if (camp.level >= FRONTIER_PEN.minLevel) {
+      const row = element('div', 'lab2-actions');
+      row.append(costRow(FRONTIER_PEN.cost, 'lab2-pen-cost'));
+      const build = button('lab2-button', '🐑 Build pen');
+      build.dataset['testid'] = 'lab2-build-pen';
+      build.disabled = penRefusal(world, 'buildPen', camp.id) !== null;
+      build.addEventListener('click', () => confirmPen('buildPen', camp.id));
       row.append(build);
       tray.append(row);
     }
@@ -1818,9 +2261,10 @@ export function mountCampLab(
 
   function setMode(next: Mode): void {
     mode = next;
+    if (mode.kind !== 'placing') placingDeep = false;
     preview =
       mode.kind === 'placing' && mode.target !== null
-        ? new Set(newlyCovered(world, mode.target.x, mode.target.y))
+        ? new Set(newlyCovered(world, mode.target.x, mode.target.y, placingDeep))
         : new Set();
     if (mode.kind === 'placing') {
       // While placing, the hint says what to do next: choose a spot, then
@@ -1839,15 +2283,22 @@ export function mountCampLab(
   }
 
   function confirmPlace(x: number, y: number): void {
-    const next = placeCamp(world, x, y);
+    const deep = placingDeep;
+    const next = placeCamp(world, x, y, deep);
     if (next === world) {
       return;
     }
-    remember({ kind: 'place', x, y });
+    remember({ kind: deep ? 'placeDeep' : 'place', x, y });
     mode = { kind: 'idle' };
+    placingDeep = false;
     preview = new Set();
     setWorld(next);
-    setHint('Camp placed: the fog lifts around it.', false);
+    setHint(
+      deep
+        ? 'Deep camp placed: it mines as a level-3 camp, deep down.'
+        : 'Camp placed: the fog lifts around it.',
+      false,
+    );
     addEffect({
       kind: 'ring',
       x,
@@ -1855,7 +2306,7 @@ export function mountCampLab(
       label: '',
       higher: [],
       fromRadius: 0,
-      toRadius: campRadius(1),
+      toRadius: deep ? FRONTIER_DEEP_CAMP.radius : campRadius(1),
     });
   }
 
@@ -1910,6 +2361,22 @@ export function mountCampLab(
     setHint(`A smelter at camp ${id}: smelt ore into ingots in the recipe book 📖.`, false);
   }
 
+  /** Build a pen at camp `id`, or move an animal into or out of it (progression PR 4). */
+  function confirmPen(kind: 'buildPen' | 'penIn' | 'penOut', id: number): void {
+    const next = penCamp(world, kind, id);
+    if (next === world) {
+      return; // the button is off whenever this would happen
+    }
+    remember({ kind, id });
+    setWorld(next);
+    const hints = {
+      buildPen: `A pen at camp ${id}: put animals in; two or more breed, eating hay.`,
+      penIn: 'An animal in the pen: safe from upkeep.',
+      penOut: 'An animal out of the pen, in the store.',
+    };
+    setHint(hints[kind], false);
+  }
+
   function confirmDemolish(id: number): void {
     const next = demolishCamp(world, id);
     if (next === world) {
@@ -1945,10 +2412,13 @@ export function mountCampLab(
     // Out of taps: End shift is what to press next, so it stands out.
     endShiftButton.classList.toggle('lab2-end-shift-now', active && turn.tapsLeft === 0);
     overBanner.hidden = active;
+    const score = world.lab.counts.get(FRONTIER_MARKET.coin) ?? 0;
     overBanner.textContent =
       turn.status === 'lost'
         ? `The crew is lost after ${turn.shift - 1} shifts. Tap New world to start again.`
-        : `Mine closed after ${turn.shift} shifts. Tap New world to start again.`;
+        : turn.status === 'finished'
+          ? `The run is over after ${FRONTIER_RUN.shifts} shifts: 🪙 ${score} coins. Tap New world to start again.`
+          : `Mine closed after ${turn.shift} shifts. Tap New world to start again.`;
   }
 
   /**
@@ -2043,8 +2513,17 @@ export function mountCampLab(
   function describeStep(step: CampStep): string {
     if (step.kind === 'tap') return `the tap at ${step.x}, ${step.y}`;
     if (step.kind === 'place') return 'placing the camp';
+    if (step.kind === 'placeDeep') return 'placing the deep camp';
     if (step.kind === 'upgrade') return `the upgrade of camp ${step.id}`;
     if (step.kind === 'demolish') return `demolishing camp ${step.id}`;
+    if (step.kind === 'sell' || step.kind === 'buy') return `the ${step.kind} of ${step.item}`;
+    if (step.kind === 'plant') return `planting at ${step.x}, ${step.y}`;
+    if (step.kind === 'buildPen') return `the pen at camp ${step.id}`;
+    if (step.kind === 'takeContract') return 'taking the contract';
+    if (step.kind === 'deliver') return 'the delivery';
+    if (step.kind === 'dropContract') return 'dropping the contract';
+    if (step.kind === 'penIn' || step.kind === 'penOut')
+      return `moving an animal at camp ${step.id}`;
     return 'the end of the shift'; // never in the history: it is emptied when a shift ends
   }
 
@@ -2082,6 +2561,10 @@ export function mountCampLab(
       tapWhilePlacing(x, y);
       return;
     }
+    if (mode.kind === 'planting') {
+      tapWhilePlanting(x, y, mode.item);
+      return;
+    }
     const result = campTap(world, x, y);
     canvas.dataset['lastTap'] = `${result.kind} ${x},${y}`;
     if (result.kind === 'fog') {
@@ -2116,21 +2599,27 @@ export function mountCampLab(
     }
     if (result.kind === 'tooHard') {
       const name = blockDefByCode(tops[x + world.lab.state.size.x * y] ?? 0).name;
+      // One reason: a camp level, or a tool (progression plan section 4).
       const text =
-        result.needs === null
-          ? `${name} cannot be mined in this lab.`
-          : result.needs > 1 &&
-              result.needs <= FRONTIER_DRILL.upToLevel &&
-              (world.lab.counts.get(FRONTIER_DRILL.item) ?? 0) === 0
-            ? `${name} needs a level ${result.needs} camp over it, or a drill and a level ${result.needs - FRONTIER_DRILL.levelBonus} camp.`
-            : `${name} needs a level ${result.needs} camp over it.`;
+        result.needs !== null
+          ? `${name} needs a level ${result.needs} camp over it.`
+          : result.needsTool === FRONTIER_DRILL.item
+            ? `${name} needs an iron drill: buy one at the market 🏪, or make one at a smelter.`
+            : result.needsTool !== null
+              ? `${name} needs a steel drill: buy one at the market 🏪.`
+              : `${name} cannot be mined.`;
       setHint(text, 'hard');
       effects = effects.filter((e) => e.kind !== 'tooHard');
       addEffect({
         kind: 'tooHard',
         x,
         y,
-        label: result.needs === null ? 'Too hard' : `Needs Lv ${result.needs}`,
+        label:
+          result.needs !== null
+            ? `Needs Lv ${result.needs}`
+            : result.needsTool !== null
+              ? `Needs ${result.needsTool === FRONTIER_DRILL.item ? 'drill' : 'steel drill'}`
+              : 'Too hard',
         higher: [],
         fromRadius: 0,
         toRadius: 0,
@@ -2163,12 +2652,18 @@ export function mountCampLab(
       const undoable = result.harvest.kind === 'grass' || result.harvest.kind === 'felled';
       remember({ kind: 'tap', x, y }, undoable);
       setWorld(result.world);
-      setHint(HARVEST_HINTS[result.harvest.kind], false);
+      const extra = result.harvest.extra;
+      setHint(
+        extra === null
+          ? HARVEST_HINTS[result.harvest.kind]
+          : 'Tree felled, and a sapling 🌱 with it: plant it on bare dirt to grow a new tree.',
+        false,
+      );
       addEffect({
         kind: 'mined',
         x,
         y,
-        label: gainText([result.harvest.gain]),
+        label: gainText(extra === null ? [result.harvest.gain] : [result.harvest.gain, extra]),
         higher: [],
         fromRadius: 0,
         toRadius: 0,

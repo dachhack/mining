@@ -35,6 +35,14 @@ import {
   depthMapOf,
   frontierAct,
   frontierStartSquare,
+  isMarketDay,
+  deliverRefusal as engineDeliverRefusal,
+  dropRefusal as engineDropRefusal,
+  takeRefusal as engineTakeRefusal,
+  penRefusal as enginePenRefusal,
+  plantRefusal as enginePlantRefusal,
+  nextMarketShift as engineNextMarketShift,
+  tradeRefusal as engineTradeRefusal,
   campAt as engineCampAt,
   coverLevelAt as engineCoverLevelAt,
   demolishRefusal as engineDemolishRefusal,
@@ -53,12 +61,15 @@ import type {
   CampGround,
   FrontierAction,
   FrontierCamp,
+  FrontierHeldContract,
   FrontierState,
   FrontierStatus,
   GameState,
   PlaceRefusal as EnginePlaceRefusal,
+  PenAction,
   ShiftReport,
   Sight,
+  TradeSide,
 } from '../../engine';
 import { labWorldFromState } from './labWorld';
 import type { LabTap, LabWorld } from './labWorld';
@@ -92,8 +103,12 @@ export interface CampTurn {
   tapsLeft: number;
   /** The crew's health: 0 loses the run. */
   health: number;
-  /** 'active', 'lost' (the crew's health reached 0) or 'closed' (the mine was closed). */
+  /** 'active', 'lost' (the crew's health reached 0), 'closed' (the mine was closed) or 'finished' (the last shift ended). */
   status: FrontierStatus;
+  /** The contract held, or `null` (progression PR 5). */
+  contract: FrontierHeldContract | null;
+  /** Contracts delivered, by tier: [tier 1, tier 2, tier 3]. */
+  contractsDone: number[];
 }
 
 /** A fresh run: shift 1, a full shift of taps, full health. */
@@ -103,6 +118,8 @@ export function firstTurn(): CampTurn {
     tapsLeft: FRONTIER_SHIFT.taps,
     health: FRONTIER_SHIFT.startHealth,
     status: 'active',
+    contract: null,
+    contractsDone: [0, 0, 0],
   };
 }
 
@@ -123,7 +140,7 @@ export {
   footprintOf,
   inCircle,
   levelNeededFor,
-  minesAsLevel,
+  toolNeededFor,
   upgradeCostFrom,
 } from '../../engine';
 /** What one square looks like to the player: 'shown', 'greyed' or 'fog'. */
@@ -171,10 +188,15 @@ export function toFrontier(world: CampWorld): FrontierState {
     mined: world.lab.mined,
     regrowIn: world.surface.regrowIn,
     stumps: world.surface.stumps,
+    grassIn: world.surface.grassIn,
+    planted: world.surface.planted,
+    treesFelled: world.surface.treesFelled,
     shift: world.turn.shift,
     tapsLeft: world.turn.tapsLeft,
     health: world.turn.health,
     status: world.turn.status,
+    contract: world.turn.contract,
+    contractsDone: world.turn.contractsDone,
   };
 }
 
@@ -200,6 +222,9 @@ export function fromFrontier(world: CampWorld, state: FrontierState): CampWorld 
       apples: state.apples,
       regrowIn: state.regrowIn,
       stumps: state.stumps,
+      grassIn: state.grassIn,
+      planted: state.planted,
+      treesFelled: state.treesFelled,
       animals: state.animals,
       nextAnimalId: state.nextAnimalId,
       rng: state.rng.s,
@@ -209,6 +234,8 @@ export function fromFrontier(world: CampWorld, state: FrontierState): CampWorld 
       tapsLeft: state.tapsLeft,
       health: state.health,
       status: state.status,
+      contract: state.contract,
+      contractsDone: state.contractsDone,
     },
   };
 }
@@ -263,6 +290,9 @@ export function bareSurface(state: GameState): Surface {
     apples: new Array<number>(squares).fill(0),
     regrowIn: new Array<number>(squares).fill(-1),
     stumps: new Array<typeof NO_FEATURE>(squares).fill(NO_FEATURE),
+    grassIn: new Array<number>(squares).fill(-1),
+    planted: new Array<boolean>(squares).fill(false),
+    treesFelled: 0,
     animals: [],
     nextAnimalId: 1,
     rng: 1,
@@ -279,7 +309,20 @@ export function campWorldFromLab(
   y: number,
   surface: Surface = bareSurface(lab.state),
 ): CampWorld {
-  const camps: Camp[] = [{ id: 1, x, y, level: 1, smelter: false, lantern: false }];
+  const camps: Camp[] = [
+    {
+      id: 1,
+      x,
+      y,
+      level: 1,
+      smelter: false,
+      lantern: false,
+      pen: false,
+      penned: 0,
+      breedIn: 0,
+      deep: false,
+    },
+  ];
   const { width, height } = lab.depths;
   const seen = seenWith(new Array<boolean>(width * height).fill(false), camps, width, height);
   return { lab, camps, seen, nextCampId: 2, surface, turn: firstTurn() };
@@ -343,7 +386,8 @@ export function campWorldOf(state: FrontierState): CampWorld {
  * - 'camp': the square holds a camp, which is never mined;
  * - 'refused': the level rule refused it (`tap.result.refusal` says why);
  * - 'tooHard': the level rule allows it, but the camps covering the square
- *   cannot mine its top block (`needs` says which level can);
+ *   cannot mine its top block (`needs` says which level can, `needsTool`
+ *   which tool);
  * - 'noTaps': the shift has no taps left (A4);
  * - 'over': the run has ended (A4).
  */
@@ -357,6 +401,8 @@ export interface CampTap {
   tap: LabTap | null;
   /** For 'tooHard': the lowest camp level that could mine the block, or `null` if none can. */
   needs: number | null;
+  /** For 'tooHard': the tool that mines the block (an iron or steel drill), if a tool does. */
+  needsTool: string | null;
   /** For 'harvested': what was taken and what it gave; `null` otherwise. */
   harvest: Harvest | null;
 }
@@ -374,6 +420,7 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
     world,
     tap: null,
     needs: tap?.needs ?? null,
+    needsTool: tap?.needsTool ?? null,
     harvest: null,
   });
   if (tap === null) {
@@ -396,7 +443,8 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
   const after = fromFrontier(world, outcome.state);
   if (tap.kind === 'harvested') {
     const gain = tap.gain[0] ?? { item: 'grass', count: 0 }; // a harvest always gives one stack
-    const harvest = { surface: after.surface, gain, kind: tap.harvest ?? 'grass' };
+    const extra = tap.gain[1] ?? null; // a sapling with a felled tree
+    const harvest = { surface: after.surface, gain, extra, kind: tap.harvest ?? 'grass' };
     return { ...answer('harvested'), world: after, harvest };
   }
   const result = {
@@ -413,16 +461,21 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
 // ----- New camps, upgrades and demolishing (the engine's rules) -----
 
 /** Why a new camp cannot be centred on (x, y) now, or `null` if it can. */
-export function placeRefusal(world: CampWorld, x: number, y: number): PlaceRefusal | null {
-  return turnRefusal(world) ?? enginePlaceRefusal(ground(world), x, y);
+export function placeRefusal(
+  world: CampWorld,
+  x: number,
+  y: number,
+  deep = false,
+): PlaceRefusal | null {
+  return turnRefusal(world) ?? enginePlaceRefusal(ground(world), x, y, deep);
 }
 
 /**
  * The squares a new level-1 camp on (x, y) would bring out of fog or out of
  * grey: the part of its circle that no camp covers now. Row by row, as indexes.
  */
-export function newlyCovered(world: CampWorld, x: number, y: number): number[] {
-  return engineNewlyCovered(ground(world), x, y);
+export function newlyCovered(world: CampWorld, x: number, y: number, deep = false): number[] {
+  return engineNewlyCovered(ground(world), x, y, deep);
 }
 
 /**
@@ -430,8 +483,8 @@ export function newlyCovered(world: CampWorld, x: number, y: number): number[] {
  * grew on its 3 x 3 is cleared and gives nothing. If `placeRefusal` says
  * no, the very same world comes back.
  */
-export function placeCamp(world: CampWorld, x: number, y: number): CampWorld {
-  return act(world, { kind: 'place', x, y }).world;
+export function placeCamp(world: CampWorld, x: number, y: number, deep = false): CampWorld {
+  return act(world, { kind: deep ? 'placeDeep' : 'place', x, y }).world;
 }
 
 /** Why camp `id` cannot be upgraded now, or `null` if it can. */
@@ -477,6 +530,82 @@ export function lanternRefusal(world: CampWorld, id: number): string | null {
 /** Hang a lantern from the store at camp `id`, for 1 tap; the very same world if it cannot. */
 export function hangCampLantern(world: CampWorld, id: number): CampWorld {
   return act(world, { kind: 'hangLantern', id }).world;
+}
+
+/** Why a pen action cannot be done at camp `id` now ('noTaps', 'over', or the engine's reason), or `null` if it can. */
+export function penRefusal(world: CampWorld, kind: PenAction, id: number): string | null {
+  return turnRefusal(world) ?? enginePenRefusal(toFrontier(world), kind, id);
+}
+
+/** Build a pen at camp `id`, or put an animal in or take one out, for 1 tap; the very same world if it cannot. */
+export function penCamp(world: CampWorld, kind: PenAction, id: number): CampWorld {
+  return act(world, { kind, id }).world;
+}
+
+// ----- The market (docs/plans/progression-phases.md, PR 1) -----
+
+/** True if the market is open in the shift being played. */
+export function marketOpen(world: CampWorld): boolean {
+  return isMarketDay(toFrontier(world));
+}
+
+/** The shift on which the market opens next at today's cadence (this one, if it is open). */
+export function nextMarketShift(world: CampWorld): number {
+  return engineNextMarketShift(toFrontier(world));
+}
+
+/** Why `lots` lots of `item` cannot be traded now ('noTaps', 'over', or the engine's reason), or `null` if they can. */
+export function tradeRefusal(
+  world: CampWorld,
+  side: TradeSide,
+  item: string,
+  lots: number,
+): string | null {
+  return turnRefusal(world) ?? engineTradeRefusal(toFrontier(world), side, item, lots);
+}
+
+/** Sell or buy `lots` lots of `item`, for 1 tap; the very same world if it cannot. */
+export function tradeCamp(
+  world: CampWorld,
+  side: TradeSide,
+  item: string,
+  lots: number,
+): CampWorld {
+  return act(world, { kind: side, item, lots }).world;
+}
+
+// ----- Contracts (docs/plans/progression-phases.md, PR 5) -----
+
+/** Why a contract action cannot be done now ('noTaps', 'over', or the engine's reason), or `null` if it can. */
+export function contractRefusal(
+  world: CampWorld,
+  action: { kind: 'takeContract'; id: string } | { kind: 'deliver' } | { kind: 'dropContract' },
+): string | null {
+  const turn = turnRefusal(world);
+  if (turn !== null) return turn;
+  const state = toFrontier(world);
+  if (action.kind === 'takeContract') return engineTakeRefusal(state, action.id);
+  return action.kind === 'deliver' ? engineDeliverRefusal(state) : engineDropRefusal(state);
+}
+
+/** Take, deliver or drop a contract, for 1 tap; the very same world if it cannot. */
+export function contractCamp(
+  world: CampWorld,
+  action: { kind: 'takeContract'; id: string } | { kind: 'deliver' } | { kind: 'dropContract' },
+): CampWorld {
+  return act(world, action).world;
+}
+
+// ----- Planting (docs/plans/progression-phases.md, PR 3) -----
+
+/** Why `item` cannot be planted on (x, y) now ('noTaps', 'over', or the engine's reason), or `null` if it can. */
+export function plantRefusal(world: CampWorld, x: number, y: number, item: string): string | null {
+  return turnRefusal(world) ?? enginePlantRefusal(toFrontier(world), x, y, item);
+}
+
+/** Plant `item` on (x, y), for 1 tap; the very same world if it cannot. */
+export function plantCamp(world: CampWorld, x: number, y: number, item: string): CampWorld {
+  return act(world, { kind: 'plant', x, y, item }).world;
 }
 
 /** Why camp `id` cannot be demolished now, or `null` if it can. */
@@ -565,6 +694,8 @@ export const PREPARED_LAB2_KEY = 'mining-game.lab2.prepared';
 export type CampStep =
   | { kind: 'tap'; x: number; y: number }
   | { kind: 'place'; x: number; y: number }
+  // A deep camp (progression PR 6).
+  | { kind: 'placeDeep'; x: number; y: number }
   | { kind: 'upgrade'; id: number }
   | { kind: 'demolish'; id: number }
   // Build a smelter at a camp; make a recipe (smelting and crafting, PR 1).
@@ -572,6 +703,19 @@ export type CampStep =
   | { kind: 'make'; recipe: string }
   // Hang a lantern at a camp (PR 3).
   | { kind: 'hangLantern'; id: number }
+  // Sell or buy at the market (progression PR 1).
+  | { kind: 'sell'; item: string; lots: number }
+  | { kind: 'buy'; item: string; lots: number }
+  // Take, deliver or drop a contract (progression PR 5).
+  | { kind: 'takeContract'; id: string }
+  | { kind: 'deliver' }
+  | { kind: 'dropContract' }
+  // A pen at a camp, and an animal into it or out of it (progression PR 4).
+  | { kind: 'buildPen'; id: number }
+  | { kind: 'penIn'; id: number }
+  | { kind: 'penOut'; id: number }
+  // Plant a sapling (progression PR 3).
+  | { kind: 'plant'; x: number; y: number; item: string }
   // End the shift, rest at a camp, or close the mine (A4).
   | { kind: 'endShift' }
   | { kind: 'rest'; id: number }
@@ -582,8 +726,8 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   if (step.kind === 'tap') {
     return campTap(world, step.x, step.y).world;
   }
-  if (step.kind === 'place') {
-    return placeCamp(world, step.x, step.y);
+  if (step.kind === 'place' || step.kind === 'placeDeep') {
+    return placeCamp(world, step.x, step.y, step.kind === 'placeDeep');
   }
   if (step.kind === 'upgrade') {
     return upgradeCamp(world, step.id);
@@ -605,6 +749,18 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   }
   if (step.kind === 'hangLantern') {
     return hangCampLantern(world, step.id);
+  }
+  if (step.kind === 'sell' || step.kind === 'buy') {
+    return tradeCamp(world, step.kind, step.item, step.lots);
+  }
+  if (step.kind === 'plant') {
+    return plantCamp(world, step.x, step.y, step.item);
+  }
+  if (step.kind === 'takeContract' || step.kind === 'deliver' || step.kind === 'dropContract') {
+    return contractCamp(world, step);
+  }
+  if (step.kind === 'buildPen' || step.kind === 'penIn' || step.kind === 'penOut') {
+    return penCamp(world, step.kind, step.id);
   }
   return demolishCamp(world, step.id);
 }

@@ -90,12 +90,12 @@ describe('the surface (plan A3)', () => {
 
 describe('mining (plan A3)', () => {
   it('mines a lit square, adds its yield and counts it', () => {
-    const w = world({ top: '#' });
+    const w = world({ top: 'C' });
     const tap = frontierTap(w, MID + 2, MID);
     expect(tap.kind).toBe('mined');
-    expect(tap.block).toBe(BLOCKS.stone.code);
-    expect(tap.gain).toEqual([{ item: 'stone', count: 1 }]);
-    expect(tap.state.inventory.get('stone')).toBe(1);
+    expect(tap.block).toBe(BLOCKS.clay.code);
+    expect(tap.gain).toEqual([{ item: 'clay', count: 1 }]);
+    expect(tap.state.inventory.get('clay')).toBe(1);
     expect(tap.state.mined).toBe(1);
     expect(depthAt(tap.state.cube, MID + 2, MID)).toBe(1);
     expect(depthAt(w.cube, MID + 2, MID)).toBe(0); // the state it was given is untouched
@@ -141,11 +141,12 @@ describe('mining (plan A3)', () => {
   });
 
   it('says "too steep" before "too hard"', () => {
-    // Hard rock one level down at AT, under open space: its neighbours are higher.
+    // Stone one level down at AT, under open space: its neighbours are higher.
+    // A level-1 camp does not mine stone (progression plan section 2.2).
     let w = world({
       special: [
         { ...AT, char: '.' },
-        { ...AT, z: 1, char: 'H' },
+        { ...AT, z: 1, char: '#' },
       ],
     });
     const steep = frontierTap(w, AT.x, AT.y);

@@ -6,11 +6,15 @@
 // - random:   a step at random among the useful ones (a tap that takes or
 //             mines something, a camp it can place, upgrade or demolish, a
 //             smelter it can build, a recipe it can make, a lantern it
-//             can hang),
+//             can hang, one lot it can sell or buy on a market day, a
+//             sapling it holds, a pen it can build or use, a contract
+//             it can take or deliver; it never drops one),
 //             ending the shift when out of taps; it never closes the mine.
 // - gatherer: tools/frontierRun.ts: builds a smelter, smelts and makes the
-//             tools and lanterns, upgrades, places up to 3 camps, takes
-//             plants and animals, mines; spends everything as it comes.
+//             tools and lanterns, keeps a pen and makes hay, sells
+//             surplus on market days, plants saplings,
+//             upgrades, places up to 3 camps, takes plants and animals,
+//             mines; spends everything as it comes.
 // - careful:  the gatherer, but it keeps wood and food back for upkeep (no
 //             camp, upgrade or wood-using recipe while short), and rests
 //             when the crew's health is low.
@@ -20,13 +24,25 @@
 //             crew is at half health or less until shift IDLE_RESTS_UNTIL,
 //             then lets the crew starve. The hunger path, start to end.
 
-import { FRONTIER_FOODS, FRONTIER_RECIPES, FRONTIER_SHIFT } from '../src/data/frontier';
+import {
+  FRONTIER_FOODS,
+  FRONTIER_MARKET,
+  FRONTIER_RECIPES,
+  FRONTIER_SHIFT,
+} from '../src/data/frontier';
 import {
   campAt,
   coverLevels,
+  contractBoard,
   createRng,
+  deliverRefusal,
+  takeRefusal,
+  isMarketDay,
+  tradeRefusal,
   previewTap,
   placeRefusal,
+  penRefusal,
+  plantRefusal,
   upgradeRefusal,
   demolishRefusal,
   lanternRefusal,
@@ -38,7 +54,7 @@ import type { FrontierState } from '../src/engine';
 import { nextFloat } from '../src/engine/rng';
 import type { RngState } from '../src/engine/rng';
 import { NO_FEATURE } from '../src/engine/frontier/state';
-import { gathererStep, restStep } from './frontierRun';
+import { gathererStep, isBareAppleTree, restStep } from './frontierRun';
 import type { FrontierStep } from './frontierRun';
 
 export const FRONTIER_POLICY_NAMES = ['random', 'gatherer', 'careful', 'digger', 'idle'] as const;
@@ -95,15 +111,42 @@ function randomPolicy(rng: RngState): FrontierPolicy {
       if (demolishRefusal(state, camp.id) === null) options.push(`demolish ${camp.id}`);
       if (smelterRefusal(state, camp.id) === null) options.push(`buildSmelter ${camp.id}`);
       if (lanternRefusal(state, camp.id) === null) options.push(`hangLantern ${camp.id}`);
+      for (const kind of ['buildPen', 'penIn', 'penOut'] as const) {
+        if (penRefusal(state, kind, camp.id) === null) options.push(`${kind} ${camp.id}`);
+      }
     }
     for (const recipe of FRONTIER_RECIPES) {
       if (makeRefusal(state, recipe.id) === null) options.push(`make ${recipe.id}`);
+    }
+    // On a market day, one lot of anything it can sell or buy.
+    if (isMarketDay(state)) {
+      for (const lot of FRONTIER_MARKET.sellPrices) {
+        if (tradeRefusal(state, 'sell', lot.item, 1) === null) options.push(`sell ${lot.item} 1`);
+      }
+      for (const lot of FRONTIER_MARKET.buyPrices) {
+        if (tradeRefusal(state, 'buy', lot.item, 1) === null) options.push(`buy ${lot.item} 1`);
+      }
+    }
+    // A contract: take one from the board, deliver the one held, or drop it.
+    for (const offer of contractBoard(state)) {
+      if (takeRefusal(state, offer.id) === null) options.push(`takeContract ${offer.id}`);
+    }
+    if (deliverRefusal(state) === null) options.push('deliver');
+    // A sapling it holds, on a few squares tried at random.
+    for (const item of ['sapling', 'appleSapling']) {
+      if ((state.inventory.get(item) ?? 0) < 1) continue;
+      for (let k = 0; k < 4; k += 1) {
+        const x = Math.floor(nextFloat(rng) * state.cube.size.x);
+        const y = Math.floor(nextFloat(rng) * state.cube.size.y);
+        if (plantRefusal(state, x, y, item) === null) options.push(`plant ${x},${y} ${item}`);
+      }
     }
     // A few places for a camp, tried at random squares (all of them would be slow).
     for (let i = 0; i < 8; i += 1) {
       const x = Math.floor(nextFloat(rng) * state.cube.size.x);
       const y = Math.floor(nextFloat(rng) * state.cube.size.y);
       if (placeRefusal(state, x, y) === null) options.push(`place ${x},${y}`);
+      if (placeRefusal(state, x, y, true) === null) options.push(`placeDeep ${x},${y}`);
     }
     options.push('endShift'); // sometimes it ends a shift early
     return options[Math.floor(nextFloat(rng) * options.length)] ?? 'endShift';
@@ -133,9 +176,10 @@ function isFood(item: string | undefined): boolean {
   return FRONTIER_FOODS.some((f) => f.item === item);
 }
 
-/** True if `step` spends what upkeep needs: a camp, an upgrade, or a recipe with wood or food in it. */
+/** True if `step` spends what upkeep needs: a camp, an upgrade, a pen, or a recipe with wood or food in it. */
 function spendsUpkeep(step: FrontierStep): boolean {
-  if (step.startsWith('place') || step.startsWith('upgrade')) return true;
+  if (step.startsWith('place') || step.startsWith('upgrade') || step.startsWith('buildPen'))
+    return true;
   if (!step.startsWith('make ')) return false;
   const recipe = FRONTIER_RECIPES.find((r) => r.id === step.slice('make '.length));
   return (recipe?.inputs ?? []).some((stack) => stack.item === 'wood' || isFood(stack.item));
@@ -169,6 +213,7 @@ function carefulStep(state: FrontierState): FrontierStep | null {
         (Math.abs(b.x - near.x) + Math.abs(b.y - near.y)),
     );
     const wanted = taps.find((s) => {
+      if (isBareAppleTree(state, s.x, s.y)) return false; // left for its apples
       const item = previewTap(state, s.x, s.y).gain[0]?.item;
       return short === 'wood' ? item === 'wood' : isFood(item);
     });
@@ -207,6 +252,7 @@ function diggerStep(state: FrontierState): FrontierStep | null {
   );
   if (woodShort || foodShort) {
     const wanted = taps.find((s) => {
+      if (isBareAppleTree(state, s.x, s.y)) return false; // left for its apples
       const item = previewTap(state, s.x, s.y).gain[0]?.item;
       return woodShort ? item === 'wood' : isFood(item);
     });

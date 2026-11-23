@@ -1,6 +1,8 @@
 // Smelting and crafting, PR 4 (docs/plans/smelting-and-crafting.md): the
-// iron drill and camp level 4 (owner, question 163). Each run is saved and
-// opened as the game opens any saved run.
+// iron drill and camp level 4 (owner, question 163). Since progression PR 2
+// (docs/plans/progression-phases.md, section 4) the drill mines iron and
+// copper ore on any camp's ground. Each run is saved and opened as the game
+// opens any saved run.
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { FRONTIER_DRILL, FRONTIER_SHIFT } from '../../src/data/frontier';
@@ -54,7 +56,9 @@ test('make an iron drill in the book, then upgrade a level-3 camp to level 4', a
   const camp = state.camps[0] ?? { x: 0, y: 0 };
 
   await page.getByTestId('lab2-book').click();
-  await expect(page.getByTestId('lab2-recipe-does-iron-drill')).toContainText('one level harder');
+  await expect(page.getByTestId('lab2-recipe-does-iron-drill')).toContainText(
+    'Mines iron and copper ore',
+  );
   await page.getByTestId('lab2-recipe-make-iron-drill').click();
   await expect(page.getByTestId('lab2-book-note')).toHaveText('Made 1 drill.');
   await page.getByTestId('lab2-book-close').click();
@@ -65,8 +69,8 @@ test('make an iron drill in the book, then upgrade a level-3 camp to level 4', a
   await expect(page.getByTestId('lab2-camp-next')).toHaveText(
     `Level 4: ring ${campRadius(4)}, nothing new to mine`,
   );
-  // The drill adds nothing to a level-3 camp.
-  await expect(page.getByTestId('lab2-camp-line')).not.toContainText('🔩');
+  // With the drill held, the camp's line says it mines ore too.
+  await expect(page.getByTestId('lab2-camp-line')).toContainText('🔩 + ore');
   const shownBefore = Number(await canvas.getAttribute('data-shown'));
   await page.getByTestId('lab2-upgrade').click();
   await expect(page.getByTestId('lab2-camp-title')).toContainText('Level 4');
@@ -83,9 +87,9 @@ test('make an iron drill in the book, then upgrade a level-3 camp to level 4', a
   );
 });
 
-test('with a drill in the store, a level-1 camp mines hard rock', async ({ page }) => {
+test('with a drill in the store, a level-1 camp mines iron ore', async ({ page }) => {
   // Seed 110, with the top block of a bare square near the first camp
-  // made hard rock (a first camp's ring has none on top: it lies deeper).
+  // made iron ore (a first camp's ring has none on top: it lies deeper).
   const start = createFrontier(110);
   const camp0 = start.camps[0] ?? { x: 0, y: 0 };
   let square: { x: number; y: number } | null = null;
@@ -97,7 +101,7 @@ test('with a drill in the store, a level-1 camp mines hard rock', async ({ page 
   if (square === null) throw new Error('no bare square east of the first camp');
   const blocks = start.cube.blocks.slice();
   const z = depthAt(start.cube, square.x, square.y);
-  blocks[cellIndex(start.cube.size, { ...square, z })] = BLOCKS.hardRock.code;
+  blocks[cellIndex(start.cube.size, { ...square, z })] = BLOCKS.ironOre.code;
   const hard: FrontierState = { ...start, cube: { ...start.cube, blocks } };
   expect(previewTap(hard, square.x, square.y).kind).toBe('tooHard');
   const drilled: FrontierState = { ...hard, inventory: new Map([[FRONTIER_DRILL.item, 1]]) };
@@ -107,7 +111,7 @@ test('with a drill in the store, a level-1 camp mines hard rock', async ({ page 
   const camp = found.state.camps[0] ?? { x: 0, y: 0 };
 
   await tapSquare(page, canvas, camp.x, camp.y);
-  await expect(page.getByTestId('lab2-camp-line')).toContainText('🔩 mines Hard rock');
+  await expect(page.getByTestId('lab2-camp-line')).toContainText('🔩 + ore');
   await page.getByTestId('lab2-camp-close').click();
 
   await tapSquare(page, canvas, found.x, found.y);

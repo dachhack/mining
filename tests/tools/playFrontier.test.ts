@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { FRONTIER_SHIFT } from '../../src/data/frontier';
+import { FRONTIER_RUN, FRONTIER_SHIFT } from '../../src/data/frontier';
 import { ENGINE_VERSION, hashFrontier } from '../../src/engine';
 import { replayFrontier } from '../../tools/frontierRun';
 import {
@@ -53,7 +53,7 @@ describe('the new game’s play interface (plan B2)', () => {
   it('shows only what the player may know: fog, the camps, the numbers', () => {
     const view = frontierView(newFrontierSession(SEED));
     expect(view).toContain(
-      `Seed ${SEED} · Shift 1 · Taps ${FRONTIER_SHIFT.taps}/${FRONTIER_SHIFT.taps}`,
+      `Seed ${SEED} · Shift 1/${FRONTIER_RUN.shifts} · Coins 0 · Taps ${FRONTIER_SHIFT.taps}/${FRONTIER_SHIFT.taps}`,
     );
     expect(view).toContain('??'); // fog
     expect(view).toContain('Camp 1 at');
@@ -133,5 +133,88 @@ describe('the new game’s play interface (plan B2)', () => {
     expect(result.output).toContain(`${camp.x},${camp.y}: depth 0`);
     expect(result.output).toContain("camp 1's ground");
     expect(result.output).toContain(`Taps ${FRONTIER_SHIFT.taps}/${FRONTIER_SHIFT.taps}`);
+  });
+});
+
+describe('the market and the run’s end in the play interface (progression PR 1)', () => {
+  /** A session on a market day, holding `inventory`. */
+  function marketSession(inventory: Record<string, number>): ReturnType<typeof newFrontierSession> {
+    const session = newFrontierSession(SEED);
+    const state = { ...session.state, shift: 10, inventory: new Map(Object.entries(inventory)) };
+    return { ...session, state, shiftLog: { start: state, actions: [] } };
+  }
+
+  it('reads "sell" and "buy" with any letter case of the item', () => {
+    expect(stepOf('sell wood 3', [])).toBe('sell wood 3');
+    expect(stepOf('Sell RawIronOre 2', [])).toBe('sell rawIronOre 2');
+    expect(stepOf('buy animal 1', [])).toBe('buy animal 1');
+    expect(stepOf('buy stone 1', [])).toBeNull(); // the market does not sell stone
+  });
+
+  it('shows the market’s prices on a market day, and when it opens next otherwise', () => {
+    expect(frontierView(newFrontierSession(SEED))).toContain('Market: opens on shift 10');
+    const open = frontierView(marketSession({ wood: 10 }));
+    expect(open).toContain('Market: OPEN this shift');
+    expect(open).toContain('Coins 0');
+  });
+
+  it('sells for coins, for 1 tap, and says why a trade is refused', () => {
+    const sold = act(marketSession({ wood: 10 }), 'sell wood 2');
+    expect(sold.refused).toBeNull();
+    expect(sold.session.state.tapsLeft).toBe(FRONTIER_SHIFT.taps - 1);
+    expect(frontierView(sold.session)).toContain('Coins 2');
+    expect(act(newFrontierSession(SEED), 'sell wood 1').refused).toContain('not open');
+  });
+});
+
+describe('planting in the play interface (progression PR 3)', () => {
+  it('reads "plant X,Y sapling" and "plant X Y applesapling"', () => {
+    expect(stepOf('plant 3,4 sapling', [])).toBe('plant 3,4 sapling');
+    expect(stepOf('plant 3 4 applesapling', [])).toBe('plant 3,4 appleSapling');
+    expect(stepOf('plant 3,4 wood', [])).toBeNull();
+  });
+
+  it('plants for 1 tap and shows the sapling on the map; says why it cannot', () => {
+    const start = newFrontierSession(SEED);
+    const state = { ...start.state, inventory: new Map([['sapling', 1]]) };
+    const session = { ...start, state, shiftLog: { start: state, actions: [] } };
+    const camp = state.camps[0] ?? { x: 0, y: 0 };
+    expect(act(session, `plant ${camp.x},${camp.y} sapling`).refused).toBe('A camp stands there.');
+    let done: ReturnType<typeof act> | null = null;
+    for (let d = 2; d < 8 && done === null; d += 1) {
+      const tried = act(session, `plant ${camp.x + d},${camp.y} sapling`);
+      if (tried.refused === null) done = tried;
+    }
+    expect(done).not.toBeNull();
+    expect(done?.session.state.tapsLeft).toBe(FRONTIER_SHIFT.taps - 1);
+    expect(frontierView(done?.session ?? session)).toContain('s0');
+  });
+});
+
+describe('contracts and phases in the play interface (progression PR 5)', () => {
+  it('reads "take ID", "deliver" and "drop", and shows the phase and its goal', () => {
+    expect(stepOf('take t1-coal', [])).toBe('takeContract t1-coal');
+    expect(stepOf('deliver', [])).toBe('deliver');
+    expect(stepOf('drop', [])).toBe('dropContract');
+    expect(frontierView(newFrontierSession(SEED))).toContain(
+      'Phase 1 of 5: Camps and the landscape.',
+    );
+  });
+
+  it('lists the board on a market day with a level-3 camp, and takes from it', () => {
+    const start = newFrontierSession(SEED);
+    const state = {
+      ...start.state,
+      shift: 30,
+      camps: start.state.camps.map((c) => ({ ...c, level: 3 })),
+    };
+    const session = { ...start, state, shiftLog: { start: state, actions: [] } };
+    const view = frontierView(session);
+    expect(view).toContain('Contract "take t1-');
+    const id = /take (t1-[a-z-]+)/.exec(view)?.[1] ?? '';
+    const taken = act(session, `takeContract ${id}`);
+    expect(taken.refused).toBeNull();
+    expect(frontierView(taken.session)).toContain('Contract: ');
+    expect(act(taken.session, 'deliver').refused).toBe('You do not hold enough for that.');
   });
 });

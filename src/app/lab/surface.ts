@@ -25,6 +25,12 @@ export interface Surface {
   regrowIn: number[];
   /** Where a tree was felled, the kind of tree that grows back (NO_FEATURE elsewhere). */
   stumps: Feature[];
+  /** The shifts until cut grass grows back on each square; -1 where none waits (farming). */
+  grassIn: number[];
+  /** True where the stump is a planted sapling (farming). */
+  planted: boolean[];
+  /** How many trees have been felled in the run. */
+  treesFelled: number;
   animals: Animal[];
   /** The id the next animal gets. */
   nextAnimalId: number;
@@ -36,6 +42,8 @@ export interface Surface {
 export interface Harvest {
   surface: Surface;
   gain: ItemStack;
+  /** A sapling that came with a felled tree, or `null` (progression PR 3). */
+  extra: ItemStack | null;
   /** 'grass', 'felled' (a tree or an empty apple tree), 'apple' or 'caught'. */
   kind: HarvestKind;
 }

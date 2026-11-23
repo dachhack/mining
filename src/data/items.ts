@@ -28,7 +28,16 @@ export type ItemId =
   | 'clay'
   // Made from ingots (smelting and crafting, PR 3).
   | 'ironPickaxe'
-  | 'copperLantern';
+  | 'copperLantern'
+  // Money at the market (docs/plans/progression-phases.md, section 3).
+  | 'coin'
+  // Bought at the market: mines crystal, rare ore and relics (plan section 4).
+  | 'steelDrill'
+  // Planted to grow a tree or an apple tree (progression plan section 6.2).
+  | 'sapling'
+  | 'appleSapling'
+  // Made from grass; feeds penned animals and the crew (plan section 6.3).
+  | 'hay';
 
 // Fuel is a gauge, not an item, so it is not here. The torch and the safety
 // lamp are gone with light (design doc v0.2, section 7). Items have no weight:
@@ -66,5 +75,10 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   clay: { name: 'Clay' },
   // Made from ingots (docs/plans/smelting-and-crafting.md, PR 3).
   ironPickaxe: { name: 'Iron pickaxe' },
+  coin: { name: 'Coins' },
+  steelDrill: { name: 'Steel drill' },
+  sapling: { name: 'Saplings' },
+  hay: { name: 'Hay' },
+  appleSapling: { name: 'Apple saplings' },
   copperLantern: { name: 'Copper lantern' },
 };

@@ -63,7 +63,7 @@ export function frontierRecipe(id: string): FrontierRecipe | null {
 /**
  * Why recipe `id` cannot be made now, or `null` if it can:
  * - 'unknown': there is no such recipe;
- * - 'noSmelter': no camp has a smelter;
+ * - 'noSmelter': it needs a smelter, and no camp has one;
  * - 'cost': the store does not hold its inputs.
  */
 export type MakeRefusal = 'unknown' | 'noSmelter' | 'cost';
@@ -71,7 +71,7 @@ export type MakeRefusal = 'unknown' | 'noSmelter' | 'cost';
 export function makeRefusal(state: FrontierState, id: string): MakeRefusal | null {
   const recipe = frontierRecipe(id);
   if (recipe === null) return 'unknown';
-  if (!hasSmelter(state)) return 'noSmelter';
+  if (recipe.needsSmelter && !hasSmelter(state)) return 'noSmelter';
   if (!canAfford(state.inventory, recipe.inputs)) return 'cost';
   return null;
 }

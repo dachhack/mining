@@ -60,8 +60,12 @@ import type { GameState } from './state';
  *        after the owner's answers of 2026-11-23 (questions 159 to 164).
  *        PR 3 (the iron pickaxe and the copper lantern) and PR 4 (the iron
  *        drill and camp level 4) are in the same batch.
+ * 0.9.0: progression in five phases, PR 1: a run lasts 100 shifts, and the
+ *        market and coins (docs/plans/progression-phases.md). First engine
+ *        PR of the batch after the owner's answers of 2026-11-23; the
+ *        plan's later PRs share it until the next playtest.
  */
-export const ENGINE_VERSION = '0.8.0';
+export const ENGINE_VERSION = '0.9.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
@@ -465,9 +469,10 @@ export {
   inCircle,
   inFootprint,
   isLevelPatch,
+  holdsToolFor,
   levelNeededFor,
-  minesAsLevel,
-  miningLevelAt,
+  frontierMineCheck,
+  toolNeededFor,
   newlyCovered,
   pay,
   placeCamp,
@@ -499,6 +504,40 @@ export {
 export type { LanternRefusal, MakeRefusal, SmelterRefusal } from './frontier/smelting';
 export type { FrontierTap, FrontierTapKind } from './frontier/tap';
 export { hashFrontier } from './frontier/hash';
+// Planting saplings (docs/plans/progression-phases.md, PR 3).
+export { isSapling, plant, plantRefusal } from './frontier/farming';
+// Contracts and the phases of a run (PR 5).
+export {
+  contractBoard,
+  contractById,
+  deliverContract,
+  deliverRefusal,
+  dropContract,
+  dropRefusal,
+  heldContract,
+  openTiers,
+  runPhase,
+  takeContract,
+  takeRefusal,
+} from './frontier/contracts';
+export type { ContractRefusal } from './frontier/contracts';
+// Animal pens (PR 4).
+export { breedPens, penAct, penRefusal } from './frontier/pens';
+export type { PenAction, PenRefusal } from './frontier/pens';
+export type { PlantRefusal } from './frontier/farming';
+// The run's end and the market (docs/plans/progression-phases.md, PR 1).
+export {
+  bestCampLevel,
+  coinsHeld,
+  isMarketDay,
+  marketEvery,
+  marketLot,
+  mostLots,
+  nextMarketShift,
+  trade,
+  tradeRefusal,
+} from './frontier/market';
+export type { TradeRefusal, TradeSide } from './frontier/market';
 // Shifts (plan A4).
 export { endFrontierShift, frontierAct, upkeepDue } from './frontier/shift';
 export type { FrontierAction, FrontierOutcome, ShiftReport } from './frontier/shift';
@@ -514,7 +553,13 @@ export {
 export type { LoggedAction, ShiftLog } from './frontier/undo';
 // Saving a run (plan B1).
 export { loadFrontier, saveFrontier } from './frontier/save';
-export type { Feature, FrontierAnimal, FrontierCamp, FrontierState } from './frontier/state';
+export type {
+  Feature,
+  FrontierAnimal,
+  FrontierCamp,
+  FrontierHeldContract,
+  FrontierState,
+} from './frontier/state';
 // The cube seen from above (design doc v0.2 section 3.1; issue #84): a
 // square's depth, its top block, and the level rule. `topBlockAt` reads the
 // true cube, under a tree too: a view must use `knownSquare` instead.

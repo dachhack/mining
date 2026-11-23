@@ -10,9 +10,12 @@
 //   changes nothing at all.
 // - THE LEVEL RULE: a mined square went down exactly 1 level, and is no more
 //   than 1 level below any neighbour.
-// - HARDNESS: a mined block needs no higher camp level than the best camp
-//   over it has, or one more with a drill in the store (FRONTIER_DRILL), up
-//   to FRONTIER_DRILL.upToLevel. No camp is above the top level.
+// - HARDNESS: a mined block is in the list of a camp level no higher than
+//   the best camp over it, or, if no level lists it, a camp covers it and a
+//   tool in the store lists it (FRONTIER_TOOLS). No camp is above the top
+//   level.
+// - CAMPS STAND HIGH: a newly placed camp's ground is no deeper than
+//   FRONTIER_CAMP_PLACE.maxDepth.
 // - SHIFTS AND HEALTH: the shift number goes up by exactly 1 at End shift and
 //   rest; health stays between 0 and full; a run at 0 health is lost; a run
 //   that has ended stays ended.
@@ -29,11 +32,34 @@
 // - SMELTERS: only at camps of FRONTIER_SMELTER.minLevel or more.
 // - LANTERNS: hung ones came from the store: a camp gains a lantern only as
 //   one lantern leaves the store.
+// - PENS: a camp without a pen holds no animals in one; a pen holds 0 to
+//   FRONTIER_PEN.capacity; animals put in or taken out move between the
+//   pen and the store one at a time; a breeding count runs only while the
+//   pen may breed.
+// - CONTRACTS: one is taken only on a market day, from that day's board,
+//   while none is held; delivering pays its coins and takes its items, and
+//   counts one more done for its tier; the counts done never fall.
+// - FARMING: a planted sapling is a waiting stump on unmined dirt; cut grass
+//   waits only on a square with nothing growing on it; a planting takes one
+//   sapling from the store.
+// - THE MARKET AND THE RUN'S END: a trade happens only on a market day
+//   (worked out here from the data), in a lot open at the best camp's
+//   level, gives up and gets exactly a whole
+//   number of lots at its price, and changes nothing else in the store; a
+//   run is 'finished' only by the End shift or rest of its last shift, and
+//   no shift past the last is ever played.
 
+import { BLOCKS } from '../src/data';
 import {
   FRONTIER_CAMP_LEVELS,
-  FRONTIER_DRILL,
+  FRONTIER_CAMP_PLACE,
+  FRONTIER_CONTRACTS,
+  FRONTIER_DEEP_CAMP,
+  FRONTIER_TOOLS,
   FRONTIER_LANTERN,
+  FRONTIER_MARKET,
+  FRONTIER_PEN,
+  FRONTIER_RUN,
   FRONTIER_SHIFT,
   FRONTIER_SMELTER,
   FRONTIER_SURFACE,
@@ -41,12 +67,12 @@ import {
 import {
   SQUARE_STEPS,
   campAt,
+  contractBoard,
   coverLevelAt,
   coverLevels,
   depthAt,
   isLevelPatch,
   isSquare,
-  levelNeededFor,
   previewTap,
   topBlockAt,
 } from '../src/engine';
@@ -97,17 +123,19 @@ export function checkStep(
     const [, coords] = step.split(' ');
     const [x, y] = (coords ?? '').split(',').map(Number);
     if (x !== undefined && y !== undefined) {
-      // Hardness: worked out here from the data, not with the engine's miningLevelAt.
-      let allowed = coverLevelAt(before.camps, x, y);
-      if (allowed > 0 && (before.inventory.get(FRONTIER_DRILL.item) ?? 0) > 0) {
-        allowed = Math.max(
-          allowed,
-          Math.min(allowed + FRONTIER_DRILL.levelBonus, FRONTIER_DRILL.upToLevel),
-        );
-      }
-      const needs = levelNeededFor(topBlockAt(before.cube, x, y));
-      if (needs === null || needs > allowed)
-        say(`mined ${x},${y}, which needs level ${needs}, with level ${allowed} allowed`);
+      // Hardness: worked out here from the data, not with the engine's frontierMineCheck.
+      const allowed = coverLevelAt(before.camps, x, y);
+      const code = topBlockAt(before.cube, x, y);
+      const byLevel = FRONTIER_CAMP_LEVELS.findIndex((l) =>
+        l.addsBlocks.some((id) => BLOCKS[id].code === code),
+      );
+      const byTool = FRONTIER_TOOLS.some(
+        (t) =>
+          (before.inventory.get(t.item) ?? 0) > 0 && t.mines.some((id) => BLOCKS[id].code === code),
+      );
+      const ok = byLevel >= 0 ? byLevel + 1 <= allowed : allowed > 0 && byTool;
+      if (!ok)
+        say(`mined ${x},${y} (block ${code}) with level ${allowed} over it and tool ${byTool}`);
       const was = depthAt(before.cube, x, y);
       const now = depthAt(after.cube, x, y);
       if (now !== was + 1) say(`mined ${x},${y} went from depth ${was} to ${now}`);
@@ -153,6 +181,22 @@ export function checkStep(
     if ((lit[i] ?? 0) > 0 && !seen) say(`square ${i} is lit but not seen`);
   });
 
+  // New camps stand high.
+  const oldIds = new Set(before.camps.map((c) => c.id));
+  for (const camp of after.camps) {
+    // A deep camp (progression PR 6) stands at any depth, at its own level, always.
+    if (camp.deep && camp.level !== FRONTIER_DEEP_CAMP.level)
+      say(`deep camp ${camp.id} is at level ${camp.level}`);
+    if (camp.deep && !oldIds.has(camp.id) && verb !== 'placeDeep')
+      say(`a deep camp placed by "${verb}"`);
+    const depth = depthAt(after.cube, camp.x, camp.y);
+    if (camp.deep && !oldIds.has(camp.id) && depth < FRONTIER_DEEP_CAMP.minDepth)
+      say(`deep camp ${camp.id} was placed at depth ${depth}`);
+    if (camp.deep) continue;
+    if (!oldIds.has(camp.id) && depthAt(after.cube, camp.x, camp.y) > FRONTIER_CAMP_PLACE.maxDepth)
+      say(`camp ${camp.id} was placed at depth ${depthAt(after.cube, camp.x, camp.y)}`);
+  }
+
   // Camp levels: none above the top level.
   for (const camp of after.camps) {
     if (camp.level < 1 || camp.level > FRONTIER_CAMP_LEVELS.length)
@@ -172,6 +216,110 @@ export function checkStep(
     const held = (s: FrontierState): number => s.inventory.get(FRONTIER_LANTERN.item) ?? 0;
     if (held(before) - held(after) !== newlyHung)
       say(`${newlyHung} lantern(s) hung, but the store went ${held(before)} -> ${held(after)}`);
+  }
+
+  // The market: worked out here from the data, not with the engine's market.ts.
+  if (verb === 'sell' || verb === 'buy') {
+    const [, item, lotsText] = step.split(' ');
+    const lots = Number(lotsText);
+    const best = before.camps.reduce((b, c) => Math.max(b, c.level), 1);
+    const every = FRONTIER_MARKET.everyShifts;
+    const cadence = every[Math.min(best, every.length) - 1] ?? 1;
+    if (before.shift % cadence !== 0)
+      say(`a trade on shift ${before.shift}, with the market every ${cadence} shifts`);
+    const lot = (verb === 'sell' ? FRONTIER_MARKET.sellPrices : FRONTIER_MARKET.buyPrices).find(
+      (l) => l.item === item,
+    );
+    if (lot === undefined) {
+      say(`a trade in ${item ?? '?'}, which the market does not ${verb}`);
+    } else {
+      if (best < (lot.fromLevel ?? 1))
+        say(`bought ${lot.item}, sold from camp level ${lot.fromLevel ?? 1}, with level ${best}`);
+      if (lot.afterTier1 === true && (before.contractsDone[0] ?? 0) === 0)
+        say(`traded ${lot.item} before a tier-1 contract was done`);
+      const sign = verb === 'sell' ? 1 : -1;
+      const expected = new Map<string, number>([
+        [lot.item, -sign * lot.count * lots],
+        [FRONTIER_MARKET.coin, sign * lot.coins * lots],
+      ]);
+      const items = new Set([...before.inventory.keys(), ...after.inventory.keys()]);
+      for (const key of items) {
+        const change = (after.inventory.get(key) ?? 0) - (before.inventory.get(key) ?? 0);
+        if (change !== (expected.get(key) ?? 0))
+          say(`the trade changed ${key} by ${change}, not ${expected.get(key) ?? 0}`);
+      }
+    }
+  }
+  // The run's end.
+  if (after.status === 'finished' && !(endsShift && before.shift === FRONTIER_RUN.shifts))
+    say(`the run finished on shift ${before.shift}, by "${verb}"`);
+  if (after.status === 'active' && after.shift > FRONTIER_RUN.shifts)
+    say(`shift ${after.shift} is past the run's last`);
+
+  // Contracts (progression plan section 5).
+  if (verb === 'takeContract') {
+    const id = step.split(' ')[1] ?? '';
+    if (before.contract !== null) say('took a contract while holding one');
+    if (!contractBoard(before).some((c) => c.id === id))
+      say(`took ${id}, which is not on the board`);
+  }
+  if (verb === 'deliver') {
+    const held = FRONTIER_CONTRACTS.find((c) => c.id === before.contract?.id);
+    if (held === undefined) {
+      say('delivered with no contract held');
+    } else {
+      const expected = new Map<string, number>(held.asks.map((a) => [a.item, -a.count]));
+      expected.set('coin', (expected.get('coin') ?? 0) + held.pays);
+      const items = new Set([...before.inventory.keys(), ...after.inventory.keys()]);
+      for (const key of items) {
+        const change = (after.inventory.get(key) ?? 0) - (before.inventory.get(key) ?? 0);
+        if (change !== (expected.get(key) ?? 0)) say(`delivering changed ${key} by ${change}`);
+      }
+      const doneBefore = before.contractsDone[held.tier - 1] ?? 0;
+      if ((after.contractsDone[held.tier - 1] ?? 0) !== doneBefore + 1)
+        say('delivering did not count');
+    }
+  }
+  after.contractsDone.forEach((n, i) => {
+    if (n < (before.contractsDone[i] ?? 0)) say(`tier ${i + 1}'s contracts done fell`);
+  });
+
+  // Pens (progression plan section 6.3).
+  for (const camp of after.camps) {
+    if (!camp.pen && camp.penned !== 0) say(`camp ${camp.id} has ${camp.penned} penned and no pen`);
+    if (camp.pen && camp.level < FRONTIER_PEN.minLevel)
+      say(`a pen at camp ${camp.id}, of level ${camp.level}`);
+    if (camp.penned < 0 || camp.penned > FRONTIER_PEN.capacity)
+      say(`camp ${camp.id}'s pen holds ${camp.penned}`);
+    const mayBreed = camp.penned >= 2 && camp.penned < FRONTIER_PEN.capacity;
+    if (!mayBreed && camp.breedIn !== 0) say(`camp ${camp.id} counts to breed but may not`);
+  }
+  if (verb === 'penIn' || verb === 'penOut') {
+    const id = Number(step.split(' ')[1]);
+    const pennedOf = (s: FrontierState): number => s.camps.find((c) => c.id === id)?.penned ?? 0;
+    const sign = verb === 'penIn' ? 1 : -1;
+    if (pennedOf(after) - pennedOf(before) !== sign)
+      say(`the pen changed by ${pennedOf(after) - pennedOf(before)}`);
+    const held = (s: FrontierState): number => s.inventory.get('animal') ?? 0;
+    if (held(after) - held(before) !== -sign)
+      say(`the store's animals changed by ${held(after) - held(before)}`);
+  }
+
+  // Farming (progression plan sections 6.1 and 6.2).
+  after.planted.forEach((planted, i) => {
+    if (planted && (after.stumps[i] ?? NO_FEATURE) === NO_FEATURE)
+      say(`square ${i} is planted but has no stump`);
+  });
+  after.grassIn.forEach((left, i) => {
+    if (left >= 0 && after.features[i] !== NO_FEATURE)
+      say(`cut grass waits on square ${i}, where something grows`);
+    if (left >= 0 && depthAt(after.cube, i % width, Math.floor(i / width)) !== 0)
+      say(`cut grass waits on square ${i}, whose ground was mined`);
+  });
+  if (verb === 'plant') {
+    const item = step.split(' ')[2] ?? '';
+    const change = (after.inventory.get(item) ?? 0) - (before.inventory.get(item) ?? 0);
+    if (change !== -1) say(`planting ${item} changed the store by ${change}`);
   }
 
   // The surface.

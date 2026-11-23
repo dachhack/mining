@@ -56,7 +56,7 @@ describe('taps (plan A4)', () => {
 
   it('refuses every tap once the shift has none left, until End shift', () => {
     // The last few taps of a shift (a full shift is FRONTIER_SHIFT.taps).
-    let w: FrontierState = { ...world({ top: '#' }), tapsLeft: 8 };
+    let w: FrontierState = { ...world({ top: 'C' }), tapsLeft: 8 };
     for (let i = 0; i < 8; i += 1) {
       const outcome = frontierAct(w, {
         kind: 'tap',

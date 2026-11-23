@@ -10,20 +10,25 @@
 // - a camp stands on a 3 x 3 patch of level ground, which cannot be mined;
 // - a new camp costs items and goes on a level 3 x 3 inside the circles;
 // - a camp can be demolished once other camps' circles cover its 3 x 3;
-// - upgrading a camp costs items and widens its circle and what it mines.
+// - upgrading a camp costs items and widens its circle and what it mines;
+// - a block no camp level mines is mined with a tool held in the store
+//   (FRONTIER_TOOLS: the iron and steel drills), on any camp's lit ground;
+// - a camp stands only in the top levels (FRONTIER_CAMP_PLACE.maxDepth).
 //
 // Every number (radii, costs, which level mines which block) is in
 // src/data/frontier.ts. Nothing here changes what it is given: every change
 // returns a new record, as the rest of the engine does.
 
 import { BLOCKS } from '../../data';
-import type { BlockId, ItemStack } from '../../data';
+import type { BlockId, ItemId, ItemStack } from '../../data';
 import {
   FRONTIER_CAMP_LEVELS,
-  FRONTIER_DRILL,
+  FRONTIER_CAMP_PLACE,
+  FRONTIER_DEEP_CAMP,
   FRONTIER_LANTERN,
   FRONTIER_NEW_CAMP_COST,
   FRONTIER_SHIFT,
+  FRONTIER_TOOLS,
 } from '../../data/frontier';
 import { depthAt } from '../heightmap';
 import type { GameState } from '../state';
@@ -74,7 +79,9 @@ export function campRadius(level: number): number {
  * FRONTIER_LANTERN.ringBonus if a lantern is hung there (owner, question 163).
  */
 export function campRing(camp: FrontierCamp): number {
-  return campRadius(camp.level) + (camp.lantern ? FRONTIER_LANTERN.ringBonus : 0);
+  // A deep camp's ring is its own (FRONTIER_DEEP_CAMP), not its level's.
+  const ring = camp.deep ? FRONTIER_DEEP_CAMP.radius : campRadius(camp.level);
+  return ring + (camp.lantern ? FRONTIER_LANTERN.ringBonus : 0);
 }
 
 /** The block kinds a camp of `level` can mine: its own level's list and every level's below it. */
@@ -156,32 +163,48 @@ export function coverLevelAt(camps: FrontierCamp[], x: number, y: number): numbe
 }
 
 /**
- * The level that counts for what can be mined on square (x, y): the best
- * level of the camps covering it, raised by FRONTIER_DRILL.levelBonus while
- * `inventory` holds a drill, but never past FRONTIER_DRILL.upToLevel by the
- * drill alone (owner, question 163). A camp already above that keeps its own
- * level. 0 if no camp covers the square: a drill lights nothing.
+ * The tool that mines a block (by its code): the first in FRONTIER_TOOLS
+ * whose list has it, or `null` if no tool mines it (a camp level does, or
+ * nothing does).
  */
-export function miningLevelAt(
+export function toolNeededFor(code: number): ItemId | null {
+  const tool = FRONTIER_TOOLS.find((t) => t.mines.some((id) => BLOCKS[id].code === code));
+  return tool?.item ?? null;
+}
+
+/** True if `inventory` holds a tool that mines the block with this code. */
+export function holdsToolFor(inventory: Map<string, number>, code: number): boolean {
+  return FRONTIER_TOOLS.some(
+    (t) => (inventory.get(t.item) ?? 0) > 0 && t.mines.some((id) => BLOCKS[id].code === code),
+  );
+}
+
+/**
+ * Whether the block with `code` can be mined on square (x, y) by the camps
+ * and tools there, and if not, what it needs:
+ * - a block some camp level mines needs a camp of that level covering the
+ *   square (`needs`);
+ * - a block a tool mines needs a camp covering the square, of any level,
+ *   and that tool, or a better one, in the store (`needsTool`);
+ * - any other block can never be mined (both `null`).
+ */
+export function frontierMineCheck(
   camps: FrontierCamp[],
   inventory: Map<string, number>,
   x: number,
   y: number,
-): number {
+  code: number,
+): { ok: boolean; needs: number | null; needsTool: ItemId | null } {
   const level = coverLevelAt(camps, x, y);
-  return level === 0 ? 0 : minesAsLevel(level, inventory);
-}
-
-/**
- * The level a camp of `level` mines as: its own, or with a drill in
- * `inventory`, FRONTIER_DRILL.levelBonus more, up to FRONTIER_DRILL.upToLevel
- * (a camp already above that keeps its own level).
- */
-export function minesAsLevel(level: number, inventory: Map<string, number>): number {
-  if ((inventory.get(FRONTIER_DRILL.item) ?? 0) < 1) {
-    return level;
+  const needs = levelNeededFor(code);
+  if (needs !== null) {
+    return { ok: level >= needs, needs, needsTool: null };
   }
-  return Math.max(level, Math.min(level + FRONTIER_DRILL.levelBonus, FRONTIER_DRILL.upToLevel));
+  const needsTool = toolNeededFor(code);
+  if (needsTool !== null) {
+    return { ok: level > 0 && holdsToolFor(inventory, code), needs: null, needsTool };
+  }
+  return { ok: false, needs: null, needsTool: null };
 }
 
 /** How square (x, y) looks: shown inside a circle, greyed if it was once, fog if never. */
@@ -282,12 +305,24 @@ export function pay(inventory: Map<string, number>, cost: ItemStack[]): Map<stri
  * - 'notShown': some square of its 3 x 3 footprint is off the map or not lit by a camp;
  * - 'occupied': its footprint overlaps another camp's;
  * - 'notLevel': the nine squares are not all at the same depth;
+ * - 'tooDeep': they are deeper than FRONTIER_CAMP_PLACE.maxDepth (owner:
+ *   camps only in the top three levels);
+ * - 'tooShallow': a deep camp, on ground shallower than
+ *   FRONTIER_DEEP_CAMP.minDepth (question 178);
  * - 'cost': the inventory does not cover the cost.
  */
-export type PlaceRefusal = 'notShown' | 'occupied' | 'notLevel' | 'cost';
+export type PlaceRefusal = 'notShown' | 'occupied' | 'notLevel' | 'tooDeep' | 'tooShallow' | 'cost';
 
-/** Why a new camp cannot be centred on (x, y), or `null` if it can. */
-export function placeRefusal(ground: CampGround, x: number, y: number): PlaceRefusal | null {
+/**
+ * Why a new camp cannot be centred on (x, y), or `null` if it can. With
+ * `deep`, a deep camp (FRONTIER_DEEP_CAMP): deep ground only, and its own cost.
+ */
+export function placeRefusal(
+  ground: CampGround,
+  x: number,
+  y: number,
+  deep = false,
+): PlaceRefusal | null {
   const width = ground.cube.size.x;
   const height = ground.cube.size.y;
   const footprint = footprintOf(x, y);
@@ -303,7 +338,13 @@ export function placeRefusal(ground: CampGround, x: number, y: number): PlaceRef
   if (!isLevelPatch(ground.cube, x, y)) {
     return 'notLevel';
   }
-  if (!canAfford(ground.inventory, FRONTIER_NEW_CAMP_COST)) {
+  if (!deep && depthAt(ground.cube, x, y) > FRONTIER_CAMP_PLACE.maxDepth) {
+    return 'tooDeep';
+  }
+  if (deep && depthAt(ground.cube, x, y) < FRONTIER_DEEP_CAMP.minDepth) {
+    return 'tooShallow';
+  }
+  if (!canAfford(ground.inventory, deep ? FRONTIER_DEEP_CAMP.cost : FRONTIER_NEW_CAMP_COST)) {
     return 'cost';
   }
   return null;
@@ -311,14 +352,28 @@ export function placeRefusal(ground: CampGround, x: number, y: number): PlaceRef
 
 /**
  * The squares a new level-1 camp on (x, y) would bring out of fog or out of
- * grey: the part of its circle that no camp covers now. Row by row, as indexes.
+ * grey: the part of its circle that no camp covers now. Row by row, as
+ * indexes. With `deep`, a deep camp's circle instead.
  */
-export function newlyCovered(ground: CampGround, x: number, y: number): number[] {
+export function newlyCovered(ground: CampGround, x: number, y: number, deep = false): number[] {
   const width = ground.cube.size.x;
   const height = ground.cube.size.y;
   const now = coverLevels(ground.camps, width, height);
   const after = coverLevels(
-    [{ id: 0, x, y, level: 1, smelter: false, lantern: false }],
+    [
+      {
+        id: 0,
+        x,
+        y,
+        level: deep ? FRONTIER_DEEP_CAMP.level : 1,
+        smelter: false,
+        lantern: false,
+        pen: false,
+        penned: 0,
+        breedIn: 0,
+        deep,
+      },
+    ],
     width,
     height,
   );
@@ -354,19 +409,31 @@ function unchanged(ground: CampGround): CampChange {
  * says no, the same fields come back. (What grows on its 3 x 3 is cleared
  * by `placeFrontierCamp`, which knows the surface.)
  */
-export function placeCamp(ground: CampGround, x: number, y: number): CampChange {
-  if (placeRefusal(ground, x, y) !== null) {
+export function placeCamp(ground: CampGround, x: number, y: number, deep = false): CampChange {
+  if (placeRefusal(ground, x, y, deep) !== null) {
     return unchanged(ground);
   }
   const camps = [
     ...ground.camps,
-    { id: ground.nextCampId, x, y, level: 1, smelter: false, lantern: false },
+    {
+      id: ground.nextCampId,
+      x,
+      y,
+      // A deep camp mines as FRONTIER_DEEP_CAMP.level, and is never upgraded.
+      level: deep ? FRONTIER_DEEP_CAMP.level : 1,
+      smelter: false,
+      lantern: false,
+      pen: false,
+      penned: 0,
+      breedIn: 0,
+      deep,
+    },
   ];
   return {
     camps,
     seen: seenWith(ground.seen, camps, ground.cube.size.x, ground.cube.size.y),
     nextCampId: ground.nextCampId + 1,
-    inventory: pay(ground.inventory, FRONTIER_NEW_CAMP_COST),
+    inventory: pay(ground.inventory, deep ? FRONTIER_DEEP_CAMP.cost : FRONTIER_NEW_CAMP_COST),
   };
 }
 
@@ -379,8 +446,8 @@ export function upgradeRefusal(ground: CampGround, id: number): 'missing' | 'top
     return 'missing';
   }
   const cost = upgradeCostFrom(camp.level);
-  if (cost === null) {
-    return 'top';
+  if (cost === null || camp.deep) {
+    return 'top'; // a deep camp is never upgraded
   }
   return canAfford(ground.inventory, cost) ? null : 'cost';
 }
@@ -440,8 +507,13 @@ export function demolishCamp(ground: CampGround, id: number): CampChange {
  * back as long as you don't mine the ground directly under them"). A refused place returns the
  * very same state.
  */
-export function placeFrontierCamp(state: FrontierState, x: number, y: number): FrontierState {
-  const change = placeCamp(state, x, y);
+export function placeFrontierCamp(
+  state: FrontierState,
+  x: number,
+  y: number,
+  deep = false,
+): FrontierState {
+  const change = placeCamp(state, x, y, deep);
   if (change.camps === state.camps) {
     return state; // refused
   }
@@ -474,5 +546,14 @@ export function upgradeFrontierCamp(state: FrontierState, id: number): FrontierS
 /** `demolishCamp` on a whole state. A refused demolish returns the very same state. */
 export function demolishFrontierCamp(state: FrontierState, id: number): FrontierState {
   const change = demolishCamp(state, id);
-  return change.camps === state.camps ? state : { ...state, ...change };
+  if (change.camps === state.camps) {
+    return state; // refused
+  }
+  // A pen goes with its camp; its animals go to the store (progression plan section 6.3).
+  const penned = state.camps.find((c) => c.id === id)?.penned ?? 0;
+  const inventory =
+    penned > 0
+      ? new Map([...change.inventory, ['animal', (change.inventory.get('animal') ?? 0) + penned]])
+      : change.inventory;
+  return { ...state, ...change, inventory };
 }

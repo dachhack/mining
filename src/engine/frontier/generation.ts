@@ -297,7 +297,18 @@ export function createFrontier(seed: number): FrontierState {
     cube.blocks[cell] = BLOCKS.clay.code;
   }
   const camps: FrontierCamp[] = [
-    { id: 1, x: start.x, y: start.y, level: 1, smelter: false, lantern: false },
+    {
+      id: 1,
+      x: start.x,
+      y: start.y,
+      level: 1,
+      smelter: false,
+      lantern: false,
+      pen: false,
+      penned: 0,
+      breedIn: 0,
+      deep: false,
+    },
   ];
   return {
     version: FRONTIER_STATE_VERSION,
@@ -320,6 +331,11 @@ export function createFrontier(seed: number): FrontierState {
     mined: 0,
     regrowIn: new Array<number>(cube.size.x * cube.size.y).fill(-1),
     stumps: new Array<Feature>(cube.size.x * cube.size.y).fill(NO_FEATURE),
+    grassIn: new Array<number>(cube.size.x * cube.size.y).fill(-1),
+    planted: new Array<boolean>(cube.size.x * cube.size.y).fill(false),
+    treesFelled: 0,
+    contract: null,
+    contractsDone: [0, 0, 0],
     shift: 1,
     tapsLeft: FRONTIER_SHIFT.taps,
     health: FRONTIER_SHIFT.startHealth,

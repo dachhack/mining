@@ -20,8 +20,8 @@ function code(world: FrontierState, x: number, y: number, z: number): number {
 }
 
 describe('the frontier world (plan A1)', () => {
-  it('is version 0.8.0 of the engine: the smelting and crafting batch', () => {
-    expect(ENGINE_VERSION).toBe('0.8.0');
+  it('is version 0.9.0 of the engine: the progression batch', () => {
+    expect(ENGINE_VERSION).toBe('0.9.0');
   });
 
   it('is the same world every time for the same seed', () => {

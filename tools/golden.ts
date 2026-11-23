@@ -321,7 +321,7 @@ const FRONTIER_RUNS: {
     policy: 'gatherer',
     maxShifts: 10,
     description:
-      'The gatherer for 10 shifts of 100 taps: takes plants and animals, places two more camps where they light the most new ground, mines 559 blocks, upgrades three times, builds a smelter, and is never hungry',
+      'The gatherer for 10 shifts of 100 taps: takes plants and animals, places two more camps where they light the most new ground, mines 479 blocks, upgrades three times, builds a smelter and a pen, makes hay, plants the saplings its felled trees give, sells grass on market days, and is never hungry',
   },
   {
     name: 'gatherer-seed-26',
@@ -329,7 +329,7 @@ const FRONTIER_RUNS: {
     policy: 'gatherer',
     maxShifts: 10,
     description:
-      'The gatherer on another seed: places two more camps, builds a smelter and brings a camp to level 3, never hungry',
+      'The gatherer on another seed: places two more camps, brings all three to level 2, builds a smelter, never hungry',
   },
   {
     name: 'careful-seed-3',
@@ -345,7 +345,7 @@ const FRONTIER_RUNS: {
     policy: 'digger',
     maxShifts: 10,
     description:
-      'The digger: a pit 5 levels deep next to the first camp under the level rule, gathering only for upkeep',
+      'The digger: a pit next to the first camp, as deep as a base camp digs (dirt and clay, not stone), gathering only for upkeep',
   },
   {
     name: 'random-seed-6',
@@ -353,7 +353,7 @@ const FRONTIER_RUNS: {
     policy: 'random',
     maxShifts: 10,
     description:
-      'The random policy: a useful step at random, ending each shift when its taps run out; it upgrades a camp to level 3 and is never hungry',
+      'The random policy: a useful step at random, ending each shift when its taps run out; it upgrades a camp to level 2, makes hay and buys hay, and is never hungry',
   },
   {
     name: 'random-seed-16-tools',
@@ -361,7 +361,15 @@ const FRONTIER_RUNS: {
     policy: 'random',
     maxShifts: 42,
     description:
-      'The random policy on another seed, for 42 shifts: it builds smelters, smelts, makes an iron pickaxe, an iron drill and copper lanterns, mines with the tools, hangs a lantern, and in its last shift upgrades a camp to level 4',
+      'The random policy on another seed, for 42 shifts: it upgrades its camp to level 2, builds a smelter and a pen, makes hay, and buys hay at the market',
+  },
+  {
+    name: 'careful-seed-3-finished',
+    seed: 3,
+    policy: 'careful',
+    maxShifts: 100,
+    description:
+      'The careful policy for a whole run of 100 shifts (docs/plans/progression-phases.md): it buys an iron drill and a steel drill at the market, smelts and makes a pickaxe and lanterns, brings two camps to level 4, buys a camp kit, flattens a patch 3 deep and places a deep camp, plants saplings, keeps a pen and makes hay, buys wood, delivers 35 contracts of all three tiers, sells its surplus, and the run ends finished, scored in coins',
   },
   {
     name: 'idle-seed-2-lost',

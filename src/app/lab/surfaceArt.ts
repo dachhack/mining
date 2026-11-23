@@ -342,6 +342,43 @@ export function drawStump(ctx: CanvasRenderingContext2D, box: SquareBox): void {
 }
 
 /**
+ * A planted sapling (progression PR 3): a small mound of earth with a green
+ * sprout of three leaves, smaller than a stump, over the block.
+ */
+export function drawSapling(ctx: CanvasRenderingContext2D, box: SquareBox, apple: boolean): void {
+  const cx = box.left + box.inner / 2;
+  const cy = box.top + box.inner / 2;
+  const r = box.inner * 0.18;
+  ctx.save();
+  ctx.fillStyle = SURFACE_PAINT.wood.bark;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + r * 0.9, r * 1.2, r * 0.55, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#5fae3e';
+  for (const angle of [-Math.PI / 2, -Math.PI / 2 - 1.1, -Math.PI / 2 + 1.1]) {
+    ctx.beginPath();
+    ctx.ellipse(
+      cx + Math.cos(angle) * r,
+      cy + Math.sin(angle) * r,
+      r * 0.75,
+      r * 0.4,
+      angle,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  }
+  if (apple) {
+    // An apple sapling carries a red bud.
+    ctx.fillStyle = SURFACE_PAINT.appleTree.apple;
+    ctx.beginPath();
+    ctx.arc(cx, cy - r * 0.2, r * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/**
  * A sheep seen from above, centred at (cx, cy), `size` pixels across: a
  * woolly body, a dark face pointing `facing` (radians), four little legs.
  */
@@ -436,6 +473,24 @@ export function labItemIcon(item: string, className: string): HTMLCanvasElement 
     ctx.beginPath();
     ctx.ellipse(s * 0.6, s * 0.2, s * 0.1, s * 0.05, -0.5, 0, Math.PI * 2);
     ctx.fill();
+  } else if (item === 'hay') {
+    // A bale of hay: golden, bound with two dark bands.
+    ctx.fillStyle = '#3a2f1d';
+    ctx.fillRect(0, 0, s, s);
+    ctx.fillStyle = '#d9b44a';
+    ctx.fillRect(s * 0.14, s * 0.26, s * 0.72, s * 0.48);
+    ctx.fillStyle = '#b38d2c';
+    for (let k = 0; k < 5; k += 1)
+      ctx.fillRect(s * (0.18 + k * 0.14), s * 0.28, s * 0.03, s * 0.44);
+    ctx.fillStyle = '#5a3b22';
+    ctx.fillRect(s * 0.3, s * 0.24, s * 0.06, s * 0.52);
+    ctx.fillRect(s * 0.64, s * 0.24, s * 0.06, s * 0.52);
+  } else if (item === 'sapling' || item === 'appleSapling') {
+    // A sapling on bare earth (progression PR 3).
+    ctx.fillStyle = '#5a3f26';
+    ctx.fillRect(0, 0, s, s);
+    // A box half again the icon's size, centred on it: the sprout fills the icon.
+    drawSapling(ctx, { left: -s / 4, top: -s / 4, inner: s * 1.5 }, item === 'appleSapling');
   } else if (item === 'animal') {
     ctx.fillStyle = '#4c7a2e';
     ctx.fillRect(0, 0, s, s);
@@ -504,10 +559,12 @@ export function labItemIcon(item: string, className: string): HTMLCanvasElement 
     ctx.moveTo(s * 0.32, s * 0.18);
     ctx.quadraticCurveTo(s * 0.7, s * 0.1, s * 0.84, s * 0.5);
     ctx.stroke();
-  } else if (item === 'drill') {
-    // A drill: a wooden handle, a copper band, and a twisted iron bit pointing down-right.
+  } else if (item === 'drill' || item === 'steelDrill') {
+    // A drill: a wooden handle, a copper band, and a twisted iron bit
+    // pointing down-right. The steel drill (progression PR 2) has the same
+    // shape, on a lighter ground.
     const p = SURFACE_PAINT.drill;
-    ctx.fillStyle = '#2a2420';
+    ctx.fillStyle = item === 'steelDrill' ? '#4a5560' : '#2a2420';
     ctx.fillRect(0, 0, s, s);
     ctx.strokeStyle = p.handle;
     ctx.lineCap = 'round';

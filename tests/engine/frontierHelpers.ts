@@ -57,7 +57,20 @@ export function world(options: WorldOptions = {}): FrontierState {
     features[f.x + SIDE * f.y] = f.feature;
     apples[f.x + SIDE * f.y] = f.apples ?? 0;
   }
-  const camps = [{ id: 1, x: MID, y: MID, level: 1, smelter: false, lantern: false }];
+  const camps = [
+    {
+      id: 1,
+      x: MID,
+      y: MID,
+      level: 1,
+      smelter: false,
+      lantern: false,
+      pen: false,
+      penned: 0,
+      breedIn: 0,
+      deep: false,
+    },
+  ];
   const animals = options.animals ?? [];
   return {
     version: FRONTIER_STATE_VERSION,
@@ -75,6 +88,11 @@ export function world(options: WorldOptions = {}): FrontierState {
     mined: 0,
     regrowIn: new Array<number>(SIDE * SIDE).fill(-1),
     stumps: new Array<Feature>(SIDE * SIDE).fill(NO_FEATURE),
+    grassIn: new Array<number>(SIDE * SIDE).fill(-1),
+    planted: new Array<boolean>(SIDE * SIDE).fill(false),
+    treesFelled: 0,
+    contract: null,
+    contractsDone: [0, 0, 0],
     shift: 1,
     tapsLeft: FRONTIER_SHIFT.taps,
     health: FRONTIER_SHIFT.startHealth,

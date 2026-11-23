@@ -43,8 +43,11 @@ describe('camp levels (plan A2)', () => {
   it('lets each level mine what the levels below it mine, and more', () => {
     expect(levelNeededFor(BLOCKS.dirt.code)).toBe(1);
     expect(levelNeededFor(BLOCKS.clay.code)).toBe(1);
-    expect(levelNeededFor(BLOCKS.hardRock.code)).toBe(2);
-    expect(levelNeededFor(BLOCKS.ironOre.code)).toBe(3);
+    // Progression plan section 2.2: stone and coal at 2, hard rock at 3; ore needs a tool.
+    expect(levelNeededFor(BLOCKS.stone.code)).toBe(2);
+    expect(levelNeededFor(BLOCKS.coalSeam.code)).toBe(2);
+    expect(levelNeededFor(BLOCKS.hardRock.code)).toBe(3);
+    expect(levelNeededFor(BLOCKS.ironOre.code)).toBeNull();
     expect(levelNeededFor(BLOCKS.bedrock.code)).toBeNull();
     for (let level = 2; level <= MAX_CAMP_LEVEL; level += 1) {
       expect(blocksMinedAt(level)).toEqual(expect.arrayContaining(blocksMinedAt(level - 1)));
@@ -102,6 +105,10 @@ describe('placing a camp (plan A2)', () => {
       level: 1,
       smelter: false,
       lantern: false,
+      pen: false,
+      penned: 0,
+      breedIn: 0,
+      deep: false,
     });
     expect(after.nextCampId).toBe(3);
     for (const stack of FRONTIER_NEW_CAMP_COST) {

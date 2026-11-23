@@ -29,7 +29,7 @@ import {
   sightMap,
 } from '../../src/app/lab/campWorld';
 import type { CampStep, CampWorld } from '../../src/app/lab/campWorld';
-import { FRONTIER_SHIFT } from '../../src/data/frontier';
+import { FRONTIER_RUN, FRONTIER_SHIFT } from '../../src/data/frontier';
 import { MOON_PHASES, moonPhase } from '../../src/app/lab/night';
 import { GRASS, TREE } from '../../src/app/lab/surface';
 import { planLevel2, tapsUntil, usefulTaps } from './campPlan';
@@ -176,6 +176,7 @@ async function counts(page: Page): Promise<Record<string, number>> {
     const shown: Record<string, number> = {};
     for (const chip of Array.from(el.children)) {
       const id = (chip as HTMLElement).dataset['testid'] ?? '';
+      if (id === 'lab-coins') continue; // the coins chip (progression PR 1): checked in market.spec.ts
       shown[id === 'lab-dug' ? 'dug' : id.replace('lab-res-', '')] = Number(
         (chip as HTMLElement).dataset['count'],
       );
@@ -570,7 +571,7 @@ test('a second camp on level ground lifts the fog; then the first is demolished 
   await expect.poll(() => counts(page)).toEqual(expectedCounts(world));
 });
 
-test('wood, clay, stone and an animal pay for level 2, and the ring grows', async ({ page }) => {
+test('wood, clay, grass and animals pay for level 2, and the ring grows', async ({ page }) => {
   const plan = planLevel2(SEED);
   expect(plan).not.toBeNull();
   if (plan === null) return;
@@ -586,14 +587,15 @@ test('wood, clay, stone and an animal pay for level 2, and the ring grows', asyn
   await expect(canvas).toHaveAttribute('data-shown', String(shownOf(plan.world)));
   await expect.poll(() => counts(page)).toEqual(expectedCounts(plan.world));
 
-  // The counter puts what the upgrade costs first, right after "Dug", so
-  // clay, stone and animals never hide off its right edge.
+  // The counter puts what the upgrade costs first, right after "Dug" and
+  // the coins, so clay and animals never hide off its right edge.
   const order = await page
     .getByTestId('lab-counter')
     .evaluate((el) => Array.from(el.children).map((c) => (c as HTMLElement).dataset['testid']));
   const level2 = upgradeCostFrom(1) ?? [];
-  expect(order.slice(0, 1 + level2.length)).toEqual([
+  expect(order.slice(0, 2 + level2.length)).toEqual([
     'lab-dug',
+    'lab-coins',
     ...level2.map((stack) => `lab-res-${stack.item}`),
   ]);
   // Wood is timber (owner): Lab 2 never shows timber.
@@ -614,7 +616,7 @@ test('wood, clay, stone and an animal pay for level 2, and the ring grows', asyn
   await expect(page.getByTestId('lab2-upgrade')).toBeEnabled();
   await page.getByTestId('lab2-upgrade').click();
 
-  // Level 2: a wider ring, and the wood, clay, stone and animal paid.
+  // Level 2: a wider ring, and its cost paid.
   await expect(page.getByTestId('lab2-camp-title')).toContainText('Level 2');
   await expect(page.getByTestId('lab2-camp-line')).toContainText(`Ring ${campRadius(2)}`);
   expect(Number(await canvas.getAttribute('data-shown'))).toBeGreaterThan(shownOf(plan.world));
@@ -1090,7 +1092,9 @@ test('End shift: the HUD counts taps down, End shift refills them, moves the ani
     next.surface.animals.map((a) => `${a.x},${a.y}`).join(' '),
   );
   await expect(page.getByTestId('lab2-undo')).toBeDisabled();
-  await expect(page.getByTestId('lab-hint')).toContainText('Shift 1 over');
+  await expect(page.getByTestId('lab-hint')).toContainText(
+    `Shift 1 of ${FRONTIER_RUN.shifts} over`,
+  );
   await expect.poll(() => counts(page)).toEqual(expectedCounts(next));
 });
 
@@ -1140,7 +1144,9 @@ test('night between shifts: End shift shows the night, with the moon of the shif
   await expect(night).toHaveAttribute('data-night', '1');
   await expect(night).toHaveAttribute('data-phase', String(moonPhase(1)));
   await expect(page.getByTestId('lab2-night-phase')).toHaveText(MOON_PHASES[moonPhase(1)] ?? '');
-  await expect(page.getByTestId('lab2-night-summary')).toContainText('Shift 1 over');
+  await expect(page.getByTestId('lab2-night-summary')).toContainText(
+    `Shift 1 of ${FRONTIER_RUN.shifts} over`,
+  );
   // Nothing behind it takes input meanwhile.
   await expect(page.locator('.lab')).toHaveJSProperty('inert', true);
   // It clears by itself in about 3 s.

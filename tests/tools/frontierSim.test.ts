@@ -70,8 +70,11 @@ describe('the new game’s simulator (plan B3)', { timeout: 60_000 }, () => {
   });
 
   it('records the shift each step of smelting and crafting is first reached in', () => {
-    // The gatherer builds a smelter, smelts, and makes the tools (smelting PR 5).
-    const run = playFrontierRun(1, 'gatherer', 30, true);
+    // The gatherer builds a smelter, buys a drill, smelts, and makes the
+    // tools (smelting PR 5). Seed 3: on seeds 1 and 2 the gatherer stays at
+    // level 2, a few apples short of level 3, so it never buys a drill
+    // (progression PR 3).
+    const run = playFrontierRun(3, 'gatherer', 30, true);
     expect(run.problems).toEqual([]);
     const f = run.metrics.firsts;
     expect(f.level2).toBeGreaterThan(0);

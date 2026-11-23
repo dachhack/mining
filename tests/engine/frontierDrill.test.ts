@@ -1,7 +1,14 @@
 // Smelting and crafting, PR 4 (docs/plans/smelting-and-crafting.md): the
-// iron drill and camp level 4 (owner, question 163).
+// iron drill and camp level 4 (owner, question 163). Since progression PR 2
+// (docs/plans/progression-phases.md, section 4) the drill mines ore rather
+// than lifting a camp a level, and the steel drill mines crystal and relics.
 import { describe, expect, it } from 'vitest';
-import { FRONTIER_CAMP_LEVELS, FRONTIER_DRILL, FRONTIER_RECIPES } from '../../src/data/frontier';
+import {
+  FRONTIER_CAMP_LEVELS,
+  FRONTIER_DRILL,
+  FRONTIER_RECIPES,
+  FRONTIER_STEEL_DRILL,
+} from '../../src/data/frontier';
 import {
   MAX_CAMP_LEVEL,
   blocksMinedAt,
@@ -9,9 +16,10 @@ import {
   campRing,
   frontierAct,
   frontierTap,
+  holdsToolFor,
   levelNeededFor,
-  miningLevelAt,
   previewTap,
+  toolNeededFor,
   upgradeCostFrom,
 } from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
@@ -53,40 +61,51 @@ describe('the iron drill (owner, question 163)', () => {
     );
   });
 
-  it('lets a level-1 camp mine hard rock', () => {
-    const w = world({ top: 'H' });
-    expect(levelNeededFor(BLOCKS.hardRock.code)).toBe(2);
-    expect(frontierTap(w, AT.x, AT.y).kind).toBe('tooHard');
-    const drilled = holding(w, DRILL);
-    expect(miningLevelAt(drilled.camps, drilled.inventory, AT.x, AT.y)).toBe(2);
-    const tap = frontierTap(drilled, AT.x, AT.y);
-    expect(tap.kind).toBe('mined');
-    expect(previewTap(drilled, AT.x, AT.y).kind).toBe('mined');
-    expect(tap.state.inventory.get(FRONTIER_DRILL.item)).toBe(1); // it does not wear out
-  });
-
-  it('lets a level-2 camp mine ore, but a level-1 camp not', () => {
-    const w = world({ top: 'i' });
-    expect(frontierTap(holding(w, DRILL), AT.x, AT.y).kind).toBe('tooHard');
-    expect(frontierTap(holding(atLevel(w, 2), DRILL), AT.x, AT.y).kind).toBe('mined');
-    expect(frontierTap(atLevel(w, 2), AT.x, AT.y).kind).toBe('tooHard');
-  });
-
-  it('adds nothing to a level-3 or level-4 camp, nor a second drill to the first', () => {
-    const w = world();
-    const two = holding(w, { [FRONTIER_DRILL.item]: 2 });
-    expect(miningLevelAt(two.camps, two.inventory, AT.x, AT.y)).toBe(2);
-    for (const level of [3, 4]) {
-      const s = holding(atLevel(w, level), DRILL);
-      expect(miningLevelAt(s.camps, s.inventory, AT.x, AT.y)).toBe(level);
+  it('mines iron and copper ore on any camp’s ground; no camp level mines ore without it (progression plan section 4)', () => {
+    expect(levelNeededFor(BLOCKS.ironOre.code)).toBeNull();
+    expect(toolNeededFor(BLOCKS.ironOre.code)).toBe(FRONTIER_DRILL.item);
+    expect(toolNeededFor(BLOCKS.copperOre.code)).toBe(FRONTIER_DRILL.item);
+    for (const top of ['i', 'u']) {
+      const w = world({ top });
+      for (const level of [1, 2, 3, 4]) {
+        const bare = frontierTap(atLevel(w, level), AT.x, AT.y);
+        expect(bare.kind, `level ${level}`).toBe('tooHard');
+        expect(bare.needs).toBeNull();
+        expect(bare.needsTool).toBe(FRONTIER_DRILL.item);
+      }
+      const drilled = holding(w, DRILL);
+      const tap = frontierTap(drilled, AT.x, AT.y);
+      expect(tap.kind).toBe('mined');
+      expect(previewTap(drilled, AT.x, AT.y).kind).toBe('mined');
+      expect(tap.state.inventory.get(FRONTIER_DRILL.item)).toBe(1); // it does not wear out
     }
   });
 
+  it('does not mine crystal; the steel drill does, and ore too', () => {
+    const crystal = world({ top: 'x' });
+    expect(frontierTap(holding(crystal, DRILL), AT.x, AT.y).needsTool).toBe(
+      FRONTIER_STEEL_DRILL.item,
+    );
+    const steel = { [FRONTIER_STEEL_DRILL.item]: 1 };
+    expect(frontierTap(holding(crystal, steel), AT.x, AT.y).kind).toBe('mined');
+    expect(frontierTap(holding(world({ top: 'i' }), steel), AT.x, AT.y).kind).toBe('mined');
+    for (const id of FRONTIER_STEEL_DRILL.mines) {
+      expect(holdsToolFor(new Map(Object.entries(steel)), BLOCKS[id].code), id).toBe(true);
+    }
+  });
+
+  it('does not help with a block a camp level mines: hard rock still needs a level-3 camp', () => {
+    const w = holding(world({ top: 'H' }), { ...DRILL, [FRONTIER_STEEL_DRILL.item]: 1 });
+    const tap = frontierTap(w, AT.x, AT.y);
+    expect(tap.kind).toBe('tooHard');
+    expect(tap.needs).toBe(3);
+    expect(tap.needsTool).toBeNull();
+  });
+
   it('leaves the ring as it is, and lights nothing', () => {
-    const w = holding(world(), DRILL);
+    const w = holding(world({ top: 'i' }), DRILL);
     expect(w.camps.map(campRing)).toEqual([campRadius(1)]);
     const beyond = { x: MID + campRadius(1) + 1, y: MID };
-    expect(miningLevelAt(w.camps, w.inventory, beyond.x, beyond.y)).toBe(0);
     expect(frontierTap(w, beyond.x, beyond.y).kind).toBe('fog');
   });
 });

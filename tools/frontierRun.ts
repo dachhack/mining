@@ -4,34 +4,57 @@
 // --frontier` use it. Everything goes through the engine's public surface.
 
 import {
+  FRONTIER_DEEP_CAMP,
   FRONTIER_DRILL,
   FRONTIER_LANTERN,
+  FRONTIER_MARKET,
   FRONTIER_NEW_CAMP_COST,
+  FRONTIER_PEN,
   FRONTIER_PICKAXE,
+  FRONTIER_STEEL_DRILL,
 } from '../src/data/frontier';
 import {
+  campAt,
   canAfford,
+  contractBoard,
+  coverLevelAt,
+  footprintOf,
+  contractById,
   coverLevels,
+  openTiers,
+  deliverRefusal,
   createFrontier,
+  depthAt,
   frontierAct,
   hasSmelter,
+  isMarketDay,
+  mostLots,
+  tradeRefusal,
   lanternRefusal,
   makeRefusal,
   previewTap,
   newlyCovered,
   placeRefusal,
+  penRefusal,
+  plantRefusal,
   smelterRefusal,
   upgradeCostFrom,
   upgradeRefusal,
 } from '../src/engine';
 import type { FrontierAction, FrontierState } from '../src/engine';
-import { NO_FEATURE } from '../src/engine/frontier/state';
+import { APPLE_TREE, NO_FEATURE } from '../src/engine/frontier/state';
 
 /**
  * One step of the new game, as a short text: "tap X,Y", "place X,Y",
  * "upgrade ID", "demolish ID", "endShift", "rest ID" (at camp ID), "close",
  * "buildSmelter ID" (a smelter at camp ID), "make RECIPE" (a recipe id,
- * such as "smelt-iron") or "hangLantern ID" (a lantern at camp ID).
+ * such as "smelt-iron"), "hangLantern ID" (a lantern at camp ID), or
+ * "sell ITEM LOTS" / "buy ITEM LOTS" at the market (an item id, such as
+ * "wood", and a whole number of lots), or "plant X,Y ITEM" (a sapling or
+ * an apple sapling on square X,Y), "buildPen ID", "penIn ID" or "penOut ID"
+ * (a pen at camp ID, an animal into it or out of it), "takeContract ID"
+ * (a contract from today's board), "deliver", "dropContract", or
+ * "placeDeep X,Y" (a deep camp).
  */
 export type FrontierStep = string;
 
@@ -72,16 +95,28 @@ export function restStep(state: FrontierState): FrontierStep {
 
 /** The engine's action for a step. Throws for text that is not a step. */
 export function actionOf(step: FrontierStep): FrontierAction {
-  const [verb, arg] = step.split(' ');
-  if (verb === 'endShift' || verb === 'close') {
+  const [verb, arg, third] = step.split(' ');
+  if ((verb === 'sell' || verb === 'buy') && arg !== undefined && third !== undefined) {
+    return { kind: verb, item: arg, lots: Number(third) };
+  }
+  if (verb === 'plant' && arg !== undefined && third !== undefined) {
+    return { kind: 'plant', ...squareOf(arg), item: third };
+  }
+  if (verb === 'endShift' || verb === 'close' || verb === 'deliver' || verb === 'dropContract') {
     return { kind: verb };
+  }
+  if (verb === 'takeContract' && arg !== undefined) {
+    return { kind: 'takeContract', id: arg };
   }
   if (
     (verb === 'upgrade' ||
       verb === 'demolish' ||
       verb === 'rest' ||
       verb === 'buildSmelter' ||
-      verb === 'hangLantern') &&
+      verb === 'hangLantern' ||
+      verb === 'buildPen' ||
+      verb === 'penIn' ||
+      verb === 'penOut') &&
     arg !== undefined
   ) {
     return { kind: verb, id: Number(arg) };
@@ -89,7 +124,7 @@ export function actionOf(step: FrontierStep): FrontierAction {
   if (verb === 'make' && arg !== undefined) {
     return { kind: 'make', recipe: arg };
   }
-  if ((verb === 'tap' || verb === 'place') && arg !== undefined) {
+  if ((verb === 'tap' || verb === 'place' || verb === 'placeDeep') && arg !== undefined) {
     return { kind: verb, ...squareOf(arg) };
   }
   throw new Error(`"${step}" is not a step of the new game`);
@@ -114,6 +149,17 @@ export function replayFrontier(seed: number, steps: FrontierStep[]): FrontierSta
     state = applyFrontierStep(state, step);
   }
   return state;
+}
+
+/**
+ * True if (x, y) holds an apple tree with no apples left: a tap would fell
+ * it for wood. The steady policies leave such a tree standing and pick its
+ * apples when they come back (owner, after decision note 0062: "don't chop
+ * down the trees and pick apples when they regrow").
+ */
+export function isBareAppleTree(state: FrontierState, x: number, y: number): boolean {
+  const i = x + state.cube.size.x * y;
+  return state.features[i] === APPLE_TREE && (state.apples[i] ?? 0) === 0;
 }
 
 /** The gatherer rests at the end of a shift when the crew's health is this or lower. */
@@ -159,17 +205,247 @@ export function craftStep(state: FrontierState): FrontierStep | null {
   return null;
 }
 
+/** The gatherer keeps this much grass back and sells the rest on a market day. */
+const GATHERER_GRASS_KEPT = 60;
+
+/** On a market day that sells wood, the gatherer buys it up to this much. */
+const GATHERER_WOOD_STOCK = 40;
+
+/** The gatherer keeps this much stone back and sells the rest on a market day. */
+const GATHERER_STONE_KEPT = 100;
+
+/**
+ * Items it sells whenever it can, while no open tier of contracts asks for
+ * them: crystal, rare ore and relics have no other use (design doc section
+ * 7), and tier-3 contracts ask for them (progression PR 5).
+ */
+const GATHERER_SELLS_ALL = ['crystal', 'rareOre', 'relic'];
+
+/**
+ * On a market day (docs/plans/progression-phases.md, section 3): buy an
+ * iron drill, then a steel drill, when it can (one each); buy wood up to
+ * GATHERER_WOOD_STOCK once the market sells it; buy a camp kit; sell every whole
+ * lot of the items with no use yet (until tier-3 contracts ask for them), then grass above GATHERER_GRASS_KEPT and
+ * stone above GATHERER_STONE_KEPT. `null` if there is nothing to trade, or
+ * it is not a market day.
+ */
+export function marketStep(state: FrontierState): FrontierStep | null {
+  if (!isMarketDay(state)) return null;
+  for (const tool of [FRONTIER_DRILL.item, FRONTIER_STEEL_DRILL.item]) {
+    const held = (state.inventory.get(tool) ?? 0) > 0;
+    if (!held && tradeRefusal(state, 'buy', tool, 1) === null) return `buy ${tool} 1`;
+  }
+  // Wood for upkeep once the market sells it (phase 4): up to
+  // GATHERER_WOOD_STOCK, as the coins allow. Leaving apple trees standing
+  // (isBareAppleTree) means less wood from felling late in a run.
+  const wood = state.inventory.get('wood') ?? 0;
+  const woodLot = FRONTIER_MARKET.buyPrices.find((l) => l.item === 'wood');
+  if (woodLot !== undefined && wood < GATHERER_WOOD_STOCK) {
+    const wanted = Math.ceil((GATHERER_WOOD_STOCK - wood) / woodLot.count);
+    const lots = Math.min(wanted, mostLots(state, 'buy', 'wood'));
+    if (lots > 0 && tradeRefusal(state, 'buy', 'wood', lots) === null) return `buy wood ${lots}`;
+  }
+  // A camp kit for one deep camp (progression PR 6), keeping 100 coins back.
+  const kit = (state.inventory.get('campKit') ?? 0) > 0;
+  const coins = state.inventory.get(FRONTIER_MARKET.coin) ?? 0;
+  if (!kit && !state.camps.some((c) => c.deep) && coins >= 250) {
+    if (tradeRefusal(state, 'buy', 'campKit', 1) === null) return 'buy campKit 1';
+  }
+  const tier3 = openTiers(state).includes(3);
+  for (const item of tier3 ? [] : GATHERER_SELLS_ALL) {
+    const lots = mostLots(state, 'sell', item);
+    if (lots > 0) return `sell ${item} ${lots}`;
+  }
+  const spare = { ...state, inventory: new Map(state.inventory) };
+  spare.inventory.set(
+    'grass',
+    Math.max(0, (state.inventory.get('grass') ?? 0) - GATHERER_GRASS_KEPT),
+  );
+  const grass = mostLots(spare, 'sell', 'grass');
+  if (grass > 0) return `sell grass ${grass}`;
+  spare.inventory.set(
+    'stone',
+    Math.max(0, (state.inventory.get('stone') ?? 0) - GATHERER_STONE_KEPT),
+  );
+  const stone = mostLots(spare, 'sell', 'stone');
+  return stone > 0 ? `sell stone ${stone}` : null;
+}
+
+/** The gatherer keeps this much hay: the level-3 upgrade's 10, and some for breeding. */
+const GATHERER_HAY = 16;
+
+/** The gatherer keeps this many animals in the store, for upgrades and food; the rest go in a pen. */
+const GATHERER_ANIMALS_KEPT = 3;
+
+/**
+ * Pens and hay (progression plan section 6.3), in order, the first that
+ * can be done: build a pen at the first camp once it holds the pen's cost
+ * and 20 wood more; take an animal out of a pen while the store has fewer
+ * than GATHERER_ANIMALS_KEPT and the pen keeps 2 to breed; put one in while
+ * the store has more; make hay while it holds less than GATHERER_HAY and
+ * has 30 grass to spare. `null` if none can be done.
+ */
+export function farmStep(state: FrontierState): FrontierStep | null {
+  const first = state.camps[0];
+  if (first === undefined) return null;
+  const pen = state.camps.find((c) => c.pen);
+  const wood = state.inventory.get('wood') ?? 0;
+  if (pen === undefined) {
+    const spare = wood >= (FRONTIER_PEN.cost.find((c) => c.item === 'wood')?.count ?? 0) + 20;
+    if (spare && penRefusal(state, 'buildPen', first.id) === null) return `buildPen ${first.id}`;
+  } else {
+    const animals = state.inventory.get('animal') ?? 0;
+    if (
+      animals < GATHERER_ANIMALS_KEPT &&
+      pen.penned > 2 &&
+      penRefusal(state, 'penOut', pen.id) === null
+    )
+      return `penOut ${pen.id}`;
+    if (animals > GATHERER_ANIMALS_KEPT && penRefusal(state, 'penIn', pen.id) === null)
+      return `penIn ${pen.id}`;
+  }
+  const hay = state.inventory.get('hay') ?? 0;
+  const grass = state.inventory.get('grass') ?? 0;
+  if (hay < GATHERER_HAY && grass >= 30 && makeRefusal(state, 'hay') === null) return 'make hay';
+  return null;
+}
+
+/**
+ * True if delivering the held contract leaves the store holding what the
+ * lowest camp's next upgrade needs of the same items (or the store did not
+ * hold that much anyway): the gatherer does not trade an upgrade for coins.
+ */
+function keepsUpgrade(state: FrontierState): boolean {
+  const asks = contractById(state.contract?.id ?? '')?.asks ?? [];
+  const lowest = [...state.camps].sort((a, b) => a.level - b.level)[0];
+  const upgrade = lowest === undefined ? [] : (upgradeCostFrom(lowest.level) ?? []);
+  return upgrade.every((need) => {
+    const ask = asks.find((a) => a.item === need.item)?.count ?? 0;
+    const held = state.inventory.get(need.item) ?? 0;
+    return ask === 0 || held < need.count || held - ask >= need.count;
+  });
+}
+
+/** The gatherer drops a contract it cannot deliver after holding it this many shifts. */
+const GATHERER_CONTRACT_PATIENCE = 20;
+
+/**
+ * Contracts (progression plan section 5), in order: deliver the one held
+ * if it can; drop it on a market day once it has been held
+ * GATHERER_CONTRACT_PATIENCE shifts; with none held, take the board's
+ * contract whose asks the store holds the most of (as a share), the
+ * highest tier first among equals. `null` if none of these can be done.
+ */
+export function contractStep(state: FrontierState): FrontierStep | null {
+  if (deliverRefusal(state) === null && keepsUpgrade(state)) return 'deliver';
+  const held = state.contract;
+  if (held !== null) {
+    const stale = state.shift - held.takenOn >= GATHERER_CONTRACT_PATIENCE;
+    return stale && isMarketDay(state) ? 'dropContract' : null;
+  }
+  let best: { id: string; share: number; tier: number } | null = null;
+  for (const offer of contractBoard(state)) {
+    const shares = offer.asks.map((a) => Math.min(1, (state.inventory.get(a.item) ?? 0) / a.count));
+    const share = shares.reduce((sum, x) => sum + x, 0) / shares.length;
+    if (best === null || share > best.share || (share === best.share && offer.tier > best.tier)) {
+      best = { id: offer.id, share, tier: offer.tier };
+    }
+  }
+  return best === null ? null : `takeContract ${best.id}`;
+}
+
+/**
+ * A deep camp (progression PR 6), once it holds the kit and none stands:
+ * on the deepest level 3 x 3 it may stand on, so the ground under its pit
+ * is lit and mined as a level-3 camp's (ties go to the square met first,
+ * row by row); with none, it flattens a patch deep enough (`flattenStep`).
+ * `null` if it can do neither.
+ */
+export function deepStep(state: FrontierState): FrontierStep | null {
+  if ((state.inventory.get('campKit') ?? 0) < 1 || state.camps.some((c) => c.deep)) return null;
+  let best: { x: number; y: number; depth: number } | null = null;
+  for (let y = 1; y < state.cube.size.y - 1; y += 1) {
+    for (let x = 1; x < state.cube.size.x - 1; x += 1) {
+      if (placeRefusal(state, x, y, true) !== null) continue;
+      const depth = depthAt(state.cube, x, y);
+      if (best === null || depth > best.depth) best = { x, y, depth };
+    }
+  }
+  if (best !== null) return `placeDeep ${best.x},${best.y}`;
+  return flattenStep(state);
+}
+
+/**
+ * Flatten ground for a deep camp: among the lit 3 x 3 patches, clear of
+ * camps, whose squares are all at least FRONTIER_DEEP_CAMP.minDepth deep,
+ * take the one closest to level (smallest gap between its deepest and
+ * shallowest squares), and mine one of its shallowest squares that can be
+ * mined now. A pit's floor is terraced by the level rule, so a level 3 x 3
+ * that deep seldom exists until it is dug for. `null` if no such patch has
+ * a square it can mine.
+ */
+function flattenStep(state: FrontierState): FrontierStep | null {
+  let best: { squares: { x: number; y: number; depth: number }[]; gap: number } | null = null;
+  for (let y = 1; y < state.cube.size.y - 1; y += 1) {
+    for (let x = 1; x < state.cube.size.x - 1; x += 1) {
+      const squares = footprintOf(x, y).map((s) => ({
+        ...s,
+        depth: depthAt(state.cube, s.x, s.y),
+      }));
+      const deepEnough = squares.every((s) => s.depth >= FRONTIER_DEEP_CAMP.minDepth);
+      const clear = squares.every((s) => campAt(state.camps, s.x, s.y) === null);
+      const lit = squares.every((s) => coverLevelAt(state.camps, s.x, s.y) > 0);
+      if (!deepEnough || !clear || !lit) continue;
+      const depths = squares.map((s) => s.depth);
+      const gap = Math.max(...depths) - Math.min(...depths);
+      // A patch with a square it can mine now (a level patch is placed on, above).
+      const minable = squares.some((s) => previewTap(state, s.x, s.y).kind === 'mined');
+      if (minable && (best === null || gap < best.gap)) best = { squares, gap };
+    }
+  }
+  if (best === null) return null;
+  const shallowest = [...best.squares]
+    .sort((a, b) => a.depth - b.depth)
+    .find((s) => previewTap(state, s.x, s.y).kind === 'mined');
+  return shallowest === undefined ? null : `tap ${shallowest.x},${shallowest.y}`;
+}
+
+/**
+ * Plant a sapling it holds (progression plan section 6.2) on the lit square
+ * farthest from the newest camp where one can be planted, so its own
+ * digging, which starts nearest that camp, leaves it be. Ties go to the
+ * square met first, row by row. `null` with no sapling, or nowhere to plant.
+ */
+export function plantStep(state: FrontierState): FrontierStep | null {
+  if ((state.inventory.get('sapling') ?? 0) < 1) return null;
+  const newest = state.camps[state.camps.length - 1];
+  if (newest === undefined) return null;
+  let best: { x: number; y: number; d: number } | null = null;
+  for (let y = 0; y < state.cube.size.y; y += 1) {
+    for (let x = 0; x < state.cube.size.x; x += 1) {
+      if (plantRefusal(state, x, y, 'sapling') !== null) continue;
+      const d = (x - newest.x) ** 2 + (y - newest.y) ** 2;
+      if (best === null || d > best.d) best = { x, y, d };
+    }
+  }
+  return best === null ? null : `plant ${best.x},${best.y} sapling`;
+}
+
 /**
  * The gatherer: a plain policy for recording golden runs. In order:
  * 0. with no taps left, end the shift, or rest if the crew's health is at
  *    GATHERER_REST_AT or below (plan A4);
- * 1. smelt and craft what it can (`craftStep`);
+ * 1. take and deliver contracts (`contractStep`), smelt and craft what it
+ *    can (`craftStep`), keep a pen and make hay
+ *    (`farmStep`), trade on a market day (`marketStep`), and plant the
+ *    saplings it holds (`plantStep`);
  * 2. upgrade the lowest camp it can pay for;
  * 3. with fewer than 3 camps, place one where it lights the most new
  *    ground, if it can pay;
  * 4. catch the lit animal nearest the newest camp;
  * 5. while the next goal (a new camp, or else the lowest camp's upgrade) is
- *    short of wood, grass or apples, take the lit plant nearest the newest camp;
+ *    short of wood, grass or apples, take the lit plant nearest the newest
+ *    camp, but never fell an apple tree picked bare (`isBareAppleTree`);
  * 6. mine the block nearest the newest camp that it can mine;
  * 7. failing that, take the nearest plant.
  * Ties go to the square met first, row by row. `null` when nothing is left to do.
@@ -179,7 +455,13 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
   if (state.tapsLeft === 0) {
     return state.health <= GATHERER_REST_AT ? restStep(state) : 'endShift';
   }
-  const craft = craftStep(state);
+  const craft =
+    contractStep(state) ??
+    deepStep(state) ??
+    craftStep(state) ??
+    farmStep(state) ??
+    marketStep(state) ??
+    plantStep(state);
   if (craft !== null) return craft;
   const byLevel = [...state.camps].sort((a, b) => a.level - b.level || a.id - b.id);
   for (const camp of byLevel) {
@@ -219,9 +501,11 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
   const animal = squares.find((s) => state.animals.some((a) => a.x === s.x && a.y === s.y));
   if (animal !== undefined) return `tap ${animal.x},${animal.y}`;
   // A plant the tap would take: not on a camp's ground (`frontierTap` checks the rest).
+  // An apple tree picked bare is left standing, for its apples to come back.
   const plant = squares.find(
     (s) =>
       state.features[s.x + width * s.y] !== NO_FEATURE &&
+      !isBareAppleTree(state, s.x, s.y) &&
       !state.camps.some((c) => Math.abs(c.x - s.x) <= 1 && Math.abs(c.y - s.y) <= 1),
   );
   // Plants give wood, grass and apples: take them while the next goal (a new

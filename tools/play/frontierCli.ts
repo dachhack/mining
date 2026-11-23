@@ -6,7 +6,7 @@
 //
 // A play log is JSON: { engineVersion, seed, steps }, where each step is one
 // of the steps of tools/frontierRun.ts ("tap 3,4", "place 5,6", "upgrade 2",
-// "demolish 1", "endShift", "rest 1", "close"). Only steps that did something
+// "demolish 1", "endShift", "rest 1", "sell wood 3", "close"). Only steps that did something
 // are logged; an undone step is taken out of the log. Replaying the steps on
 // the seed gives the same run, on the engine version the log names.
 
@@ -16,9 +16,14 @@ import { dirname } from 'node:path';
 import { BLOCKS, ITEMS, blockDefByCode } from '../../src/data';
 import type { BlockId, ItemId, ItemStack } from '../../src/data';
 import {
+  FRONTIER_DEEP_CAMP,
   FRONTIER_DRILL,
+  FRONTIER_MARKET,
   FRONTIER_NEW_CAMP_COST,
+  FRONTIER_PEN,
   FRONTIER_RECIPES,
+  FRONTIER_PHASES,
+  FRONTIER_RUN,
   FRONTIER_SHIFT,
   FRONTIER_SMELTER,
 } from '../../src/data/frontier';
@@ -29,14 +34,25 @@ import {
   campAt,
   campRing,
   canAfford,
+  coinsHeld,
   createFrontier,
   depthAt,
   frontierTap,
   hashFrontier,
+  isMarketDay,
   levelNeededFor,
+  toolNeededFor,
   lanternRefusal,
   makeRefusal,
+  marketEvery,
+  contractBoard,
+  deliverRefusal,
+  heldContract,
+  runPhase,
+  takeRefusal,
+  penRefusal,
   newlyCovered,
+  nextMarketShift,
   previewTap,
   placeRefusal,
   shiftUndoCount,
@@ -149,6 +165,36 @@ function refusalText(refusal: string | null): string {
     place: 'A camp cannot go there now (see "look").',
     upgrade: 'That camp cannot be upgraded now.',
     demolish: 'That camp cannot be demolished: other camps must cover its 3 x 3 first.',
+    notYet:
+      'The market does not sell that yet: tools from a level-3 camp, a camp kit, wood and apples after a tier-1 contract.',
+    placeDeep: `A deep camp cannot go there now (see "look"): it needs the kit, wood and stone, and lit, level ground at depth ${FRONTIER_DEEP_CAMP.minDepth} or more.`,
+    holding: 'You hold a contract already: deliver it or "drop" it first.',
+    none: 'You hold no contract.',
+    hasPen: 'That camp has a pen already.',
+    campLevel: "That camp's level is too low for it.",
+    noPen: 'That camp has no pen: build one first ("pen N").',
+    full: 'That pen is full.',
+    empty: 'That pen holds no animals.',
+    closed: 'The market is not open this shift (see "Market" in the view).',
+    unknown: 'The market does not trade that item that way.',
+    lots: 'Trade a whole number of lots, 1 or more.',
+    cost: 'You do not hold enough for that.',
+  };
+  return texts[refusal ?? ''] ?? `Refused: ${refusal ?? 'unknown'}.`;
+}
+
+/** Why a sapling cannot be planted, in words for the player. */
+function plantText(refusal: string | null): string {
+  const texts: Record<string, string> = {
+    unknown: 'Only a sapling or an apple sapling can be planted.',
+    cost: 'You hold none of those.',
+    notShown: 'That square is not lit by a camp.',
+    camp: 'A camp stands there.',
+    animal: 'An animal stands there.',
+    ground: 'Saplings grow only on dirt at the surface, never on ground that was mined.',
+    occupied: 'Something grows there already, or a sapling is planted.',
+    noTaps: 'No taps left this shift: end the shift ("end").',
+    over: 'The run is over.',
   };
   return texts[refusal ?? ''] ?? `Refused: ${refusal ?? 'unknown'}.`;
 }
@@ -171,6 +217,11 @@ const TAP_DONE: Record<string, string> = {
   mined: 'mined',
 };
 
+/** "iron drill" or "steel drill": a tool's name for the player. */
+function toolName(item: string): string {
+  return item === FRONTIER_DRILL.item ? 'iron drill' : itemName(item);
+}
+
 /** "2 wood, 1 apple". */
 function stacksText(stacks: ItemStack[]): string {
   return stacks.map((s) => `${s.count} ${itemName(s.item)}`).join(', ');
@@ -192,8 +243,17 @@ function shiftLine(report: ShiftReport, state: FrontierState): string {
     report.regrown > 0 ? `${report.regrown} apple tree(s) regrew` : '',
     report.treesRegrown > 0 ? `${report.treesRegrown} felled tree(s) grew back` : '',
     report.newAnimals > 0 ? 'an animal walked in' : '',
+    report.born > 0 ? `${report.born} animal(s) born in pens` : '',
+    report.grassRegrown > 0 ? `grass grew back on ${report.grassRegrown} square(s)` : '',
   ].filter((t) => t !== '');
-  const end = state.status === 'lost' ? ' The crew is lost: the run is over.' : '';
+  const end =
+    state.status === 'lost'
+      ? ' The crew is lost: the run is over.'
+      : state.status === 'finished'
+        ? ` That was the last shift: the run is over. Score: ${coinsHeld(state)} coins.`
+        : report.marketOpens
+          ? ' Market day: the market is open this shift.'
+          : '';
   return `Shift ${report.shift} over: ${paid}${hunger}.${more.length > 0 ? ` ${more.join('; ')}.` : ''}${end}`;
 }
 
@@ -208,11 +268,14 @@ export function act(session: FrontierSession, step: FrontierStep): StepResult {
   if (!outcome.done) {
     const tap = outcome.tap;
     let why = refusalText(tap?.kind === 'refused' ? tap.refusal : (outcome.refusal ?? null));
+    if (action.kind === 'plant') why = plantText(outcome.refusal);
     if (tap?.kind === 'tooHard') {
       why =
-        tap.needs === null
-          ? 'No camp level can mine that block.'
-          : `Too hard: it needs a level ${tap.needs} camp over it.`;
+        tap.needs !== null
+          ? `Too hard: it needs a level ${tap.needs} camp over it.`
+          : tap.needsTool !== null
+            ? `Too hard: it needs a ${toolName(tap.needsTool)} in your store (buy one at the market).`
+            : 'Nothing can mine that block.';
     }
     return { session, refused: why, lines: [] };
   }
@@ -276,16 +339,19 @@ function undo(session: FrontierSession): StepResult {
 /**
  * The step a typed choice stands for, or `null` if it is not one. Accepts
  * "tap 3,4" (or "t 3 4"), "place 3,4", "upgrade 2", "demolish 1", "end",
- * "rest 1" (or "rest" with one camp), "close", "undo", or the number of a listed choice.
+ * "rest 1" (or "rest" with one camp), "sell wood 3", "buy animal 1",
+ * "plant 3,4 sapling", "take t1-coal", "deliver", "drop", "deep 3,4",
+ * "close", "undo", or the number of a listed choice.
  */
 export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | null {
   const text = typed.trim().toLowerCase().replace(/\s+/g, ' ');
   if (/^\d+$/.test(text)) {
     return listed[Number(text) - 1] ?? null;
   }
-  const square = /^(tap|t|place|p) (\d+)[ ,]+(\d+)$/.exec(text);
+  const square = /^(tap|t|place|p|deep) (\d+)[ ,]+(\d+)$/.exec(text);
   if (square !== null) {
-    const verb = square[1] === 't' ? 'tap' : square[1] === 'p' ? 'place' : (square[1] ?? '');
+    const verbs: Record<string, string> = { t: 'tap', p: 'place', deep: 'placeDeep' };
+    const verb = verbs[square[1] ?? ''] ?? square[1] ?? '';
     return `${verb} ${square[2] ?? ''},${square[3] ?? ''}`;
   }
   const camp = /^(upgrade|demolish|rest) (\d+)$/.exec(text);
@@ -296,10 +362,39 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
   if (smelter !== null) {
     return `buildSmelter ${smelter[2] ?? ''}`;
   }
+  const pen = /^(pen|buildpen|penin|penout) (\d+)$/.exec(text);
+  if (pen !== null) {
+    const verbs: Record<string, string> = {
+      pen: 'buildPen',
+      buildpen: 'buildPen',
+      penin: 'penIn',
+      penout: 'penOut',
+    };
+    return `${verbs[pen[1] ?? ''] ?? ''} ${pen[2] ?? ''}`;
+  }
   const lantern = /^(lantern|hang|hang lantern|hanglantern) (\d+)$/.exec(text);
   if (lantern !== null) {
     return `hangLantern ${lantern[2] ?? ''}`;
   }
+  const plantStep = /^plant (\d+)[ ,]+(\d+) ([a-z]+)$/.exec(text);
+  if (plantStep !== null) {
+    // "sapling" or "applesapling" (the typed text is lower case).
+    const item = ['sapling', 'appleSapling'].find((id) => id.toLowerCase() === plantStep[3]);
+    return item === undefined ? null : `plant ${plantStep[1] ?? ''},${plantStep[2] ?? ''} ${item}`;
+  }
+  const tradeStep = /^(sell|buy) ([a-z]+) (\d+)$/.exec(text);
+  if (tradeStep !== null) {
+    // Item ids are camelCase ("rawIronOre"); the typed text is lower case.
+    const lots = tradeStep[1] === 'sell' ? FRONTIER_MARKET.sellPrices : FRONTIER_MARKET.buyPrices;
+    const lot = lots.find((l) => l.item.toLowerCase() === tradeStep[2]);
+    return lot === undefined ? null : `${tradeStep[1] ?? ''} ${lot.item} ${tradeStep[3] ?? ''}`;
+  }
+  const take = /^take ([a-z0-9-]+)$/.exec(text);
+  if (take !== null) {
+    return `takeContract ${take[1] ?? ''}`;
+  }
+  if (text === 'deliver') return 'deliver';
+  if (text === 'drop' || text === 'drop contract') return 'dropContract';
   const make = /^make ([a-z-]+)$/.exec(text);
   if (make !== null) {
     return `make ${make[1] ?? ''}`;
@@ -342,9 +437,30 @@ export function listedSteps(session: FrontierSession): FrontierStep[] {
       if (act(session, `demolish ${camp.id}`).refused === null) steps.push(`demolish ${camp.id}`);
       if (smelterRefusal(state, camp.id) === null) steps.push(`buildSmelter ${camp.id}`);
       if (lanternRefusal(state, camp.id) === null) steps.push(`hangLantern ${camp.id}`);
+      for (const kind of ['buildPen', 'penIn', 'penOut'] as const) {
+        if (penRefusal(state, kind, camp.id) === null) steps.push(`${kind} ${camp.id}`);
+      }
     }
     for (const recipe of FRONTIER_RECIPES) {
       if (makeRefusal(state, recipe.id) === null) steps.push(`make ${recipe.id}`);
+    }
+    for (const offer of contractBoard(state)) {
+      if (takeRefusal(state, offer.id) === null) steps.push(`takeContract ${offer.id}`);
+    }
+    if (deliverRefusal(state) === null) steps.push('deliver');
+    if (state.contract !== null) steps.push('dropContract');
+    if (canAfford(state.inventory, FRONTIER_DEEP_CAMP.cost)) {
+      // The deepest places for a deep camp, deepest first (ties row by row).
+      const deeps: { step: FrontierStep; depth: number }[] = [];
+      for (let y = 1; y < height - 1; y += 1) {
+        for (let x = 1; x < width - 1; x += 1) {
+          if (placeRefusal(state, x, y, true) === null) {
+            deeps.push({ step: `placeDeep ${x},${y}`, depth: depthAt(state.cube, x, y) });
+          }
+        }
+      }
+      deeps.sort((a, b) => b.depth - a.depth);
+      steps.push(...deeps.slice(0, LISTED_PLACES).map((p) => p.step));
     }
     if (canAfford(state.inventory, FRONTIER_NEW_CAMP_COST)) {
       // The places that light the most new ground, best first (ties row by row).
@@ -403,6 +519,7 @@ function squareChars(state: FrontierState, sight: string, x: number, y: number):
   else if (state.features[i] === GRASS) first = '"';
   else if (state.features[i] === TREE) first = 'T';
   else if (state.features[i] === APPLE_TREE) first = (state.apples[i] ?? 0) > 0 ? 'A' : 'a';
+  else if (state.planted[i] === true) first = 's';
   else if (depth >= state.cube.size.z) first = '_';
   else {
     const code = topBlockAt(state.cube, x, y);
@@ -459,9 +576,11 @@ export function frontierView(session: FrontierSession): string {
       ? ''
       : state.status === 'lost'
         ? ' · RUN OVER: the crew is lost'
-        : ' · RUN OVER: mine closed';
+        : state.status === 'finished'
+          ? ' · RUN OVER: the last shift is done'
+          : ' · RUN OVER: mine closed';
   lines.push(
-    `Seed ${state.seed} · Shift ${state.shift} · Taps ${state.tapsLeft}/${FRONTIER_SHIFT.taps} · Health ${state.health}/${FRONTIER_SHIFT.startHealth} · Dug ${state.mined}${status}`,
+    `Seed ${state.seed} · Shift ${state.shift}/${FRONTIER_RUN.shifts} · Coins ${coinsHeld(state)} · Taps ${state.tapsLeft}/${FRONTIER_SHIFT.taps} · Health ${state.health}/${FRONTIER_SHIFT.startHealth} · Dug ${state.mined}${status}`,
   );
   const held = [...state.inventory.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
   lines.push(
@@ -471,6 +590,8 @@ export function frontierView(session: FrontierSession): string {
     `Upkeep at the end of this shift: ${stacksText(upkeepDue(state.shift, state.camps.length)) || 'nothing'}`,
   );
   lines.push(`New camp costs ${stacksText(FRONTIER_NEW_CAMP_COST)}.`);
+  lines.push(...goalLines(state));
+  lines.push(...marketLines(state));
   for (const camp of state.camps) {
     const cost = upgradeCostFrom(camp.level);
     const up = cost === null ? 'top level' : `upgrade costs ${stacksText(cost)}`;
@@ -480,14 +601,17 @@ export function frontierView(session: FrontierSession): string {
         ? `; a smelter costs ${stacksText(FRONTIER_SMELTER.cost)}`
         : '';
     const lantern = camp.lantern ? '; a lantern' : '';
+    const pen = camp.pen
+      ? `; a pen of ${camp.penned}/${FRONTIER_PEN.capacity}${camp.breedIn > 0 ? `, an animal born in ${camp.breedIn} shift(s) for ${FRONTIER_PEN.hayPerBirth} hay` : ''}`
+      : '';
     lines.push(
-      `Camp ${camp.id} at ${camp.x},${camp.y}: level ${camp.level}, ring ${campRing(camp)}; ${up}${smelter}${lantern}.`,
+      `${camp.deep ? 'Deep camp' : 'Camp'} ${camp.id} at ${camp.x},${camp.y}: level ${camp.level}, ring ${campRing(camp)}; ${camp.deep ? 'never upgraded' : up}${smelter}${lantern}${pen}.`,
     );
   }
   lines.push('', ...mapLines(state), '');
   lines.push(
     'Map: two characters a square: what is on it, then its depth. ?? fog, -- out of range now.',
-    '  m animal  " grass  T tree  A apple tree (a: no apples)  N camp N\'s middle  + camp ground',
+    '  m animal  " grass  T tree  A apple tree (a: no apples)  s sapling  N camp N\'s middle  + camp ground',
     '  . dirt  # stone  k clay  o coal  H hard rock  i iron  u copper  x crystal  R rubble  _ nothing left',
   );
   const listed = listedSteps(session);
@@ -503,6 +627,51 @@ export function frontierView(session: FrontierSession): string {
     lines.push('  Also: "look X,Y" to see what a square is and what a tap would do.');
   }
   return lines.join('\n');
+}
+
+/** "5 grass for 1 coin" for each lot. */
+function lotsText(lots: { item: string; count: number; coins: number }[]): string {
+  return lots.map((l) => `${l.count} ${l.item} for ${l.coins}`).join(', ');
+}
+
+/** The phase, its goal, the contract held, and contracts done. */
+function goalLines(state: FrontierState): string[] {
+  const phase = runPhase(state);
+  const goal = FRONTIER_PHASES[phase - 1] ?? { title: '', next: '' };
+  const lines = [`Phase ${phase} of 5: ${goal.title}. Next: ${goal.next}`];
+  const held = heldContract(state);
+  if (held !== null) {
+    const ready = deliverRefusal(state) === null ? ' READY: "deliver".' : '';
+    lines.push(
+      `Contract: ${held.name} (tier ${held.tier}): ${stacksText(held.asks)} for ${held.pays} coins.${ready} "drop" gives it up.`,
+    );
+  }
+  const done = state.contractsDone;
+  if (done.some((n) => n > 0)) {
+    lines.push(
+      `Contracts done: tier 1 ${done[0] ?? 0}, tier 2 ${done[1] ?? 0}, tier 3 ${done[2] ?? 0}.`,
+    );
+  }
+  return lines;
+}
+
+/** The market: open today, with its prices, or when it opens next. */
+function marketLines(state: FrontierState): string[] {
+  if (state.status !== 'active') return [];
+  if (!isMarketDay(state)) {
+    return [
+      `Market: opens on shift ${nextMarketShift(state)} (every ${marketEvery(state)} shifts with your best camp).`,
+    ];
+  }
+  return [
+    'Market: OPEN this shift. "sell ITEM N" or "buy ITEM N" trades N lots, 1 tap a trade.',
+    `  Sell (coins a lot): ${lotsText(FRONTIER_MARKET.sellPrices)}.`,
+    `  Buy (coins a lot): ${lotsText(FRONTIER_MARKET.buyPrices)}.`,
+    ...contractBoard(state).map(
+      (c) =>
+        `  Contract "take ${c.id}" (tier ${c.tier}, ${c.name}): ${stacksText(c.asks)} for ${c.pays} coins.`,
+    ),
+  ];
 }
 
 /** How many squares a tap would take or mine something on now. */
@@ -531,9 +700,14 @@ export function lookText(session: FrontierSession, x: number, y: number): string
   const parts = [`${x},${y}: depth ${depth}`];
   if (depth < size.z) {
     const needs = levelNeededFor(code);
-    parts.push(
-      `top block ${blockDefByCode(code).name}${needs === null ? ' (no camp can mine it)' : ` (a level ${needs} camp mines it${needs > 1 && needs <= FRONTIER_DRILL.upToLevel ? `, or a level ${needs - FRONTIER_DRILL.levelBonus} camp with a drill` : ''})`}`,
-    );
+    const tool = toolNeededFor(code);
+    const how =
+      needs !== null
+        ? `a level ${needs} camp mines it`
+        : tool !== null
+          ? `any camp mines it with a ${toolName(tool)}`
+          : 'nothing mines it';
+    parts.push(`top block ${blockDefByCode(code).name} (${how})`);
   }
   const i = x + size.x * y;
   const feature = state.features[i];
@@ -543,7 +717,13 @@ export function lookText(session: FrontierSession, x: number, y: number): string
   const stump = state.stumps[i] ?? NO_FEATURE;
   if (stump !== NO_FEATURE) {
     const tree = stump === APPLE_TREE ? 'an apple tree' : 'a tree';
-    parts.push(`a stump: ${tree} grows back in ${state.regrowIn[i] ?? 0} shift(s)`);
+    const what = state.planted[i] === true ? 'a sapling' : 'a stump';
+    parts.push(`${what}: ${tree} grows in ${state.regrowIn[i] ?? 0} shift(s)`);
+  }
+  if ((state.grassIn[i] ?? -1) >= 0) {
+    parts.push(
+      `cut grass: it grows back in ${state.grassIn[i] ?? 0} shift(s) if grass grows beside it`,
+    );
   }
   if (animalAt(state, x, y) !== null) parts.push('an animal on it');
   const camp = campAt(state.camps, x, y);

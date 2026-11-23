@@ -33,7 +33,7 @@ function play(
 describe('undo (plan A5)', () => {
   it('takes back each action exactly, newest first, and gives its tap back', () => {
     const start = world({
-      top: '#',
+      top: 'C',
       features: [
         { x: AT.x, y: AT.y + 1, feature: GRASS },
         { x: AT.x, y: AT.y + 2, feature: TREE },
@@ -41,7 +41,7 @@ describe('undo (plan A5)', () => {
       inventory: rich(),
     });
     const actions: FrontierAction[] = [
-      { kind: 'tap', x: AT.x, y: AT.y }, // mines stone
+      { kind: 'tap', x: AT.x, y: AT.y }, // mines clay
       { kind: 'tap', x: AT.x, y: AT.y + 1 }, // cuts grass
       { kind: 'tap', x: AT.x, y: AT.y + 2 }, // fells the tree
       { kind: 'place', x: MID + NEXT, y: MID },
@@ -74,7 +74,7 @@ describe('undo (plan A5)', () => {
 
   it('never undoes a catch or an apple pick, and steps past them', () => {
     const start = world({
-      top: '#',
+      top: 'C',
       features: [{ x: AT.x, y: AT.y + 1, feature: APPLE_TREE, apples: 3 }],
       animals: [{ id: 1, x: AT.x, y: AT.y + 2 }],
     });
