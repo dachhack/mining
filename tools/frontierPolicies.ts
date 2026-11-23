@@ -4,7 +4,8 @@
 // random policy draws from its own seeded generator, never the clock).
 //
 // - random:   a step at random among the useful ones (a tap that takes or
-//             mines something, a camp it can place, upgrade or demolish),
+//             mines something, a camp it can place, upgrade or demolish, a
+//             smelter it can build, a recipe it can make),
 //             ending the shift when out of taps; it never closes the mine.
 // - gatherer: tools/frontierRun.ts: upgrades, places up to 3 camps, takes
 //             plants and animals, mines; spends everything as it comes.
@@ -16,7 +17,7 @@
 //             crew is at half health or less until shift IDLE_RESTS_UNTIL,
 //             then lets the crew starve. The hunger path, start to end.
 
-import { FRONTIER_FOODS, FRONTIER_SHIFT } from '../src/data/frontier';
+import { FRONTIER_FOODS, FRONTIER_RECIPES, FRONTIER_SHIFT } from '../src/data/frontier';
 import {
   campAt,
   coverLevels,
@@ -25,6 +26,8 @@ import {
   placeRefusal,
   upgradeRefusal,
   demolishRefusal,
+  makeRefusal,
+  smelterRefusal,
   upkeepDue,
 } from '../src/engine';
 import type { FrontierState } from '../src/engine';
@@ -86,6 +89,10 @@ function randomPolicy(rng: RngState): FrontierPolicy {
     for (const camp of state.camps) {
       if (upgradeRefusal(state, camp.id) === null) options.push(`upgrade ${camp.id}`);
       if (demolishRefusal(state, camp.id) === null) options.push(`demolish ${camp.id}`);
+      if (smelterRefusal(state, camp.id) === null) options.push(`buildSmelter ${camp.id}`);
+    }
+    for (const recipe of FRONTIER_RECIPES) {
+      if (makeRefusal(state, recipe.id) === null) options.push(`make ${recipe.id}`);
     }
     // A few places for a camp, tried at random squares (all of them would be slow).
     for (let i = 0; i < 8; i += 1) {

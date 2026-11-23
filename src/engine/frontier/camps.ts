@@ -274,7 +274,7 @@ export function newlyCovered(ground: CampGround, x: number, y: number): number[]
   const width = ground.cube.size.x;
   const height = ground.cube.size.y;
   const now = coverLevels(ground.camps, width, height);
-  const after = coverLevels([{ id: 0, x, y, level: 1 }], width, height);
+  const after = coverLevels([{ id: 0, x, y, level: 1, smelter: false }], width, height);
   const fresh: number[] = [];
   for (let i = 0; i < after.length; i += 1) {
     if ((after[i] ?? 0) > 0 && (now[i] ?? 0) === 0) {
@@ -311,7 +311,7 @@ export function placeCamp(ground: CampGround, x: number, y: number): CampChange 
   if (placeRefusal(ground, x, y) !== null) {
     return unchanged(ground);
   }
-  const camps = [...ground.camps, { id: ground.nextCampId, x, y, level: 1 }];
+  const camps = [...ground.camps, { id: ground.nextCampId, x, y, level: 1, smelter: false }];
   return {
     camps,
     seen: seenWith(ground.seen, camps, ground.cube.size.x, ground.cube.size.y),

@@ -182,13 +182,14 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
   | 3 | 15 | + iron, copper, crystal, unstable ore, relics, the keystone | 40 wood, 20 clay, 40 stone, 3 animals, 10 apples |
 
 - **Demolishing** a camp needs other camps' circles to cover its whole 3×3 (question 134). It gives nothing back; its ground can then be mined, and what only it lit turns grey.
-- **The recipe book** lists what a new camp and each upgrade cost. Pinned recipes show, in the tray, how much of each item the player holds against what is needed. Pins are saved (question 143).
+- **A smelter** (owner, question 161) can be built at a camp of level 2 or more, from its panel, for [Default] 20 stone and 10 clay and 1 tap. One per camp; it is lost with the camp. While one stands anywhere, the recipe book can smelt: [Default] 2 raw ore + 1 coal make 2 ingots, 1 tap (question 162). What ingots are for comes next (`docs/plans/smelting-and-crafting.md`).
+- **The recipe book** lists what a new camp and each upgrade cost, and what a smelter makes (with a Make button). Pinned recipes show, in the tray, how much of each item the player holds against what is needed. Pins are saved (question 143).
 
 ## 7. Resources
 
 - **Items:** wood, grass, apples, animals, clay, stone, coal, and the ores. Everything gathered goes into one store with no limit.
-- **What uses them:** camps and upgrades (section 6), and upkeep (section 4.2): wood, and grass, apples or animals as food.
-- **For now, coal and the ores have no use.** They are for the rules that come back (section 10) and the contracts (section 8).
+- **What uses them:** camps and upgrades (section 6), and upkeep (section 4.2): wood, and grass, apples or animals as food. Stone and clay build smelters; raw ore and coal smelt into iron and copper ingots (section 6).
+- **Coal and raw iron and copper are smelted into ingots** at a smelter. Ingots have no use yet: the pickaxe, the lantern, the drill and camp level 4 come next, and the first contract asks for them (questions 163 and 164). Crystal and the rare ores have no use yet either.
 - **There is no crafting for now:** the recipe book replaces it, and recipes can be added to it later.
 
 ## 8. Contracts [Decided]

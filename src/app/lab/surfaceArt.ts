@@ -22,6 +22,8 @@ export const SURFACE_PAINT = {
   },
   animal: { wool: '#f2ede2', woolShade: '#cfc6b4', face: '#2d2620', leg: '#2d2620' },
   wood: { bark: '#6b4428', ring: '#c99a62', ringDark: '#9b7044' },
+  ironIngot: { face: '#8d949c', top: '#c4cad1' },
+  copperIngot: { face: '#b8673a', top: '#e39a66' },
 };
 
 /** "mulberry32": numbers 0..1 from a seed, the same every time. Paint only, never the game. */
@@ -454,6 +456,27 @@ export function labItemIcon(item: string, className: string): HTMLCanvasElement 
       ctx.arc(s / 2, s / 2, s * rr, 0, Math.PI * 2);
       ctx.stroke();
     }
+  } else if (item === 'ironIngot' || item === 'copperIngot') {
+    // An ingot: a bar seen at an angle, its top lighter than its face.
+    const p = item === 'ironIngot' ? SURFACE_PAINT.ironIngot : SURFACE_PAINT.copperIngot;
+    ctx.fillStyle = '#2a2420';
+    ctx.fillRect(0, 0, s, s);
+    ctx.fillStyle = p.face;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.1, s * 0.72);
+    ctx.lineTo(s * 0.9, s * 0.72);
+    ctx.lineTo(s * 0.78, s * 0.42);
+    ctx.lineTo(s * 0.22, s * 0.42);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = p.top;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.22, s * 0.42);
+    ctx.lineTo(s * 0.78, s * 0.42);
+    ctx.lineTo(s * 0.7, s * 0.3);
+    ctx.lineTo(s * 0.3, s * 0.3);
+    ctx.closePath();
+    ctx.fill();
   } else {
     return null;
   }

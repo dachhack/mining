@@ -8,6 +8,7 @@
 // says for level N. No DOM code here, so the unit tests run it in Node.
 
 import type { ItemStack } from '../../data';
+import { FRONTIER_RECIPES } from '../../data/frontier';
 import { LAB_NEW_CAMP_COST } from '../../data/labCamps';
 import { MAX_CAMP_LEVEL, upgradeCostFrom } from './campWorld';
 
@@ -16,22 +17,44 @@ export interface Recipe {
   id: string;
   /** What the book calls it. */
   name: string;
-  /** The camp level it makes: 1 for a new camp, N for an upgrade to level N. */
+  /** The camp level it makes: 1 for a new camp, N for an upgrade to level N; 0 for a recipe made in the book. */
   level: number;
   /** What it costs. */
   cost: ItemStack[];
+  /**
+   * What it makes, for a recipe made in the book with its Make button
+   * (smelting: docs/plans/smelting-and-crafting.md); `null` for a camp or an
+   * upgrade, which are built on the map.
+   */
+  makes: ItemStack | null;
 }
 
-/** Every recipe in the book, in order: a new camp, then each upgrade, level 2 first. */
+/** Every recipe in the book, in order: a new camp, then each upgrade, level 2 first, then what a smelter makes. */
 export function labRecipes(): Recipe[] {
   const recipes: Recipe[] = [
-    { id: 'new-camp', name: 'New camp', level: 1, cost: LAB_NEW_CAMP_COST },
+    { id: 'new-camp', name: 'New camp', level: 1, cost: LAB_NEW_CAMP_COST, makes: null },
   ];
   for (let level = 2; level <= MAX_CAMP_LEVEL; level += 1) {
     const cost = upgradeCostFrom(level - 1);
     if (cost !== null) {
-      recipes.push({ id: `upgrade-${level}`, name: `Upgrade camp to level ${level}`, level, cost });
+      recipes.push({
+        id: `upgrade-${level}`,
+        name: `Upgrade camp to level ${level}`,
+        level,
+        cost,
+        makes: null,
+      });
     }
+  }
+  // What a smelter makes (FRONTIER_RECIPES), after the camps.
+  for (const recipe of FRONTIER_RECIPES) {
+    recipes.push({
+      id: recipe.id,
+      name: recipe.name,
+      level: 0,
+      cost: recipe.inputs,
+      makes: recipe.output,
+    });
   }
   return recipes;
 }

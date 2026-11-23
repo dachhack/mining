@@ -15,7 +15,12 @@ import { dirname } from 'node:path';
 
 import { BLOCKS, ITEMS, blockDefByCode } from '../../src/data';
 import type { BlockId, ItemId, ItemStack } from '../../src/data';
-import { FRONTIER_NEW_CAMP_COST, FRONTIER_SHIFT } from '../../src/data/frontier';
+import {
+  FRONTIER_NEW_CAMP_COST,
+  FRONTIER_RECIPES,
+  FRONTIER_SHIFT,
+  FRONTIER_SMELTER,
+} from '../../src/data/frontier';
 import {
   ENGINE_VERSION,
   actLogged,
@@ -28,11 +33,13 @@ import {
   frontierTap,
   hashFrontier,
   levelNeededFor,
+  makeRefusal,
   newlyCovered,
   previewTap,
   placeRefusal,
   shiftUndoCount,
   sightMap,
+  smelterRefusal,
   startLog,
   topBlockAt,
   undoLastAction,
@@ -283,6 +290,14 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
   if (camp !== null) {
     return `${camp[1] ?? ''} ${camp[2] ?? ''}`;
   }
+  const smelter = /^(smelter|buildsmelter|build smelter) (\d+)$/.exec(text);
+  if (smelter !== null) {
+    return `buildSmelter ${smelter[2] ?? ''}`;
+  }
+  const make = /^make ([a-z-]+)$/.exec(text);
+  if (make !== null) {
+    return `make ${make[1] ?? ''}`;
+  }
   const words: Record<string, FrontierStep> = {
     end: 'endShift',
     'end shift': 'endShift',
@@ -303,8 +318,8 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
 const LISTED_PLACES = 5;
 
 /**
- * The choices listed under the view, numbered: every upgrade and demolish
- * that would work, the places for a new camp that light the most new ground
+ * The choices listed under the view, numbered: every upgrade, demolish,
+ * smelter and recipe that would work, the places for a new camp that light the most new ground
  * (if one can be paid for), then undo, end shift, rest at each camp, and close. Taps are
  * not listed one by one (there are hundreds): the view counts them, and
  * "tap X,Y" takes any of them.
@@ -319,6 +334,10 @@ export function listedSteps(session: FrontierSession): FrontierStep[] {
     for (const camp of state.camps) {
       if (act(session, `upgrade ${camp.id}`).refused === null) steps.push(`upgrade ${camp.id}`);
       if (act(session, `demolish ${camp.id}`).refused === null) steps.push(`demolish ${camp.id}`);
+      if (smelterRefusal(state, camp.id) === null) steps.push(`buildSmelter ${camp.id}`);
+    }
+    for (const recipe of FRONTIER_RECIPES) {
+      if (makeRefusal(state, recipe.id) === null) steps.push(`make ${recipe.id}`);
     }
     if (canAfford(state.inventory, FRONTIER_NEW_CAMP_COST)) {
       // The places that light the most new ground, best first (ties row by row).
@@ -448,8 +467,13 @@ export function frontierView(session: FrontierSession): string {
   for (const camp of state.camps) {
     const cost = upgradeCostFrom(camp.level);
     const up = cost === null ? 'top level' : `upgrade costs ${stacksText(cost)}`;
+    const smelter = camp.smelter
+      ? '; a smelter'
+      : camp.level >= FRONTIER_SMELTER.minLevel
+        ? `; a smelter costs ${stacksText(FRONTIER_SMELTER.cost)}`
+        : '';
     lines.push(
-      `Camp ${camp.id} at ${camp.x},${camp.y}: level ${camp.level}, ring ${campRadius(camp.level)}; ${up}.`,
+      `Camp ${camp.id} at ${camp.x},${camp.y}: level ${camp.level}, ring ${campRadius(camp.level)}; ${up}${smelter}.`,
     );
   }
   lines.push('', ...mapLines(state), '');

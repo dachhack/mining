@@ -1,13 +1,28 @@
 // UI lab 2: the recipe book's recipes come from the lab's data.
 import { describe, expect, it } from 'vitest';
+import { FRONTIER_RECIPES } from '../../src/data/frontier';
 import { LAB_CAMP_LEVELS, LAB_NEW_CAMP_COST } from '../../src/data/labCamps';
 import { MAX_CAMP_LEVEL, upgradeCostFrom } from '../../src/app/lab/campWorld';
 import { FIRST_PINS, labRecipes, parsePins, recipeById } from '../../src/app/lab/recipes';
 
 describe('the recipe book', () => {
-  it('holds a new camp, then an upgrade to each level above 1, in order', () => {
-    expect(labRecipes().map((r) => r.id)).toEqual(['new-camp', 'upgrade-2', 'upgrade-3']);
-    expect(labRecipes()).toHaveLength(MAX_CAMP_LEVEL);
+  it('holds a new camp, then an upgrade to each level above 1, then what a smelter makes, in order', () => {
+    expect(labRecipes().map((r) => r.id)).toEqual([
+      'new-camp',
+      'upgrade-2',
+      'upgrade-3',
+      ...FRONTIER_RECIPES.map((r) => r.id),
+    ]);
+    expect(labRecipes().filter((r) => r.makes === null)).toHaveLength(MAX_CAMP_LEVEL);
+  });
+
+  it('asks for what smelting takes, and says what it makes: one source, src/data', () => {
+    for (const made of FRONTIER_RECIPES) {
+      const recipe = recipeById(made.id);
+      expect(recipe?.cost).toBe(made.inputs);
+      expect(recipe?.makes).toBe(made.output);
+      expect(recipe?.level).toBe(0);
+    }
   });
 
   it('asks for exactly what the camp tool and the upgrades cost: one source, src/data', () => {

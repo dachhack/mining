@@ -1161,3 +1161,41 @@ body[data-screen='lab2'] {
   overflow: visible;
   mask-image: none;
 }
+
+/* Smelting and crafting: a recipe made in the book has a Make button above its pin. */
+.lab2-recipe-buttons {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lab .lab2-recipe-make {
+  min-width: 64px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #1d1610;
+  background: linear-gradient(#ffb067, #e07b32);
+  border: 1px solid #ffc48d;
+}
+
+.lab .lab2-recipe-make:disabled {
+  color: #8f8578;
+  background: #26201b;
+  border: 1px dashed #3f362f;
+}
+
+.lab2-recipe-why {
+  font-size: 0.72rem;
+  color: #c9a27c;
+}
+
+.lab2-book-note {
+  min-height: 1.2em;
+  margin: 0;
+  font-size: 0.85rem;
+  color: #f0c58a;
+}

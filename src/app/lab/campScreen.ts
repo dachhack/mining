@@ -20,7 +20,7 @@
 
 import { BLOCKS, blockDefByCode, ITEMS } from '../../data';
 import type { ItemId, ItemStack } from '../../data';
-import { FRONTIER_SHIFT } from '../../data/frontier';
+import { FRONTIER_SHIFT, FRONTIER_SMELTER } from '../../data/frontier';
 import { LAB_ITEMS, LAB_NEW_CAMP_COST } from '../../data/labCamps';
 import type { HigherNeighbour, SquareDirection } from '../../engine';
 import { SQUARE_STEPS, loadFrontier, saveFrontier } from '../../engine';
@@ -41,9 +41,13 @@ import {
   minesText,
   newCampWorld,
   newlyCovered,
+  buildCampSmelter,
   demolishCamp,
   demolishRefusal,
   footprintOf,
+  makeCampRecipe,
+  makeRefusal,
+  smelterRefusal,
   placeCamp,
   PREPARED_LAB2_KEY,
   placeRefusal,
@@ -369,6 +373,9 @@ export function mountCampLab(
   bookCard.setAttribute('aria-modal', 'true');
   bookCard.setAttribute('aria-label', 'Recipe book');
   bookCard.hidden = true;
+  /** A line at the top of the book saying what was just made; empty until something is. */
+  const bookNote = element('p', 'lab2-book-note');
+  bookNote.dataset['testid'] = 'lab2-book-note';
 
   page.append(top.bar, counter, frame, hint, tray, bookCard);
   root.replaceChildren(page);
@@ -997,6 +1004,21 @@ export function mountCampLab(
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(camp.level), tx, ty + tagR * 0.06);
+
+    // A smelter: a small flame in a tag at the bottom left.
+    if (camp.smelter) {
+      const fx = cx - r * 0.78;
+      ctx.fillStyle = CAMP_MARKS.levelTag;
+      ctx.beginPath();
+      ctx.arc(fx, ty, tagR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ff8a2b';
+      ctx.beginPath();
+      ctx.moveTo(fx, ty - tagR * 0.7);
+      ctx.quadraticCurveTo(fx + tagR * 0.65, ty, fx, ty + tagR * 0.6);
+      ctx.quadraticCurveTo(fx - tagR * 0.65, ty, fx, ty - tagR * 0.7);
+      ctx.fill();
+    }
   }
 
   /** A circle round square (x, y) at `radius` squares, as the ring a camp lights. */
@@ -1095,7 +1117,7 @@ export function mountCampLab(
     // A faint tent where the camp would stand.
     ctx.save();
     ctx.globalAlpha = 0.55;
-    drawCampMarker(ctx, { id: 0, x: target.x, y: target.y, level: 1 }, c, false);
+    drawCampMarker(ctx, { id: 0, x: target.x, y: target.y, level: 1, smelter: false }, c, false);
     ctx.restore();
   }
 
@@ -1217,6 +1239,11 @@ export function mountCampLab(
         count: entry.count,
         icon: () => blockIcon(entry.iconBlock, 'lab-chip-icon'),
       });
+    }
+    // What a smelter makes (no block yields it, so it has its own icon).
+    for (const item of ['ironIngot', 'copperIngot']) {
+      const count = counts.get(item) ?? 0;
+      if (count > 0) all.push({ item, count, icon: () => labItemIcon(item, 'lab-chip-icon') });
     }
     // What the next steps cost comes first, so it never hides off the right
     // edge (review of PR #122): the lowest camp's next upgrade, then a new
@@ -1369,7 +1396,8 @@ export function mountCampLab(
 
   /** A recipe's icon: a tent, with the camp level it makes for an upgrade. */
   function recipeIcon(recipe: Recipe): HTMLElement {
-    const icon = element('span', 'lab2-recipe-icon', '⛺');
+    // A camp or an upgrade: a tent; something a smelter makes: a flame.
+    const icon = element('span', 'lab2-recipe-icon', recipe.makes === null ? '⛺' : '🔥');
     if (recipe.level > 1) {
       icon.append(element('span', 'lab2-recipe-level', String(recipe.level)));
     }
@@ -1413,6 +1441,10 @@ export function mountCampLab(
 
   /** Go to where `recipe` is built. */
   function buildFrom(recipe: Recipe): void {
+    if (recipe.makes !== null) {
+      openBook(); // made in the book, with its Make button
+      return;
+    }
     if (recipe.level === 1) {
       setMode({ kind: 'placing', target: null });
       return;
@@ -1428,6 +1460,7 @@ export function mountCampLab(
   /** Open the recipe book card, with a history entry for the back button to take away. */
   function openBook(): void {
     if (mode.kind === 'book') return;
+    bookNote.textContent = '';
     window.history.pushState({ lab2Book: true }, '');
     setMode({ kind: 'book' });
   }
@@ -1475,16 +1508,57 @@ export function mountCampLab(
         if (fresh !== null) fresh.scrollTop = scroll;
       });
       const text = element('div', 'lab2-recipe-text');
+      const makes = recipe.makes;
+      const name =
+        makes === null
+          ? recipe.name
+          : `${recipe.name} → ${makes.count} ${itemName(makes.item).toLowerCase()}${makes.count > 1 ? 's' : ''}`;
       text.append(
-        element('span', 'lab2-recipe-name', recipe.name),
+        element('span', 'lab2-recipe-name', name),
         costRow(recipe.cost, `lab2-recipe-${recipe.id}`),
       );
-      row.append(recipeIcon(recipe), text, pin);
+      const buttons = element('div', 'lab2-recipe-buttons');
+      if (makes !== null) {
+        // Made here, for 1 tap, while a smelter stands (smelting and crafting).
+        const why = makeRefusal(world, recipe.id);
+        const make = button('lab2-recipe-make', 'Make');
+        make.dataset['testid'] = `lab2-recipe-make-${recipe.id}`;
+        make.disabled = why !== null;
+        make.addEventListener('click', () => makeInBook(recipe));
+        buttons.append(make);
+        if (why === 'noSmelter') {
+          const note = element(
+            'span',
+            'lab2-recipe-why',
+            'Needs a smelter: build one at a level 2 camp.',
+          );
+          note.dataset['testid'] = `lab2-recipe-why-${recipe.id}`;
+          text.append(note);
+        }
+      }
+      buttons.append(pin);
+      row.append(recipeIcon(recipe), text, buttons);
       list.append(row);
     }
     const inner = element('div', 'lab2-book-inner');
-    inner.append(head, list);
+    inner.append(head, bookNote, list);
     bookCard.replaceChildren(inner);
+  }
+
+  /** Make `recipe` once, from the book: its inputs and 1 tap. */
+  function makeInBook(recipe: Recipe): void {
+    const next = makeCampRecipe(world, recipe.id);
+    if (next === world || recipe.makes === null) {
+      return; // the button is off whenever this would happen
+    }
+    remember({ kind: 'make', recipe: recipe.id });
+    const list = bookCard.querySelector('.lab2-book-list');
+    const scroll = list === null ? 0 : list.scrollTop;
+    const made = itemName(recipe.makes.item).toLowerCase();
+    bookNote.textContent = `Made ${recipe.makes.count} ${made}${recipe.makes.count > 1 ? 's' : ''}.`;
+    setWorld(next);
+    const fresh = bookCard.querySelector('.lab2-book-list');
+    if (fresh !== null) fresh.scrollTop = scroll;
   }
 
   function showPlacingTray(target: { x: number; y: number } | null): void {
@@ -1605,6 +1679,26 @@ export function mountCampLab(
       actions.append(upgrade);
     }
     tray.replaceChildren(head, line, next, actions);
+
+    // The smelter (smelting and crafting): built here from level 2, or here already.
+    if (camp.smelter) {
+      const has = element(
+        'p',
+        'lab2-panel-line',
+        '🔥 Smelter here · smelt ore in the recipe book 📖',
+      );
+      has.dataset['testid'] = 'lab2-camp-smelter';
+      tray.append(has);
+    } else if (camp.level >= FRONTIER_SMELTER.minLevel) {
+      const row = element('div', 'lab2-actions');
+      row.append(costRow(FRONTIER_SMELTER.cost, 'lab2-smelter-cost'));
+      const build = button('lab2-button', '🔥 Build smelter');
+      build.dataset['testid'] = 'lab2-build-smelter';
+      build.disabled = smelterRefusal(world, camp.id) !== null;
+      build.addEventListener('click', () => confirmSmelter(camp.id));
+      row.append(build);
+      tray.append(row);
+    }
   }
 
   // ----- Changing the world -----
@@ -1681,6 +1775,16 @@ export function mountCampLab(
       fromRadius: campRadius(before.level),
       toRadius: campRadius(before.level + 1),
     });
+  }
+
+  function confirmSmelter(id: number): void {
+    const next = buildCampSmelter(world, id);
+    if (next === world) {
+      return; // the button is off whenever this would happen
+    }
+    remember({ kind: 'buildSmelter', id });
+    setWorld(next);
+    setHint(`A smelter at camp ${id}: smelt ore into ingots in the recipe book 📖.`, false);
   }
 
   function confirmDemolish(id: number): void {

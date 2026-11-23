@@ -23,8 +23,9 @@
 //   (a felled tree, with nothing growing on it, on ground never mined), and
 //   every stump waits;
 //   nothing grows on a camp's ground.
+// - SMELTERS: only at camps of FRONTIER_SMELTER.minLevel or more.
 
-import { FRONTIER_SHIFT, FRONTIER_SURFACE } from '../src/data/frontier';
+import { FRONTIER_SHIFT, FRONTIER_SMELTER, FRONTIER_SURFACE } from '../src/data/frontier';
 import {
   SQUARE_STEPS,
   campAt,
@@ -125,6 +126,12 @@ export function checkStep(
     if (before.seen[i] === true && !seen) say(`square ${i} was seen and is not now`);
     if ((lit[i] ?? 0) > 0 && !seen) say(`square ${i} is lit but not seen`);
   });
+
+  // Smelters: only at a camp of the level that may have one.
+  for (const camp of after.camps) {
+    if (camp.smelter && camp.level < FRONTIER_SMELTER.minLevel)
+      say(`a smelter at camp ${camp.id}, of level ${camp.level}`);
+  }
 
   // The surface.
   const squares = new Set<string>();

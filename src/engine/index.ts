@@ -55,8 +55,11 @@ import type { GameState } from './state';
  *        also covers the changes after the playtest of PR #146 (#147: 100
  *        taps a shift, stumps wait under camps), which should have bumped
  *        and did not.
+ * 0.8.0: smelting and crafting, PR 1: the smelter and ingots
+ *        (docs/plans/smelting-and-crafting.md). First engine PR of the batch
+ *        after the owner's answers of 2026-11-23 (questions 159 to 164).
  */
-export const ENGINE_VERSION = '0.7.0';
+export const ENGINE_VERSION = '0.8.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
@@ -478,6 +481,15 @@ export type { CampChange, CampGround, PlaceRefusal, Sight } from './frontier/cam
 export { animalAt, gained, harvestAt } from './frontier/surface';
 export type { FrontierHarvest, HarvestKind } from './frontier/surface';
 export { frontierTap, previewTap } from './frontier/tap';
+export {
+  buildSmelter,
+  frontierRecipe,
+  hasSmelter,
+  makeRecipe,
+  makeRefusal,
+  smelterRefusal,
+} from './frontier/smelting';
+export type { MakeRefusal, SmelterRefusal } from './frontier/smelting';
 export type { FrontierTap, FrontierTapKind } from './frontier/tap';
 export { hashFrontier } from './frontier/hash';
 // Shifts (plan A4).
