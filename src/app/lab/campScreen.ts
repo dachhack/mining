@@ -407,27 +407,260 @@ export function mountCampLab(
   /** The squares a new camp on the tool's target would light: for the preview. */
   let preview: Set<number> = new Set();
 
-  function draw(now: number = performance.now()): void {
+  // The ground (fog, blocks, plants, greyed squares, the lit edge) is drawn
+  // into `ground`, an offscreen canvas, and each frame copies it; only what
+  // moves (animals, the place preview, camps, effects) is drawn every frame.
+  // On a fully revealed map, redrawing every square each frame made the game
+  // slow (owner, after the playtest of 8842e83). So:
+  // - a tap draws the ground again only around the squares it changed;
+  // - `ground` reaches GROUND_MARGIN css pixels past each side of the view,
+  //   drawn for the camera as it was then (`groundCamera`), so a pan only
+  //   shifts the copy, until it nears the margin's edge or the pan stops;
+  // - a zoom, or a new canvas size, draws it all again.
+  const ground = document.createElement('canvas');
+  /** How far, in css pixels, the ground reaches past each side of the view. */
+  const GROUND_MARGIN = 160;
+  /** How long after the camera last moved the ground is drawn again for where it stopped, in ms. */
+  const GROUND_SETTLE_MS = 150;
+  /** The camera the ground was drawn for. */
+  let groundCamera: LabCamera = { ...camera };
+  /** The world (and what is seen) the ground was last drawn from. */
+  let groundKey: unknown[] = [];
+  /** The zoom and canvas size the ground was drawn for: a change draws it all again. */
+  let drawnView = '';
+  /** How many times the ground has been drawn, and whether last time it was all of it or a part: for the e2e tests. */
+  let groundDraws = 0;
+  let groundDrawn: 'all' | 'part' = 'all';
+  /** The timer that draws the ground again once a pan stops. */
+  let settleTimer = 0;
+
+  /**
+   * What each square looked like when the ground was last drawn: its top
+   * block, depth, plant, apples, stump and sight. A tap changes one or two
+   * squares, so only the area around them is drawn again (see `drawGround`).
+   */
+  let drawnSquares: string[] = [];
+
+  /** How square `i` looks, as one string, for spotting the squares that changed. */
+  function squareLook(i: number): string {
+    return [
+      tops[i],
+      world.lab.depths.depths[i],
+      world.surface.features[i],
+      world.surface.apples[i],
+      world.surface.stumps[i],
+      sights[i],
+    ].join(',');
+  }
+
+  /**
+   * Run `paint` with the camera set to the one the ground was drawn for, so
+   * that `toPx` and everything that draws a square place it on the ground.
+   */
+  function atGroundCamera(paint: () => void): void {
+    const now = camera;
+    camera = groundCamera;
+    try {
+      paint();
+    } finally {
+      camera = now;
+    }
+  }
+
+  /**
+   * Bring `ground` up to date: all of it when the zoom or the canvas changed,
+   * when the camera has moved nearly to the edge of its margin, or when
+   * `settle` is set (a pan has stopped); otherwise only the squares that
+   * changed, with 3 squares round them (shadows, forest edges, the lit edge
+   * and the fog's mottle reach that far).
+   */
+  function drawGround(width: number, height: number, ratio: number, settle: boolean): void {
+    const c = cellPixels();
+    const viewKey = [camera.cells, width, height, ratio].join(',');
+    const shiftX = (groundCamera.x - camera.x) * c;
+    const shiftY = (groundCamera.y - camera.y) * c;
+    const moved = shiftX !== 0 || shiftY !== 0;
+    const tooFar = Math.abs(shiftX) > GROUND_MARGIN || Math.abs(shiftY) > GROUND_MARGIN;
+    const size = world.lab.state.size;
+    const pixelWidth = Math.round((width + 2 * GROUND_MARGIN) * ratio);
+    const pixelHeight = Math.round((height + 2 * GROUND_MARGIN) * ratio);
+    const ctx = ground.getContext('2d');
+    if (ctx === null) {
+      return;
+    }
+    if (viewKey !== drawnView || tooFar || (settle && moved)) {
+      // All of it, for the camera as it is now.
+      if (ground.width !== pixelWidth || ground.height !== pixelHeight) {
+        ground.width = pixelWidth;
+        ground.height = pixelHeight;
+      }
+      groundCamera = { ...camera };
+      drawnView = viewKey;
+      groundKey = [world.lab.state, world.lab.depths, world.surface, world.camps, sights];
+      drawnSquares = [];
+      for (let i = 0; i < size.x * size.y; i += 1) drawnSquares.push(squareLook(i));
+      groundDraws += 1;
+      groundDrawn = 'all';
+      ctx.setTransform(ratio, 0, 0, ratio, GROUND_MARGIN * ratio, GROUND_MARGIN * ratio);
+      ctx.imageSmoothingEnabled = true;
+      drawGroundOn(ctx, null);
+      return;
+    }
+    const key = [world.lab.state, world.lab.depths, world.surface, world.camps, sights];
+    if (key.every((k, i) => k === groundKey[i])) {
+      return; // the same world: the ground is as it was
+    }
+    groundKey = key;
+    // The squares that look different now: their bounding box, if any.
+    const looks: string[] = [];
+    for (let i = 0; i < size.x * size.y; i += 1) looks.push(squareLook(i));
+    let area: { x0: number; y0: number; x1: number; y1: number } | null = null;
+    for (let i = 0; i < looks.length; i += 1) {
+      if (looks[i] === drawnSquares[i]) continue;
+      const x = i % size.x;
+      const y = Math.floor(i / size.x);
+      area =
+        area === null
+          ? { x0: x, y0: y, x1: x, y1: y }
+          : {
+              x0: Math.min(area.x0, x),
+              y0: Math.min(area.y0, y),
+              x1: Math.max(area.x1, x),
+              y1: Math.max(area.y1, y),
+            };
+    }
+    drawnSquares = looks;
+    if (area === null) {
+      return; // nothing on the ground changed (camps are drawn on top)
+    }
+    groundDraws += 1;
+    groundDrawn = 'part';
+    const reach = 3;
+    const part = {
+      x0: area.x0 - reach,
+      y0: area.y0 - reach,
+      x1: area.x1 + reach,
+      y1: area.y1 + reach,
+    };
+    atGroundCamera(() => {
+      // Only the part is drawn again: clipped to it, on whole device pixels
+      // (a clip edge through the middle of a pixel would blend the old
+      // ground and the new along it). Squares just outside the part spill
+      // into it (the lit edge's glow, a forest's edge, a shadow), so they
+      // are drawn too, and clipped.
+      const from = toPx(part.x0, part.y0);
+      const to = toPx(part.x1 + 1, part.y1 + 1);
+      const left = Math.floor((from.px + GROUND_MARGIN) * ratio);
+      const top = Math.floor((from.py + GROUND_MARGIN) * ratio);
+      const right = Math.ceil((to.px + GROUND_MARGIN) * ratio);
+      const bottom = Math.ceil((to.py + GROUND_MARGIN) * ratio);
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.beginPath();
+      ctx.rect(left, top, right - left, bottom - top);
+      ctx.clip();
+      ctx.setTransform(ratio, 0, 0, ratio, GROUND_MARGIN * ratio, GROUND_MARGIN * ratio);
+      drawGroundOn(ctx, {
+        x0: part.x0 - 3,
+        y0: part.y0 - 3,
+        x1: part.x1 + 3,
+        y1: part.y1 + 3,
+      });
+      ctx.restore();
+    });
+  }
+
+  function draw(now: number = performance.now(), settle = false): void {
     const ready = prepareCanvas(canvas);
     if (ready === null) {
       return;
     }
     const { ctx } = ready;
+    const c = cellPixels();
+    const ratio = window.devicePixelRatio || 1;
+    drawGround(ready.width, ready.height, ratio, settle);
+    // The ground, shifted by however far the camera has moved since it was
+    // drawn (in whole device pixels, so it is copied, not resampled).
+    const shiftX = Math.round(((groundCamera.x - camera.x) * c - GROUND_MARGIN) * ratio);
+    const shiftY = Math.round(((groundCamera.y - camera.y) * c - GROUND_MARGIN) * ratio);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(ground, shiftX, shiftY);
+    ctx.restore();
+    if (groundCamera.x !== camera.x || groundCamera.y !== camera.y) {
+      // Panning: once the camera stops, draw the ground for where it stopped.
+      window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(() => draw(performance.now(), true), GROUND_SETTLE_MS);
+    }
+
+    drawAnimals(ctx, c);
+    if (mode.kind === 'placing' && mode.target !== null) {
+      drawPlacePreview(ctx, mode.target, c, now);
+    }
+    for (const camp of world.camps) {
+      if (sightOf(camp.x, camp.y) === 'shown') {
+        const selected = mode.kind === 'camp' && mode.id === camp.id;
+        if (selected) {
+          drawRing(ctx, camp.x, camp.y, campRadius(camp.level), c, 1, false);
+        }
+        drawCampMarker(ctx, camp, c, selected);
+      }
+    }
+    drawEffects(ctx, now, c);
+    writeCanvasData(c);
+  }
+
+  /** True if square (x, y), or one within 2 squares of it, is fog. */
+  function fogNear(x: number, y: number): boolean {
+    for (let dy = -2; dy <= 2; dy += 1) {
+      for (let dx = -2; dx <= 2; dx += 1) {
+        if (sightOf(x + dx, y + dy) === 'fog') return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * The ground: fog, then every lit or greyed square, then the edge of the
+   * lit area. With `part`, only the squares in it (the caller clips to it).
+   */
+  function drawGroundOn(
+    ctx: CanvasRenderingContext2D,
+    part: { x0: number; y0: number; x1: number; y1: number } | null,
+  ): void {
     const css = view();
     const c = cellPixels();
     const size = world.lab.state.size;
-    const x0 = Math.max(0, Math.floor(camera.x));
-    const y0 = Math.max(0, Math.floor(camera.y));
-    const x1 = Math.min(size.x - 1, Math.ceil(camera.x + camera.cells));
-    const y1 = Math.min(size.y - 1, Math.ceil(camera.y + rowsOf(camera, css)));
+    const margin = GROUND_MARGIN / c; // the ground's margin, in squares
+    // The squares in view and in the margin, or in `part` (as far as it is in them).
+    const x0 = Math.max(0, Math.floor(camera.x - margin), part?.x0 ?? 0);
+    const y0 = Math.max(0, Math.floor(camera.y - margin), part?.y0 ?? 0);
+    const x1 = Math.min(
+      size.x - 1,
+      Math.ceil(camera.x + camera.cells + margin),
+      part?.x1 ?? size.x,
+    );
+    const y1 = Math.min(
+      size.y - 1,
+      Math.ceil(camera.y + rowsOf(camera, css) + margin),
+      part?.y1 ?? size.y,
+    );
 
     // Fog fills everything first, edge to edge (no gaps between fog squares).
     ctx.fillStyle = CAMP_MARKS.fog;
-    ctx.fillRect(0, 0, css.width, css.height);
-    // A faint, soft mottle, so the fog reads as darkness over ground, not a hole.
-    for (let y = y0 - 1; y <= y1 + 1; y += 1) {
-      for (let x = x0 - 1; x <= x1 + 1; x += 1) {
-        if ((x * 7 + y * 13) % 6 === 0) {
+    ctx.fillRect(
+      -GROUND_MARGIN,
+      -GROUND_MARGIN,
+      css.width + 2 * GROUND_MARGIN,
+      css.height + 2 * GROUND_MARGIN,
+    );
+    // A faint, soft mottle, so the fog reads as darkness over ground, not a
+    // hole. A patch reaches under 2 squares or so either way; where all of
+    // those are lit or greyed, their squares cover it, so it is not drawn.
+    // A patch reaches about 3 squares, so those just outside are drawn too.
+    for (let y = y0 - 3; y <= y1 + 3; y += 1) {
+      for (let x = x0 - 3; x <= x1 + 3; x += 1) {
+        if ((x * 7 + y * 13) % 6 === 0 && fogNear(x, y)) {
           const { px, py } = toPx(x, y);
           const glow = ctx.createRadialGradient(
             px + c / 2,
@@ -485,22 +718,12 @@ export function mountCampLab(
         }
       }
     }
+  }
 
-    drawAnimals(ctx, c);
-    if (mode.kind === 'placing' && mode.target !== null) {
-      drawPlacePreview(ctx, mode.target, c, now);
-    }
-    for (const camp of world.camps) {
-      if (sightOf(camp.x, camp.y) === 'shown') {
-        const selected = mode.kind === 'camp' && mode.id === camp.id;
-        if (selected) {
-          drawRing(ctx, camp.x, camp.y, campRadius(camp.level), c, 1, false);
-        }
-        drawCampMarker(ctx, camp, c, selected);
-      }
-    }
-    drawEffects(ctx, now, c);
-
+  /** What the map shows, as data attributes on the canvas, for the e2e tests. */
+  function writeCanvasData(c: number): void {
+    canvas.dataset['groundDraws'] = String(groundDraws);
+    canvas.dataset['groundDrawn'] = groundDrawn;
     canvas.dataset['camX'] = String(camera.x);
     canvas.dataset['camY'] = String(camera.y);
     canvas.dataset['cells'] = String(camera.cells);
