@@ -4,6 +4,7 @@
 // --frontier` use it. Everything goes through the engine's public surface.
 
 import {
+  FRONTIER_DEEP_CAMP,
   FRONTIER_DRILL,
   FRONTIER_LANTERN,
   FRONTIER_MARKET,
@@ -13,8 +14,11 @@ import {
   FRONTIER_STEEL_DRILL,
 } from '../src/data/frontier';
 import {
+  campAt,
   canAfford,
   contractBoard,
+  coverLevelAt,
+  footprintOf,
   contractById,
   coverLevels,
   openTiers,
@@ -339,8 +343,9 @@ export function contractStep(state: FrontierState): FrontierStep | null {
 /**
  * A deep camp (progression PR 6), once it holds the kit and none stands:
  * on the deepest level 3 x 3 it may stand on, so the ground under its pit
- * is lit and mined as a level-3 camp's. Ties go to the square met first,
- * row by row. `null` if it cannot place one.
+ * is lit and mined as a level-3 camp's (ties go to the square met first,
+ * row by row); with none, it flattens a patch deep enough (`flattenStep`).
+ * `null` if it can do neither.
  */
 export function deepStep(state: FrontierState): FrontierStep | null {
   if ((state.inventory.get('campKit') ?? 0) < 1 || state.camps.some((c) => c.deep)) return null;
@@ -352,7 +357,43 @@ export function deepStep(state: FrontierState): FrontierStep | null {
       if (best === null || depth > best.depth) best = { x, y, depth };
     }
   }
-  return best === null ? null : `placeDeep ${best.x},${best.y}`;
+  if (best !== null) return `placeDeep ${best.x},${best.y}`;
+  return flattenStep(state);
+}
+
+/**
+ * Flatten ground for a deep camp: among the lit 3 x 3 patches, clear of
+ * camps, whose squares are all at least FRONTIER_DEEP_CAMP.minDepth deep,
+ * take the one closest to level (smallest gap between its deepest and
+ * shallowest squares), and mine one of its shallowest squares that can be
+ * mined now. A pit's floor is terraced by the level rule, so a level 3 x 3
+ * that deep seldom exists until it is dug for. `null` if no such patch has
+ * a square it can mine.
+ */
+function flattenStep(state: FrontierState): FrontierStep | null {
+  let best: { squares: { x: number; y: number; depth: number }[]; gap: number } | null = null;
+  for (let y = 1; y < state.cube.size.y - 1; y += 1) {
+    for (let x = 1; x < state.cube.size.x - 1; x += 1) {
+      const squares = footprintOf(x, y).map((s) => ({
+        ...s,
+        depth: depthAt(state.cube, s.x, s.y),
+      }));
+      const deepEnough = squares.every((s) => s.depth >= FRONTIER_DEEP_CAMP.minDepth);
+      const clear = squares.every((s) => campAt(state.camps, s.x, s.y) === null);
+      const lit = squares.every((s) => coverLevelAt(state.camps, s.x, s.y) > 0);
+      if (!deepEnough || !clear || !lit) continue;
+      const depths = squares.map((s) => s.depth);
+      const gap = Math.max(...depths) - Math.min(...depths);
+      // A patch with a square it can mine now (a level patch is placed on, above).
+      const minable = squares.some((s) => previewTap(state, s.x, s.y).kind === 'mined');
+      if (minable && (best === null || gap < best.gap)) best = { squares, gap };
+    }
+  }
+  if (best === null) return null;
+  const shallowest = [...best.squares]
+    .sort((a, b) => a.depth - b.depth)
+    .find((s) => previewTap(state, s.x, s.y).kind === 'mined');
+  return shallowest === undefined ? null : `tap ${shallowest.x},${shallowest.y}`;
 }
 
 /**
