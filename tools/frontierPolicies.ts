@@ -5,7 +5,8 @@
 //
 // - random:   a step at random among the useful ones (a tap that takes or
 //             mines something, a camp it can place, upgrade or demolish, a
-//             smelter it can build, a recipe it can make),
+//             smelter it can build, a recipe it can make, a lantern it
+//             can hang),
 //             ending the shift when out of taps; it never closes the mine.
 // - gatherer: tools/frontierRun.ts: upgrades, places up to 3 camps, takes
 //             plants and animals, mines; spends everything as it comes.
@@ -26,6 +27,7 @@ import {
   placeRefusal,
   upgradeRefusal,
   demolishRefusal,
+  lanternRefusal,
   makeRefusal,
   smelterRefusal,
   upkeepDue,
@@ -90,6 +92,7 @@ function randomPolicy(rng: RngState): FrontierPolicy {
       if (upgradeRefusal(state, camp.id) === null) options.push(`upgrade ${camp.id}`);
       if (demolishRefusal(state, camp.id) === null) options.push(`demolish ${camp.id}`);
       if (smelterRefusal(state, camp.id) === null) options.push(`buildSmelter ${camp.id}`);
+      if (lanternRefusal(state, camp.id) === null) options.push(`hangLantern ${camp.id}`);
     }
     for (const recipe of FRONTIER_RECIPES) {
       if (makeRefusal(state, recipe.id) === null) options.push(`make ${recipe.id}`);

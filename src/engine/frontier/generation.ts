@@ -296,7 +296,9 @@ export function createFrontier(seed: number): FrontierState {
   for (const cell of surface.clay) {
     cube.blocks[cell] = BLOCKS.clay.code;
   }
-  const camps: FrontierCamp[] = [{ id: 1, x: start.x, y: start.y, level: 1, smelter: false }];
+  const camps: FrontierCamp[] = [
+    { id: 1, x: start.x, y: start.y, level: 1, smelter: false, lantern: false },
+  ];
   return {
     version: FRONTIER_STATE_VERSION,
     seed,

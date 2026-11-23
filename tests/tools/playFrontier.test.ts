@@ -72,6 +72,10 @@ describe('the new game’s play interface (plan B2)', () => {
     expect(stepOf('rest 1', listed)).toBe('rest 1');
     expect(stepOf('rest', listed)).toBe('rest 1');
     expect(stepOf('rest', ['endShift', 'rest 1', 'rest 2', 'close'])).toBeNull();
+    expect(stepOf('smelter 2', listed)).toBe('buildSmelter 2');
+    expect(stepOf('make iron-pickaxe', listed)).toBe('make iron-pickaxe');
+    expect(stepOf('lantern 2', listed)).toBe('hangLantern 2');
+    expect(stepOf('hang lantern 3', listed)).toBe('hangLantern 3');
     expect(stepOf('dig', listed)).toBeNull();
     expect(stepOf('9', listed)).toBeNull();
   });

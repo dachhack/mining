@@ -205,7 +205,7 @@ describe('roaming animals (they move at End shift, plan A4)', () => {
       rng: 12345,
     });
     // Dig a pit at (3, 10) and (2, 9): taps need a lit square, so light the whole map first.
-    w = { ...w, camps: [{ id: 1, x: MID, y: MID, level: 3, smelter: false }] };
+    w = { ...w, camps: [{ id: 1, x: MID, y: MID, level: 3, smelter: false, lantern: false }] };
     for (const [x, y] of [
       [3, 10],
       [2, 9],

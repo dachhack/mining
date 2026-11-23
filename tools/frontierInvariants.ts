@@ -24,8 +24,15 @@
 //   every stump waits;
 //   nothing grows on a camp's ground.
 // - SMELTERS: only at camps of FRONTIER_SMELTER.minLevel or more.
+// - LANTERNS: hung ones came from the store: a camp gains a lantern only as
+//   one lantern leaves the store.
 
-import { FRONTIER_SHIFT, FRONTIER_SMELTER, FRONTIER_SURFACE } from '../src/data/frontier';
+import {
+  FRONTIER_LANTERN,
+  FRONTIER_SHIFT,
+  FRONTIER_SMELTER,
+  FRONTIER_SURFACE,
+} from '../src/data/frontier';
 import {
   SQUARE_STEPS,
   campAt,
@@ -131,6 +138,15 @@ export function checkStep(
   for (const camp of after.camps) {
     if (camp.smelter && camp.level < FRONTIER_SMELTER.minLevel)
       say(`a smelter at camp ${camp.id}, of level ${camp.level}`);
+  }
+
+  // Lanterns: each one newly hung left the store.
+  const hungBefore = new Set(before.camps.filter((c) => c.lantern).map((c) => c.id));
+  const newlyHung = after.camps.filter((c) => c.lantern && !hungBefore.has(c.id)).length;
+  if (newlyHung > 0) {
+    const held = (s: FrontierState): number => s.inventory.get(FRONTIER_LANTERN.item) ?? 0;
+    if (held(before) - held(after) !== newlyHung)
+      say(`${newlyHung} lantern(s) hung, but the store went ${held(before)} -> ${held(after)}`);
   }
 
   // The surface.

@@ -95,7 +95,14 @@ describe('placing a camp (plan A2)', () => {
     expect(fresh.length).toBeGreaterThan(0);
     const after = placeFrontierCamp(before, MID + NEXT, MID);
     expect(after.camps).toHaveLength(2);
-    expect(after.camps[1]).toEqual({ id: 2, x: MID + NEXT, y: MID, level: 1, smelter: false });
+    expect(after.camps[1]).toEqual({
+      id: 2,
+      x: MID + NEXT,
+      y: MID,
+      level: 1,
+      smelter: false,
+      lantern: false,
+    });
     expect(after.nextCampId).toBe(3);
     for (const stack of FRONTIER_NEW_CAMP_COST) {
       expect(after.inventory.get(stack.item)).toBe(

@@ -21,8 +21,8 @@ import { NO_FEATURE } from '../src/engine/frontier/state';
 /**
  * One step of the new game, as a short text: "tap X,Y", "place X,Y",
  * "upgrade ID", "demolish ID", "endShift", "rest ID" (at camp ID), "close",
- * "buildSmelter ID" (a smelter at camp ID) or "make RECIPE" (a recipe id,
- * such as "smelt-iron").
+ * "buildSmelter ID" (a smelter at camp ID), "make RECIPE" (a recipe id,
+ * such as "smelt-iron") or "hangLantern ID" (a lantern at camp ID).
  */
 export type FrontierStep = string;
 
@@ -68,7 +68,11 @@ export function actionOf(step: FrontierStep): FrontierAction {
     return { kind: verb };
   }
   if (
-    (verb === 'upgrade' || verb === 'demolish' || verb === 'rest' || verb === 'buildSmelter') &&
+    (verb === 'upgrade' ||
+      verb === 'demolish' ||
+      verb === 'rest' ||
+      verb === 'buildSmelter' ||
+      verb === 'hangLantern') &&
     arg !== undefined
   ) {
     return { kind: verb, id: Number(arg) };

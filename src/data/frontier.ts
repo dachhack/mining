@@ -1,5 +1,6 @@
 import type { BlockId } from './blocks';
 import type { ItemStack } from './types';
+import type { ItemId } from './items';
 
 // The new game (Lab 2 becomes the game, docs/plans/lab2-becomes-the-game.md):
 // camps, their fog of war and their upgrades, and the surface: grass, trees,
@@ -225,4 +226,44 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
     ],
     output: { item: 'copperIngot', count: 2 },
   },
+  // What ingots are for (owner, question 163), PR 3: a tool and a lantern.
+  {
+    id: 'iron-pickaxe',
+    name: 'Iron pickaxe',
+    inputs: [
+      { item: 'ironIngot', count: 3 },
+      { item: 'wood', count: 2 },
+    ],
+    output: { item: 'ironPickaxe', count: 1 },
+  },
+  {
+    id: 'copper-lantern',
+    name: 'Copper lantern',
+    inputs: [
+      { item: 'copperIngot', count: 2 },
+      { item: 'crystal', count: 1 },
+    ],
+    output: { item: 'copperLantern', count: 1 },
+  },
 ];
+
+/**
+ * The iron pickaxe (owner, question 163): while the store holds `item`,
+ * every mining tap yields `yieldTimes` as much. Taking from the surface is
+ * unchanged. It does not wear out, and a second one adds nothing.
+ */
+export const FRONTIER_PICKAXE = {
+  item: 'ironPickaxe' as ItemId,
+  yieldTimes: 2,
+};
+
+/**
+ * The copper lantern (owner, question 163): one `item` from the store, hung
+ * at a camp from its panel for 1 tap, widens that camp's ring by
+ * `ringBonus` squares on top of its level. One per camp; it is lost with
+ * the camp.
+ */
+export const FRONTIER_LANTERN = {
+  item: 'copperLantern' as ItemId,
+  ringBonus: 3,
+};

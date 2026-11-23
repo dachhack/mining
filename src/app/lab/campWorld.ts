@@ -41,6 +41,7 @@ import {
   isLevelPatch as engineIsLevelPatch,
   makeRefusal as engineMakeRefusal,
   smelterRefusal as engineSmelterRefusal,
+  lanternRefusal as engineLanternRefusal,
   newlyCovered as engineNewlyCovered,
   placeRefusal as enginePlaceRefusal,
   seenWith,
@@ -116,6 +117,7 @@ export {
   MAX_CAMP_LEVEL,
   blocksMinedAt,
   campRadius,
+  campRing,
   canAfford,
   coverLevels,
   footprintOf,
@@ -276,7 +278,7 @@ export function campWorldFromLab(
   y: number,
   surface: Surface = bareSurface(lab.state),
 ): CampWorld {
-  const camps: Camp[] = [{ id: 1, x, y, level: 1, smelter: false }];
+  const camps: Camp[] = [{ id: 1, x, y, level: 1, smelter: false, lantern: false }];
   const { width, height } = lab.depths;
   const seen = seenWith(new Array<boolean>(width * height).fill(false), camps, width, height);
   return { lab, camps, seen, nextCampId: 2, surface, turn: firstTurn() };
@@ -466,6 +468,16 @@ export function makeCampRecipe(world: CampWorld, recipe: string): CampWorld {
   return act(world, { kind: 'make', recipe }).world;
 }
 
+/** Why a lantern cannot be hung at camp `id` now ('noTaps', 'over', or the engine's reason), or `null` if it can. */
+export function lanternRefusal(world: CampWorld, id: number): string | null {
+  return turnRefusal(world) ?? engineLanternRefusal(toFrontier(world), id);
+}
+
+/** Hang a lantern from the store at camp `id`, for 1 tap; the very same world if it cannot. */
+export function hangCampLantern(world: CampWorld, id: number): CampWorld {
+  return act(world, { kind: 'hangLantern', id }).world;
+}
+
 /** Why camp `id` cannot be demolished now, or `null` if it can. */
 export function demolishRefusal(
   world: CampWorld,
@@ -553,6 +565,8 @@ export type CampStep =
   // Build a smelter at a camp; make a recipe (smelting and crafting, PR 1).
   | { kind: 'buildSmelter'; id: number }
   | { kind: 'make'; recipe: string }
+  // Hang a lantern at a camp (PR 3).
+  | { kind: 'hangLantern'; id: number }
   // End the shift, rest at a camp, or close the mine (A4).
   | { kind: 'endShift' }
   | { kind: 'rest'; id: number }
@@ -583,6 +597,9 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   }
   if (step.kind === 'make') {
     return makeCampRecipe(world, step.recipe);
+  }
+  if (step.kind === 'hangLantern') {
+    return hangCampLantern(world, step.id);
   }
   return demolishCamp(world, step.id);
 }

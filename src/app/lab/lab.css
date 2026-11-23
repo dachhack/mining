@@ -1193,6 +1193,12 @@ body[data-screen='lab2'] {
   color: #c9a27c;
 }
 
+/* What a pickaxe or a lantern does, under its name in the book. */
+.lab2-recipe-does {
+  font-size: 0.72rem;
+  color: #b9c7a4;
+}
+
 .lab2-book-note {
   min-height: 1.2em;
   margin: 0;

@@ -17,7 +17,7 @@ import type { RngState } from '../rng';
  * not loaded into a new shape. Separate from the old game's STATE_VERSION
  * while the two rule sets live side by side.
  */
-export const FRONTIER_STATE_VERSION = 6; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`
+export const FRONTIER_STATE_VERSION = 7; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`
 
 /** What grows on a square: nothing, grass, a tree or an apple tree. */
 export const NO_FEATURE = 0;
@@ -44,6 +44,8 @@ export interface FrontierCamp {
   level: number;
   /** True once a smelter is built at this camp (docs/plans/smelting-and-crafting.md). */
   smelter: boolean;
+  /** True once a copper lantern is hung at this camp: its ring is wider (FRONTIER_LANTERN). */
+  lantern: boolean;
 }
 
 export interface FrontierState {

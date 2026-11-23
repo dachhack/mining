@@ -26,13 +26,14 @@ import {
   actLogged,
   animalAt,
   campAt,
-  campRadius,
+  campRing,
   canAfford,
   createFrontier,
   depthAt,
   frontierTap,
   hashFrontier,
   levelNeededFor,
+  lanternRefusal,
   makeRefusal,
   newlyCovered,
   previewTap,
@@ -294,6 +295,10 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
   if (smelter !== null) {
     return `buildSmelter ${smelter[2] ?? ''}`;
   }
+  const lantern = /^(lantern|hang|hang lantern|hanglantern) (\d+)$/.exec(text);
+  if (lantern !== null) {
+    return `hangLantern ${lantern[2] ?? ''}`;
+  }
   const make = /^make ([a-z-]+)$/.exec(text);
   if (make !== null) {
     return `make ${make[1] ?? ''}`;
@@ -319,7 +324,7 @@ const LISTED_PLACES = 5;
 
 /**
  * The choices listed under the view, numbered: every upgrade, demolish,
- * smelter and recipe that would work, the places for a new camp that light the most new ground
+ * smelter, lantern and recipe that would work, the places for a new camp that light the most new ground
  * (if one can be paid for), then undo, end shift, rest at each camp, and close. Taps are
  * not listed one by one (there are hundreds): the view counts them, and
  * "tap X,Y" takes any of them.
@@ -335,6 +340,7 @@ export function listedSteps(session: FrontierSession): FrontierStep[] {
       if (act(session, `upgrade ${camp.id}`).refused === null) steps.push(`upgrade ${camp.id}`);
       if (act(session, `demolish ${camp.id}`).refused === null) steps.push(`demolish ${camp.id}`);
       if (smelterRefusal(state, camp.id) === null) steps.push(`buildSmelter ${camp.id}`);
+      if (lanternRefusal(state, camp.id) === null) steps.push(`hangLantern ${camp.id}`);
     }
     for (const recipe of FRONTIER_RECIPES) {
       if (makeRefusal(state, recipe.id) === null) steps.push(`make ${recipe.id}`);
@@ -472,8 +478,9 @@ export function frontierView(session: FrontierSession): string {
       : camp.level >= FRONTIER_SMELTER.minLevel
         ? `; a smelter costs ${stacksText(FRONTIER_SMELTER.cost)}`
         : '';
+    const lantern = camp.lantern ? '; a lantern' : '';
     lines.push(
-      `Camp ${camp.id} at ${camp.x},${camp.y}: level ${camp.level}, ring ${campRadius(camp.level)}; ${up}${smelter}.`,
+      `Camp ${camp.id} at ${camp.x},${camp.y}: level ${camp.level}, ring ${campRing(camp)}; ${up}${smelter}${lantern}.`,
     );
   }
   lines.push('', ...mapLines(state), '');

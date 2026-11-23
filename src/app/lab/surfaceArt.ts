@@ -24,6 +24,8 @@ export const SURFACE_PAINT = {
   wood: { bark: '#6b4428', ring: '#c99a62', ringDark: '#9b7044' },
   ironIngot: { face: '#8d949c', top: '#c4cad1' },
   copperIngot: { face: '#b8673a', top: '#e39a66' },
+  ironPickaxe: { head: '#aeb5bd', headDark: '#7d848c', handle: '#8a5a32' },
+  copperLantern: { body: '#c27443', bodyDark: '#8f4f2a', glow: '#ffd36b', glowLight: '#fff2c2' },
 };
 
 /** "mulberry32": numbers 0..1 from a seed, the same every time. Paint only, never the game. */
@@ -477,6 +479,56 @@ export function labItemIcon(item: string, className: string): HTMLCanvasElement 
     ctx.lineTo(s * 0.3, s * 0.3);
     ctx.closePath();
     ctx.fill();
+  } else if (item === 'ironPickaxe') {
+    // A pickaxe: a wooden handle on the diagonal, an iron head across its top.
+    const p = SURFACE_PAINT.ironPickaxe;
+    ctx.fillStyle = '#2a2420';
+    ctx.fillRect(0, 0, s, s);
+    ctx.strokeStyle = p.handle;
+    ctx.lineCap = 'round';
+    ctx.lineWidth = s * 0.1;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.24, s * 0.8);
+    ctx.lineTo(s * 0.66, s * 0.3);
+    ctx.stroke();
+    ctx.strokeStyle = p.headDark;
+    ctx.lineWidth = s * 0.13;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.3, s * 0.2);
+    ctx.quadraticCurveTo(s * 0.7, s * 0.12, s * 0.86, s * 0.56);
+    ctx.stroke();
+    ctx.strokeStyle = p.head;
+    ctx.lineWidth = s * 0.06;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.32, s * 0.18);
+    ctx.quadraticCurveTo(s * 0.7, s * 0.1, s * 0.84, s * 0.5);
+    ctx.stroke();
+  } else if (item === 'copperLantern') {
+    // A lantern: a copper cap and base round a warm glowing glass.
+    const p = SURFACE_PAINT.copperLantern;
+    ctx.fillStyle = '#2a2420';
+    ctx.fillRect(0, 0, s, s);
+    ctx.fillStyle = p.glow;
+    ctx.fillRect(s * 0.32, s * 0.34, s * 0.36, s * 0.36);
+    ctx.fillStyle = p.glowLight;
+    ctx.fillRect(s * 0.42, s * 0.42, s * 0.16, s * 0.2);
+    ctx.fillStyle = p.body;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.26, s * 0.34);
+    ctx.lineTo(s * 0.74, s * 0.34);
+    ctx.lineTo(s * 0.6, s * 0.22);
+    ctx.lineTo(s * 0.4, s * 0.22);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillRect(s * 0.26, s * 0.7, s * 0.48, s * 0.1);
+    ctx.fillStyle = p.bodyDark;
+    ctx.fillRect(s * 0.3, s * 0.34, s * 0.04, s * 0.36);
+    ctx.fillRect(s * 0.66, s * 0.34, s * 0.04, s * 0.36);
+    ctx.strokeStyle = p.bodyDark;
+    ctx.lineWidth = s * 0.04;
+    ctx.beginPath();
+    ctx.arc(s / 2, s * 0.2, s * 0.08, Math.PI, 0);
+    ctx.stroke();
   } else {
     return null;
   }
