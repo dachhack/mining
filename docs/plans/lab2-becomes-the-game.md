@@ -222,7 +222,7 @@ Each PR is small, keeps the APK working, has its own tests, and says whether it 
 
 ### Phase D: the old rules come back, one PR each, in your order
 
-First: **fuel and depth bands**, coal-fuelled digging and the deeper ore bands (owner, question 153). Then the rest in an order you choose then. Wall slumps and supports do not come back: they are removed for good (decision note 0053). Each is its own small batch, playtested before the next.
+First: **smelting and crafting** (owner, question 159, after the playtest of a3121a6): a smelter at a camp, ingots from raw ore and coal, and four things to make with them: an iron pickaxe, a copper lantern, an iron drill and camp level 4 (questions 161 to 164). The plan, in five small PRs, is `docs/plans/smelting-and-crafting.md`. It replaces fuel and depth bands as the first rule back (question 153); those wait their turn with the rest. Upkeep stays as it is at 100 taps (question 160). Then the rest in an order you choose then. Wall slumps and supports do not come back: they are removed for good (decision note 0053). Each is its own small batch, playtested before the next.
 
 ---
 
