@@ -36,6 +36,9 @@
 //   FRONTIER_PEN.capacity; animals put in or taken out move between the
 //   pen and the store one at a time; a breeding count runs only while the
 //   pen may breed.
+// - CONTRACTS: one is taken only on a market day, from that day's board,
+//   while none is held; delivering pays its coins and takes its items, and
+//   counts one more done for its tier; the counts done never fall.
 // - FARMING: a planted sapling is a waiting stump on unmined dirt; cut grass
 //   waits only on a square with nothing growing on it; a planting takes one
 //   sapling from the store.
@@ -50,6 +53,7 @@ import { BLOCKS } from '../src/data';
 import {
   FRONTIER_CAMP_LEVELS,
   FRONTIER_CAMP_PLACE,
+  FRONTIER_CONTRACTS,
   FRONTIER_TOOLS,
   FRONTIER_LANTERN,
   FRONTIER_MARKET,
@@ -62,6 +66,7 @@ import {
 import {
   SQUARE_STEPS,
   campAt,
+  contractBoard,
   coverLevelAt,
   coverLevels,
   depthAt,
@@ -238,6 +243,34 @@ export function checkStep(
     say(`the run finished on shift ${before.shift}, by "${verb}"`);
   if (after.status === 'active' && after.shift > FRONTIER_RUN.shifts)
     say(`shift ${after.shift} is past the run's last`);
+
+  // Contracts (progression plan section 5).
+  if (verb === 'takeContract') {
+    const id = step.split(' ')[1] ?? '';
+    if (before.contract !== null) say('took a contract while holding one');
+    if (!contractBoard(before).some((c) => c.id === id))
+      say(`took ${id}, which is not on the board`);
+  }
+  if (verb === 'deliver') {
+    const held = FRONTIER_CONTRACTS.find((c) => c.id === before.contract?.id);
+    if (held === undefined) {
+      say('delivered with no contract held');
+    } else {
+      const expected = new Map<string, number>(held.asks.map((a) => [a.item, -a.count]));
+      expected.set('coin', (expected.get('coin') ?? 0) + held.pays);
+      const items = new Set([...before.inventory.keys(), ...after.inventory.keys()]);
+      for (const key of items) {
+        const change = (after.inventory.get(key) ?? 0) - (before.inventory.get(key) ?? 0);
+        if (change !== (expected.get(key) ?? 0)) say(`delivering changed ${key} by ${change}`);
+      }
+      const doneBefore = before.contractsDone[held.tier - 1] ?? 0;
+      if ((after.contractsDone[held.tier - 1] ?? 0) !== doneBefore + 1)
+        say('delivering did not count');
+    }
+  }
+  after.contractsDone.forEach((n, i) => {
+    if (n < (before.contractsDone[i] ?? 0)) say(`tier ${i + 1}'s contracts done fell`);
+  });
 
   // Pens (progression plan section 6.3).
   for (const camp of after.camps) {

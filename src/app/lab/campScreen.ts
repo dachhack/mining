@@ -25,6 +25,7 @@ import {
   FRONTIER_LANTERN,
   FRONTIER_MARKET,
   FRONTIER_PEN,
+  FRONTIER_PHASES,
   FRONTIER_PICKAXE,
   FRONTIER_RUN,
   FRONTIER_SAPLINGS,
@@ -33,10 +34,19 @@ import {
   FRONTIER_STEEL_DRILL,
   FRONTIER_CAMP_PLACE,
 } from '../../data/frontier';
-import type { FrontierLot } from '../../data/frontier';
+import type { FrontierContractDef, FrontierLot } from '../../data/frontier';
 import { LAB_ITEMS, LAB_NEW_CAMP_COST } from '../../data/labCamps';
 import type { HigherNeighbour, SquareDirection } from '../../engine';
-import { SQUARE_STEPS, loadFrontier, mostLots, saveFrontier } from '../../engine';
+import {
+  SQUARE_STEPS,
+  contractBoard,
+  deliverRefusal,
+  heldContract,
+  loadFrontier,
+  mostLots,
+  runPhase,
+  saveFrontier,
+} from '../../engine';
 import type { TradeSide } from '../../engine';
 import { randomSeed } from '../previewSession';
 import { CAMP_LOOK, CAMP_MARKS } from './campLook';
@@ -64,6 +74,8 @@ import {
   footprintOf,
   makeCampRecipe,
   makeRefusal,
+  contractCamp,
+  contractRefusal,
   penCamp,
   penRefusal,
   marketOpen,
@@ -199,6 +211,10 @@ function placeRefusalText(refusal: PlaceRefusal): string {
     return `Camps stand only in the top ${FRONTIER_CAMP_PLACE.maxDepth + 1} levels: this ground is dug too deep.`;
   return 'Not enough to build it yet: mine more first.';
 }
+
+/** A contract action, as a step (progression PR 5). */
+type ContractStep =
+  { kind: 'takeContract'; id: string } | { kind: 'deliver' } | { kind: 'dropContract' };
 
 /** Something drawn over the map for a short while. */
 interface Effect {
@@ -1457,7 +1473,13 @@ export function mountCampLab(
     // The market (progression PR 1): lit on a market day; on other days it
     // opens the card too, to show the prices and when the market opens.
     const open = marketOpen(world);
-    const market = button(open ? 'lab2-book-button lab2-market-open' : 'lab2-book-button', '🏪');
+    // It glows on a market day, and when the contract held can be delivered (progression PR 5).
+    const deliverable = deliverRefusal(toFrontier(world)) === null;
+    const market = button(
+      open || deliverable ? 'lab2-book-button lab2-market-open' : 'lab2-book-button',
+      '🏪',
+    );
+    market.dataset['deliverable'] = String(deliverable);
     market.dataset['testid'] = 'lab2-market';
     market.dataset['open'] = String(open);
     const marketLabel = open
@@ -1744,6 +1766,26 @@ export function mountCampLab(
     const section = (title: string): void => {
       list.append(element('span', 'lab2-market-section', title));
     };
+    // Goals and contracts (progression PR 5): the phase and what moves it
+    // on, the contract held (deliverable on any shift), and the board.
+    const state = toFrontier(world);
+    const phase = runPhase(state);
+    const goal = FRONTIER_PHASES[phase - 1];
+    section(`Phase ${phase} of 5${goal === undefined ? '' : ` · ${goal.title}`}`);
+    const next = element('p', 'lab2-market-when', goal?.next ?? '');
+    next.dataset['testid'] = 'lab2-goal';
+    list.append(next);
+    const held = heldContract(state);
+    if (held !== null) {
+      section('Your contract');
+      list.append(contractRow(held, 'held'));
+    }
+    // The one held is shown above, not again on the board.
+    const board = contractBoard(state).filter((c) => c.id !== held?.id);
+    if (board.length > 0) {
+      section('Contract board');
+      for (const offer of board) list.append(contractRow(offer, 'offer'));
+    }
     section('Sell');
     for (const lot of FRONTIER_MARKET.sellPrices) {
       if ((world.lab.counts.get(lot.item) ?? 0) > 0) list.append(marketRow('sell', lot));
@@ -1753,6 +1795,55 @@ export function mountCampLab(
     const inner = element('div', 'lab2-book-inner');
     inner.append(head, when, bookNote, list);
     bookCard.replaceChildren(inner);
+  }
+
+  /**
+   * A contract: its name, tier and pay, what it asks for (have/need), and
+   * Take for one on the board, or Deliver and Drop for the one held.
+   */
+  function contractRow(contract: FrontierContractDef, as: 'held' | 'offer'): HTMLElement {
+    const row = element('div', 'lab2-recipe');
+    row.dataset['testid'] = `lab2-contract-${as}-${contract.id}`;
+    const text = element('div', 'lab2-recipe-text');
+    text.append(
+      element(
+        'span',
+        'lab2-recipe-name',
+        `T${contract.tier} · ${contract.name} → ${contract.pays} 🪙`,
+      ),
+      costRow(contract.asks, `lab2-contract-${contract.id}`),
+    );
+    const buttons = element('div', 'lab2-recipe-buttons lab2-market-buttons');
+    const actions: { label: string; action: ContractStep }[] =
+      as === 'offer'
+        ? [{ label: 'Take', action: { kind: 'takeContract', id: contract.id } }]
+        : [
+            { label: 'Drop', action: { kind: 'dropContract' } },
+            { label: 'Deliver', action: { kind: 'deliver' } },
+          ];
+    for (const { label, action } of actions) {
+      const b = button(label === 'Drop' ? 'lab2-recipe-pin' : 'lab2-recipe-make', label);
+      b.dataset['testid'] = `lab2-contract-${label.toLowerCase()}-${contract.id}`;
+      b.disabled = contractRefusal(world, action) !== null;
+      b.addEventListener('click', () => contractInMarket(action, contract));
+      buttons.append(b);
+    }
+    row.append(text, buttons);
+    return row;
+  }
+
+  /** Take, deliver or drop a contract from the market's card, for 1 tap. */
+  function contractInMarket(action: ContractStep, contract: FrontierContractDef): void {
+    const next = contractCamp(world, action);
+    if (next === world) return; // the button is off whenever this would happen
+    remember(action);
+    const notes = {
+      takeContract: `Taken: ${contract.name}. Deliver it on any shift once you hold everything.`,
+      deliver: `Delivered: ${contract.name}, for ${contract.pays} coins.`,
+      dropContract: `Dropped: ${contract.name}.`,
+    };
+    bookNote.textContent = notes[action.kind];
+    setWorld(next);
   }
 
   /** One lot at the market: what it takes (have/need) and gives, and its buttons. */
@@ -2388,6 +2479,9 @@ export function mountCampLab(
     if (step.kind === 'sell' || step.kind === 'buy') return `the ${step.kind} of ${step.item}`;
     if (step.kind === 'plant') return `planting at ${step.x}, ${step.y}`;
     if (step.kind === 'buildPen') return `the pen at camp ${step.id}`;
+    if (step.kind === 'takeContract') return 'taking the contract';
+    if (step.kind === 'deliver') return 'the delivery';
+    if (step.kind === 'dropContract') return 'dropping the contract';
     if (step.kind === 'penIn' || step.kind === 'penOut')
       return `moving an animal at camp ${step.id}`;
     return 'the end of the shift'; // never in the history: it is emptied when a shift ends

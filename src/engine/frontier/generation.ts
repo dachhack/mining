@@ -333,6 +333,8 @@ export function createFrontier(seed: number): FrontierState {
     grassIn: new Array<number>(cube.size.x * cube.size.y).fill(-1),
     planted: new Array<boolean>(cube.size.x * cube.size.y).fill(false),
     treesFelled: 0,
+    contract: null,
+    contractsDone: [0, 0, 0],
     shift: 1,
     tapsLeft: FRONTIER_SHIFT.taps,
     health: FRONTIER_SHIFT.startHealth,

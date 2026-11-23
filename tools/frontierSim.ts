@@ -67,6 +67,8 @@ export interface FrontierRunMetrics {
   grassHeld: number;
   /** Coins held when the run stopped: the score, once the run has finished. */
   coins: number;
+  /** Contracts delivered in the whole run, of every tier. */
+  contracts: number;
   /**
    * The shift each step of smelting and crafting was first reached in, or -1
    * if never: a camp at level 2, 3 and 4, a smelter, the first ingot, an
@@ -90,6 +92,9 @@ export const FIRST_NAMES = [
   'lantern',
   'lanternHung',
   'level4',
+  'tier1',
+  'tier2',
+  'tier3',
 ] as const;
 export type FirstName = (typeof FIRST_NAMES)[number];
 
@@ -108,6 +113,10 @@ function reached(state: FrontierState): Set<FirstName> {
   if (held(FRONTIER_DRILL.item)) got.add('drill');
   if (held(FRONTIER_STEEL_DRILL.item)) got.add('steelDrill');
   if (held(FRONTIER_LANTERN.item)) got.add('lantern');
+  // The first contract delivered of each tier (progression PR 5).
+  if ((state.contractsDone[0] ?? 0) > 0) got.add('tier1');
+  if ((state.contractsDone[1] ?? 0) > 0) got.add('tier2');
+  if ((state.contractsDone[2] ?? 0) > 0) got.add('tier3');
   return got;
 }
 
@@ -190,6 +199,7 @@ export function playFrontierRun(
       deepest,
       grassHeld: state.inventory.get('grass') ?? 0,
       coins: state.inventory.get('coin') ?? 0,
+      contracts: state.contractsDone.reduce((sum, n) => sum + n, 0),
       firsts,
       mined,
       finalHash,
@@ -220,6 +230,7 @@ export function summaryLine(policy: string, runs: FrontierRunMetrics[]): string 
     `deepest ${median(runs.map((r) => r.deepest))}`,
     `grass held ${median(runs.map((r) => r.grassHeld))}`,
     `coins ${median(runs.map((r) => r.coins))}`,
+    `contracts ${median(runs.map((r) => r.contracts))}`,
   ].join(' · ');
 }
 

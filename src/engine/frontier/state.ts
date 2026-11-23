@@ -17,7 +17,7 @@ import type { RngState } from '../rng';
  * not loaded into a new shape. Separate from the old game's STATE_VERSION
  * while the two rule sets live side by side.
  */
-export const FRONTIER_STATE_VERSION = 9; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen
+export const FRONTIER_STATE_VERSION = 10; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`
 
 /** What grows on a square: nothing, grass, a tree or an apple tree. */
 export const NO_FEATURE = 0;
@@ -101,6 +101,10 @@ export interface FrontierState {
   planted: boolean[];
   /** How many trees have been felled in the run: every few give a sapling (FRONTIER_SAPLINGS). */
   treesFelled: number;
+  /** The contract held (contracts.ts): its id and the shift it was taken on; `null` if none. */
+  contract: FrontierHeldContract | null;
+  /** How many contracts of each tier have been delivered: [tier 1, tier 2, tier 3]. */
+  contractsDone: number[];
   /** The shift being played: 1 is the first. */
   shift: number;
   /** Taps left in this shift (src/data/frontier.ts, FRONTIER_SHIFT.taps a shift). */
@@ -113,6 +117,12 @@ export interface FrontierState {
    * shift of the run (FRONTIER_RUN.shifts) ended.
    */
   status: FrontierStatus;
+}
+
+/** A contract held: which one (FRONTIER_CONTRACTS), and the shift it was taken on. */
+export interface FrontierHeldContract {
+  id: string;
+  takenOn: number;
 }
 
 /** How a run stands: going on, lost, ended by closing the mine, or played to its last shift. */

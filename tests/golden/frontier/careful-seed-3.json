@@ -4,7 +4,7 @@
   "engineVersion": "0.9.0",
   "seed": 3,
   "stepCount": 1010,
-  "expectedHash": "408d664019e39ab0",
+  "expectedHash": "0786710c252478bf",
   "steps": [
     "tap 15,11",
     "tap 17,13",
@@ -814,6 +814,7 @@
     "tap 1,9",
     "tap 1,8",
     "endShift",
+    "takeContract t1-coal",
     "sell grass 14",
     "tap 4,20",
     "tap 2,16",
@@ -913,8 +914,8 @@
     "tap 29,9",
     "tap 28,9",
     "tap 27,9",
-    "tap 17,14",
     "endShift",
+    "tap 17,14",
     "tap 18,14",
     "tap 19,14",
     "tap 27,14",
@@ -1014,7 +1015,6 @@
     "tap 26,2",
     "tap 26,3",
     "tap 26,4",
-    "tap 15,5",
     "endShift"
   ]
 }

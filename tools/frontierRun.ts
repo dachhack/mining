@@ -13,7 +13,11 @@ import {
 } from '../src/data/frontier';
 import {
   canAfford,
+  contractBoard,
+  contractById,
   coverLevels,
+  openTiers,
+  deliverRefusal,
   createFrontier,
   frontierAct,
   hasSmelter,
@@ -42,7 +46,8 @@ import { NO_FEATURE } from '../src/engine/frontier/state';
  * "sell ITEM LOTS" / "buy ITEM LOTS" at the market (an item id, such as
  * "wood", and a whole number of lots), or "plant X,Y ITEM" (a sapling or
  * an apple sapling on square X,Y), "buildPen ID", "penIn ID" or "penOut ID"
- * (a pen at camp ID, an animal into it or out of it).
+ * (a pen at camp ID, an animal into it or out of it), "takeContract ID"
+ * (a contract from today's board), "deliver" or "dropContract".
  */
 export type FrontierStep = string;
 
@@ -90,8 +95,11 @@ export function actionOf(step: FrontierStep): FrontierAction {
   if (verb === 'plant' && arg !== undefined && third !== undefined) {
     return { kind: 'plant', ...squareOf(arg), item: third };
   }
-  if (verb === 'endShift' || verb === 'close') {
+  if (verb === 'endShift' || verb === 'close' || verb === 'deliver' || verb === 'dropContract') {
     return { kind: verb };
+  }
+  if (verb === 'takeContract' && arg !== undefined) {
+    return { kind: 'takeContract', id: arg };
   }
   if (
     (verb === 'upgrade' ||
@@ -185,13 +193,17 @@ const GATHERER_GRASS_KEPT = 60;
 /** The gatherer keeps this much stone back and sells the rest on a market day. */
 const GATHERER_STONE_KEPT = 100;
 
-/** Items with no use yet (design doc section 7), which the gatherer sells whenever it can. */
+/**
+ * Items it sells whenever it can, while no open tier of contracts asks for
+ * them: crystal, rare ore and relics have no other use (design doc section
+ * 7), and tier-3 contracts ask for them (progression PR 5).
+ */
 const GATHERER_SELLS_ALL = ['crystal', 'rareOre', 'relic'];
 
 /**
  * On a market day (docs/plans/progression-phases.md, section 3): buy an
  * iron drill, then a steel drill, when it can (one each); sell every whole
- * lot of the items with no use yet, then grass above GATHERER_GRASS_KEPT and
+ * lot of the items with no use yet (until tier-3 contracts ask for them), then grass above GATHERER_GRASS_KEPT and
  * stone above GATHERER_STONE_KEPT. `null` if there is nothing to trade, or
  * it is not a market day.
  */
@@ -201,7 +213,8 @@ export function marketStep(state: FrontierState): FrontierStep | null {
     const held = (state.inventory.get(tool) ?? 0) > 0;
     if (!held && tradeRefusal(state, 'buy', tool, 1) === null) return `buy ${tool} 1`;
   }
-  for (const item of GATHERER_SELLS_ALL) {
+  const tier3 = openTiers(state).includes(3);
+  for (const item of tier3 ? [] : GATHERER_SELLS_ALL) {
     const lots = mostLots(state, 'sell', item);
     if (lots > 0) return `sell ${item} ${lots}`;
   }
@@ -260,6 +273,50 @@ export function farmStep(state: FrontierState): FrontierStep | null {
 }
 
 /**
+ * True if delivering the held contract leaves the store holding what the
+ * lowest camp's next upgrade needs of the same items (or the store did not
+ * hold that much anyway): the gatherer does not trade an upgrade for coins.
+ */
+function keepsUpgrade(state: FrontierState): boolean {
+  const asks = contractById(state.contract?.id ?? '')?.asks ?? [];
+  const lowest = [...state.camps].sort((a, b) => a.level - b.level)[0];
+  const upgrade = lowest === undefined ? [] : (upgradeCostFrom(lowest.level) ?? []);
+  return upgrade.every((need) => {
+    const ask = asks.find((a) => a.item === need.item)?.count ?? 0;
+    const held = state.inventory.get(need.item) ?? 0;
+    return ask === 0 || held < need.count || held - ask >= need.count;
+  });
+}
+
+/** The gatherer drops a contract it cannot deliver after holding it this many shifts. */
+const GATHERER_CONTRACT_PATIENCE = 20;
+
+/**
+ * Contracts (progression plan section 5), in order: deliver the one held
+ * if it can; drop it on a market day once it has been held
+ * GATHERER_CONTRACT_PATIENCE shifts; with none held, take the board's
+ * contract whose asks the store holds the most of (as a share), the
+ * highest tier first among equals. `null` if none of these can be done.
+ */
+export function contractStep(state: FrontierState): FrontierStep | null {
+  if (deliverRefusal(state) === null && keepsUpgrade(state)) return 'deliver';
+  const held = state.contract;
+  if (held !== null) {
+    const stale = state.shift - held.takenOn >= GATHERER_CONTRACT_PATIENCE;
+    return stale && isMarketDay(state) ? 'dropContract' : null;
+  }
+  let best: { id: string; share: number; tier: number } | null = null;
+  for (const offer of contractBoard(state)) {
+    const shares = offer.asks.map((a) => Math.min(1, (state.inventory.get(a.item) ?? 0) / a.count));
+    const share = shares.reduce((sum, x) => sum + x, 0) / shares.length;
+    if (best === null || share > best.share || (share === best.share && offer.tier > best.tier)) {
+      best = { id: offer.id, share, tier: offer.tier };
+    }
+  }
+  return best === null ? null : `takeContract ${best.id}`;
+}
+
+/**
  * Plant a sapling it holds (progression plan section 6.2) on the lit square
  * farthest from the newest camp where one can be planted, so its own
  * digging, which starts nearest that camp, leaves it be. Ties go to the
@@ -284,7 +341,8 @@ export function plantStep(state: FrontierState): FrontierStep | null {
  * The gatherer: a plain policy for recording golden runs. In order:
  * 0. with no taps left, end the shift, or rest if the crew's health is at
  *    GATHERER_REST_AT or below (plan A4);
- * 1. smelt and craft what it can (`craftStep`), keep a pen and make hay
+ * 1. take and deliver contracts (`contractStep`), smelt and craft what it
+ *    can (`craftStep`), keep a pen and make hay
  *    (`farmStep`), trade on a market day (`marketStep`), and plant the
  *    saplings it holds (`plantStep`);
  * 2. upgrade the lowest camp it can pay for;
@@ -302,7 +360,12 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
   if (state.tapsLeft === 0) {
     return state.health <= GATHERER_REST_AT ? restStep(state) : 'endShift';
   }
-  const craft = craftStep(state) ?? farmStep(state) ?? marketStep(state) ?? plantStep(state);
+  const craft =
+    contractStep(state) ??
+    craftStep(state) ??
+    farmStep(state) ??
+    marketStep(state) ??
+    plantStep(state);
   if (craft !== null) return craft;
   const byLevel = [...state.camps].sort((a, b) => a.level - b.level || a.id - b.id);
   for (const camp of byLevel) {

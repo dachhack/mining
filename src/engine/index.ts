@@ -506,6 +506,21 @@ export type { FrontierTap, FrontierTapKind } from './frontier/tap';
 export { hashFrontier } from './frontier/hash';
 // Planting saplings (docs/plans/progression-phases.md, PR 3).
 export { isSapling, plant, plantRefusal } from './frontier/farming';
+// Contracts and the phases of a run (PR 5).
+export {
+  contractBoard,
+  contractById,
+  deliverContract,
+  deliverRefusal,
+  dropContract,
+  dropRefusal,
+  heldContract,
+  openTiers,
+  runPhase,
+  takeContract,
+  takeRefusal,
+} from './frontier/contracts';
+export type { ContractRefusal } from './frontier/contracts';
 // Animal pens (PR 4).
 export { breedPens, penAct, penRefusal } from './frontier/pens';
 export type { PenAction, PenRefusal } from './frontier/pens';
@@ -538,7 +553,13 @@ export {
 export type { LoggedAction, ShiftLog } from './frontier/undo';
 // Saving a run (plan B1).
 export { loadFrontier, saveFrontier } from './frontier/save';
-export type { Feature, FrontierAnimal, FrontierCamp, FrontierState } from './frontier/state';
+export type {
+  Feature,
+  FrontierAnimal,
+  FrontierCamp,
+  FrontierHeldContract,
+  FrontierState,
+} from './frontier/state';
 // The cube seen from above (design doc v0.2 section 3.1; issue #84): a
 // square's depth, its top block, and the level rule. `topBlockAt` reads the
 // true cube, under a tree too: a view must use `knownSquare` instead.

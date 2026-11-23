@@ -35,6 +35,8 @@ export function hashFrontier(state: FrontierState): string {
       grassIn: state.grassIn,
       planted: state.planted,
       treesFelled: state.treesFelled,
+      contract: state.contract,
+      contractsDone: state.contractsDone,
       shift: state.shift,
       tapsLeft: state.tapsLeft,
       health: state.health,

@@ -4,6 +4,7 @@
 
 import {
   FRONTIER_CAMP_LEVELS,
+  FRONTIER_BOARD,
   FRONTIER_CAMP_PLACE,
   FRONTIER_FOODS,
   FRONTIER_LANTERN,
@@ -92,6 +93,9 @@ export function frontierHelpText(): string {
     `- "pen N" builds an animal pen at camp N (level ${FRONTIER_PEN.minLevel} or more; ${cost(FRONTIER_PEN.cost)}; one a camp; lost with it, its animals back to the store).`,
     `  "penin N" / "penout N" moves an animal from the store into it or back (up to ${FRONTIER_PEN.capacity}). Penned animals are never eaten.`,
     `  A pen with 2 or more and room breeds one every ${FRONTIER_PEN.breedEveryShifts} shifts, eating ${FRONTIER_PEN.hayPerBirth} hay; "make hay" turns 3 grass into 1 hay.`,
+    `- Contracts: on a market day the board offers ${FRONTIER_BOARD.perTier} of each open tier ("take ID"). Tier 1 opens with a level ${FRONTIER_BOARD.tier1Level} camp,`,
+    '  tier 2 after a tier-1 contract is delivered, tier 3 after a tier-2. Hold one at a time; "deliver" on any shift once you',
+    '  hold everything it asks for pays its coins; "drop" gives it up. Each costs 1 tap. The view names your phase and goal.',
     '- "undo" takes back your last action in this shift and gives the tap back. Catching an',
     '  animal and picking an apple cannot be undone, and nothing before the shift began can.',
   ].join('\n');

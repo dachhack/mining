@@ -35,6 +35,14 @@ import { nextFloat } from '../rng';
 import { blockAt } from '../state';
 import { campAt, demolishFrontierCamp, placeFrontierCamp, upgradeFrontierCamp } from './camps';
 import { walkable } from './generation';
+import {
+  deliverContract,
+  deliverRefusal,
+  dropContract,
+  dropRefusal,
+  takeContract,
+  takeRefusal,
+} from './contracts';
 import { plant, plantRefusal } from './farming';
 import { breedPens, penAct, penRefusal } from './pens';
 import { isMarketDay, trade, tradeRefusal } from './market';
@@ -68,6 +76,10 @@ export type FrontierAction =
   | { kind: 'hangLantern'; id: number }
   // Sell or buy `lots` lots of `item` at the market, on a market day (market.ts).
   | { kind: 'sell'; item: string; lots: number }
+  // Take contract `id` from today's board, deliver the one held, or drop it (contracts.ts).
+  | { kind: 'takeContract'; id: string }
+  | { kind: 'deliver' }
+  | { kind: 'dropContract' }
   // Build a pen at camp `id`, or put an animal in or take one out (pens.ts).
   | { kind: 'buildPen'; id: number }
   | { kind: 'penIn'; id: number }
@@ -429,6 +441,18 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
   if (action.kind === 'hangLantern') {
     const why = lanternRefusal(state, action.id);
     return why === null ? spent(hangLantern(state, action.id)) : refused(state, why);
+  }
+  if (action.kind === 'takeContract') {
+    const why = takeRefusal(state, action.id);
+    return why === null ? spent(takeContract(state, action.id)) : refused(state, why);
+  }
+  if (action.kind === 'deliver') {
+    const why = deliverRefusal(state);
+    return why === null ? spent(deliverContract(state)) : refused(state, why);
+  }
+  if (action.kind === 'dropContract') {
+    const why = dropRefusal(state);
+    return why === null ? spent(dropContract(state)) : refused(state, why);
   }
   if (action.kind === 'buildPen' || action.kind === 'penIn' || action.kind === 'penOut') {
     const why = penRefusal(state, action.kind, action.id);

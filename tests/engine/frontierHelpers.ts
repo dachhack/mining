@@ -90,6 +90,8 @@ export function world(options: WorldOptions = {}): FrontierState {
     grassIn: new Array<number>(SIDE * SIDE).fill(-1),
     planted: new Array<boolean>(SIDE * SIDE).fill(false),
     treesFelled: 0,
+    contract: null,
+    contractsDone: [0, 0, 0],
     shift: 1,
     tapsLeft: FRONTIER_SHIFT.taps,
     health: FRONTIER_SHIFT.startHealth,

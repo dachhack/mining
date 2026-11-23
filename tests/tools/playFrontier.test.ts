@@ -190,3 +190,31 @@ describe('planting in the play interface (progression PR 3)', () => {
     expect(frontierView(done?.session ?? session)).toContain('s0');
   });
 });
+
+describe('contracts and phases in the play interface (progression PR 5)', () => {
+  it('reads "take ID", "deliver" and "drop", and shows the phase and its goal', () => {
+    expect(stepOf('take t1-coal', [])).toBe('takeContract t1-coal');
+    expect(stepOf('deliver', [])).toBe('deliver');
+    expect(stepOf('drop', [])).toBe('dropContract');
+    expect(frontierView(newFrontierSession(SEED))).toContain(
+      'Phase 1 of 5: Camps and the landscape.',
+    );
+  });
+
+  it('lists the board on a market day with a level-3 camp, and takes from it', () => {
+    const start = newFrontierSession(SEED);
+    const state = {
+      ...start.state,
+      shift: 30,
+      camps: start.state.camps.map((c) => ({ ...c, level: 3 })),
+    };
+    const session = { ...start, state, shiftLog: { start: state, actions: [] } };
+    const view = frontierView(session);
+    expect(view).toContain('Contract "take t1-');
+    const id = /take (t1-[a-z-]+)/.exec(view)?.[1] ?? '';
+    const taken = act(session, `takeContract ${id}`);
+    expect(taken.refused).toBeNull();
+    expect(frontierView(taken.session)).toContain('Contract: ');
+    expect(act(taken.session, 'deliver').refused).toBe('You do not hold enough for that.');
+  });
+});

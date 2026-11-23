@@ -369,7 +369,7 @@ const FRONTIER_RUNS: {
     policy: 'careful',
     maxShifts: 100,
     description:
-      'The careful policy for a whole run of 100 shifts (docs/plans/progression-phases.md): it buys an iron drill and a steel drill at the market, smelts and makes a pickaxe and lanterns, brings two of its camps to level 4, plants saplings, keeps a pen and makes hay, sells its surplus, and the run ends finished, scored in coins',
+      'The careful policy for a whole run of 100 shifts (docs/plans/progression-phases.md): it buys an iron drill and a steel drill at the market, smelts and makes a pickaxe and lanterns, brings a camp to level 4, plants saplings, keeps a pen and makes hay, delivers 37 contracts of all three tiers, sells its surplus, and the run ends finished, scored in coins',
   },
   {
     name: 'idle-seed-2-lost',

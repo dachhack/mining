@@ -40,7 +40,7 @@ v0.2 is in the git history, as v0.1 is.
 | Hazards | **None for now** (owner: "Lab 2 becomes the game"). The old ones come back one at a time, fuel and depth bands first; wall slumps and supports are retired (question 153, section 10) |
 | Harm | **Hunger only** (owner, question 148): each item of upkeep that cannot be paid costs the crew 1 health (section 5) |
 | Base | **Camps** (Lab 2's): placed on a level 3×3 of lit ground **in the top three levels** (depth 0 to 2; owner, 2026-11-23), upgraded to see further and dig harder rock, demolished once other camps cover them. A base camp mines only dirt and clay; ore, crystal and relics need tools (section 6). The recipe book shows what each costs |
-| Win condition | **A run lasts 100 shifts** (owner, 2026-11-23: "100 shifts or crew lost"), or ends sooner when the crew is lost or the player closes the mine (question 152). The coins held at the end are the score [Default; question 170]. Contracts are not built yet (section 8) |
+| Win condition | **A run lasts 100 shifts** (owner, 2026-11-23: "100 shifts or crew lost"), or ends sooner when the crew is lost or the player closes the mine (question 152). The coins held at the end are the score [Default; question 170]; contracts in three tiers pay most of them (section 8) |
 | Meta-progression | Unlocks only (new options between runs); no permanent stat upgrades |
 | Platforms | Android and iOS |
 
@@ -240,9 +240,16 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 - **Coal and raw iron and copper are smelted into ingots** at a smelter. Ingots make the pickaxe, the lantern and the drill, and pay for camp level 4; the first contract asks for ingots (questions 163 and 164). Crystal and the rare ores have no use yet; a later contract may ask for crystal.
 - **There is no crafting for now:** the recipe book replaces it, and recipes can be added to it later.
 
-## 8. Contracts [Decided]
+## 8. Contracts [Decided: tiers and delivery; the list Default]
 
-**Being replaced** by the plan's contracts (`docs/plans/progression-phases.md` section 5): three tiers on a board at the market, paid in coins on delivery; a contract no longer ends the run.
+(Progression plan sections 1 and 5; built in its PR 5. This replaces v0.2's single contract that won the run.)
+
+- **The board:** on a market day the market's card shows up to [Default] 3 contracts of each open tier (`FRONTIER_BOARD`), drawn from the run's seed and the shift: the same seed and shift always show the same board, and the next market day shows another.
+- **Tiers open in turn:** tier 1 while the best camp is level [Default] 3 or more; tier 2 once a tier-1 contract is delivered; tier 3 once a tier-2 one is.
+- **The contracts** (`FRONTIER_CONTRACTS`, every one [Default]): tier 1 asks for coal, stone, raw ore or ingots, for 50 to 120 coins; tier 2 for the same in bulk, for 200 to 450; tier 3 for crystal, rare ore, relics or the keystone, for 700 to 2,000. Each pays more than its items fetch at the market.
+- **Taking** one costs 1 tap, on a market day, and only one is held at a time (question 173). **Delivering** costs 1 tap on any shift once the store holds everything it asks for: the items leave the store and its coins arrive ("Done on delivery", question 89). **Dropping** it costs 1 tap and gives nothing back. There is no deadline. A contract never ends the run.
+- **Phases** (plan section 1): the run is in phase 1 until a camp reaches level 2, phase 2 until one reaches level 3, phase 3 until a tier-1 contract is delivered, phase 4 until a tier-2 one is, then phase 5 (`runPhase`). The market's card names the phase and what moves it on (`FRONTIER_PHASES`).
+- **Interface:** the top of the market's card shows the phase and its goal, the contract held (have/need for each item, Deliver and Drop), and the board (Take). The market's button glows when the contract held can be delivered.
 
 Unchanged from v0.2 in intent, and not built yet: a contract asks for deliverables (ore, relics); the run is won the moment the last one reaches the store (owner, question 89: "Done on delivery"). Until contracts exist, a run ends only as in section 5.1.
 

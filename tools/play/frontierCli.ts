@@ -21,6 +21,7 @@ import {
   FRONTIER_NEW_CAMP_COST,
   FRONTIER_PEN,
   FRONTIER_RECIPES,
+  FRONTIER_PHASES,
   FRONTIER_RUN,
   FRONTIER_SHIFT,
   FRONTIER_SMELTER,
@@ -43,6 +44,11 @@ import {
   lanternRefusal,
   makeRefusal,
   marketEvery,
+  contractBoard,
+  deliverRefusal,
+  heldContract,
+  runPhase,
+  takeRefusal,
   penRefusal,
   newlyCovered,
   nextMarketShift,
@@ -159,6 +165,8 @@ function refusalText(refusal: string | null): string {
     upgrade: 'That camp cannot be upgraded now.',
     demolish: 'That camp cannot be demolished: other camps must cover its 3 x 3 first.',
     notYet: 'The market sells that only once your best camp is level 3.',
+    holding: 'You hold a contract already: deliver it or "drop" it first.',
+    none: 'You hold no contract.',
     hasPen: 'That camp has a pen already.',
     campLevel: "That camp's level is too low for it.",
     noPen: 'That camp has no pen: build one first ("pen N").',
@@ -329,7 +337,7 @@ function undo(session: FrontierSession): StepResult {
  * The step a typed choice stands for, or `null` if it is not one. Accepts
  * "tap 3,4" (or "t 3 4"), "place 3,4", "upgrade 2", "demolish 1", "end",
  * "rest 1" (or "rest" with one camp), "sell wood 3", "buy animal 1",
- * "plant 3,4 sapling",
+ * "plant 3,4 sapling", "take t1-coal", "deliver", "drop",
  * "close", "undo", or the number of a listed choice.
  */
 export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | null {
@@ -377,6 +385,12 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
     const lot = lots.find((l) => l.item.toLowerCase() === tradeStep[2]);
     return lot === undefined ? null : `${tradeStep[1] ?? ''} ${lot.item} ${tradeStep[3] ?? ''}`;
   }
+  const take = /^take ([a-z0-9-]+)$/.exec(text);
+  if (take !== null) {
+    return `takeContract ${take[1] ?? ''}`;
+  }
+  if (text === 'deliver') return 'deliver';
+  if (text === 'drop' || text === 'drop contract') return 'dropContract';
   const make = /^make ([a-z-]+)$/.exec(text);
   if (make !== null) {
     return `make ${make[1] ?? ''}`;
@@ -426,6 +440,11 @@ export function listedSteps(session: FrontierSession): FrontierStep[] {
     for (const recipe of FRONTIER_RECIPES) {
       if (makeRefusal(state, recipe.id) === null) steps.push(`make ${recipe.id}`);
     }
+    for (const offer of contractBoard(state)) {
+      if (takeRefusal(state, offer.id) === null) steps.push(`takeContract ${offer.id}`);
+    }
+    if (deliverRefusal(state) === null) steps.push('deliver');
+    if (state.contract !== null) steps.push('dropContract');
     if (canAfford(state.inventory, FRONTIER_NEW_CAMP_COST)) {
       // The places that light the most new ground, best first (ties row by row).
       const places: { step: FrontierStep; fresh: number }[] = [];
@@ -554,6 +573,7 @@ export function frontierView(session: FrontierSession): string {
     `Upkeep at the end of this shift: ${stacksText(upkeepDue(state.shift, state.camps.length)) || 'nothing'}`,
   );
   lines.push(`New camp costs ${stacksText(FRONTIER_NEW_CAMP_COST)}.`);
+  lines.push(...goalLines(state));
   lines.push(...marketLines(state));
   for (const camp of state.camps) {
     const cost = upgradeCostFrom(camp.level);
@@ -597,6 +617,27 @@ function lotsText(lots: { item: string; count: number; coins: number }[]): strin
   return lots.map((l) => `${l.count} ${l.item} for ${l.coins}`).join(', ');
 }
 
+/** The phase, its goal, the contract held, and contracts done. */
+function goalLines(state: FrontierState): string[] {
+  const phase = runPhase(state);
+  const goal = FRONTIER_PHASES[phase - 1] ?? { title: '', next: '' };
+  const lines = [`Phase ${phase} of 5: ${goal.title}. Next: ${goal.next}`];
+  const held = heldContract(state);
+  if (held !== null) {
+    const ready = deliverRefusal(state) === null ? ' READY: "deliver".' : '';
+    lines.push(
+      `Contract: ${held.name} (tier ${held.tier}): ${stacksText(held.asks)} for ${held.pays} coins.${ready} "drop" gives it up.`,
+    );
+  }
+  const done = state.contractsDone;
+  if (done.some((n) => n > 0)) {
+    lines.push(
+      `Contracts done: tier 1 ${done[0] ?? 0}, tier 2 ${done[1] ?? 0}, tier 3 ${done[2] ?? 0}.`,
+    );
+  }
+  return lines;
+}
+
 /** The market: open today, with its prices, or when it opens next. */
 function marketLines(state: FrontierState): string[] {
   if (state.status !== 'active') return [];
@@ -609,6 +650,10 @@ function marketLines(state: FrontierState): string[] {
     'Market: OPEN this shift. "sell ITEM N" or "buy ITEM N" trades N lots, 1 tap a trade.',
     `  Sell (coins a lot): ${lotsText(FRONTIER_MARKET.sellPrices)}.`,
     `  Buy (coins a lot): ${lotsText(FRONTIER_MARKET.buyPrices)}.`,
+    ...contractBoard(state).map(
+      (c) =>
+        `  Contract "take ${c.id}" (tier ${c.tier}, ${c.name}): ${stacksText(c.asks)} for ${c.pays} coins.`,
+    ),
   ];
 }
 

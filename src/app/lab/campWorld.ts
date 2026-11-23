@@ -36,6 +36,9 @@ import {
   frontierAct,
   frontierStartSquare,
   isMarketDay,
+  deliverRefusal as engineDeliverRefusal,
+  dropRefusal as engineDropRefusal,
+  takeRefusal as engineTakeRefusal,
   penRefusal as enginePenRefusal,
   plantRefusal as enginePlantRefusal,
   nextMarketShift as engineNextMarketShift,
@@ -58,6 +61,7 @@ import type {
   CampGround,
   FrontierAction,
   FrontierCamp,
+  FrontierHeldContract,
   FrontierState,
   FrontierStatus,
   GameState,
@@ -101,6 +105,10 @@ export interface CampTurn {
   health: number;
   /** 'active', 'lost' (the crew's health reached 0), 'closed' (the mine was closed) or 'finished' (the last shift ended). */
   status: FrontierStatus;
+  /** The contract held, or `null` (progression PR 5). */
+  contract: FrontierHeldContract | null;
+  /** Contracts delivered, by tier: [tier 1, tier 2, tier 3]. */
+  contractsDone: number[];
 }
 
 /** A fresh run: shift 1, a full shift of taps, full health. */
@@ -110,6 +118,8 @@ export function firstTurn(): CampTurn {
     tapsLeft: FRONTIER_SHIFT.taps,
     health: FRONTIER_SHIFT.startHealth,
     status: 'active',
+    contract: null,
+    contractsDone: [0, 0, 0],
   };
 }
 
@@ -185,6 +195,8 @@ export function toFrontier(world: CampWorld): FrontierState {
     tapsLeft: world.turn.tapsLeft,
     health: world.turn.health,
     status: world.turn.status,
+    contract: world.turn.contract,
+    contractsDone: world.turn.contractsDone,
   };
 }
 
@@ -222,6 +234,8 @@ export function fromFrontier(world: CampWorld, state: FrontierState): CampWorld 
       tapsLeft: state.tapsLeft,
       health: state.health,
       status: state.status,
+      contract: state.contract,
+      contractsDone: state.contractsDone,
     },
   };
 }
@@ -544,6 +558,28 @@ export function tradeCamp(
   return act(world, { kind: side, item, lots }).world;
 }
 
+// ----- Contracts (docs/plans/progression-phases.md, PR 5) -----
+
+/** Why a contract action cannot be done now ('noTaps', 'over', or the engine's reason), or `null` if it can. */
+export function contractRefusal(
+  world: CampWorld,
+  action: { kind: 'takeContract'; id: string } | { kind: 'deliver' } | { kind: 'dropContract' },
+): string | null {
+  const turn = turnRefusal(world);
+  if (turn !== null) return turn;
+  const state = toFrontier(world);
+  if (action.kind === 'takeContract') return engineTakeRefusal(state, action.id);
+  return action.kind === 'deliver' ? engineDeliverRefusal(state) : engineDropRefusal(state);
+}
+
+/** Take, deliver or drop a contract, for 1 tap; the very same world if it cannot. */
+export function contractCamp(
+  world: CampWorld,
+  action: { kind: 'takeContract'; id: string } | { kind: 'deliver' } | { kind: 'dropContract' },
+): CampWorld {
+  return act(world, action).world;
+}
+
 // ----- Planting (docs/plans/progression-phases.md, PR 3) -----
 
 /** Why `item` cannot be planted on (x, y) now ('noTaps', 'over', or the engine's reason), or `null` if it can. */
@@ -652,6 +688,10 @@ export type CampStep =
   // Sell or buy at the market (progression PR 1).
   | { kind: 'sell'; item: string; lots: number }
   | { kind: 'buy'; item: string; lots: number }
+  // Take, deliver or drop a contract (progression PR 5).
+  | { kind: 'takeContract'; id: string }
+  | { kind: 'deliver' }
+  | { kind: 'dropContract' }
   // A pen at a camp, and an animal into it or out of it (progression PR 4).
   | { kind: 'buildPen'; id: number }
   | { kind: 'penIn'; id: number }
@@ -697,6 +737,9 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   }
   if (step.kind === 'plant') {
     return plantCamp(world, step.x, step.y, step.item);
+  }
+  if (step.kind === 'takeContract' || step.kind === 'deliver' || step.kind === 'dropContract') {
+    return contractCamp(world, step);
   }
   if (step.kind === 'buildPen' || step.kind === 'penIn' || step.kind === 'penOut') {
     return penCamp(world, step.kind, step.id);

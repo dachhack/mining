@@ -7,7 +7,8 @@
 //             mines something, a camp it can place, upgrade or demolish, a
 //             smelter it can build, a recipe it can make, a lantern it
 //             can hang, one lot it can sell or buy on a market day, a
-//             sapling it holds, a pen it can build or use),
+//             sapling it holds, a pen it can build or use, a contract
+//             it can take or deliver; it never drops one),
 //             ending the shift when out of taps; it never closes the mine.
 // - gatherer: tools/frontierRun.ts: builds a smelter, smelts and makes the
 //             tools and lanterns, keeps a pen and makes hay, sells
@@ -32,7 +33,10 @@ import {
 import {
   campAt,
   coverLevels,
+  contractBoard,
   createRng,
+  deliverRefusal,
+  takeRefusal,
   isMarketDay,
   tradeRefusal,
   previewTap,
@@ -123,6 +127,11 @@ function randomPolicy(rng: RngState): FrontierPolicy {
         if (tradeRefusal(state, 'buy', lot.item, 1) === null) options.push(`buy ${lot.item} 1`);
       }
     }
+    // A contract: take one from the board, deliver the one held, or drop it.
+    for (const offer of contractBoard(state)) {
+      if (takeRefusal(state, offer.id) === null) options.push(`takeContract ${offer.id}`);
+    }
+    if (deliverRefusal(state) === null) options.push('deliver');
     // A sapling it holds, on a few squares tried at random.
     for (const item of ['sapling', 'appleSapling']) {
       if ((state.inventory.get(item) ?? 0) < 1) continue;

@@ -485,3 +485,170 @@ export const FRONTIER_MARKET = {
     { item: 'copperLantern', count: 1, coins: 40, fromLevel: 3 },
   ] as FrontierLot[],
 };
+
+// ----- Contracts (docs/plans/progression-phases.md, section 5; PR 5) -----
+
+/** A contract: the items it asks for, all delivered at once, and the coins it pays then. */
+export interface FrontierContractDef {
+  /** A short name for code, steps and tests: 't1-coal'. */
+  id: string;
+  /** 1, 2 or 3. */
+  tier: number;
+  /** What the board calls it. */
+  name: string;
+  asks: ItemStack[];
+  pays: number;
+}
+
+/**
+ * Every contract the board can offer. Each pays well over what its items
+ * fetch at the market (FRONTIER_MARKET.sellPrices), and each tier pays
+ * more than the one below. Every number is a [Default] (plan section 5:
+ * tier 1 pays 50 to 150 coins, tier 2 200 to 500, tier 3 600 to 2,000).
+ */
+export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
+  // Tier 1: coal, stone, raw ore, or ingots for more.
+  {
+    id: 't1-coal',
+    tier: 1,
+    name: 'Coal for the forge',
+    asks: [{ item: 'coal', count: 20 }],
+    pays: 60,
+  },
+  {
+    id: 't1-stone',
+    tier: 1,
+    name: 'Stone for a wall',
+    asks: [{ item: 'stone', count: 100 }],
+    pays: 50,
+  },
+  { id: 't1-iron', tier: 1, name: 'Raw iron', asks: [{ item: 'rawIronOre', count: 20 }], pays: 80 },
+  {
+    id: 't1-copper',
+    tier: 1,
+    name: 'Raw copper',
+    asks: [{ item: 'rawCopperOre', count: 20 }],
+    pays: 80,
+  },
+  {
+    id: 't1-iron-ingots',
+    tier: 1,
+    name: 'Iron ingots',
+    asks: [{ item: 'ironIngot', count: 10 }],
+    pays: 120,
+  },
+  {
+    id: 't1-copper-ingots',
+    tier: 1,
+    name: 'Copper ingots',
+    asks: [{ item: 'copperIngot', count: 10 }],
+    pays: 120,
+  },
+  {
+    id: 't1-mixed',
+    tier: 1,
+    name: 'Coal and iron',
+    asks: [
+      { item: 'coal', count: 10 },
+      { item: 'rawIronOre', count: 10 },
+    ],
+    pays: 75,
+  },
+  // Tier 2: bulk stone, ore and ingots.
+  {
+    id: 't2-stone',
+    tier: 2,
+    name: 'Stone for a bridge',
+    asks: [{ item: 'stone', count: 300 }],
+    pays: 200,
+  },
+  {
+    id: 't2-coal',
+    tier: 2,
+    name: 'Coal for a winter',
+    asks: [{ item: 'coal', count: 80 }],
+    pays: 220,
+  },
+  {
+    id: 't2-iron',
+    tier: 2,
+    name: 'Iron ore in bulk',
+    asks: [{ item: 'rawIronOre', count: 60 }],
+    pays: 250,
+  },
+  {
+    id: 't2-copper-ingots',
+    tier: 2,
+    name: 'Copper for wire',
+    asks: [{ item: 'copperIngot', count: 40 }],
+    pays: 380,
+  },
+  {
+    id: 't2-ingots',
+    tier: 2,
+    name: 'Ingots for a works',
+    asks: [
+      { item: 'ironIngot', count: 30 },
+      { item: 'copperIngot', count: 20 },
+    ],
+    pays: 450,
+  },
+  // Tier 3: crystal, rare ore and relics.
+  { id: 't3-crystal', tier: 3, name: 'Crystal', asks: [{ item: 'crystal', count: 10 }], pays: 700 },
+  { id: 't3-rare', tier: 3, name: 'Rare ore', asks: [{ item: 'rareOre', count: 15 }], pays: 900 },
+  { id: 't3-relics', tier: 3, name: 'Relics', asks: [{ item: 'relic', count: 3 }], pays: 800 },
+  {
+    id: 't3-collection',
+    tier: 3,
+    name: 'A collector’s order',
+    asks: [
+      { item: 'crystal', count: 20 },
+      { item: 'relic', count: 2 },
+    ],
+    pays: 1500,
+  },
+  {
+    id: 't3-keystone',
+    tier: 3,
+    name: 'The keystone',
+    asks: [{ item: 'keystone', count: 1 }],
+    pays: 2000,
+  },
+];
+
+/**
+ * The contract board (plan section 5). On a market day it shows up to
+ * `perTier` contracts of each open tier, drawn from the run's seed and the
+ * shift. Tier 1 opens while the best camp is at least `tier1Level`; tier 2
+ * once a tier-1 contract is done; tier 3 once a tier-2 contract is done.
+ * One contract is held at a time (question 173), with no deadline.
+ */
+export const FRONTIER_BOARD = {
+  perTier: 3,
+  tier1Level: 3,
+};
+
+/**
+ * The phases of a run (progression plan section 1), phase 1 first: what
+ * each is about, and what moves the run on. The engine's `runPhase` says
+ * which one a run is in; the screen and the play interface show these.
+ */
+export const FRONTIER_PHASES: { title: string; next: string }[] = [
+  {
+    title: 'Camps and the landscape',
+    next: 'Upgrade a camp to level 2 (wood, clay, grass, animals).',
+  },
+  {
+    title: 'Farming and planning the pit',
+    next: 'Upgrade a camp to level 3 (stone, clay, apples, animals, hay); keep grass, trees and a pen going.',
+  },
+  {
+    title: 'Tier-1 contracts and tools',
+    next: 'Buy an iron drill at the market, take a tier-1 contract from the board, and deliver it.',
+  },
+  { title: 'Tier-2 contracts', next: 'Deliver a tier-2 contract: ore and ingots in bulk.' },
+  {
+    title: 'Tier-3 contracts and money',
+    next: 'Deliver tier-3 contracts (crystal, rare ore, relics: a steel drill mines them) and end rich.',
+  },
+];
