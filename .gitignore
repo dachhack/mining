@@ -1,4 +1,5 @@
-node_modules/
+# No slash: a node_modules symlink (as in a git worktree) is ignored too, not only a folder.
+node_modules
 dist/
 coverage/
 test-results/
