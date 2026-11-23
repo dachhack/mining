@@ -168,9 +168,9 @@ describe('the copper lantern (owner, question 163)', () => {
     const recipe = FRONTIER_RECIPES.find((r) => r.id === 'copper-lantern');
     expect(recipe?.inputs).toEqual([
       { item: 'copperIngot', count: 2 },
-      { item: 'crystal', count: 1 },
+      { item: 'coal', count: 1 },
     ]);
-    const made = frontierAct(withSmelter({ copperIngot: 2, crystal: 1 }), {
+    const made = frontierAct(withSmelter({ copperIngot: 2, coal: 1 }), {
       kind: 'make',
       recipe: 'copper-lantern',
     });

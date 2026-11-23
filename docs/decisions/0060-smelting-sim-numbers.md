@@ -1,6 +1,6 @@
 # 0060: Smelting and crafting in the simulator
 
-Date: 2026-11-23. PR 5 of `docs/plans/smelting-and-crafting.md`: what the simulator says about the smelter, the ingots, the tools and camp level 4 (PRs 1 to 4, engine 0.8.0). No number in `src/data` changes here. The tuning options are owner questions 165 and 166.
+Date: 2026-11-23. PR 5 of `docs/plans/smelting-and-crafting.md`: what the simulator says about the smelter, the ingots, the tools and camp level 4 (PRs 1 to 4, engine 0.8.0). No number in `src/data` changed in that PR. The tuning options were owner questions 165 and 166; the owner's answers, and the lantern recipe they changed, are at the end.
 
 ## The policies learn to craft
 
@@ -41,3 +41,18 @@ Median mined over the run: careful and gatherer 91 coal, 282 raw iron, 202 raw c
   - a little crystal in the middle band (1.5 veins per 1,000 cells, 2 to 4 blocks each): 21 crystal mined (median), and 42 of 50 runs hang a lantern, at a median shift of 20. This changes every seed's cube, the old game's too, until Phase C.
 - **The drill comes after it matters most (question 166).** A level-3 camp comes at shift 8 and the drill at shift 18. By then the policies' camps mine as deep as the drill allows anyway. The drill helps only a camp still at level 1 or 2. The policies keep their 3 camps and upgrade them all, so the simulator cannot say how much a player would use it.
 - **11 runs in 100 never reach level 3,** so they never make an ingot. All 11 stop 1 to 4 apples short of the upgrade's 10. By then only 2 or 3 apple trees are left on the map, none of them lit and bearing. The gatherer fells bare apple trees for wood. This is mostly the policy, not a rule. The playtest brief asks the playtesters to watch for it.
+
+## The owner's answers (2026-11-23)
+
+- **Question 165: (a).** The copper lantern takes 2 copper ingots + 1 coal; crystal is no longer needed (`FRONTIER_RECIPES` in `src/data/frontier.ts`).
+- **Question 166: (a).** The drill stays as it is; the playtest will show whether players use it.
+
+The same 100 runs of 60 shifts with the coal lantern:
+
+| Step         | careful (crystal → coal) | gatherer (crystal → coal) |
+| ------------ | ------------------------ | ------------------------- |
+| lantern hung | 7 @59 → 88 @15           | 7 @56 → 88 @15            |
+| iron drill   | 88 @18 → 82 @18          | 88 @18 → 82 @18           |
+| level 4      | 87 @21 → 62 @21          | 87 @21 → 62 @21           |
+
+The other steps are unchanged. Lanterns now compete for copper ingots. The policies hang a lantern at each of their 3 camps (6 copper ingots) before they save for the drill (2) and level 4 (6), so fewer runs reach those by shift 60. A player who wants level 4 sooner can hang fewer lanterns; the playtest brief asks which they chose.

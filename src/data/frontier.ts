@@ -255,7 +255,7 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
     name: 'Copper lantern',
     inputs: [
       { item: 'copperIngot', count: 2 },
-      { item: 'crystal', count: 1 },
+      { item: 'coal', count: 1 },
     ],
     output: { item: 'copperLantern', count: 1 },
   },
@@ -294,7 +294,8 @@ export const FRONTIER_DRILL = {
 };
 
 /**
- * The copper lantern (owner, question 163): one `item` from the store, hung
+ * The copper lantern (owner, question 163; its recipe takes coal, not
+ * crystal: question 165, decision note 0060): one `item` from the store, hung
  * at a camp from its panel for 1 tap, widens that camp's ring by
  * `ringBonus` squares on top of its level. One per camp; it is lost with
  * the camp.
