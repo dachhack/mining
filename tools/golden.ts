@@ -356,6 +356,14 @@ const FRONTIER_RUNS: {
       'The random policy: a useful step at random, ending each shift when its taps run out; it upgrades a camp to level 3 and is never hungry',
   },
   {
+    name: 'random-seed-1-smelts',
+    seed: 1,
+    policy: 'random',
+    maxShifts: 21,
+    description:
+      'The random policy on another seed, for 21 shifts: it builds smelters and, in its last shift, smelts raw ore into ingots',
+  },
+  {
     name: 'idle-seed-2-lost',
     seed: 2,
     policy: 'idle',

@@ -1,10 +1,10 @@
 {
   "description": "The digger: a pit 5 levels deep next to the first camp under the level rule, gathering only for upkeep",
   "recordedWith": "digger",
-  "engineVersion": "0.7.0",
+  "engineVersion": "0.8.0",
   "seed": 5,
   "stepCount": 929,
-  "expectedHash": "98e3e55f59f5feac",
+  "expectedHash": "9e68081f5718c518",
   "steps": [
     "tap 19,14",
     "tap 20,14",

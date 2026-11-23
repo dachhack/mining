@@ -175,3 +175,54 @@ export const FRONTIER_FOODS: ItemStack[] = [
   { item: 'apple', count: 1 },
   { item: 'animal', count: 1 },
 ];
+
+// ----- Smelting and crafting (docs/plans/smelting-and-crafting.md) -----
+
+/**
+ * The smelter (owner, question 161): built at a camp of level `minLevel` or
+ * more, from its panel, for `cost` and 1 tap. One per camp; it is lost if
+ * the camp is demolished. Smelting needs a smelter somewhere.
+ */
+export const FRONTIER_SMELTER = {
+  minLevel: 2,
+  cost: [
+    { item: 'stone', count: 20 },
+    { item: 'clay', count: 10 },
+  ] as ItemStack[],
+};
+
+/** Something made from the recipe book: what it takes and what it gives. */
+export interface FrontierRecipe {
+  /** A short name for code, step strings and tests: 'smelt-iron'. */
+  id: string;
+  /** What the book calls it. */
+  name: string;
+  inputs: ItemStack[];
+  output: ItemStack;
+}
+
+/**
+ * What can be made, each for 1 tap, while a smelter stands somewhere
+ * (owner, question 162: 2 raw ore + 1 coal make 2 ingots, the old game's
+ * ratio, decision note 0014).
+ */
+export const FRONTIER_RECIPES: FrontierRecipe[] = [
+  {
+    id: 'smelt-iron',
+    name: 'Smelt iron',
+    inputs: [
+      { item: 'rawIronOre', count: 2 },
+      { item: 'coal', count: 1 },
+    ],
+    output: { item: 'ironIngot', count: 2 },
+  },
+  {
+    id: 'smelt-copper',
+    name: 'Smelt copper',
+    inputs: [
+      { item: 'rawCopperOre', count: 2 },
+      { item: 'coal', count: 1 },
+    ],
+    output: { item: 'copperIngot', count: 2 },
+  },
+];

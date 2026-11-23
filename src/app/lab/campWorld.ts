@@ -39,6 +39,8 @@ import {
   coverLevelAt as engineCoverLevelAt,
   demolishRefusal as engineDemolishRefusal,
   isLevelPatch as engineIsLevelPatch,
+  makeRefusal as engineMakeRefusal,
+  smelterRefusal as engineSmelterRefusal,
   newlyCovered as engineNewlyCovered,
   placeRefusal as enginePlaceRefusal,
   seenWith,
@@ -274,7 +276,7 @@ export function campWorldFromLab(
   y: number,
   surface: Surface = bareSurface(lab.state),
 ): CampWorld {
-  const camps: Camp[] = [{ id: 1, x, y, level: 1 }];
+  const camps: Camp[] = [{ id: 1, x, y, level: 1, smelter: false }];
   const { width, height } = lab.depths;
   const seen = seenWith(new Array<boolean>(width * height).fill(false), camps, width, height);
   return { lab, camps, seen, nextCampId: 2, surface, turn: firstTurn() };
@@ -442,6 +444,28 @@ export function upgradeCamp(world: CampWorld, id: number): CampWorld {
   return act(world, { kind: 'upgrade', id }).world;
 }
 
+// ----- Smelting and crafting (docs/plans/smelting-and-crafting.md) -----
+
+/** Why a smelter cannot be built at camp `id` now ('noTaps', 'over', or the engine's reason), or `null` if it can. */
+export function smelterRefusal(world: CampWorld, id: number): string | null {
+  return turnRefusal(world) ?? engineSmelterRefusal(toFrontier(world), id);
+}
+
+/** Build a smelter at camp `id`, for its cost and 1 tap; the very same world if it cannot. */
+export function buildCampSmelter(world: CampWorld, id: number): CampWorld {
+  return act(world, { kind: 'buildSmelter', id }).world;
+}
+
+/** Why recipe `recipe` cannot be made now ('noTaps', 'over', or the engine's reason), or `null` if it can. */
+export function makeRefusal(world: CampWorld, recipe: string): string | null {
+  return turnRefusal(world) ?? engineMakeRefusal(toFrontier(world), recipe);
+}
+
+/** Make recipe `recipe` once, for its inputs and 1 tap; the very same world if it cannot. */
+export function makeCampRecipe(world: CampWorld, recipe: string): CampWorld {
+  return act(world, { kind: 'make', recipe }).world;
+}
+
 /** Why camp `id` cannot be demolished now, or `null` if it can. */
 export function demolishRefusal(
   world: CampWorld,
@@ -526,6 +550,9 @@ export type CampStep =
   | { kind: 'place'; x: number; y: number }
   | { kind: 'upgrade'; id: number }
   | { kind: 'demolish'; id: number }
+  // Build a smelter at a camp; make a recipe (smelting and crafting, PR 1).
+  | { kind: 'buildSmelter'; id: number }
+  | { kind: 'make'; recipe: string }
   // End the shift, rest at a camp, or close the mine (A4).
   | { kind: 'endShift' }
   | { kind: 'rest'; id: number }
@@ -550,6 +577,12 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   }
   if (step.kind === 'close') {
     return closeMine(world);
+  }
+  if (step.kind === 'buildSmelter') {
+    return buildCampSmelter(world, step.id);
+  }
+  if (step.kind === 'make') {
+    return makeCampRecipe(world, step.recipe);
   }
   return demolishCamp(world, step.id);
 }

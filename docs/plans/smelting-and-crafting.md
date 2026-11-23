@@ -1,6 +1,6 @@
 # Smelting and crafting: the plan
 
-Status: **agreed with the owner** (2026-11-23, questions 161 to 164). Not built yet. Every number is a [Default] that will live in `src/data/frontier.ts`.
+Status: **agreed with the owner** (2026-11-23, questions 161 to 164). PR 1 (the smelter and smelting, with its UI) is built; the rest is not yet. Every number is a [Default] that will live in `src/data/frontier.ts`.
 
 The owner chose this as the next feature after playing a3121a6 (question 159). It replaces "fuel first" in Phase D. By shift 22 of that run, with 7 camps, coal (15), raw iron (34) and raw copper (20) were piling up with nothing to spend them on. This gives them a use that makes the main loop (gather, dig, light more ground) better, without adding a new chore. Upkeep stays as easy as it is (question 160).
 
