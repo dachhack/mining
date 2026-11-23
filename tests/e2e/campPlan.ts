@@ -123,7 +123,7 @@ export function usefulTaps(
   return { steps, world };
 }
 
-/** A played world that can pay for level 2 (wood, clay, stone and an animal) from the first camp's ring. */
+/** A played world that can pay for level 2 (upgradeCostFrom(1)) from the first camp's ring. */
 export interface Level2Plan {
   seed: number;
   /** The taps and End shifts, as steps to replay before the page opens. */

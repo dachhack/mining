@@ -8,6 +8,7 @@ import {
   FRONTIER_LANTERN,
   FRONTIER_NEW_CAMP_COST,
   FRONTIER_PICKAXE,
+  FRONTIER_STEEL_DRILL,
 } from '../src/data/frontier';
 import {
   canAfford,
@@ -17,6 +18,7 @@ import {
   hasSmelter,
   isMarketDay,
   mostLots,
+  tradeRefusal,
   lanternRefusal,
   makeRefusal,
   previewTap,
@@ -169,17 +171,25 @@ export function craftStep(state: FrontierState): FrontierStep | null {
 /** The gatherer keeps this much grass back and sells the rest on a market day. */
 const GATHERER_GRASS_KEPT = 60;
 
+/** The gatherer keeps this much stone back and sells the rest on a market day. */
+const GATHERER_STONE_KEPT = 100;
+
 /** Items with no use yet (design doc section 7), which the gatherer sells whenever it can. */
 const GATHERER_SELLS_ALL = ['crystal', 'rareOre', 'relic'];
 
 /**
- * On a market day (docs/plans/progression-phases.md, section 3): sell every
- * whole lot of the items with no use yet, then grass above
- * GATHERER_GRASS_KEPT. `null` if there is nothing to sell, or it is not a
- * market day.
+ * On a market day (docs/plans/progression-phases.md, section 3): buy an
+ * iron drill, then a steel drill, when it can (one each); sell every whole
+ * lot of the items with no use yet, then grass above GATHERER_GRASS_KEPT and
+ * stone above GATHERER_STONE_KEPT. `null` if there is nothing to trade, or
+ * it is not a market day.
  */
 export function marketStep(state: FrontierState): FrontierStep | null {
   if (!isMarketDay(state)) return null;
+  for (const tool of [FRONTIER_DRILL.item, FRONTIER_STEEL_DRILL.item]) {
+    const held = (state.inventory.get(tool) ?? 0) > 0;
+    if (!held && tradeRefusal(state, 'buy', tool, 1) === null) return `buy ${tool} 1`;
+  }
   for (const item of GATHERER_SELLS_ALL) {
     const lots = mostLots(state, 'sell', item);
     if (lots > 0) return `sell ${item} ${lots}`;
@@ -190,7 +200,13 @@ export function marketStep(state: FrontierState): FrontierStep | null {
     Math.max(0, (state.inventory.get('grass') ?? 0) - GATHERER_GRASS_KEPT),
   );
   const grass = mostLots(spare, 'sell', 'grass');
-  return grass > 0 ? `sell grass ${grass}` : null;
+  if (grass > 0) return `sell grass ${grass}`;
+  spare.inventory.set(
+    'stone',
+    Math.max(0, (state.inventory.get('stone') ?? 0) - GATHERER_STONE_KEPT),
+  );
+  const stone = mostLots(spare, 'sell', 'stone');
+  return stone > 0 ? `sell stone ${stone}` : null;
 }
 
 /**

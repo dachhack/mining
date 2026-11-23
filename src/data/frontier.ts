@@ -25,7 +25,14 @@ export interface FrontierCampLevel {
  *
  * A square can be mined if a camp whose radius covers it has a level that
  * can mine its top block; with several camps over a square, the best level
- * counts. A block kind in no level's list cannot be mined in Lab 2 at all.
+ * counts. A block kind in no level's list is mined with a tool instead
+ * (FRONTIER_TOOLS), or not at all.
+ *
+ * What each level mines and the level-2 cost are the progression plan's
+ * (docs/plans/progression-phases.md, section 2.2; owner, 2026-11-23): a
+ * base camp mines only dirt, rubble and clay; level 2 adds stone and coal;
+ * level 3 adds hard rock. Ore, crystal and relics need a tool. The level-2
+ * upgrade costs nothing a base camp cannot dig (no stone).
  *
  * The radii are 9, 12 and 15 (they were 5, 8 and 12). The owner found camps
  * had to touch to spread the light ("It's too close") and asked for a bigger
@@ -40,24 +47,25 @@ export const FRONTIER_CAMP_LEVELS: FrontierCampLevel[] = [
   {
     radius: 9,
     // No timber-root: Lab 2's cube has none (LAB_SURFACE.timberRootBecomes).
-    addsBlocks: ['dirt', 'rubble', 'stone', 'coalSeam', 'clay'],
+    addsBlocks: ['dirt', 'rubble', 'clay'],
     upgradeCost: [],
   },
   {
     radius: 12,
-    addsBlocks: ['hardRock'],
+    addsBlocks: ['stone', 'coalSeam'],
     // Wood too (owner: "Let's make timber needed for each camp upgrade";
-    // "Wood is timber"): a little more than the 15 a new camp costs.
+    // "Wood is timber"): a little more than the 15 a new camp costs. No
+    // stone: a base camp cannot mine it (progression plan section 2.2).
     upgradeCost: [
       { item: 'wood', count: 20 },
       { item: 'clay', count: 10 },
-      { item: 'stone', count: 15 },
-      { item: 'animal', count: 1 },
+      { item: 'grass', count: 10 },
+      { item: 'animal', count: 2 },
     ],
   },
   {
     radius: 15,
-    addsBlocks: ['ironOre', 'copperOre', 'crystal', 'unstableOre', 'relic', 'keystone'],
+    addsBlocks: ['hardRock'],
     upgradeCost: [
       { item: 'wood', count: 40 },
       { item: 'clay', count: 20 },
@@ -68,9 +76,9 @@ export const FRONTIER_CAMP_LEVELS: FrontierCampLevel[] = [
   },
   {
     // Level 4 (owner, question 163; docs/plans/smelting-and-crafting.md):
-    // a wider ring and nothing new to mine, since level 3 already mines
-    // every block that can be mined. Its cost has ingots, so it needs a
-    // smelter somewhere first.
+    // a wider ring and nothing new to mine: what level 3 does not mine is
+    // mined with tools. Its cost has ingots, so it needs a smelter
+    // somewhere first.
     radius: 18,
     addsBlocks: [],
     upgradeCost: [
@@ -93,6 +101,15 @@ export const FRONTIER_NEW_CAMP_COST: ItemStack[] = [
   { item: 'wood', count: 15 },
   { item: 'grass', count: 15 },
 ];
+
+/**
+ * Where a camp may stand (progression plan section 2.1; owner: "Camps can
+ * only be placed in the top three levels"): its level 3 x 3 must be at a
+ * depth of at most `maxDepth` (0 is the surface).
+ */
+export const FRONTIER_CAMP_PLACE = {
+  maxDepth: 2,
+};
 
 /**
  * The free first camp's 3 x 3 patch is centred no further than this many
@@ -281,17 +298,38 @@ export const FRONTIER_PICKAXE = {
   yieldTimes: 2,
 };
 
+/** A tool that mines blocks no camp level mines: while the store holds `item`, a lit square's `mines` blocks can be mined. */
+export interface FrontierTool {
+  item: ItemId;
+  mines: BlockId[];
+}
+
 /**
- * The iron drill (owner, question 163: a tool for harder rock): while the
- * store holds `item`, every camp mines as if it were `levelBonus` levels
- * higher, but never past what level `upToLevel` mines. A camp's ring stays
- * its own level's. It does not wear out, and a second one adds nothing.
+ * The iron drill (progression plan section 4; it was "one camp level
+ * higher" until then): while the store holds `item`, any camp's lit
+ * ground's iron and copper ore can be mined. It does not wear out, and a
+ * second one adds nothing. Made at a smelter (FRONTIER_RECIPES) or bought
+ * at the market; the first one has to be bought, since ingots need ore.
  */
-export const FRONTIER_DRILL = {
-  item: 'drill' as ItemId,
-  levelBonus: 1,
-  upToLevel: 3,
+export const FRONTIER_DRILL: FrontierTool = {
+  item: 'drill',
+  mines: ['ironOre', 'copperOre'],
 };
+
+/**
+ * The steel drill (plan section 4; question 172): mines what the iron drill
+ * does, and crystal, unstable ore, relics and the keystone. Bought only.
+ */
+export const FRONTIER_STEEL_DRILL: FrontierTool = {
+  item: 'steelDrill',
+  mines: ['ironOre', 'copperOre', 'crystal', 'unstableOre', 'relic', 'keystone'],
+};
+
+/**
+ * Every tool, cheapest first: a block a tool mines asks for the first tool
+ * here that mines it.
+ */
+export const FRONTIER_TOOLS: FrontierTool[] = [FRONTIER_DRILL, FRONTIER_STEEL_DRILL];
 
 /**
  * The copper lantern (owner, question 163; its recipe takes coal, not
@@ -319,12 +357,14 @@ export const FRONTIER_RUN = {
 /**
  * One lot at the market: `count` of `item` for `coins` coins. Selling trades
  * the item for the coins; buying, the coins for the item. A trade is any
- * whole number of lots, for 1 tap (plan section 3).
+ * whole number of lots, for 1 tap (plan section 3). A lot with `fromLevel`
+ * is traded only while the best camp standing is at least that level.
  */
 export interface FrontierLot {
   item: ItemId;
   count: number;
   coins: number;
+  fromLevel?: number;
 }
 
 /**
@@ -348,7 +388,10 @@ export const FRONTIER_MARKET = {
     { item: 'apple', count: 2, coins: 1 },
     { item: 'animal', count: 1, coins: 3 },
     { item: 'clay', count: 2, coins: 1 },
-    { item: 'stone', count: 2, coins: 1 },
+    // Stone is what most taps dig (twice as much with a pickaxe): at 2 for a
+    // coin, the simulator's gatherer made 4,500 coins in a run from stone
+    // alone, more than the contracts are meant to pay (progression PR 2).
+    { item: 'stone', count: 10, coins: 1 },
     { item: 'coal', count: 1, coins: 1 },
     { item: 'rawIronOre', count: 1, coins: 2 },
     { item: 'rawCopperOre', count: 1, coins: 2 },
@@ -360,11 +403,16 @@ export const FRONTIER_MARKET = {
   ] as FrontierLot[],
   /**
    * What the player can buy, and what it costs (question 171). From the
-   * start: an animal and clay. Saplings and hay join with farming (plan
-   * section 6), the tools with camp gating (section 4).
+   * start: an animal and clay. From a level-3 camp: the tools (plan section
+   * 4), dearer than making them at a smelter. Saplings and hay join with
+   * farming (plan section 6).
    */
   buyPrices: [
     { item: 'animal', count: 1, coins: 8 },
     { item: 'clay', count: 1, coins: 1 },
+    { item: 'drill', count: 1, coins: 80, fromLevel: 3 },
+    { item: 'steelDrill', count: 1, coins: 250, fromLevel: 3 },
+    { item: 'ironPickaxe', count: 1, coins: 60, fromLevel: 3 },
+    { item: 'copperLantern', count: 1, coins: 40, fromLevel: 3 },
   ] as FrontierLot[],
 };

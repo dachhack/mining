@@ -4,7 +4,7 @@
 
 import {
   FRONTIER_CAMP_LEVELS,
-  FRONTIER_DRILL,
+  FRONTIER_CAMP_PLACE,
   FRONTIER_FOODS,
   FRONTIER_LANTERN,
   FRONTIER_MARKET,
@@ -57,7 +57,7 @@ export function frontierHelpText(): string {
     '  Then it mines the top block, which gives what the block gives (stone, clay, coal...).',
     '- The level rule: a square can only be mined if none of its four neighbours is more than',
     '  1 level higher. Dig wide, not deep.',
-    '- A camp stands on a level 3 x 3, lit, not over another camp. Its ground is never mined.',
+    `- A camp stands on a level 3 x 3, lit, not over another camp, no deeper than depth ${FRONTIER_CAMP_PLACE.maxDepth}. Its ground is never mined.`,
     `  A new camp costs ${cost(FRONTIER_NEW_CAMP_COST)}. A camp can be demolished once other camps' rings`,
     '  cover its 3 x 3; it gives nothing back.',
     ...levels,
@@ -71,7 +71,8 @@ export function frontierHelpText(): string {
     `- "smelter N" builds a smelter at camp N (level ${FRONTIER_SMELTER.minLevel} or more; ${cost(FRONTIER_SMELTER.cost)}; one a camp, lost with it).`,
     `  With a smelter anywhere, "make R" makes recipe R: ${FRONTIER_RECIPES.map((r) => `${r.id} (${cost(r.inputs)} -> ${r.output.count} ${r.output.item})`).join(', ')}.`,
     `  While you hold an iron pickaxe, every mining tap yields ${FRONTIER_PICKAXE.yieldTimes} times as much (a second adds nothing).`,
-    `  While you hold a drill, every camp mines as if it were ${FRONTIER_DRILL.levelBonus} level higher, up to level ${FRONTIER_DRILL.upToLevel}'s blocks (its ring stays the same).`,
+    `  While you hold an iron drill, iron and copper ore can be mined on any camp's ground; a steel drill also mines`,
+    `  crystal, rare ore and relics. No camp level mines those. The market sells both once your best camp is level 3.`,
     `  "lantern N" hangs a copper lantern from your store at camp N: its ring grows by ${FRONTIER_LANTERN.ringBonus} (one a camp, lost with it).`,
     '  Each costs 1 tap.',
     `- The market opens every ${FRONTIER_MARKET.everyShifts.join(', ')} shifts while your best camp is level 1, 2, 3, ...`,

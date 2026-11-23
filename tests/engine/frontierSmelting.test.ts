@@ -136,7 +136,9 @@ describe('the iron pickaxe (owner, question 163)', () => {
   });
 
   it('doubles what a mining tap yields, and a second one adds nothing', () => {
-    const plain = world({ top: '#' });
+    // Stone: a level-2 camp mines it (progression plan section 2.2).
+    const plainBase = world({ top: '#' });
+    const plain = { ...plainBase, camps: plainBase.camps.map((c) => ({ ...c, level: 2 })) };
     const one = holding(plain, { [FRONTIER_PICKAXE.item]: 1 });
     const two = holding(plain, { [FRONTIER_PICKAXE.item]: 2 });
     const without = frontierAct(plain, { kind: 'tap', x: AT.x, y: AT.y });

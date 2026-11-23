@@ -67,11 +67,13 @@ export function marketLot(side: TradeSide, item: string): FrontierLot | null {
  * Why `lots` lots of `item` cannot be traded on `side` now, or `null` if they can:
  * - 'closed': it is not a market day;
  * - 'unknown': the market does not trade that item that way;
+ * - 'notYet': it does, but only once the best camp is at the lot's
+ *   `fromLevel` (the tools, from level 3);
  * - 'lots': `lots` is not a whole number of 1 or more;
  * - 'cost': the store does not hold what the trade takes (the items to
  *   sell, or the coins to buy).
  */
-export type TradeRefusal = 'closed' | 'unknown' | 'lots' | 'cost';
+export type TradeRefusal = 'closed' | 'unknown' | 'notYet' | 'lots' | 'cost';
 
 export function tradeRefusal(
   state: FrontierState,
@@ -82,6 +84,7 @@ export function tradeRefusal(
   if (!isMarketDay(state)) return 'closed';
   const lot = marketLot(side, item);
   if (lot === null) return 'unknown';
+  if (bestCampLevel(state) < (lot.fromLevel ?? 1)) return 'notYet';
   if (!Number.isInteger(lots) || lots < 1) return 'lots';
   const given = tradeOf(side, lot, lots).give;
   if (!canAfford(state.inventory, [given])) return 'cost';
@@ -119,7 +122,8 @@ export function trade(
 
 /**
  * The most whole lots of `item` the store can trade on `side` now (0 if
- * none, or if the market does not trade it), whether or not it is a market day.
+ * none, or if the market does not trade it), whether or not it is a market
+ * day or the lot is open yet.
  */
 export function mostLots(state: FrontierState, side: TradeSide, item: string): number {
   const lot = marketLot(side, item);

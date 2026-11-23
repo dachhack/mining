@@ -6,8 +6,10 @@
 // 3. a camp's own 3 x 3 is never mined ('camp');
 // 4. grass, a tree or an apple tree is taken before the block under it;
 // 5. the level rule: a square may be at most 1 level below its neighbours ('refused');
-// 6. the camps covering the square must have a level that can mine its top block,
-//    one level more with a drill in the store, up to level 3's blocks ('tooHard');
+// 6. the camps covering the square must have a level that can mine its top
+//    block, or, for a block no camp level mines (ore, crystal, relics), a
+//    camp must cover it and the store must hold a tool that mines it
+//    ('tooHard'; progression plan sections 2.2 and 4);
 // 7. then the top block is mined, and what it yields goes into the inventory
 //    (doubled while the store holds an iron pickaxe: FRONTIER_PICKAXE).
 //
@@ -16,12 +18,12 @@
 // (review of PR #119).
 
 import { blockDefByCode } from '../../data';
-import type { ItemStack } from '../../data';
+import type { ItemId, ItemStack } from '../../data';
 import { FRONTIER_PICKAXE, FRONTIER_SURFACE } from '../../data/frontier';
 import { mayMine, topBlockAt } from '../heightmap';
 import type { HigherNeighbour, MineRefusal } from '../heightmap';
 import { labMine } from '../lab';
-import { campAt, levelNeededFor, miningLevelAt, sightAt } from './camps';
+import { campAt, frontierMineCheck, sightAt } from './camps';
 import { gained, harvestAt } from './surface';
 import type { HarvestKind } from './surface';
 import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from './state';
@@ -34,7 +36,8 @@ import type { FrontierState } from './state';
  * - 'fog' or 'greyed': the square is outside every camp's circle;
  * - 'camp': the square is a camp's ground;
  * - 'refused': the level rule refused it, or the square is off the map (`refusal`);
- * - 'tooHard': the camps covering it cannot mine its top block (`needs`).
+ * - 'tooHard': the camps covering it cannot mine its top block (`needs`
+ *   or `needsTool`).
  */
 export type FrontierTapKind =
   'mined' | 'harvested' | 'fog' | 'greyed' | 'camp' | 'refused' | 'tooHard';
@@ -49,8 +52,10 @@ export interface FrontierTap {
   harvest: HarvestKind | null;
   /** For 'mined': the block code that was mined. */
   block: number | null;
-  /** For 'tooHard': the lowest camp level that can mine the block, or `null` if none can. */
+  /** For 'tooHard': the lowest camp level that can mine the block, or `null` if no level can. */
   needs: number | null;
+  /** For 'tooHard': the tool that mines the block, if a tool does and none is held. */
+  needsTool: ItemId | null;
   /** For 'refused': why ('outside' for a square off the map). */
   refusal: MineRefusal | 'outside' | null;
   /** For a 'refused' too-steep tap: the neighbours that are too high. */
@@ -76,6 +81,7 @@ export function frontierTap(state: FrontierState, x: number, y: number): Frontie
     harvest: null,
     block: null,
     needs: null,
+    needsTool: null,
     refusal: null,
     higherNeighbours: [],
   });
@@ -105,9 +111,9 @@ export function frontierTap(state: FrontierState, x: number, y: number): Frontie
       higherNeighbours: check.higherNeighbours,
     };
   }
-  const needs = levelNeededFor(topBlockAt(state.cube, x, y));
-  if (needs === null || needs > miningLevelAt(state.camps, state.inventory, x, y)) {
-    return { ...nothing('tooHard'), needs };
+  const hard = frontierMineCheck(state.camps, state.inventory, x, y, topBlockAt(state.cube, x, y));
+  if (!hard.ok) {
+    return { ...nothing('tooHard'), needs: hard.needs, needsTool: hard.needsTool };
   }
   const mined = labMine(state.cube, x, y);
   if (!mined.mined) {
@@ -172,8 +178,7 @@ export function previewTap(
   }
   if (!mayMine(state.cube, x, y).allowed) return { kind: 'refused', gain: [] };
   const code = topBlockAt(state.cube, x, y);
-  const needs = levelNeededFor(code);
-  if (needs === null || needs > miningLevelAt(state.camps, state.inventory, x, y))
+  if (!frontierMineCheck(state.camps, state.inventory, x, y, code).ok)
     return { kind: 'tooHard', gain: [] };
   return { kind: 'mined', gain: miningGain(state.inventory, blockDefByCode(code).yields) };
 }

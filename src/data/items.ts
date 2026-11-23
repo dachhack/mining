@@ -30,7 +30,9 @@ export type ItemId =
   | 'ironPickaxe'
   | 'copperLantern'
   // Money at the market (docs/plans/progression-phases.md, section 3).
-  | 'coin';
+  | 'coin'
+  // Bought at the market: mines crystal, rare ore and relics (plan section 4).
+  | 'steelDrill';
 
 // Fuel is a gauge, not an item, so it is not here. The torch and the safety
 // lamp are gone with light (design doc v0.2, section 7). Items have no weight:
@@ -69,5 +71,6 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   // Made from ingots (docs/plans/smelting-and-crafting.md, PR 3).
   ironPickaxe: { name: 'Iron pickaxe' },
   coin: { name: 'Coins' },
+  steelDrill: { name: 'Steel drill' },
   copperLantern: { name: 'Copper lantern' },
 };

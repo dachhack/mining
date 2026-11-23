@@ -127,7 +127,7 @@ export {
   footprintOf,
   inCircle,
   levelNeededFor,
-  minesAsLevel,
+  toolNeededFor,
   upgradeCostFrom,
 } from '../../engine';
 /** What one square looks like to the player: 'shown', 'greyed' or 'fog'. */
@@ -347,7 +347,8 @@ export function campWorldOf(state: FrontierState): CampWorld {
  * - 'camp': the square holds a camp, which is never mined;
  * - 'refused': the level rule refused it (`tap.result.refusal` says why);
  * - 'tooHard': the level rule allows it, but the camps covering the square
- *   cannot mine its top block (`needs` says which level can);
+ *   cannot mine its top block (`needs` says which level can, `needsTool`
+ *   which tool);
  * - 'noTaps': the shift has no taps left (A4);
  * - 'over': the run has ended (A4).
  */
@@ -361,6 +362,8 @@ export interface CampTap {
   tap: LabTap | null;
   /** For 'tooHard': the lowest camp level that could mine the block, or `null` if none can. */
   needs: number | null;
+  /** For 'tooHard': the tool that mines the block (an iron or steel drill), if a tool does. */
+  needsTool: string | null;
   /** For 'harvested': what was taken and what it gave; `null` otherwise. */
   harvest: Harvest | null;
 }
@@ -378,6 +381,7 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
     world,
     tap: null,
     needs: tap?.needs ?? null,
+    needsTool: tap?.needsTool ?? null,
     harvest: null,
   });
   if (tap === null) {

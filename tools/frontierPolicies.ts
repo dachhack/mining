@@ -32,7 +32,7 @@ import {
   coverLevels,
   createRng,
   isMarketDay,
-  mostLots,
+  tradeRefusal,
   previewTap,
   placeRefusal,
   upgradeRefusal,
@@ -110,10 +110,10 @@ function randomPolicy(rng: RngState): FrontierPolicy {
     // On a market day, one lot of anything it can sell or buy.
     if (isMarketDay(state)) {
       for (const lot of FRONTIER_MARKET.sellPrices) {
-        if (mostLots(state, 'sell', lot.item) > 0) options.push(`sell ${lot.item} 1`);
+        if (tradeRefusal(state, 'sell', lot.item, 1) === null) options.push(`sell ${lot.item} 1`);
       }
       for (const lot of FRONTIER_MARKET.buyPrices) {
-        if (mostLots(state, 'buy', lot.item) > 0) options.push(`buy ${lot.item} 1`);
+        if (tradeRefusal(state, 'buy', lot.item, 1) === null) options.push(`buy ${lot.item} 1`);
       }
     }
     // A few places for a camp, tried at random squares (all of them would be slow).

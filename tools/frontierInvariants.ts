@@ -10,9 +10,12 @@
 //   changes nothing at all.
 // - THE LEVEL RULE: a mined square went down exactly 1 level, and is no more
 //   than 1 level below any neighbour.
-// - HARDNESS: a mined block needs no higher camp level than the best camp
-//   over it has, or one more with a drill in the store (FRONTIER_DRILL), up
-//   to FRONTIER_DRILL.upToLevel. No camp is above the top level.
+// - HARDNESS: a mined block is in the list of a camp level no higher than
+//   the best camp over it, or, if no level lists it, a camp covers it and a
+//   tool in the store lists it (FRONTIER_TOOLS). No camp is above the top
+//   level.
+// - CAMPS STAND HIGH: a newly placed camp's ground is no deeper than
+//   FRONTIER_CAMP_PLACE.maxDepth.
 // - SHIFTS AND HEALTH: the shift number goes up by exactly 1 at End shift and
 //   rest; health stays between 0 and full; a run at 0 health is lost; a run
 //   that has ended stays ended.
@@ -30,14 +33,17 @@
 // - LANTERNS: hung ones came from the store: a camp gains a lantern only as
 //   one lantern leaves the store.
 // - THE MARKET AND THE RUN'S END: a trade happens only on a market day
-//   (worked out here from the data), gives up and gets exactly a whole
+//   (worked out here from the data), in a lot open at the best camp's
+//   level, gives up and gets exactly a whole
 //   number of lots at its price, and changes nothing else in the store; a
 //   run is 'finished' only by the End shift or rest of its last shift, and
 //   no shift past the last is ever played.
 
+import { BLOCKS } from '../src/data';
 import {
   FRONTIER_CAMP_LEVELS,
-  FRONTIER_DRILL,
+  FRONTIER_CAMP_PLACE,
+  FRONTIER_TOOLS,
   FRONTIER_LANTERN,
   FRONTIER_MARKET,
   FRONTIER_RUN,
@@ -53,7 +59,6 @@ import {
   depthAt,
   isLevelPatch,
   isSquare,
-  levelNeededFor,
   previewTap,
   topBlockAt,
 } from '../src/engine';
@@ -104,17 +109,19 @@ export function checkStep(
     const [, coords] = step.split(' ');
     const [x, y] = (coords ?? '').split(',').map(Number);
     if (x !== undefined && y !== undefined) {
-      // Hardness: worked out here from the data, not with the engine's miningLevelAt.
-      let allowed = coverLevelAt(before.camps, x, y);
-      if (allowed > 0 && (before.inventory.get(FRONTIER_DRILL.item) ?? 0) > 0) {
-        allowed = Math.max(
-          allowed,
-          Math.min(allowed + FRONTIER_DRILL.levelBonus, FRONTIER_DRILL.upToLevel),
-        );
-      }
-      const needs = levelNeededFor(topBlockAt(before.cube, x, y));
-      if (needs === null || needs > allowed)
-        say(`mined ${x},${y}, which needs level ${needs}, with level ${allowed} allowed`);
+      // Hardness: worked out here from the data, not with the engine's frontierMineCheck.
+      const allowed = coverLevelAt(before.camps, x, y);
+      const code = topBlockAt(before.cube, x, y);
+      const byLevel = FRONTIER_CAMP_LEVELS.findIndex((l) =>
+        l.addsBlocks.some((id) => BLOCKS[id].code === code),
+      );
+      const byTool = FRONTIER_TOOLS.some(
+        (t) =>
+          (before.inventory.get(t.item) ?? 0) > 0 && t.mines.some((id) => BLOCKS[id].code === code),
+      );
+      const ok = byLevel >= 0 ? byLevel + 1 <= allowed : allowed > 0 && byTool;
+      if (!ok)
+        say(`mined ${x},${y} (block ${code}) with level ${allowed} over it and tool ${byTool}`);
       const was = depthAt(before.cube, x, y);
       const now = depthAt(after.cube, x, y);
       if (now !== was + 1) say(`mined ${x},${y} went from depth ${was} to ${now}`);
@@ -160,6 +167,13 @@ export function checkStep(
     if ((lit[i] ?? 0) > 0 && !seen) say(`square ${i} is lit but not seen`);
   });
 
+  // New camps stand high.
+  const oldIds = new Set(before.camps.map((c) => c.id));
+  for (const camp of after.camps) {
+    if (!oldIds.has(camp.id) && depthAt(after.cube, camp.x, camp.y) > FRONTIER_CAMP_PLACE.maxDepth)
+      say(`camp ${camp.id} was placed at depth ${depthAt(after.cube, camp.x, camp.y)}`);
+  }
+
   // Camp levels: none above the top level.
   for (const camp of after.camps) {
     if (camp.level < 1 || camp.level > FRONTIER_CAMP_LEVELS.length)
@@ -196,6 +210,8 @@ export function checkStep(
     if (lot === undefined) {
       say(`a trade in ${item ?? '?'}, which the market does not ${verb}`);
     } else {
+      if (best < (lot.fromLevel ?? 1))
+        say(`bought ${lot.item}, sold from camp level ${lot.fromLevel ?? 1}, with level ${best}`);
       const sign = verb === 'sell' ? 1 : -1;
       const expected = new Map<string, number>([
         [lot.item, -sign * lot.count * lots],

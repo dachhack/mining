@@ -30,6 +30,7 @@
 
 import {
   FRONTIER_DRILL,
+  FRONTIER_STEEL_DRILL,
   FRONTIER_LANTERN,
   FRONTIER_PICKAXE,
   FRONTIER_SHIFT,
@@ -85,6 +86,7 @@ export const FIRST_NAMES = [
   'ingot',
   'pickaxe',
   'drill',
+  'steelDrill',
   'lantern',
   'lanternHung',
   'level4',
@@ -104,6 +106,7 @@ function reached(state: FrontierState): Set<FirstName> {
   if (held('ironIngot') || held('copperIngot')) got.add('ingot');
   if (held(FRONTIER_PICKAXE.item)) got.add('pickaxe');
   if (held(FRONTIER_DRILL.item)) got.add('drill');
+  if (held(FRONTIER_STEEL_DRILL.item)) got.add('steelDrill');
   if (held(FRONTIER_LANTERN.item)) got.add('lantern');
   return got;
 }

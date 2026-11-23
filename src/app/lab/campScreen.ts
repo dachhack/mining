@@ -28,6 +28,8 @@ import {
   FRONTIER_RUN,
   FRONTIER_SHIFT,
   FRONTIER_SMELTER,
+  FRONTIER_STEEL_DRILL,
+  FRONTIER_CAMP_PLACE,
 } from '../../data/frontier';
 import type { FrontierLot } from '../../data/frontier';
 import { LAB_ITEMS, LAB_NEW_CAMP_COST } from '../../data/labCamps';
@@ -49,7 +51,6 @@ import {
   campTap,
   canAfford,
   addedNamesAt,
-  minesAsLevel,
   minesText,
   newCampWorld,
   newlyCovered,
@@ -171,6 +172,8 @@ function placeRefusalText(refusal: PlaceRefusal): string {
   if (refusal === 'notShown') return 'The 3 × 3 must be lit, inside a camp’s ring.';
   if (refusal === 'occupied') return 'It overlaps another camp.';
   if (refusal === 'notLevel') return NOT_LEVEL_TEXT;
+  if (refusal === 'tooDeep')
+    return `Camps stand only in the top ${FRONTIER_CAMP_PLACE.maxDepth + 1} levels: this ground is dug too deep.`;
   return 'Not enough to build it yet: mine more first.';
 }
 
@@ -1764,7 +1767,7 @@ export function mountCampLab(
       return `Every mining tap gives ${FRONTIER_PICKAXE.yieldTimes}×, while you have one.`;
     }
     if (makes?.item === FRONTIER_DRILL.item) {
-      return `Every camp mines one level harder, up to level ${FRONTIER_DRILL.upToLevel}'s blocks.`;
+      return 'Mines iron and copper ore on any camp’s ground, while you have one.';
     }
     if (makes?.item === FRONTIER_LANTERN.item) {
       return `Hang it at a camp from its panel: ring +${FRONTIER_LANTERN.ringBonus}.`;
@@ -1887,11 +1890,14 @@ export function mountCampLab(
     const line = element('p', 'lab2-panel-line');
     line.dataset['testid'] = 'lab2-camp-line';
     // With a lantern, the ring is its level's plus the lantern's (said on the lantern's line below).
-    // With a drill in the store, the camp mines as if a level higher, up to FRONTIER_DRILL.upToLevel.
-    const mines = minesAsLevel(camp.level, world.lab.counts);
-    // 🔩: the drill raises what it mines (kept short, so the line fits a phone).
-    const withDrill = mines > camp.level ? '🔩 ' : '';
-    line.textContent = `Ring ${campRing(camp)} · ${withDrill}mines ${minesText(mines)}`;
+    // A drill in the store adds ore (🔩) and a steel drill crystal and relics too (⚙️), on any camp's ground.
+    const held = (item: string): boolean => (world.lab.counts.get(item) ?? 0) > 0;
+    const tools = held(FRONTIER_STEEL_DRILL.item)
+      ? ' · ⚙️ + ore, crystal, relics'
+      : held(FRONTIER_DRILL.item)
+        ? ' · 🔩 + ore'
+        : '';
+    line.textContent = `Ring ${campRing(camp)} · mines ${minesText(camp.level)}${tools}`;
 
     // Next: what the upgrade gives, and what it costs.
     const next = element('p', 'lab2-panel-line lab2-panel-next');
@@ -2277,21 +2283,27 @@ export function mountCampLab(
     }
     if (result.kind === 'tooHard') {
       const name = blockDefByCode(tops[x + world.lab.state.size.x * y] ?? 0).name;
+      // One reason: a camp level, or a tool (progression plan section 4).
       const text =
-        result.needs === null
-          ? `${name} cannot be mined in this lab.`
-          : result.needs > 1 &&
-              result.needs <= FRONTIER_DRILL.upToLevel &&
-              (world.lab.counts.get(FRONTIER_DRILL.item) ?? 0) === 0
-            ? `${name} needs a level ${result.needs} camp over it, or a drill and a level ${result.needs - FRONTIER_DRILL.levelBonus} camp.`
-            : `${name} needs a level ${result.needs} camp over it.`;
+        result.needs !== null
+          ? `${name} needs a level ${result.needs} camp over it.`
+          : result.needsTool === FRONTIER_DRILL.item
+            ? `${name} needs an iron drill: buy one at the market 🏪, or make one at a smelter.`
+            : result.needsTool !== null
+              ? `${name} needs a steel drill: buy one at the market 🏪.`
+              : `${name} cannot be mined.`;
       setHint(text, 'hard');
       effects = effects.filter((e) => e.kind !== 'tooHard');
       addEffect({
         kind: 'tooHard',
         x,
         y,
-        label: result.needs === null ? 'Too hard' : `Needs Lv ${result.needs}`,
+        label:
+          result.needs !== null
+            ? `Needs Lv ${result.needs}`
+            : result.needsTool !== null
+              ? `Needs ${result.needsTool === FRONTIER_DRILL.item ? 'drill' : 'steel drill'}`
+              : 'Too hard',
         higher: [],
         fromRadius: 0,
         toRadius: 0,

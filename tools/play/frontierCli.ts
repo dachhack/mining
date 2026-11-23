@@ -38,6 +38,7 @@ import {
   hashFrontier,
   isMarketDay,
   levelNeededFor,
+  toolNeededFor,
   lanternRefusal,
   makeRefusal,
   marketEvery,
@@ -155,6 +156,7 @@ function refusalText(refusal: string | null): string {
     place: 'A camp cannot go there now (see "look").',
     upgrade: 'That camp cannot be upgraded now.',
     demolish: 'That camp cannot be demolished: other camps must cover its 3 x 3 first.',
+    notYet: 'The market sells that only once your best camp is level 3.',
     closed: 'The market is not open this shift (see "Market" in the view).',
     unknown: 'The market does not trade that item that way.',
     lots: 'Trade a whole number of lots, 1 or more.',
@@ -180,6 +182,11 @@ const TAP_DONE: Record<string, string> = {
   caught: 'caught the animal',
   mined: 'mined',
 };
+
+/** "iron drill" or "steel drill": a tool's name for the player. */
+function toolName(item: string): string {
+  return item === FRONTIER_DRILL.item ? 'iron drill' : itemName(item);
+}
 
 /** "2 wood, 1 apple". */
 function stacksText(stacks: ItemStack[]): string {
@@ -227,9 +234,11 @@ export function act(session: FrontierSession, step: FrontierStep): StepResult {
     let why = refusalText(tap?.kind === 'refused' ? tap.refusal : (outcome.refusal ?? null));
     if (tap?.kind === 'tooHard') {
       why =
-        tap.needs === null
-          ? 'No camp level can mine that block.'
-          : `Too hard: it needs a level ${tap.needs} camp over it.`;
+        tap.needs !== null
+          ? `Too hard: it needs a level ${tap.needs} camp over it.`
+          : tap.needsTool !== null
+            ? `Too hard: it needs a ${toolName(tap.needsTool)} in your store (buy one at the market).`
+            : 'Nothing can mine that block.';
     }
     return { session, refused: why, lines: [] };
   }
@@ -579,9 +588,14 @@ export function lookText(session: FrontierSession, x: number, y: number): string
   const parts = [`${x},${y}: depth ${depth}`];
   if (depth < size.z) {
     const needs = levelNeededFor(code);
-    parts.push(
-      `top block ${blockDefByCode(code).name}${needs === null ? ' (no camp can mine it)' : ` (a level ${needs} camp mines it${needs > 1 && needs <= FRONTIER_DRILL.upToLevel ? `, or a level ${needs - FRONTIER_DRILL.levelBonus} camp with a drill` : ''})`}`,
-    );
+    const tool = toolNeededFor(code);
+    const how =
+      needs !== null
+        ? `a level ${needs} camp mines it`
+        : tool !== null
+          ? `any camp mines it with a ${toolName(tool)}`
+          : 'nothing mines it';
+    parts.push(`top block ${blockDefByCode(code).name} (${how})`);
   }
   const i = x + size.x * y;
   const feature = state.features[i];

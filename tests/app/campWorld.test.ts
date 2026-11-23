@@ -16,6 +16,7 @@ import {
   coverLevelAt,
   inCircle,
   levelNeededFor,
+  toolNeededFor,
   marketOpen,
   newCampWorld,
   newlyCovered,
@@ -52,7 +53,8 @@ const NEXT = campRadius(1) - 1;
 /**
  * A SIDE x SIDE cube, 3 layers deep: the top layer is `top` everywhere
  * (one character of BLOCK_CHARS in tests/engine/helpers.ts), except the
- * squares listed in `special`; the layers under it are stone.
+ * squares listed in `special`; the layers under it are clay, which a
+ * level-1 camp mines (progression plan section 2.2).
  */
 function cube(top: string, special: { x: number; y: number; char: string }[] = []) {
   const topRows: string[] = [];
@@ -63,8 +65,8 @@ function cube(top: string, special: { x: number; y: number; char: string }[] = [
     }
     topRows.push(row);
   }
-  const stone = new Array<string>(SIDE).fill('#'.repeat(SIDE));
-  return buildState({ layers: [topRows, stone, stone] });
+  const clay = new Array<string>(SIDE).fill('C'.repeat(SIDE));
+  return buildState({ layers: [topRows, clay, clay] });
 }
 
 /** A world on `cube(...)` with its first camp in the middle. */
@@ -116,29 +118,34 @@ describe('the lab 2 data', () => {
     expect(LAB_NEW_CAMP_COST.length).toBeGreaterThan(0);
   });
 
-  it('lets some level mine every block that gives something, and names each block once', () => {
+  it('lets some level or some tool mine every block that gives something, and names each block once', () => {
     const named: BlockId[] = LAB_CAMP_LEVELS.flatMap((level) => level.addsBlocks);
     expect(new Set(named).size).toBe(named.length);
     for (const id of Object.keys(BLOCKS) as BlockId[]) {
       // Lab 2's cube has no timber-root (LAB_SURFACE.timberRootBecomes).
       if (id === 'timberRoot') continue;
       if (BLOCKS[id].yields.length > 0) {
-        expect(levelNeededFor(BLOCKS[id].code), id).not.toBeNull();
+        const code = BLOCKS[id].code;
+        expect(levelNeededFor(code) ?? toolNeededFor(code), id).not.toBeNull();
       }
     }
     expect(levelNeededFor(BLOCKS.bedrock.code)).toBeNull();
     expect(levelNeededFor(BLOCKS.air.code)).toBeNull();
   });
 
-  it('matches the owner’s starting table: dirt to coal at 1, hard rock at 2, ore at 3', () => {
-    for (const id of ['dirt', 'rubble', 'stone', 'coalSeam'] as const) {
+  it('matches the progression table: dirt and clay at 1, stone and coal at 2, hard rock at 3, ore with a tool', () => {
+    for (const id of ['dirt', 'rubble', 'clay'] as const) {
       expect(levelNeededFor(BLOCKS[id].code), id).toBe(1);
     }
-    expect(levelNeededFor(BLOCKS.hardRock.code)).toBe(2);
-    for (const id of ['ironOre', 'copperOre', 'crystal'] as const) {
-      expect(levelNeededFor(BLOCKS[id].code), id).toBe(3);
+    for (const id of ['stone', 'coalSeam'] as const) {
+      expect(levelNeededFor(BLOCKS[id].code), id).toBe(2);
     }
-    expect(blocksMinedAt(2)).toEqual([...blocksMinedAt(1), 'hardRock']);
+    expect(levelNeededFor(BLOCKS.hardRock.code)).toBe(3);
+    for (const id of ['ironOre', 'copperOre', 'crystal'] as const) {
+      expect(levelNeededFor(BLOCKS[id].code), id).toBeNull();
+      expect(toolNeededFor(BLOCKS[id].code), id).not.toBeNull();
+    }
+    expect(blocksMinedAt(3)).toEqual([...blocksMinedAt(2), 'hardRock']);
   });
 });
 
@@ -192,16 +199,16 @@ describe('fog and sight', () => {
 
 describe('taps', () => {
   it('mines a lit square and adds its yield', () => {
-    const w = world('#');
+    const w = world('C');
     const tap = campTap(w, MID + 2, MID);
     expect(tap.kind).toBe('mined');
     expect(depthAt(tap.world.lab.state, MID + 2, MID)).toBe(1);
-    expect(tap.world.lab.counts.get('stone')).toBe(1);
+    expect(tap.world.lab.counts.get('clay')).toBe(1);
     expect(tap.world.camps).toBe(w.camps);
   });
 
   it('refuses a tap in fog and changes nothing', () => {
-    const w = world('#');
+    const w = world('C');
     const before = hashState(w.lab.state);
     const tap = campTap(w, 0, 0);
     expect(tap.kind).toBe('fog');
@@ -220,7 +227,7 @@ describe('taps', () => {
   });
 
   it('says "too steep" before "too hard", so an upgrade never breaks a promise', () => {
-    // Hard rock 1 level down at `pit`, under open space: its four neighbours
+    // Stone 1 level down at `pit`, under open space: its four neighbours
     // are higher, so the level rule refuses it whatever the camp's level.
     const pit = { x: MID + 3, y: MID };
     const rows = (char: string, at: string): string[] => {
@@ -232,7 +239,7 @@ describe('taps', () => {
       }
       return out;
     };
-    const state = buildState({ layers: [rows('d', '.'), rows('#', 'H'), rows('#', '#')] });
+    const state = buildState({ layers: [rows('d', '.'), rows('C', '#'), rows('C', 'C')] });
     let w = campWorldFromState(1, state, MID, MID);
     const steep = campTap(w, pit.x, pit.y);
     expect(steep.kind).toBe('refused');
@@ -262,7 +269,7 @@ describe('taps', () => {
 
   it('refuses a block too hard for the camps over it, saying which level can', () => {
     const square = { x: MID + 2, y: MID }; // just outside the first camp's 3 x 3
-    const w = rich(world('d', [{ ...square, char: 'H' }]));
+    const w = rich(world('d', [{ ...square, char: '#' }]));
     const tap = campTap(w, square.x, square.y);
     expect(tap.kind).toBe('tooHard');
     expect(tap.needs).toBe(2);
@@ -271,13 +278,13 @@ describe('taps', () => {
     const upgraded = upgradeCamp(w, 1);
     const after = campTap(upgraded, square.x, square.y);
     expect(after.kind).toBe('mined');
-    expect(topBlockAt(after.world.lab.state, square.x, square.y)).toBe(BLOCKS.stone.code);
+    expect(topBlockAt(after.world.lab.state, square.x, square.y)).toBe(BLOCKS.clay.code);
   });
 
-  it('uses the best camp over a square: a level-2 ring lets a level-1 ring’s hard rock be mined', () => {
-    // Hard rock between the first camp and a second one placed NEXT to the east.
+  it('uses the best camp over a square: a level-2 ring lets a level-1 ring’s stone be mined', () => {
+    // Stone between the first camp and a second one placed NEXT to the east.
     const square = { x: MID + 2, y: MID }; // just outside the first camp's 3 x 3
-    let w = rich(world('d', [{ ...square, char: 'H' }]));
+    let w = rich(world('d', [{ ...square, char: '#' }]));
     w = placeCamp(w, MID + NEXT, MID);
     expect(campTap(w, square.x, square.y).kind).toBe('tooHard');
     w = upgradeCamp(w, 2);
@@ -285,7 +292,7 @@ describe('taps', () => {
   });
 
   it('passes the level rule’s refusal through, unchanged', () => {
-    let w = world('#');
+    let w = world('C');
     w = campTap(w, MID + 2, MID).world;
     const tap = campTap(w, MID + 2, MID); // now 1 down with higher neighbours
     expect(tap.kind).toBe('refused');
@@ -348,7 +355,7 @@ describe('placing camps', () => {
 
 describe('3 x 3 camps on level ground (owner, question 134)', () => {
   it('a camp stands on 3 x 3 squares, none of which can be mined', () => {
-    const w = world('#');
+    const w = world('C');
     for (const sq of footprintOf(MID, MID)) {
       expect(campTap(w, sq.x, sq.y).kind).toBe('camp');
     }
@@ -357,7 +364,7 @@ describe('3 x 3 camps on level ground (owner, question 134)', () => {
 
   it('refuses a patch that is not level, and takes one dug level all over', () => {
     const at = { x: MID + NEXT, y: MID };
-    let w = rich(world('#'));
+    let w = rich(world('C'));
     expect(isLevelPatch(w.lab, at.x, at.y)).toBe(true);
     // Dig one square of the patch: the nine are no longer at one depth.
     w = campTap(w, at.x, at.y).world;
@@ -404,7 +411,7 @@ describe('3 x 3 camps on level ground (owner, question 134)', () => {
   });
 
   it('gives nothing back, and the old base can then be mined', () => {
-    let w = placeCamp(rich(world('#')), MID + NEXT, MID);
+    let w = placeCamp(rich(world('C')), MID + NEXT, MID);
     const counts = new Map(w.lab.counts);
     expect(campTap(w, MID, MID).kind).toBe('camp');
     w = demolishCamp(w, 1);

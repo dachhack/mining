@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { BLOCKS } from '../../src/data';
 import type { ItemStack } from '../../src/data';
-import { FRONTIER_SHIFT } from '../../src/data/frontier';
+import { FRONTIER_MARKET, FRONTIER_SHIFT } from '../../src/data/frontier';
 import { LAB_CAMP_LEVELS, LAB_NEW_CAMP_COST, LAB_SURFACE } from '../../src/data/labCamps';
 import { blockAt, depthAt, hashState } from '../../src/engine';
 import { newLabWorld } from '../../src/app/lab/labWorld';
@@ -272,7 +272,8 @@ describe('the new costs (issue #121)', () => {
   it('a new camp costs wood and grass; every upgrade costs wood too (wood is timber); level 3 adds apples', () => {
     const items = (cost: ItemStack[]) => cost.map((s) => s.item).sort();
     expect(items(LAB_NEW_CAMP_COST)).toEqual(['grass', 'wood']);
-    expect(items(upgradeCostFrom(1) ?? [])).toEqual(['animal', 'clay', 'stone', 'wood']);
+    // No stone for level 2: a base camp cannot mine it (progression plan section 2.2).
+    expect(items(upgradeCostFrom(1) ?? [])).toEqual(['animal', 'clay', 'grass', 'wood']);
     expect(items(upgradeCostFrom(2) ?? [])).toEqual(['animal', 'apple', 'clay', 'stone', 'wood']);
     // Nothing in Lab 2 costs timber: wood is timber (owner).
     for (const cost of [LAB_NEW_CAMP_COST, upgradeCostFrom(1) ?? [], upgradeCostFrom(2) ?? []]) {
@@ -368,9 +369,26 @@ describe('the starting ring pays for the next steps (issue #121), in 200 seeds',
     expect(short).toEqual([]);
   }, 240_000);
 
-  it('the first ring and one more camp hold the clay and stone for level 2, and an animal comes by', () => {
+  // A base camp mines only dirt and clay (progression plan section 2.2), so
+  // a few seeds' two rings hold a little less clay than level 2 needs. The
+  // market sells clay from the first market day (shift 10), and the spare
+  // grass pays for it: that counts too.
+  it('the first ring and one more camp hold what level 2 costs, with spare grass sold for clay at the market, and an animal comes by', () => {
     const level2 = upgradeCostFrom(1) ?? [];
-    const clayAndStone = level2.filter((s) => s.item !== 'animal');
+    const gathered = level2.filter((s) => s.item !== 'animal');
+    const price = (lots: typeof FRONTIER_MARKET.sellPrices, item: string) =>
+      lots.find((l) => l.item === item) ?? { count: 1, coins: 0 };
+    const grassLot = price(FRONTIER_MARKET.sellPrices, 'grass');
+    const clayLot = price(FRONTIER_MARKET.buyPrices, 'clay');
+    /** True if `counts` pays for level 2 (but its animals), buying missing clay with spare grass. */
+    const paysWithMarket = (counts: Map<string, number>): boolean => {
+      const need = (item: string) => gathered.find((g) => g.item === item)?.count ?? 0;
+      const spareGrass = (counts.get('grass') ?? 0) - need('grass');
+      const coins = Math.floor(spareGrass / grassLot.count) * grassLot.coins;
+      const clayShort = Math.max(0, need('clay') - (counts.get('clay') ?? 0));
+      const others = gathered.filter((g) => g.item !== 'clay');
+      return canAfford(counts, others) && clayShort * (clayLot.coins / clayLot.count) <= coins;
+    };
     const short: string[] = [];
     for (let seed = 1; seed <= 200; seed += 1) {
       const start = newCampWorld(seed);
@@ -399,7 +417,7 @@ describe('the starting ring pays for the next steps (issue #121), in 200 seeds',
         const placing = { ...taken, turn: { ...taken.turn, tapsLeft: FRONTIER_SHIFT.taps } };
         taken = takeEverything(placeCamp(placing, best.x, best.y));
       }
-      if (!seen || taken.camps.length < 2 || !canAfford(taken.lab.counts, clayAndStone)) {
+      if (!seen || taken.camps.length < 2 || !paysWithMarket(taken.lab.counts)) {
         short.push(
           `seed ${seed}: animal ${seen}, camps ${taken.camps.length}, ${JSON.stringify([...taken.lab.counts])}`,
         );
@@ -413,9 +431,7 @@ describe('the lab data', () => {
   it('clay is a real block now (Lab 2 becomes the game, plan A1), and level 1 mines it and what it replaces', () => {
     expect(Object.keys(BLOCKS)).toContain('clay');
     expect(BLOCKS.clay.yields).toEqual([{ item: 'clay', count: LAB_SURFACE.clayPerBlock }]);
-    expect(LAB_CAMP_LEVELS[0]?.addsBlocks).toEqual(
-      expect.arrayContaining(['dirt', 'stone', 'clay']),
-    );
+    expect(LAB_CAMP_LEVELS[0]?.addsBlocks).toEqual(expect.arrayContaining(['dirt', 'clay']));
   });
 
   it('generates the same surface for a seed', () => {

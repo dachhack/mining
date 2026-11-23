@@ -39,7 +39,7 @@ v0.2 is in the git history, as v0.1 is.
 | Player | No avatar. A tap on a lit square takes what is on it (an animal, grass, an apple, a tree) or mines its top block. An abstract **crew** with a health bar does the work (section 5) |
 | Hazards | **None for now** (owner: "Lab 2 becomes the game"). The old ones come back one at a time, fuel and depth bands first; wall slumps and supports are retired (question 153, section 10) |
 | Harm | **Hunger only** (owner, question 148): each item of upkeep that cannot be paid costs the crew 1 health (section 5) |
-| Base | **Camps** (Lab 2's): placed on a level 3×3 of lit ground, upgraded to see further and dig harder rock, demolished once other camps cover them. The recipe book shows what each costs; there is no crafting for now (section 6) |
+| Base | **Camps** (Lab 2's): placed on a level 3×3 of lit ground **in the top three levels** (depth 0 to 2; owner, 2026-11-23), upgraded to see further and dig harder rock, demolished once other camps cover them. A base camp mines only dirt and clay; ore, crystal and relics need tools (section 6). The recipe book shows what each costs |
 | Win condition | **A run lasts 100 shifts** (owner, 2026-11-23: "100 shifts or crew lost"), or ends sooner when the crew is lost or the player closes the mine (question 152). The coins held at the end are the score [Default; question 170]. Contracts are not built yet (section 8) |
 | Meta-progression | Unlocks only (new options between runs); no permanent stat upgrades |
 | Platforms | Android and iOS |
@@ -90,19 +90,21 @@ The old bands' hazards (water and gas pockets, lava, unstable ore) are not in pl
 
 ### 3.5 Block types [Default]
 
-| Block | Yields | Mined by camps of level |
+| Block | Yields | Mined by |
 |---|---|---|
-| Dirt | — | 1 |
-| Rubble | — | 1 |
-| Stone | Stone | 1 |
-| Coal seam | Coal | 1 |
-| Clay | Clay | 1 |
-| Hard rock | Stone | 2 |
-| Iron / copper ore | Raw iron / raw copper | 3 |
-| Crystal | Crystal | 3 |
-| Unstable ore | Rare ore | 3 |
-| Relic / keystone | Contract item | 3 |
+| Dirt | — | a camp of level 1 |
+| Rubble | — | a camp of level 1 |
+| Clay | Clay | a camp of level 1 |
+| Stone | Stone | a camp of level 2 |
+| Coal seam | Coal | a camp of level 2 |
+| Hard rock | Stone | a camp of level 3 |
+| Iron / copper ore | Raw iron / raw copper | any camp, with an iron drill (or a steel drill) |
+| Crystal | Crystal | any camp, with a steel drill |
+| Unstable ore | Rare ore | any camp, with a steel drill |
+| Relic / keystone | Contract item | any camp, with a steel drill |
 | Sealed rock, bedrock | — | never |
+
+(Progression plan section 2.2, owner 2026-11-23: "You can't dig hard rock or ore unless your camp is upgraded"; the base camp mines neither rock nor coal.)
 
 Every block costs one tap, whatever it is.
 
@@ -143,7 +145,7 @@ In this order:
 
 - Only a square's top block can be mined, and only once nothing grows on it.
 - **The level rule** (owner: "After mining, at most 1 step"): after the mine, the square must be no more than 1 level lower than each of its face neighbours. Going deep means digging a terraced pit, about one more ring of squares a level.
-- **The camps' levels:** a block can be mined only if a camp whose circle covers the square has a level that mines it (section 3.5). Where several camps cover a square, the best level counts.
+- **The camps' levels and the tools:** a block can be mined only if a camp whose circle covers the square has a level that mines it (section 3.5). Where several camps cover a square, the best level counts. A block no camp level mines (ore, crystal, relics) can be mined on any camp's lit ground while the store holds a tool that mines it; a tool does not help with a block a camp level mines. A refused tap names one thing: the camp level, or the tool.
 - **A camp's own 3×3 is never mined.**
 - **The order of the checks:** a tap the level rule forbids says so ("too steep") before saying a block is too hard, so an upgrade never promises a block the level rule still forbids.
 
@@ -171,28 +173,29 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 - **A camp** stands on a 3×3 patch. Its circle covers the squares with `dx² + dy² ≤ r² + r` around its middle, where `r` is its ring. Its ground is never mined.
 - **Placing** a new camp needs:
   - a 3×3 that is all lit;
-  - level ground (all nine squares at one depth);
+  - level ground (all nine squares at one depth), at a depth of [Default] 2 or less (`FRONTIER_CAMP_PLACE.maxDepth`; owner: "Camps can only be placed in the top three levels");
   - no other camp's ground in the 3×3;
   - the cost, [Default] 15 wood and 15 grass (question 139).
 
   What grows on the 3×3 is cleared and gives nothing.
 - **Upgrading** widens the ring and adds the blocks the camp can mine:
 
-  | Level | Ring | Mines | Upgrade to this level costs |
-  |---|---|---|---|
-  | 1 | 9 | Dirt, rubble, stone, coal, clay | — (the first camp is free) |
-  | 2 | 12 | + hard rock | 20 wood, 10 clay, 15 stone, 1 animal |
-  | 3 | 15 | + iron, copper, crystal, unstable ore, relics, the keystone | 40 wood, 20 clay, 40 stone, 3 animals, 10 apples |
-  | 4 | 18 | nothing new: level 3 mines every block that can be mined | 40 wood, 8 iron ingots, 6 copper ingots, 20 stone |
+  | Level | Ring | Mines | Upgrade to this level costs | Market every |
+  |---|---|---|---|---|
+  | 1 | 9 | Dirt, rubble, clay | — (the first camp is free) | 10 shifts |
+  | 2 | 12 | + stone, coal | 20 wood, 10 clay, 10 grass, 2 animals | 5 shifts |
+  | 3 | 15 | + hard rock | 40 wood, 20 clay, 40 stone, 3 animals, 10 apples | 3 shifts |
+  | 4 | 18 | nothing new | 40 wood, 8 iron ingots, 6 copper ingots, 20 stone | 3 shifts |
 
-  Level 4 (owner, question 163) is [Default] in ring and cost; its ingots need a smelter somewhere first.
+  What each level mines is the owner's (progression plan section 2.2); the costs, rings and level 4 are [Default]. The level-2 upgrade costs no stone, since a base camp cannot mine it. Level 4's ingots need a smelter somewhere first.
 
 - **Demolishing** a camp needs other camps' circles to cover its whole 3×3 (question 134). It gives nothing back; its ground can then be mined, and what only it lit turns grey.
 - **A smelter** (owner, question 161) can be built at a camp of level 2 or more, from its panel, for [Default] 20 stone and 10 clay and 1 tap. One per camp; it is lost with the camp. While one stands anywhere, the recipe book can smelt: [Default] 2 raw ore + 1 coal make 2 ingots, 1 tap (question 162). (`docs/plans/smelting-and-crafting.md`.)
 - **Made from ingots** (question 163), in the recipe book while a smelter stands, 1 tap each:
   - **The iron pickaxe**, [Default] 3 iron ingots + 2 wood. While the store holds one, every mining tap yields [Default] twice as much. Taking from the surface is unchanged. It does not wear out, and a second one adds nothing.
   - **The copper lantern**, [Default] 2 copper ingots + 1 coal (coal, not crystal: question 165). Hung at a camp from its panel (1 tap), it widens that camp's ring by [Default] 3 squares on top of its level. One per camp; it is lost with the camp.
-  - **The iron drill**, [Default] 4 iron ingots + 2 copper ingots + 2 wood. While the store holds one, every camp mines as if it were [Default] one level higher, but never past what level 3 mines: a level-1 camp mines hard rock, a level-2 camp mines ore, crystal and relics. A camp's ring stays its own level's. It does not wear out, and a second one adds nothing.
+  - **The iron drill**, [Default] 4 iron ingots + 2 copper ingots + 2 wood, or bought at the market. While the store holds one, iron and copper ore can be mined on any camp's lit ground (progression plan section 4; until engine 0.9.0 it lifted every camp one level). The first one has to be bought: ingots need ore. It does not wear out, and a second one adds nothing.
+- **The steel drill** (bought only, question 172): mines what the iron drill does, and crystal, unstable ore, relics and the keystone.
 - **The recipe book** lists what a new camp and each upgrade cost, and what is made with a smelter (with a Make button). Pinned recipes show, in the tray, how much of each item the player holds against what is needed. Pins are saved (question 143).
 
 ## 6a. The market [Decided cadence; prices Default]
@@ -202,8 +205,8 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 - **When:** the market is open for the whole of every shift whose number is a multiple of its cadence: every **10** shifts while the best camp standing is level 1, every **5** at level 2, every **3** at level 3 (owner, 2026-11-23), and [Default] 3 at level 4 (question 167). Nothing about it is stored; the shift and the camps decide it. The night before says "Market day".
 - **Money** is an item, **coins** (question 170). A run starts with none.
 - **Trading:** on a market day, the player sells or buys any whole number of one item's lots, for **1 tap** a trade. A lot is [Default] (`FRONTIER_MARKET`):
-  - sold: 5 grass, 2 wood, 2 apples, 2 clay or 2 stone for 1 coin; 1 animal for 3; 1 coal for 1; 1 raw iron or copper ore for 2; 1 ingot for 5; 1 crystal for 20; 1 rare ore for 15; 1 relic for 40;
-  - bought: 1 animal for 8 coins; 1 clay for 1 coin. Saplings and hay join with farming, the tools with camp gating (plan sections 4 and 6).
+  - sold: 5 grass, 2 wood, 2 apples or 2 clay for 1 coin; 10 stone for 1 coin; 1 animal for 3; 1 coal for 1; 1 raw iron or copper ore for 2; 1 ingot for 5; 1 crystal for 20; 1 rare ore for 15; 1 relic for 40;
+  - bought: 1 animal for 8 coins; 1 clay for 1 coin; and, while the best camp is level 3 or more, an iron drill for 80, a steel drill for 250, an iron pickaxe for 60 and a copper lantern for 40. Saplings and hay join with farming (plan section 6).
   - Nothing can be bought and sold back at a profit.
 - A trade can be undone, like any action that is not a harvest.
 - **Interface:** a market button (🏪) beside the recipe book, lit on a market day. It opens a card like the book's: what can be sold (the items held) and bought, each with what the player has, and Sell, Sell all and Buy buttons. On other days the card says when the market opens, and its buttons are off. Coins are shown next to Dug in the counter.
