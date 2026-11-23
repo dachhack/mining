@@ -292,7 +292,7 @@ Not set for the new game yet. The simulator (`npm run sim`) measures runs; at th
 
 With 100 taps, upkeep takes about 2 taps a shift: close to trivial, and the owner wants it left that way (question 160).
 
-**With the progression batch** (engine 0.9.0, 100 shifts a run, 100 runs; decision note 0062): a careful player finishes 99 runs in 100, reaches phase 3 at a median shift of 13, phase 4 at 26 and phase 5 at 48 (three runs in four), delivers a median of 32 contracts and ends with a median of about 4,100 coins. Policies that felled apple trees for wood stalled at level 2 a few apples short of level 3 in about one run in five; the owner answered that apples are enough if apple trees are left standing (question 177).
+**With the progression batch** (engine 0.9.0, 100 shifts a run, 100 runs; decision note 0062): a careful player finishes all 100 runs, reaches phase 3 at a median shift of 12, phase 4 at 21 and phase 5 at 42 (97 runs in 100), delivers a median of 29 contracts and ends with a median of about 3,200 coins. Apples are enough for level 3 when apple trees are left standing (question 177); wood is bought at the market late in a run.
 
 ## 13. Open questions
 
