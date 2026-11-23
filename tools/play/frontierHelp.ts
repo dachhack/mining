@@ -9,6 +9,7 @@ import {
   FRONTIER_LANTERN,
   FRONTIER_MARKET,
   FRONTIER_NEW_CAMP_COST,
+  FRONTIER_PEN,
   FRONTIER_PICKAXE,
   FRONTIER_RECIPES,
   FRONTIER_RUN,
@@ -88,6 +89,9 @@ export function frontierHelpText(): string {
     `  Every ${FRONTIER_SAPLINGS.saplingEveryFelled}nd tree felled gives a sapling; 3 apples make an apple sapling ("make apple-sapling", no smelter).`,
     `  "plant X,Y sapling" plants one on lit surface dirt or a stump (1 tap): a tree in ${FRONTIER_SAPLINGS.saplingGrowShifts} shifts,`,
     `  an apple tree in ${FRONTIER_SAPLINGS.appleSaplingGrowShifts}. Mining its square digs it out.`,
+    `- "pen N" builds an animal pen at camp N (level ${FRONTIER_PEN.minLevel} or more; ${cost(FRONTIER_PEN.cost)}; one a camp; lost with it, its animals back to the store).`,
+    `  "penin N" / "penout N" moves an animal from the store into it or back (up to ${FRONTIER_PEN.capacity}). Penned animals are never eaten.`,
+    `  A pen with 2 or more and room breeds one every ${FRONTIER_PEN.breedEveryShifts} shifts, eating ${FRONTIER_PEN.hayPerBirth} hay; "make hay" turns 3 grass into 1 hay.`,
     '- "undo" takes back your last action in this shift and gives the tap back. Catching an',
     '  animal and picking an apple cannot be undone, and nothing before the shift began can.',
   ].join('\n');

@@ -11,6 +11,7 @@
 //      grass grows back beside grass (progression plan section 6.1);
 //    - upkeep is paid in wood and food (question 147): food is an apple,
 //      else 2 grass, else an animal (questions 155 and 158);
+//    - animals in pens breed, eating hay (pens.ts; plan section 6.3);
 //    - each item of upkeep that cannot be paid costs the crew 1 health
 //      (question 148: "Hunger only"); at 0 health the run is lost.
 //
@@ -35,6 +36,7 @@ import { blockAt } from '../state';
 import { campAt, demolishFrontierCamp, placeFrontierCamp, upgradeFrontierCamp } from './camps';
 import { walkable } from './generation';
 import { plant, plantRefusal } from './farming';
+import { breedPens, penAct, penRefusal } from './pens';
 import { isMarketDay, trade, tradeRefusal } from './market';
 import { animalAt } from './surface';
 import {
@@ -66,6 +68,10 @@ export type FrontierAction =
   | { kind: 'hangLantern'; id: number }
   // Sell or buy `lots` lots of `item` at the market, on a market day (market.ts).
   | { kind: 'sell'; item: string; lots: number }
+  // Build a pen at camp `id`, or put an animal in or take one out (pens.ts).
+  | { kind: 'buildPen'; id: number }
+  | { kind: 'penIn'; id: number }
+  | { kind: 'penOut'; id: number }
   // Plant a sapling or an apple sapling from the store on square (x, y) (farming.ts).
   | { kind: 'plant'; x: number; y: number; item: string }
   | { kind: 'buy'; item: string; lots: number }
@@ -87,6 +93,8 @@ export interface ShiftReport {
   treesRegrown: number;
   /** Squares where cut grass grew back. */
   grassRegrown: number;
+  /** Animals born in pens (pens.ts). */
+  born: number;
   /** Animals that walked in. */
   newAnimals: number;
   /** True if the market is open in the shift that starts now. */
@@ -203,6 +211,8 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
     else inventory.delete(pay.item);
     paid.push({ item: pay.item, count: pay.count });
   }
+  // Breeding, after upkeep: the crew eats first (pens.ts).
+  const bred = breedPens(state.camps, inventory);
   const healthLost = unpaid.length;
   const health = Math.max(0, state.health - healthLost);
   const next: FrontierState = {
@@ -216,7 +226,8 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
     stumps: grown.stumps,
     planted: grown.planted,
     grassIn: grown.grassIn,
-    inventory,
+    camps: bred.camps,
+    inventory: bred.inventory,
     health,
     shift: state.shift + 1,
     tapsLeft: FRONTIER_SHIFT.taps,
@@ -236,6 +247,7 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
       regrown: grown.regrown,
       treesRegrown: grown.treesRegrown,
       grassRegrown: grown.grassRegrown,
+      born: bred.born,
       newAnimals,
       marketOpens: isMarketDay(next),
     },
@@ -417,6 +429,10 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
   if (action.kind === 'hangLantern') {
     const why = lanternRefusal(state, action.id);
     return why === null ? spent(hangLantern(state, action.id)) : refused(state, why);
+  }
+  if (action.kind === 'buildPen' || action.kind === 'penIn' || action.kind === 'penOut') {
+    const why = penRefusal(state, action.kind, action.id);
+    return why === null ? spent(penAct(state, action.kind, action.id)) : refused(state, why);
   }
   if (action.kind === 'plant') {
     const why = plantRefusal(state, action.x, action.y, action.item);

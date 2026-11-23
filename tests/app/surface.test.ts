@@ -205,7 +205,22 @@ describe('roaming animals (they move at End shift, plan A4)', () => {
       rng: 12345,
     });
     // Dig a pit at (3, 10) and (2, 9): taps need a lit square, so light the whole map first.
-    w = { ...w, camps: [{ id: 1, x: MID, y: MID, level: 3, smelter: false, lantern: false }] };
+    w = {
+      ...w,
+      camps: [
+        {
+          id: 1,
+          x: MID,
+          y: MID,
+          level: 3,
+          smelter: false,
+          lantern: false,
+          pen: false,
+          penned: 0,
+          breedIn: 0,
+        },
+      ],
+    };
     for (const [x, y] of [
       [3, 10],
       [2, 9],
@@ -274,7 +289,15 @@ describe('the new costs (issue #121)', () => {
     expect(items(LAB_NEW_CAMP_COST)).toEqual(['grass', 'wood']);
     // No stone for level 2: a base camp cannot mine it (progression plan section 2.2).
     expect(items(upgradeCostFrom(1) ?? [])).toEqual(['animal', 'clay', 'grass', 'wood']);
-    expect(items(upgradeCostFrom(2) ?? [])).toEqual(['animal', 'apple', 'clay', 'stone', 'wood']);
+    // Hay too since progression PR 4 (plan section 6.3).
+    expect(items(upgradeCostFrom(2) ?? [])).toEqual([
+      'animal',
+      'apple',
+      'clay',
+      'hay',
+      'stone',
+      'wood',
+    ]);
     // Nothing in Lab 2 costs timber: wood is timber (owner).
     for (const cost of [LAB_NEW_CAMP_COST, upgradeCostFrom(1) ?? [], upgradeCostFrom(2) ?? []]) {
       expect(items(cost)).not.toContain('timber');

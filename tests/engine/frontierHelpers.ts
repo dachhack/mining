@@ -57,7 +57,19 @@ export function world(options: WorldOptions = {}): FrontierState {
     features[f.x + SIDE * f.y] = f.feature;
     apples[f.x + SIDE * f.y] = f.apples ?? 0;
   }
-  const camps = [{ id: 1, x: MID, y: MID, level: 1, smelter: false, lantern: false }];
+  const camps = [
+    {
+      id: 1,
+      x: MID,
+      y: MID,
+      level: 1,
+      smelter: false,
+      lantern: false,
+      pen: false,
+      penned: 0,
+      breedIn: 0,
+    },
+  ];
   const animals = options.animals ?? [];
   return {
     version: FRONTIER_STATE_VERSION,

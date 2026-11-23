@@ -19,6 +19,7 @@ import {
   FRONTIER_DRILL,
   FRONTIER_MARKET,
   FRONTIER_NEW_CAMP_COST,
+  FRONTIER_PEN,
   FRONTIER_RECIPES,
   FRONTIER_RUN,
   FRONTIER_SHIFT,
@@ -42,6 +43,7 @@ import {
   lanternRefusal,
   makeRefusal,
   marketEvery,
+  penRefusal,
   newlyCovered,
   nextMarketShift,
   previewTap,
@@ -157,6 +159,11 @@ function refusalText(refusal: string | null): string {
     upgrade: 'That camp cannot be upgraded now.',
     demolish: 'That camp cannot be demolished: other camps must cover its 3 x 3 first.',
     notYet: 'The market sells that only once your best camp is level 3.',
+    hasPen: 'That camp has a pen already.',
+    campLevel: "That camp's level is too low for it.",
+    noPen: 'That camp has no pen: build one first ("pen N").',
+    full: 'That pen is full.',
+    empty: 'That pen holds no animals.',
     closed: 'The market is not open this shift (see "Market" in the view).',
     unknown: 'The market does not trade that item that way.',
     lots: 'Trade a whole number of lots, 1 or more.',
@@ -225,6 +232,8 @@ function shiftLine(report: ShiftReport, state: FrontierState): string {
     report.regrown > 0 ? `${report.regrown} apple tree(s) regrew` : '',
     report.treesRegrown > 0 ? `${report.treesRegrown} felled tree(s) grew back` : '',
     report.newAnimals > 0 ? 'an animal walked in' : '',
+    report.born > 0 ? `${report.born} animal(s) born in pens` : '',
+    report.grassRegrown > 0 ? `grass grew back on ${report.grassRegrown} square(s)` : '',
   ].filter((t) => t !== '');
   const end =
     state.status === 'lost'
@@ -341,6 +350,16 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
   if (smelter !== null) {
     return `buildSmelter ${smelter[2] ?? ''}`;
   }
+  const pen = /^(pen|buildpen|penin|penout) (\d+)$/.exec(text);
+  if (pen !== null) {
+    const verbs: Record<string, string> = {
+      pen: 'buildPen',
+      buildpen: 'buildPen',
+      penin: 'penIn',
+      penout: 'penOut',
+    };
+    return `${verbs[pen[1] ?? ''] ?? ''} ${pen[2] ?? ''}`;
+  }
   const lantern = /^(lantern|hang|hang lantern|hanglantern) (\d+)$/.exec(text);
   if (lantern !== null) {
     return `hangLantern ${lantern[2] ?? ''}`;
@@ -400,6 +419,9 @@ export function listedSteps(session: FrontierSession): FrontierStep[] {
       if (act(session, `demolish ${camp.id}`).refused === null) steps.push(`demolish ${camp.id}`);
       if (smelterRefusal(state, camp.id) === null) steps.push(`buildSmelter ${camp.id}`);
       if (lanternRefusal(state, camp.id) === null) steps.push(`hangLantern ${camp.id}`);
+      for (const kind of ['buildPen', 'penIn', 'penOut'] as const) {
+        if (penRefusal(state, kind, camp.id) === null) steps.push(`${kind} ${camp.id}`);
+      }
     }
     for (const recipe of FRONTIER_RECIPES) {
       if (makeRefusal(state, recipe.id) === null) steps.push(`make ${recipe.id}`);
@@ -542,8 +564,11 @@ export function frontierView(session: FrontierSession): string {
         ? `; a smelter costs ${stacksText(FRONTIER_SMELTER.cost)}`
         : '';
     const lantern = camp.lantern ? '; a lantern' : '';
+    const pen = camp.pen
+      ? `; a pen of ${camp.penned}/${FRONTIER_PEN.capacity}${camp.breedIn > 0 ? `, an animal born in ${camp.breedIn} shift(s) for ${FRONTIER_PEN.hayPerBirth} hay` : ''}`
+      : '';
     lines.push(
-      `Camp ${camp.id} at ${camp.x},${camp.y}: level ${camp.level}, ring ${campRing(camp)}; ${up}${smelter}${lantern}.`,
+      `Camp ${camp.id} at ${camp.x},${camp.y}: level ${camp.level}, ring ${campRing(camp)}; ${up}${smelter}${lantern}${pen}.`,
     );
   }
   lines.push('', ...mapLines(state), '');

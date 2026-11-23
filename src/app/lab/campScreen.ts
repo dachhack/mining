@@ -24,6 +24,7 @@ import {
   FRONTIER_DRILL,
   FRONTIER_LANTERN,
   FRONTIER_MARKET,
+  FRONTIER_PEN,
   FRONTIER_PICKAXE,
   FRONTIER_RUN,
   FRONTIER_SAPLINGS,
@@ -63,6 +64,8 @@ import {
   footprintOf,
   makeCampRecipe,
   makeRefusal,
+  penCamp,
+  penRefusal,
   marketOpen,
   plantCamp,
   plantRefusal,
@@ -169,7 +172,11 @@ function shiftText(report: ShiftReport, turn: CampTurn, rested: boolean): string
     return `${start}: no ${lacking}. The crew is lost.`;
   }
   // The last shift (progression plan section 7): the coins held are the score.
-  const market = report.marketOpens ? ' Market day: the market 🏪 is open.' : '';
+  const born =
+    report.born > 0
+      ? ` ${report.born === 1 ? 'An animal was' : `${report.born} animals were`} born in a pen.`
+      : '';
+  const market = `${born}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
   if (turn.status === 'finished') {
     return `${start}. That was the last shift: the run is over.`;
   }
@@ -1185,7 +1192,17 @@ export function mountCampLab(
     ctx.globalAlpha = 0.55;
     drawCampMarker(
       ctx,
-      { id: 0, x: target.x, y: target.y, level: 1, smelter: false, lantern: false },
+      {
+        id: 0,
+        x: target.x,
+        y: target.y,
+        level: 1,
+        smelter: false,
+        lantern: false,
+        pen: false,
+        penned: 0,
+        breedIn: 0,
+      },
       c,
       false,
     );
@@ -1332,6 +1349,7 @@ export function mountCampLab(
       FRONTIER_LANTERN.item,
       'sapling',
       'appleSapling',
+      'hay',
     ]) {
       const count = counts.get(item) ?? 0;
       if (count > 0) all.push({ item, count, icon: () => labItemIcon(item, 'lab-chip-icon') });
@@ -1532,7 +1550,9 @@ export function mountCampLab(
               ? '🏮'
               : item === 'appleSapling'
                 ? '🌱'
-                : '🔥';
+                : item === 'hay'
+                  ? '🌾'
+                  : '🔥';
     const icon = element('span', 'lab2-recipe-icon', face);
     if (recipe.level > 1) {
       icon.append(element('span', 'lab2-recipe-level', String(recipe.level)));
@@ -1810,6 +1830,9 @@ export function mountCampLab(
     if (makes?.item === FRONTIER_DRILL.item) {
       return 'Mines iron and copper ore on any camp’s ground, while you have one.';
     }
+    if (makes?.item === 'hay') {
+      return `Food for the crew, and ${FRONTIER_PEN.hayPerBirth} feeds a pen's new animal. No smelter needed.`;
+    }
     if (makes?.item === 'appleSapling') {
       return `Plant it with 🌱: an apple tree in ${FRONTIER_SAPLINGS.appleSaplingGrowShifts} shifts. No smelter needed.`;
     }
@@ -2042,6 +2065,42 @@ export function mountCampLab(
       tray.append(row);
     }
 
+    // The animal pen (progression PR 4): build one, or move animals in and out.
+    if (camp.pen) {
+      const row = element('div', 'lab2-actions');
+      // Short, so it fits beside its buttons on a phone: "🐑 2/4 · lamb in 3".
+      const breeding =
+        camp.breedIn > 0 ? ` · lamb in ${camp.breedIn}` : camp.penned < 2 ? ' · 2 breed' : '';
+      const has = element(
+        'span',
+        'lab2-panel-line',
+        `🐑 ${camp.penned}/${FRONTIER_PEN.capacity}${breeding}`,
+      );
+      has.title = `Pen: ${camp.penned} of ${FRONTIER_PEN.capacity}. Two or more breed every ${FRONTIER_PEN.breedEveryShifts} shifts, eating ${FRONTIER_PEN.hayPerBirth} hay.`;
+      has.dataset['testid'] = 'lab2-camp-pen';
+      const putIn = button('lab2-button', 'In');
+      putIn.dataset['testid'] = 'lab2-pen-in';
+      putIn.setAttribute('aria-label', 'Put an animal in the pen');
+      putIn.disabled = penRefusal(world, 'penIn', camp.id) !== null;
+      putIn.addEventListener('click', () => confirmPen('penIn', camp.id));
+      const takeOut = button('lab2-button', 'Out');
+      takeOut.dataset['testid'] = 'lab2-pen-out';
+      takeOut.setAttribute('aria-label', 'Take an animal out of the pen');
+      takeOut.disabled = penRefusal(world, 'penOut', camp.id) !== null;
+      takeOut.addEventListener('click', () => confirmPen('penOut', camp.id));
+      row.append(has, putIn, takeOut);
+      tray.append(row);
+    } else if (camp.level >= FRONTIER_PEN.minLevel) {
+      const row = element('div', 'lab2-actions');
+      row.append(costRow(FRONTIER_PEN.cost, 'lab2-pen-cost'));
+      const build = button('lab2-button', '🐑 Build pen');
+      build.dataset['testid'] = 'lab2-build-pen';
+      build.disabled = penRefusal(world, 'buildPen', camp.id) !== null;
+      build.addEventListener('click', () => confirmPen('buildPen', camp.id));
+      row.append(build);
+      tray.append(row);
+    }
+
     // The lantern (PR 3): hung here from the store, or here already.
     if (camp.lantern) {
       const has = element(
@@ -2170,6 +2229,22 @@ export function mountCampLab(
     remember({ kind: 'buildSmelter', id });
     setWorld(next);
     setHint(`A smelter at camp ${id}: smelt ore into ingots in the recipe book 📖.`, false);
+  }
+
+  /** Build a pen at camp `id`, or move an animal into or out of it (progression PR 4). */
+  function confirmPen(kind: 'buildPen' | 'penIn' | 'penOut', id: number): void {
+    const next = penCamp(world, kind, id);
+    if (next === world) {
+      return; // the button is off whenever this would happen
+    }
+    remember({ kind, id });
+    setWorld(next);
+    const hints = {
+      buildPen: `A pen at camp ${id}: put animals in; two or more breed, eating hay.`,
+      penIn: 'An animal in the pen: safe from upkeep.',
+      penOut: 'An animal out of the pen, in the store.',
+    };
+    setHint(hints[kind], false);
   }
 
   function confirmDemolish(id: number): void {
@@ -2312,6 +2387,9 @@ export function mountCampLab(
     if (step.kind === 'demolish') return `demolishing camp ${step.id}`;
     if (step.kind === 'sell' || step.kind === 'buy') return `the ${step.kind} of ${step.item}`;
     if (step.kind === 'plant') return `planting at ${step.x}, ${step.y}`;
+    if (step.kind === 'buildPen') return `the pen at camp ${step.id}`;
+    if (step.kind === 'penIn' || step.kind === 'penOut')
+      return `moving an animal at camp ${step.id}`;
     return 'the end of the shift'; // never in the history: it is emptied when a shift ends
   }
 

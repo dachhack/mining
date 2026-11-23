@@ -343,7 +343,7 @@ export function newlyCovered(ground: CampGround, x: number, y: number): number[]
   const height = ground.cube.size.y;
   const now = coverLevels(ground.camps, width, height);
   const after = coverLevels(
-    [{ id: 0, x, y, level: 1, smelter: false, lantern: false }],
+    [{ id: 0, x, y, level: 1, smelter: false, lantern: false, pen: false, penned: 0, breedIn: 0 }],
     width,
     height,
   );
@@ -385,7 +385,17 @@ export function placeCamp(ground: CampGround, x: number, y: number): CampChange 
   }
   const camps = [
     ...ground.camps,
-    { id: ground.nextCampId, x, y, level: 1, smelter: false, lantern: false },
+    {
+      id: ground.nextCampId,
+      x,
+      y,
+      level: 1,
+      smelter: false,
+      lantern: false,
+      pen: false,
+      penned: 0,
+      breedIn: 0,
+    },
   ];
   return {
     camps,
@@ -499,5 +509,14 @@ export function upgradeFrontierCamp(state: FrontierState, id: number): FrontierS
 /** `demolishCamp` on a whole state. A refused demolish returns the very same state. */
 export function demolishFrontierCamp(state: FrontierState, id: number): FrontierState {
   const change = demolishCamp(state, id);
-  return change.camps === state.camps ? state : { ...state, ...change };
+  if (change.camps === state.camps) {
+    return state; // refused
+  }
+  // A pen goes with its camp; its animals go to the store (progression plan section 6.3).
+  const penned = state.camps.find((c) => c.id === id)?.penned ?? 0;
+  const inventory =
+    penned > 0
+      ? new Map([...change.inventory, ['animal', (change.inventory.get('animal') ?? 0) + penned]])
+      : change.inventory;
+  return { ...state, ...change, inventory };
 }

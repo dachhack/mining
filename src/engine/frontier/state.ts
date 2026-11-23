@@ -17,7 +17,7 @@ import type { RngState } from '../rng';
  * not loaded into a new shape. Separate from the old game's STATE_VERSION
  * while the two rule sets live side by side.
  */
-export const FRONTIER_STATE_VERSION = 8; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming)
+export const FRONTIER_STATE_VERSION = 9; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen
 
 /** What grows on a square: nothing, grass, a tree or an apple tree. */
 export const NO_FEATURE = 0;
@@ -46,6 +46,15 @@ export interface FrontierCamp {
   smelter: boolean;
   /** True once a copper lantern is hung at this camp: its ring is wider (FRONTIER_LANTERN). */
   lantern: boolean;
+  /** True once an animal pen is built at this camp (FRONTIER_PEN). */
+  pen: boolean;
+  /** Animals in the pen. */
+  penned: number;
+  /**
+   * Shifts until the pen's next animal is born, while it may breed (at least
+   * 2 animals and room for one more); 0 while it may not, or waits for hay.
+   */
+  breedIn: number;
 }
 
 export interface FrontierState {

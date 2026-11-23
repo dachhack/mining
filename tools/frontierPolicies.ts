@@ -7,10 +7,11 @@
 //             mines something, a camp it can place, upgrade or demolish, a
 //             smelter it can build, a recipe it can make, a lantern it
 //             can hang, one lot it can sell or buy on a market day, a
-//             sapling it holds),
+//             sapling it holds, a pen it can build or use),
 //             ending the shift when out of taps; it never closes the mine.
 // - gatherer: tools/frontierRun.ts: builds a smelter, smelts and makes the
-//             tools and lanterns, sells surplus on market days,
+//             tools and lanterns, keeps a pen and makes hay, sells
+//             surplus on market days, plants saplings,
 //             upgrades, places up to 3 camps, takes plants and animals,
 //             mines; spends everything as it comes.
 // - careful:  the gatherer, but it keeps wood and food back for upkeep (no
@@ -36,6 +37,7 @@ import {
   tradeRefusal,
   previewTap,
   placeRefusal,
+  penRefusal,
   plantRefusal,
   upgradeRefusal,
   demolishRefusal,
@@ -105,6 +107,9 @@ function randomPolicy(rng: RngState): FrontierPolicy {
       if (demolishRefusal(state, camp.id) === null) options.push(`demolish ${camp.id}`);
       if (smelterRefusal(state, camp.id) === null) options.push(`buildSmelter ${camp.id}`);
       if (lanternRefusal(state, camp.id) === null) options.push(`hangLantern ${camp.id}`);
+      for (const kind of ['buildPen', 'penIn', 'penOut'] as const) {
+        if (penRefusal(state, kind, camp.id) === null) options.push(`${kind} ${camp.id}`);
+      }
     }
     for (const recipe of FRONTIER_RECIPES) {
       if (makeRefusal(state, recipe.id) === null) options.push(`make ${recipe.id}`);
@@ -161,9 +166,10 @@ function isFood(item: string | undefined): boolean {
   return FRONTIER_FOODS.some((f) => f.item === item);
 }
 
-/** True if `step` spends what upkeep needs: a camp, an upgrade, or a recipe with wood or food in it. */
+/** True if `step` spends what upkeep needs: a camp, an upgrade, a pen, or a recipe with wood or food in it. */
 function spendsUpkeep(step: FrontierStep): boolean {
-  if (step.startsWith('place') || step.startsWith('upgrade')) return true;
+  if (step.startsWith('place') || step.startsWith('upgrade') || step.startsWith('buildPen'))
+    return true;
   if (!step.startsWith('make ')) return false;
   const recipe = FRONTIER_RECIPES.find((r) => r.id === step.slice('make '.length));
   return (recipe?.inputs ?? []).some((stack) => stack.item === 'wood' || isFood(stack.item));

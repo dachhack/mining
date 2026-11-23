@@ -75,7 +75,17 @@ describe('when the market opens (owner: every 10, 5 or 3 shifts by the best camp
 
   it('follows the best camp standing', () => {
     const w = at(5, 1);
-    const second = { id: 2, x: 2, y: 2, level: 2, smelter: false, lantern: false };
+    const second = {
+      id: 2,
+      x: 2,
+      y: 2,
+      level: 2,
+      smelter: false,
+      lantern: false,
+      pen: false,
+      penned: 0,
+      breedIn: 0,
+    };
     const two = { ...w, camps: [...w.camps, second] };
     expect(isMarketDay(w)).toBe(false);
     expect(isMarketDay(two)).toBe(true);

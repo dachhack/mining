@@ -36,6 +36,7 @@ import {
   frontierAct,
   frontierStartSquare,
   isMarketDay,
+  penRefusal as enginePenRefusal,
   plantRefusal as enginePlantRefusal,
   nextMarketShift as engineNextMarketShift,
   tradeRefusal as engineTradeRefusal,
@@ -61,6 +62,7 @@ import type {
   FrontierStatus,
   GameState,
   PlaceRefusal as EnginePlaceRefusal,
+  PenAction,
   ShiftReport,
   Sight,
   TradeSide,
@@ -293,7 +295,9 @@ export function campWorldFromLab(
   y: number,
   surface: Surface = bareSurface(lab.state),
 ): CampWorld {
-  const camps: Camp[] = [{ id: 1, x, y, level: 1, smelter: false, lantern: false }];
+  const camps: Camp[] = [
+    { id: 1, x, y, level: 1, smelter: false, lantern: false, pen: false, penned: 0, breedIn: 0 },
+  ];
   const { width, height } = lab.depths;
   const seen = seenWith(new Array<boolean>(width * height).fill(false), camps, width, height);
   return { lab, camps, seen, nextCampId: 2, surface, turn: firstTurn() };
@@ -498,6 +502,16 @@ export function hangCampLantern(world: CampWorld, id: number): CampWorld {
   return act(world, { kind: 'hangLantern', id }).world;
 }
 
+/** Why a pen action cannot be done at camp `id` now ('noTaps', 'over', or the engine's reason), or `null` if it can. */
+export function penRefusal(world: CampWorld, kind: PenAction, id: number): string | null {
+  return turnRefusal(world) ?? enginePenRefusal(toFrontier(world), kind, id);
+}
+
+/** Build a pen at camp `id`, or put an animal in or take one out, for 1 tap; the very same world if it cannot. */
+export function penCamp(world: CampWorld, kind: PenAction, id: number): CampWorld {
+  return act(world, { kind, id }).world;
+}
+
 // ----- The market (docs/plans/progression-phases.md, PR 1) -----
 
 /** True if the market is open in the shift being played. */
@@ -638,6 +652,10 @@ export type CampStep =
   // Sell or buy at the market (progression PR 1).
   | { kind: 'sell'; item: string; lots: number }
   | { kind: 'buy'; item: string; lots: number }
+  // A pen at a camp, and an animal into it or out of it (progression PR 4).
+  | { kind: 'buildPen'; id: number }
+  | { kind: 'penIn'; id: number }
+  | { kind: 'penOut'; id: number }
   // Plant a sapling (progression PR 3).
   | { kind: 'plant'; x: number; y: number; item: string }
   // End the shift, rest at a camp, or close the mine (A4).
@@ -679,6 +697,9 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   }
   if (step.kind === 'plant') {
     return plantCamp(world, step.x, step.y, step.item);
+  }
+  if (step.kind === 'buildPen' || step.kind === 'penIn' || step.kind === 'penOut') {
+    return penCamp(world, step.kind, step.id);
   }
   return demolishCamp(world, step.id);
 }

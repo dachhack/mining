@@ -138,10 +138,11 @@ In this order:
 5. **Saplings** planted grow like a felled tree's stump (section 7a).
 6. **Upkeep** (owner, question 147: "Food and wood"):
    - 1 wood every shift;
-   - 1 food every 2nd shift: 3 grass, else an apple, else an animal (questions 155 and 158; decision note 0057);
+   - 1 food every 2nd shift: 3 grass, else 1 hay, else an apple, else an animal from the store, never one in a pen (questions 155, 158 and 175; decision note 0057);
    - 1 more wood every 4th shift for each camp after the first.
-7. **Hunger:** each item of upkeep that cannot be paid costs 1 health (section 5).
-8. The next shift starts with a full set of taps.
+7. **Pens breed** (section 7b), once the upkeep is paid: the crew eats first.
+8. **Hunger:** each item of upkeep that cannot be paid costs 1 health (section 5).
+9. The next shift starts with a full set of taps.
 
 ### 4.3 Mining and the level rule [Decided; numbers Default]
 
@@ -186,7 +187,7 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
   |---|---|---|---|---|
   | 1 | 9 | Dirt, rubble, clay | — (the first camp is free) | 10 shifts |
   | 2 | 12 | + stone, coal | 20 wood, 10 clay, 10 grass, 2 animals | 5 shifts |
-  | 3 | 15 | + hard rock | 40 wood, 20 clay, 40 stone, 3 animals, 10 apples | 3 shifts |
+  | 3 | 15 | + hard rock | 40 wood, 20 clay, 40 stone, 3 animals, 10 apples, 10 hay | 3 shifts |
   | 4 | 18 | nothing new | 40 wood, 8 iron ingots, 6 copper ingots, 20 stone | 3 shifts |
 
   What each level mines is the owner's (progression plan section 2.2); the costs, rings and level 4 are [Default]. The level-2 upgrade costs no stone, since a base camp cannot mine it. Level 4's ingots need a smelter somewhere first.
@@ -208,7 +209,7 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 - **Money** is an item, **coins** (question 170). A run starts with none.
 - **Trading:** on a market day, the player sells or buys any whole number of one item's lots, for **1 tap** a trade. A lot is [Default] (`FRONTIER_MARKET`):
   - sold: 5 grass, 2 wood, 2 apples or 2 clay for 1 coin; 10 stone for 1 coin; 1 animal for 3; 1 coal for 1; 1 raw iron or copper ore for 2; 1 ingot for 5; 1 crystal for 20; 1 rare ore for 15; 1 relic for 40;
-  - bought: 1 animal for 8 coins; 1 clay for 1 coin; 1 sapling for 3, 1 apple sapling for 6; and, while the best camp is level 3 or more, an iron drill for 80, a steel drill for 250, an iron pickaxe for 60 and a copper lantern for 40. Saplings and hay join with farming (plan section 6).
+  - bought: 1 animal for 8 coins; 1 clay for 1 coin; 1 sapling for 3, 1 apple sapling for 6; 1 hay for 1; and, while the best camp is level 3 or more, an iron drill for 80, a steel drill for 250, an iron pickaxe for 60 and a copper lantern for 40. Saplings and hay join with farming (plan section 6).
   - Nothing can be bought and sold back at a profit.
 - A trade can be undone, like any action that is not a harvest.
 - **Interface:** a market button (🏪) beside the recipe book, lit on a market day. It opens a card like the book's: what can be sold (the items held) and bought, each with what the player has, and Sell, Sell all and Buy buttons. On other days the card says when the market opens, and its buttons are off. Coins are shown next to Dug in the counter.
@@ -221,6 +222,16 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 - **Planting** costs 1 tap and one sapling, on a lit square of surface dirt that was never mined, with nothing growing on it, no camp and no animal; a stump may be planted over (the new sapling replaces it). Cut grass waiting there no longer grows.
 - **Growing:** a sapling becomes a tree [Default] 15 shifts later, an apple sapling an apple tree full of apples [Default] 20 shifts later, by the stump rules (section 4.2): it waits under an animal or a camp, and mining its square digs it out.
 - **Interface:** while a sapling is held, a 🌱 button in the tray opens the planting mode: choose a sapling or an apple sapling, then each tap on the map plants one, or the hint says why it cannot. A planted sapling is drawn as a small sprout. Planting can be undone.
+
+## 7b. Hay and animal pens [Decided; numbers Default]
+
+(Progression plan section 6.3; built in its PR 4.)
+
+- **Hay** is made in the recipe book from [Default] 3 grass, for 1 tap, with no smelter. It is food for the crew (after grass, before apples; question 175), it feeds a pen's new animals, and level 3 costs 10. The market sells it, 1 coin each.
+- **A pen** is built at a camp of level [Default] 2 or more (as the smelter), from its panel, for [Default] 10 wood and 1 tap (`FRONTIER_PEN`). One per camp; it goes with the camp, and its animals go back to the store.
+- **Animals** are put in from the store, or taken out to it, 1 tap each, up to [Default] 4 in a pen. Upkeep never eats a penned animal.
+- **Breeding:** at End shift, after upkeep, a pen with at least 2 animals and room for one more counts down [Default] 4 shifts, then gains an animal and the store gives up [Default] 2 hay. With too little hay it waits, trying again each shift. A pen that may not breed keeps no count.
+- **Interface:** a camp's panel has "🐑 Build pen", then the pen's count, when the next animal is due, and In and Out buttons. The night says when an animal is born.
 
 ## 7. Resources
 

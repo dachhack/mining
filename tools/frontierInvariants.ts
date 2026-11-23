@@ -32,6 +32,10 @@
 // - SMELTERS: only at camps of FRONTIER_SMELTER.minLevel or more.
 // - LANTERNS: hung ones came from the store: a camp gains a lantern only as
 //   one lantern leaves the store.
+// - PENS: a camp without a pen holds no animals in one; a pen holds 0 to
+//   FRONTIER_PEN.capacity; animals put in or taken out move between the
+//   pen and the store one at a time; a breeding count runs only while the
+//   pen may breed.
 // - FARMING: a planted sapling is a waiting stump on unmined dirt; cut grass
 //   waits only on a square with nothing growing on it; a planting takes one
 //   sapling from the store.
@@ -49,6 +53,7 @@ import {
   FRONTIER_TOOLS,
   FRONTIER_LANTERN,
   FRONTIER_MARKET,
+  FRONTIER_PEN,
   FRONTIER_RUN,
   FRONTIER_SHIFT,
   FRONTIER_SMELTER,
@@ -233,6 +238,27 @@ export function checkStep(
     say(`the run finished on shift ${before.shift}, by "${verb}"`);
   if (after.status === 'active' && after.shift > FRONTIER_RUN.shifts)
     say(`shift ${after.shift} is past the run's last`);
+
+  // Pens (progression plan section 6.3).
+  for (const camp of after.camps) {
+    if (!camp.pen && camp.penned !== 0) say(`camp ${camp.id} has ${camp.penned} penned and no pen`);
+    if (camp.pen && camp.level < FRONTIER_PEN.minLevel)
+      say(`a pen at camp ${camp.id}, of level ${camp.level}`);
+    if (camp.penned < 0 || camp.penned > FRONTIER_PEN.capacity)
+      say(`camp ${camp.id}'s pen holds ${camp.penned}`);
+    const mayBreed = camp.penned >= 2 && camp.penned < FRONTIER_PEN.capacity;
+    if (!mayBreed && camp.breedIn !== 0) say(`camp ${camp.id} counts to breed but may not`);
+  }
+  if (verb === 'penIn' || verb === 'penOut') {
+    const id = Number(step.split(' ')[1]);
+    const pennedOf = (s: FrontierState): number => s.camps.find((c) => c.id === id)?.penned ?? 0;
+    const sign = verb === 'penIn' ? 1 : -1;
+    if (pennedOf(after) - pennedOf(before) !== sign)
+      say(`the pen changed by ${pennedOf(after) - pennedOf(before)}`);
+    const held = (s: FrontierState): number => s.inventory.get('animal') ?? 0;
+    if (held(after) - held(before) !== -sign)
+      say(`the store's animals changed by ${held(after) - held(before)}`);
+  }
 
   // Farming (progression plan sections 6.1 and 6.2).
   after.planted.forEach((planted, i) => {

@@ -506,6 +506,9 @@ export type { FrontierTap, FrontierTapKind } from './frontier/tap';
 export { hashFrontier } from './frontier/hash';
 // Planting saplings (docs/plans/progression-phases.md, PR 3).
 export { isSapling, plant, plantRefusal } from './frontier/farming';
+// Animal pens (PR 4).
+export { breedPens, penAct, penRefusal } from './frontier/pens';
+export type { PenAction, PenRefusal } from './frontier/pens';
 export type { PlantRefusal } from './frontier/farming';
 // The run's end and the market (docs/plans/progression-phases.md, PR 1).
 export {

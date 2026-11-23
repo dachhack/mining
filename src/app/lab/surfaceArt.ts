@@ -473,6 +473,18 @@ export function labItemIcon(item: string, className: string): HTMLCanvasElement 
     ctx.beginPath();
     ctx.ellipse(s * 0.6, s * 0.2, s * 0.1, s * 0.05, -0.5, 0, Math.PI * 2);
     ctx.fill();
+  } else if (item === 'hay') {
+    // A bale of hay: golden, bound with two dark bands.
+    ctx.fillStyle = '#3a2f1d';
+    ctx.fillRect(0, 0, s, s);
+    ctx.fillStyle = '#d9b44a';
+    ctx.fillRect(s * 0.14, s * 0.26, s * 0.72, s * 0.48);
+    ctx.fillStyle = '#b38d2c';
+    for (let k = 0; k < 5; k += 1)
+      ctx.fillRect(s * (0.18 + k * 0.14), s * 0.28, s * 0.03, s * 0.44);
+    ctx.fillStyle = '#5a3b22';
+    ctx.fillRect(s * 0.3, s * 0.24, s * 0.06, s * 0.52);
+    ctx.fillRect(s * 0.64, s * 0.24, s * 0.06, s * 0.52);
   } else if (item === 'sapling' || item === 'appleSapling') {
     // A sapling on bare earth (progression PR 3).
     ctx.fillStyle = '#5a3f26';

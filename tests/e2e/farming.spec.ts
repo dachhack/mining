@@ -77,3 +77,36 @@ test('plant a sapling on bare dirt, be told why not on a camp, and undo it', asy
   await expect(canvas).toHaveAttribute('data-stumps', '');
   await expect(page.getByTestId('lab-res-sapling')).toHaveAttribute('data-count', '2');
 });
+
+test('build a pen at a camp, put animals in and take one out, and undo', async ({ page }) => {
+  // A level-2 camp: a pen needs one (FRONTIER_PEN.minLevel).
+  const start = createFrontier(110);
+  const state: FrontierState = {
+    ...start,
+    camps: start.camps.map((c) => ({ ...c, level: 2 })),
+    inventory: new Map([
+      ['wood', 30],
+      ['animal', 3],
+    ]),
+  };
+  const camp = state.camps[0] ?? { x: 0, y: 0 };
+  const canvas = await openGame(page, state);
+  await tapSquare(page, canvas, camp.x, camp.y);
+  await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'camp');
+  await page.getByTestId('lab2-build-pen').click();
+  await expect(page.getByTestId('lab2-camp-pen')).toContainText('🐑 0/4');
+  await expect(page.getByTestId('lab2-pen-out')).toBeDisabled();
+  await page.getByTestId('lab2-pen-in').click();
+  await page.getByTestId('lab2-pen-in').click();
+  await expect(page.getByTestId('lab2-camp-pen')).toContainText('🐑 2/4 · lamb in 4');
+  await expect(page.getByTestId('lab-res-animal')).toHaveAttribute('data-count', '1');
+  await page.getByTestId('lab2-pen-out').click();
+  await expect(page.getByTestId('lab2-camp-pen')).toContainText('🐑 1/4 · 2 breed');
+  await page.getByTestId('lab2-undo').click();
+  await tapSquare(page, canvas, camp.x, camp.y); // Undo closes the panel
+  await expect(page.getByTestId('lab2-camp-pen')).toContainText('🐑 2/4');
+  await expect(page.getByTestId('lab2-hud')).toHaveAttribute(
+    'data-taps',
+    String(FRONTIER_SHIFT.taps - 3),
+  );
+});

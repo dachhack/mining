@@ -7,6 +7,7 @@ import {
   FRONTIER_DRILL,
   FRONTIER_LANTERN,
   FRONTIER_NEW_CAMP_COST,
+  FRONTIER_PEN,
   FRONTIER_PICKAXE,
   FRONTIER_STEEL_DRILL,
 } from '../src/data/frontier';
@@ -24,6 +25,7 @@ import {
   previewTap,
   newlyCovered,
   placeRefusal,
+  penRefusal,
   plantRefusal,
   smelterRefusal,
   upgradeCostFrom,
@@ -39,7 +41,8 @@ import { NO_FEATURE } from '../src/engine/frontier/state';
  * such as "smelt-iron"), "hangLantern ID" (a lantern at camp ID), or
  * "sell ITEM LOTS" / "buy ITEM LOTS" at the market (an item id, such as
  * "wood", and a whole number of lots), or "plant X,Y ITEM" (a sapling or
- * an apple sapling on square X,Y).
+ * an apple sapling on square X,Y), "buildPen ID", "penIn ID" or "penOut ID"
+ * (a pen at camp ID, an animal into it or out of it).
  */
 export type FrontierStep = string;
 
@@ -95,7 +98,10 @@ export function actionOf(step: FrontierStep): FrontierAction {
       verb === 'demolish' ||
       verb === 'rest' ||
       verb === 'buildSmelter' ||
-      verb === 'hangLantern') &&
+      verb === 'hangLantern' ||
+      verb === 'buildPen' ||
+      verb === 'penIn' ||
+      verb === 'penOut') &&
     arg !== undefined
   ) {
     return { kind: verb, id: Number(arg) };
@@ -214,6 +220,45 @@ export function marketStep(state: FrontierState): FrontierStep | null {
   return stone > 0 ? `sell stone ${stone}` : null;
 }
 
+/** The gatherer keeps this much hay: the level-3 upgrade's 10, and some for breeding. */
+const GATHERER_HAY = 16;
+
+/** The gatherer keeps this many animals in the store, for upgrades and food; the rest go in a pen. */
+const GATHERER_ANIMALS_KEPT = 3;
+
+/**
+ * Pens and hay (progression plan section 6.3), in order, the first that
+ * can be done: build a pen at the first camp once it holds the pen's cost
+ * and 20 wood more; take an animal out of a pen while the store has fewer
+ * than GATHERER_ANIMALS_KEPT and the pen keeps 2 to breed; put one in while
+ * the store has more; make hay while it holds less than GATHERER_HAY and
+ * has 30 grass to spare. `null` if none can be done.
+ */
+export function farmStep(state: FrontierState): FrontierStep | null {
+  const first = state.camps[0];
+  if (first === undefined) return null;
+  const pen = state.camps.find((c) => c.pen);
+  const wood = state.inventory.get('wood') ?? 0;
+  if (pen === undefined) {
+    const spare = wood >= (FRONTIER_PEN.cost.find((c) => c.item === 'wood')?.count ?? 0) + 20;
+    if (spare && penRefusal(state, 'buildPen', first.id) === null) return `buildPen ${first.id}`;
+  } else {
+    const animals = state.inventory.get('animal') ?? 0;
+    if (
+      animals < GATHERER_ANIMALS_KEPT &&
+      pen.penned > 2 &&
+      penRefusal(state, 'penOut', pen.id) === null
+    )
+      return `penOut ${pen.id}`;
+    if (animals > GATHERER_ANIMALS_KEPT && penRefusal(state, 'penIn', pen.id) === null)
+      return `penIn ${pen.id}`;
+  }
+  const hay = state.inventory.get('hay') ?? 0;
+  const grass = state.inventory.get('grass') ?? 0;
+  if (hay < GATHERER_HAY && grass >= 30 && makeRefusal(state, 'hay') === null) return 'make hay';
+  return null;
+}
+
 /**
  * Plant a sapling it holds (progression plan section 6.2) on the lit square
  * farthest from the newest camp where one can be planted, so its own
@@ -239,8 +284,9 @@ export function plantStep(state: FrontierState): FrontierStep | null {
  * The gatherer: a plain policy for recording golden runs. In order:
  * 0. with no taps left, end the shift, or rest if the crew's health is at
  *    GATHERER_REST_AT or below (plan A4);
- * 1. smelt and craft what it can (`craftStep`), trade on a market day
- *    (`marketStep`), and plant the saplings it holds (`plantStep`);
+ * 1. smelt and craft what it can (`craftStep`), keep a pen and make hay
+ *    (`farmStep`), trade on a market day (`marketStep`), and plant the
+ *    saplings it holds (`plantStep`);
  * 2. upgrade the lowest camp it can pay for;
  * 3. with fewer than 3 camps, place one where it lights the most new
  *    ground, if it can pay;
@@ -256,7 +302,7 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
   if (state.tapsLeft === 0) {
     return state.health <= GATHERER_REST_AT ? restStep(state) : 'endShift';
   }
-  const craft = craftStep(state) ?? marketStep(state) ?? plantStep(state);
+  const craft = craftStep(state) ?? farmStep(state) ?? marketStep(state) ?? plantStep(state);
   if (craft !== null) return craft;
   const byLevel = [...state.camps].sort((a, b) => a.level - b.level || a.id - b.id);
   for (const camp of byLevel) {

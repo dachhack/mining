@@ -72,6 +72,9 @@ export const FRONTIER_CAMP_LEVELS: FrontierCampLevel[] = [
       { item: 'stone', count: 40 },
       { item: 'animal', count: 3 },
       { item: 'apple', count: 10 },
+      // Hay (progression plan section 6.3): farming pays for the level that
+      // opens the tools.
+      { item: 'hay', count: 10 },
     ],
   },
   {
@@ -224,6 +227,8 @@ export const FRONTIER_SAPLINGS = {
  */
 export const FRONTIER_FOODS: ItemStack[] = [
   { item: 'grass', count: 3 },
+  // Hay (progression plan section 6.3; question 175): after grass, before apples.
+  { item: 'hay', count: 1 },
   { item: 'apple', count: 1 },
   { item: 'animal', count: 1 },
 ];
@@ -321,7 +326,34 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
     output: { item: 'appleSapling', count: 1 },
     needsSmelter: false,
   },
+  // Hay from grass (progression plan section 6.3): no smelter.
+  {
+    id: 'hay',
+    name: 'Hay',
+    inputs: [{ item: 'grass', count: 3 }],
+    output: { item: 'hay', count: 1 },
+    needsSmelter: false,
+  },
 ];
+
+/**
+ * Animal pens (progression plan section 6.3). A pen is built at a camp of
+ * level `minLevel` or more, from its panel, for `cost` and 1 tap (level 2,
+ * as the smelter: farming is Phase 2's, and a base camp's panel has no room
+ * for it); one per camp, lost with the camp (its
+ * animals go to the store). It holds up to `capacity` animals, put in from
+ * the store and taken out, 1 tap each; upkeep never eats a penned animal.
+ * A pen with at least 2 animals and room for one more gains an animal every
+ * `breedEveryShifts` shifts, at End shift, eating `hayPerBirth` hay from the
+ * store; with too little hay it waits.
+ */
+export const FRONTIER_PEN = {
+  minLevel: 2,
+  cost: [{ item: 'wood', count: 10 }] as ItemStack[],
+  capacity: 4,
+  breedEveryShifts: 4,
+  hayPerBirth: 2,
+};
 
 /**
  * The iron pickaxe (owner, question 163): while the store holds `item`,
@@ -438,15 +470,15 @@ export const FRONTIER_MARKET = {
   ] as FrontierLot[],
   /**
    * What the player can buy, and what it costs (question 171). From the
-   * start: an animal, clay and saplings. From a level-3 camp: the tools (plan section
-   * 4), dearer than making them at a smelter. Hay joins with pens (plan
-   * section 6.3).
+   * start: an animal, clay, saplings and hay. From a level-3 camp: the tools (plan section
+   * 4), dearer than making them at a smelter.
    */
   buyPrices: [
     { item: 'animal', count: 1, coins: 8 },
     { item: 'clay', count: 1, coins: 1 },
     { item: 'sapling', count: 1, coins: 3 },
     { item: 'appleSapling', count: 1, coins: 6 },
+    { item: 'hay', count: 1, coins: 1 },
     { item: 'drill', count: 1, coins: 80, fromLevel: 3 },
     { item: 'steelDrill', count: 1, coins: 250, fromLevel: 3 },
     { item: 'ironPickaxe', count: 1, coins: 60, fromLevel: 3 },

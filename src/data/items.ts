@@ -35,7 +35,9 @@ export type ItemId =
   | 'steelDrill'
   // Planted to grow a tree or an apple tree (progression plan section 6.2).
   | 'sapling'
-  | 'appleSapling';
+  | 'appleSapling'
+  // Made from grass; feeds penned animals and the crew (plan section 6.3).
+  | 'hay';
 
 // Fuel is a gauge, not an item, so it is not here. The torch and the safety
 // lamp are gone with light (design doc v0.2, section 7). Items have no weight:
@@ -76,6 +78,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   coin: { name: 'Coins' },
   steelDrill: { name: 'Steel drill' },
   sapling: { name: 'Saplings' },
+  hay: { name: 'Hay' },
   appleSapling: { name: 'Apple saplings' },
   copperLantern: { name: 'Copper lantern' },
 };

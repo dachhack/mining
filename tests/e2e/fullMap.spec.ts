@@ -23,13 +23,63 @@ const RUN_KEY = 'mining-game.run';
 function revealedWorld(): FrontierState {
   const start = createFrontier(110);
   const size = start.cube.size;
-  const first = start.camps[0] ?? { id: 1, x: 16, y: 16, level: 1, smelter: false, lantern: false };
+  const first = start.camps[0] ?? {
+    id: 1,
+    x: 16,
+    y: 16,
+    level: 1,
+    smelter: false,
+    lantern: false,
+    pen: false,
+    penned: 0,
+    breedIn: 0,
+  };
   const camps = [
     { ...first, level: 3 },
-    { id: 2, x: 6, y: 6, level: 3, smelter: false, lantern: false },
-    { id: 3, x: 25, y: 6, level: 3, smelter: false, lantern: false },
-    { id: 4, x: 6, y: 25, level: 3, smelter: false, lantern: false },
-    { id: 5, x: 25, y: 25, level: 3, smelter: false, lantern: false },
+    {
+      id: 2,
+      x: 6,
+      y: 6,
+      level: 3,
+      smelter: false,
+      lantern: false,
+      pen: false,
+      penned: 0,
+      breedIn: 0,
+    },
+    {
+      id: 3,
+      x: 25,
+      y: 6,
+      level: 3,
+      smelter: false,
+      lantern: false,
+      pen: false,
+      penned: 0,
+      breedIn: 0,
+    },
+    {
+      id: 4,
+      x: 6,
+      y: 25,
+      level: 3,
+      smelter: false,
+      lantern: false,
+      pen: false,
+      penned: 0,
+      breedIn: 0,
+    },
+    {
+      id: 5,
+      x: 25,
+      y: 25,
+      level: 3,
+      smelter: false,
+      lantern: false,
+      pen: false,
+      penned: 0,
+      breedIn: 0,
+    },
   ];
   const seen = seenWith(new Array<boolean>(size.x * size.y).fill(true), camps, size.x, size.y);
   return { ...start, camps, nextCampId: 6, seen };
