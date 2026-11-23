@@ -1209,6 +1209,39 @@ test('Close mine asks once, then ends the run: nothing more can be done', async 
   await expect(page.getByTestId('lab2-over')).toBeHidden();
 });
 
+test('a felled tree leaves a stump ring, and mining its square takes the ring away', async ({
+  page,
+}) => {
+  // Owner, after the playtest of 8842e83: "The tree ring needs to disappear
+  // if you mine the surface level block the tree grows on."
+  const canvas = await openLab2(page);
+  const start = newCampWorld(SEED);
+  const camp = start.camps[0] ?? { x: 0, y: 0 };
+  const width = start.lab.state.size.x;
+  // The plain tree nearest the camp that a tap fells, in the camp's ring.
+  const trees: Square[] = [];
+  start.surface.features.forEach((feature, i) => {
+    const square = { x: i % width, y: Math.floor(i / width) };
+    if (feature === TREE && campTap(start, square.x, square.y).harvest?.kind === 'felled') {
+      trees.push(square);
+    }
+  });
+  const distance = (s: Square): number => Math.abs(s.x - camp.x) + Math.abs(s.y - camp.y);
+  const tree = trees.sort((a, b) => distance(a) - distance(b))[0];
+  expect(tree).toBeDefined();
+  if (tree === undefined) return;
+  const key = `${tree.x},${tree.y}`;
+  // Felled: a stump ring where the tree stood.
+  const felled = campTap(start, tree.x, tree.y);
+  await tapSquare(page, canvas, tree);
+  await expect(canvas).toHaveAttribute('data-last-tap', `harvested ${key}`);
+  await expect(canvas).toHaveAttribute('data-stumps', new RegExp(`(^| )${key}( |$)`));
+  // Mined: the stump is dug out, and its ring goes with it.
+  const mined = await digOnce(page, canvas, felled.world, tree);
+  expect(mined.lab.mined).toBe(1);
+  await expect(canvas).not.toHaveAttribute('data-stumps', new RegExp(`(^| )${key}( |$)`));
+});
+
 test('Rest is in a camp’s panel: the crew rests there, then the shift ends', async ({ page }) => {
   // Owner, question 156: "Only at a camp". The End shift bar has no Rest.
   const canvas = await openLab2(page);

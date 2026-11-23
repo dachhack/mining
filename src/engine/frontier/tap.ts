@@ -22,7 +22,7 @@ import { labMine } from '../lab';
 import { campAt, coverLevelAt, levelNeededFor, sightAt } from './camps';
 import { gained, harvestAt } from './surface';
 import type { HarvestKind } from './surface';
-import { APPLE_TREE, GRASS, TREE } from './state';
+import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from './state';
 import type { FrontierState } from './state';
 
 /**
@@ -105,9 +105,22 @@ export function frontierTap(state: FrontierState, x: number, y: number): Frontie
   for (const stack of mined.yields) {
     inventory = gained(inventory, stack);
   }
+  // Mining the ground under a stump digs it out: no tree grows back there,
+  // and the stump is gone at once (owner, after the playtest of 8842e83:
+  // "The tree ring needs to disappear if you mine the surface level block
+  // the tree grows on").
+  const i = x + state.cube.size.x * y;
+  let stumps = state.stumps;
+  let regrowIn = state.regrowIn;
+  if ((stumps[i] ?? NO_FEATURE) !== NO_FEATURE) {
+    stumps = [...stumps];
+    stumps[i] = NO_FEATURE;
+    regrowIn = [...regrowIn];
+    regrowIn[i] = -1;
+  }
   return {
     ...nothing('mined'),
-    state: { ...state, cube: mined.state, inventory, mined: state.mined + 1 },
+    state: { ...state, cube: mined.state, inventory, mined: state.mined + 1, stumps, regrowIn },
     gain: mined.yields,
     block: mined.block,
   };

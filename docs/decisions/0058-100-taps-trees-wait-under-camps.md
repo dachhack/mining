@@ -4,7 +4,7 @@ Date: 2026-11-22. The owner's playtest of PR #146: "100 turns per shift. Trees g
 
 - **Taps: 10 → 100** (`FRONTIER_SHIFT.taps`, [Default]). The HUD shows the taps left only ("⚡ 100", with the full count in its label), because "100/100" ran into Close mine on a 320 px phone.
 - **Trees.** A tree grows back unless the ground directly under it is mined:
-  - mining a stump's square digs it out, as before (0057);
+  - mining a stump's square digs it out, as before (0057). Since the owner's playtest of 8842e83 ("The tree ring needs to disappear if you mine the surface level block the tree grows on"), the stump is cleared from the state when the square is mined, so its ring goes at once; before, it stayed in the state, and on the map, until its wait ran out;
   - a camp built over a tree now leaves a stump, as felling does, and a stump under a camp no longer clears: it waits, and grows back the shift after the camp is demolished (if the square was never mined);
   - an animal on the stump still makes it wait a shift.
     Nothing else stops regrowth.

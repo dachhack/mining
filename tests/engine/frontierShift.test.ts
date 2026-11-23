@@ -288,6 +288,11 @@ describe('felled trees grow back (owner, question 157: "Trees regrow slowly")', 
     w = frontierAct(w, { kind: 'tap', x: AT.x, y: AT.y }).state; // felled
     w = frontierAct(w, { kind: 'tap', x: AT.x, y: AT.y }).state; // mined
     expect(w.mined).toBe(1);
+    // The stump is gone at once (owner, after the playtest of 8842e83: "The
+    // tree ring needs to disappear if you mine the surface level block the
+    // tree grows on"), not when its wait runs out.
+    expect(w.stumps[i]).toBe(NO_FEATURE);
+    expect(w.regrowIn[i]).toBe(-1);
     const later = endFrontierShift(shifts(w, FRONTIER_SHIFT.treeRegrowShifts - 1));
     expect(later.state.features[i]).toBe(NO_FEATURE);
     expect(later.state.stumps[i]).toBe(NO_FEATURE);

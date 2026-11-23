@@ -515,6 +515,13 @@ export function mountCampLab(
     // For the e2e tests: the shift, and where the animals are.
     canvas.dataset['shift'] = String(world.turn.shift);
     canvas.dataset['animals'] = world.surface.animals.map((a) => `${a.x},${a.y}`).join(' ');
+    // ...and the stumps (felled trees that will grow back), drawn as rings.
+    const width = world.lab.state.size.x;
+    const stumps: string[] = [];
+    world.surface.stumps.forEach((stump, i) => {
+      if (stump !== NO_FEATURE) stumps.push(`${i % width},${Math.floor(i / width)}`);
+    });
+    canvas.dataset['stumps'] = stumps.join(' ');
   }
 
   /** True if square (x, y) is on the map, not in fog, and has a tree or an apple tree: part of a forest. */
