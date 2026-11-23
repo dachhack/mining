@@ -6,7 +6,8 @@
 // - random:   a step at random among the useful ones (a tap that takes or
 //             mines something, a camp it can place, upgrade or demolish, a
 //             smelter it can build, a recipe it can make, a lantern it
-//             can hang, one lot it can sell or buy on a market day),
+//             can hang, one lot it can sell or buy on a market day, a
+//             sapling it holds),
 //             ending the shift when out of taps; it never closes the mine.
 // - gatherer: tools/frontierRun.ts: builds a smelter, smelts and makes the
 //             tools and lanterns, sells surplus on market days,
@@ -35,6 +36,7 @@ import {
   tradeRefusal,
   previewTap,
   placeRefusal,
+  plantRefusal,
   upgradeRefusal,
   demolishRefusal,
   lanternRefusal,
@@ -114,6 +116,15 @@ function randomPolicy(rng: RngState): FrontierPolicy {
       }
       for (const lot of FRONTIER_MARKET.buyPrices) {
         if (tradeRefusal(state, 'buy', lot.item, 1) === null) options.push(`buy ${lot.item} 1`);
+      }
+    }
+    // A sapling it holds, on a few squares tried at random.
+    for (const item of ['sapling', 'appleSapling']) {
+      if ((state.inventory.get(item) ?? 0) < 1) continue;
+      for (let k = 0; k < 4; k += 1) {
+        const x = Math.floor(nextFloat(rng) * state.cube.size.x);
+        const y = Math.floor(nextFloat(rng) * state.cube.size.y);
+        if (plantRefusal(state, x, y, item) === null) options.push(`plant ${x},${y} ${item}`);
       }
     }
     // A few places for a camp, tried at random squares (all of them would be slow).

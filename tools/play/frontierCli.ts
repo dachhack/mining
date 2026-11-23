@@ -165,6 +165,22 @@ function refusalText(refusal: string | null): string {
   return texts[refusal ?? ''] ?? `Refused: ${refusal ?? 'unknown'}.`;
 }
 
+/** Why a sapling cannot be planted, in words for the player. */
+function plantText(refusal: string | null): string {
+  const texts: Record<string, string> = {
+    unknown: 'Only a sapling or an apple sapling can be planted.',
+    cost: 'You hold none of those.',
+    notShown: 'That square is not lit by a camp.',
+    camp: 'A camp stands there.',
+    animal: 'An animal stands there.',
+    ground: 'Saplings grow only on dirt at the surface, never on ground that was mined.',
+    occupied: 'Something grows there already, or a sapling is planted.',
+    noTaps: 'No taps left this shift: end the shift ("end").',
+    over: 'The run is over.',
+  };
+  return texts[refusal ?? ''] ?? `Refused: ${refusal ?? 'unknown'}.`;
+}
+
 /** What a tap does to a square, as a verb: "cut the grass on", "mine"... */
 const TAP_VERBS: Record<string, string> = {
   grass: 'cut the grass on',
@@ -232,6 +248,7 @@ export function act(session: FrontierSession, step: FrontierStep): StepResult {
   if (!outcome.done) {
     const tap = outcome.tap;
     let why = refusalText(tap?.kind === 'refused' ? tap.refusal : (outcome.refusal ?? null));
+    if (action.kind === 'plant') why = plantText(outcome.refusal);
     if (tap?.kind === 'tooHard') {
       why =
         tap.needs !== null
@@ -303,6 +320,7 @@ function undo(session: FrontierSession): StepResult {
  * The step a typed choice stands for, or `null` if it is not one. Accepts
  * "tap 3,4" (or "t 3 4"), "place 3,4", "upgrade 2", "demolish 1", "end",
  * "rest 1" (or "rest" with one camp), "sell wood 3", "buy animal 1",
+ * "plant 3,4 sapling",
  * "close", "undo", or the number of a listed choice.
  */
 export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | null {
@@ -326,6 +344,12 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
   const lantern = /^(lantern|hang|hang lantern|hanglantern) (\d+)$/.exec(text);
   if (lantern !== null) {
     return `hangLantern ${lantern[2] ?? ''}`;
+  }
+  const plantStep = /^plant (\d+)[ ,]+(\d+) ([a-z]+)$/.exec(text);
+  if (plantStep !== null) {
+    // "sapling" or "applesapling" (the typed text is lower case).
+    const item = ['sapling', 'appleSapling'].find((id) => id.toLowerCase() === plantStep[3]);
+    return item === undefined ? null : `plant ${plantStep[1] ?? ''},${plantStep[2] ?? ''} ${item}`;
   }
   const tradeStep = /^(sell|buy) ([a-z]+) (\d+)$/.exec(text);
   if (tradeStep !== null) {
@@ -437,6 +461,7 @@ function squareChars(state: FrontierState, sight: string, x: number, y: number):
   else if (state.features[i] === GRASS) first = '"';
   else if (state.features[i] === TREE) first = 'T';
   else if (state.features[i] === APPLE_TREE) first = (state.apples[i] ?? 0) > 0 ? 'A' : 'a';
+  else if (state.planted[i] === true) first = 's';
   else if (depth >= state.cube.size.z) first = '_';
   else {
     const code = topBlockAt(state.cube, x, y);
@@ -524,7 +549,7 @@ export function frontierView(session: FrontierSession): string {
   lines.push('', ...mapLines(state), '');
   lines.push(
     'Map: two characters a square: what is on it, then its depth. ?? fog, -- out of range now.',
-    '  m animal  " grass  T tree  A apple tree (a: no apples)  N camp N\'s middle  + camp ground',
+    '  m animal  " grass  T tree  A apple tree (a: no apples)  s sapling  N camp N\'s middle  + camp ground',
     '  . dirt  # stone  k clay  o coal  H hard rock  i iron  u copper  x crystal  R rubble  _ nothing left',
   );
   const listed = listedSteps(session);
@@ -605,7 +630,13 @@ export function lookText(session: FrontierSession, x: number, y: number): string
   const stump = state.stumps[i] ?? NO_FEATURE;
   if (stump !== NO_FEATURE) {
     const tree = stump === APPLE_TREE ? 'an apple tree' : 'a tree';
-    parts.push(`a stump: ${tree} grows back in ${state.regrowIn[i] ?? 0} shift(s)`);
+    const what = state.planted[i] === true ? 'a sapling' : 'a stump';
+    parts.push(`${what}: ${tree} grows in ${state.regrowIn[i] ?? 0} shift(s)`);
+  }
+  if ((state.grassIn[i] ?? -1) >= 0) {
+    parts.push(
+      `cut grass: it grows back in ${state.grassIn[i] ?? 0} shift(s) if grass grows beside it`,
+    );
   }
   if (animalAt(state, x, y) !== null) parts.push('an animal on it');
   const camp = campAt(state.camps, x, y);

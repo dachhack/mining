@@ -321,7 +321,7 @@ const FRONTIER_RUNS: {
     policy: 'gatherer',
     maxShifts: 10,
     description:
-      'The gatherer for 10 shifts of 100 taps: takes plants and animals, places two more camps where they light the most new ground, mines 559 blocks, upgrades three times, builds a smelter, sells grass on market days, and is never hungry',
+      'The gatherer for 10 shifts of 100 taps: takes plants and animals, places two more camps where they light the most new ground, mines 504 blocks, upgrades three times, builds a smelter, plants the saplings its felled trees give, sells grass on market days, and is never hungry',
   },
   {
     name: 'gatherer-seed-26',
@@ -353,7 +353,7 @@ const FRONTIER_RUNS: {
     policy: 'random',
     maxShifts: 10,
     description:
-      'The random policy: a useful step at random, ending each shift when its taps run out; it upgrades a camp to level 2 and is never hungry',
+      'The random policy: a useful step at random, ending each shift when its taps run out; it upgrades a camp to level 2, makes apple saplings and plants saplings, and is never hungry',
   },
   {
     name: 'random-seed-16-tools',
@@ -361,7 +361,7 @@ const FRONTIER_RUNS: {
     policy: 'random',
     maxShifts: 42,
     description:
-      'The random policy on another seed, for 42 shifts: it builds a smelter, upgrades its camp to level 3, and buys animals and clay at the market',
+      'The random policy on another seed, for 42 shifts: it upgrades its camp to level 2, builds a smelter, makes apple saplings, and buys saplings, an apple sapling and clay at the market',
   },
   {
     name: 'careful-seed-3-finished',
@@ -369,7 +369,7 @@ const FRONTIER_RUNS: {
     policy: 'careful',
     maxShifts: 100,
     description:
-      'The careful policy for a whole run of 100 shifts (docs/plans/progression-phases.md): it buys an iron drill and a steel drill at the market, smelts and makes a pickaxe and lanterns, brings its three camps to level 4, sells its surplus, and the run ends finished, scored in coins',
+      'The careful policy for a whole run of 100 shifts (docs/plans/progression-phases.md): it buys an iron drill and a steel drill at the market, smelts and makes a pickaxe and lanterns, brings two of its camps to level 4, plants saplings, sells its surplus, and the run ends finished, scored in coins',
   },
   {
     name: 'idle-seed-2-lost',

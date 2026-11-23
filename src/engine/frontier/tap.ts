@@ -19,7 +19,7 @@
 
 import { blockDefByCode } from '../../data';
 import type { ItemId, ItemStack } from '../../data';
-import { FRONTIER_PICKAXE, FRONTIER_SURFACE } from '../../data/frontier';
+import { FRONTIER_PICKAXE, FRONTIER_SAPLINGS, FRONTIER_SURFACE } from '../../data/frontier';
 import { mayMine, topBlockAt } from '../heightmap';
 import type { HigherNeighbour, MineRefusal } from '../heightmap';
 import { labMine } from '../lab';
@@ -100,7 +100,8 @@ export function frontierTap(state: FrontierState, x: number, y: number): Frontie
     return nothing('camp');
   }
   if (taken !== null) {
-    return { ...nothing('harvested'), state: taken.state, gain: [taken.gain], harvest: taken.kind };
+    const gain = taken.extra === null ? [taken.gain] : [taken.gain, taken.extra];
+    return { ...nothing('harvested'), state: taken.state, gain, harvest: taken.kind };
   }
   const check = mayMine(state.cube, x, y);
   if (!check.allowed) {
@@ -131,15 +132,25 @@ export function frontierTap(state: FrontierState, x: number, y: number): Frontie
   const i = x + state.cube.size.x * y;
   let stumps = state.stumps;
   let regrowIn = state.regrowIn;
+  let planted = state.planted;
   if ((stumps[i] ?? NO_FEATURE) !== NO_FEATURE) {
     stumps = [...stumps];
     stumps[i] = NO_FEATURE;
     regrowIn = [...regrowIn];
     regrowIn[i] = -1;
+    planted = [...planted];
+    planted[i] = false;
   }
+  // Nor does cut grass grow back on ground dug out (progression plan section 6.1).
+  let grassIn = state.grassIn;
+  if ((grassIn[i] ?? -1) >= 0) {
+    grassIn = [...grassIn];
+    grassIn[i] = -1;
+  }
+  const after = { ...state, cube: mined.state, inventory, mined: state.mined + 1 };
   return {
     ...nothing('mined'),
-    state: { ...state, cube: mined.state, inventory, mined: state.mined + 1, stumps, regrowIn },
+    state: { ...after, stumps, regrowIn, planted, grassIn },
     gain,
     block: mined.block,
   };
@@ -174,7 +185,13 @@ export function previewTap(
     return { kind: 'harvested', gain: [{ item: 'apple', count: 1 }] };
   }
   if (feature === TREE || feature === APPLE_TREE) {
-    return { kind: 'harvested', gain: [{ item: 'wood', count: FRONTIER_SURFACE.woodPerTree }] };
+    const wood = { item: 'wood' as const, count: FRONTIER_SURFACE.woodPerTree };
+    // Every few trees felled give a sapling too (surface.ts).
+    const sapling = (state.treesFelled + 1) % FRONTIER_SAPLINGS.saplingEveryFelled === 0;
+    return {
+      kind: 'harvested',
+      gain: sapling ? [wood, { item: 'sapling', count: 1 }] : [wood],
+    };
   }
   if (!mayMine(state.cube, x, y).allowed) return { kind: 'refused', gain: [] };
   const code = topBlockAt(state.cube, x, y);

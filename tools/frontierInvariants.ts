@@ -32,6 +32,9 @@
 // - SMELTERS: only at camps of FRONTIER_SMELTER.minLevel or more.
 // - LANTERNS: hung ones came from the store: a camp gains a lantern only as
 //   one lantern leaves the store.
+// - FARMING: a planted sapling is a waiting stump on unmined dirt; cut grass
+//   waits only on a square with nothing growing on it; a planting takes one
+//   sapling from the store.
 // - THE MARKET AND THE RUN'S END: a trade happens only on a market day
 //   (worked out here from the data), in a lot open at the best camp's
 //   level, gives up and gets exactly a whole
@@ -230,6 +233,23 @@ export function checkStep(
     say(`the run finished on shift ${before.shift}, by "${verb}"`);
   if (after.status === 'active' && after.shift > FRONTIER_RUN.shifts)
     say(`shift ${after.shift} is past the run's last`);
+
+  // Farming (progression plan sections 6.1 and 6.2).
+  after.planted.forEach((planted, i) => {
+    if (planted && (after.stumps[i] ?? NO_FEATURE) === NO_FEATURE)
+      say(`square ${i} is planted but has no stump`);
+  });
+  after.grassIn.forEach((left, i) => {
+    if (left >= 0 && after.features[i] !== NO_FEATURE)
+      say(`cut grass waits on square ${i}, where something grows`);
+    if (left >= 0 && depthAt(after.cube, i % width, Math.floor(i / width)) !== 0)
+      say(`cut grass waits on square ${i}, whose ground was mined`);
+  });
+  if (verb === 'plant') {
+    const item = step.split(' ')[2] ?? '';
+    const change = (after.inventory.get(item) ?? 0) - (before.inventory.get(item) ?? 0);
+    if (change !== -1) say(`planting ${item} changed the store by ${change}`);
+  }
 
   // The surface.
   const squares = new Set<string>();

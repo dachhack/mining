@@ -134,12 +134,14 @@ In this order:
 1. **Animals:** each takes 3 steps to an open face neighbour. Every 3rd shift a new one walks in at the map's edge, while there are fewer than 8 (question 149).
 2. **Apples:** an apple tree picked bare has its 3 apples back 5 shifts later (question 150).
 3. **Trees** (owner, question 157: "Trees regrow slowly"): a felled tree leaves a stump, and the same kind of tree grows back on it 15 shifts later; an apple tree comes back with its 3 apples. A tree grows back unless the ground directly under it is mined (owner, after the playtest of PR #146): nothing grows back on a square mined since, because mining digs the stump out, and its ring goes from the map at once (owner, after the playtest of 8842e83). A camp built over a tree leaves a stump, and a stump under a camp waits: it grows back once the camp is demolished. Where an animal stands on the stump, it waits a shift more (decision note 0058).
-4. **Upkeep** (owner, question 147: "Food and wood"):
+4. **Cut grass** (progression plan section 6.1): a square whose grass was cut grows grass again [Default] 4 shifts later (`FRONTIER_SHIFT.grassRegrowShifts`), if it is still unmined dirt with nothing on it and no camp, and grass grew on a face neighbour when the shift ended. Otherwise it waits a shift more, so a patch cut bare to its last tuft stays bare (question 174). Mining the square ends the wait.
+5. **Saplings** planted grow like a felled tree's stump (section 7a).
+6. **Upkeep** (owner, question 147: "Food and wood"):
    - 1 wood every shift;
    - 1 food every 2nd shift: 3 grass, else an apple, else an animal (questions 155 and 158; decision note 0057);
    - 1 more wood every 4th shift for each camp after the first.
-5. **Hunger:** each item of upkeep that cannot be paid costs 1 health (section 5).
-6. The next shift starts with a full set of taps.
+7. **Hunger:** each item of upkeep that cannot be paid costs 1 health (section 5).
+8. The next shift starts with a full set of taps.
 
 ### 4.3 Mining and the level rule [Decided; numbers Default]
 
@@ -206,10 +208,19 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 - **Money** is an item, **coins** (question 170). A run starts with none.
 - **Trading:** on a market day, the player sells or buys any whole number of one item's lots, for **1 tap** a trade. A lot is [Default] (`FRONTIER_MARKET`):
   - sold: 5 grass, 2 wood, 2 apples or 2 clay for 1 coin; 10 stone for 1 coin; 1 animal for 3; 1 coal for 1; 1 raw iron or copper ore for 2; 1 ingot for 5; 1 crystal for 20; 1 rare ore for 15; 1 relic for 40;
-  - bought: 1 animal for 8 coins; 1 clay for 1 coin; and, while the best camp is level 3 or more, an iron drill for 80, a steel drill for 250, an iron pickaxe for 60 and a copper lantern for 40. Saplings and hay join with farming (plan section 6).
+  - bought: 1 animal for 8 coins; 1 clay for 1 coin; 1 sapling for 3, 1 apple sapling for 6; and, while the best camp is level 3 or more, an iron drill for 80, a steel drill for 250, an iron pickaxe for 60 and a copper lantern for 40. Saplings and hay join with farming (plan section 6).
   - Nothing can be bought and sold back at a profit.
 - A trade can be undone, like any action that is not a harvest.
 - **Interface:** a market button (🏪) beside the recipe book, lit on a market day. It opens a card like the book's: what can be sold (the items held) and bought, each with what the player has, and Sell, Sell all and Buy buttons. On other days the card says when the market opens, and its buttons are off. Coins are shown next to Dug in the counter.
+
+## 7a. Saplings [Decided; numbers Default]
+
+(Progression plan section 6.2; built in its PR 3.)
+
+- **Where saplings come from:** every [Default] 2nd tree felled in a run gives a sapling as well as its wood (`FRONTIER_SAPLINGS`; counted, not random). The recipe book makes an apple sapling from [Default] 3 apples, for 1 tap, with no smelter. The market sells both (section 6a).
+- **Planting** costs 1 tap and one sapling, on a lit square of surface dirt that was never mined, with nothing growing on it, no camp and no animal; a stump may be planted over (the new sapling replaces it). Cut grass waiting there no longer grows.
+- **Growing:** a sapling becomes a tree [Default] 15 shifts later, an apple sapling an apple tree full of apples [Default] 20 shifts later, by the stump rules (section 4.2): it waits under an animal or a camp, and mining its square digs it out.
+- **Interface:** while a sapling is held, a 🌱 button in the tray opens the planting mode: choose a sapling or an apple sapling, then each tap on the map plants one, or the hint says why it cannot. A planted sapling is drawn as a small sprout. Planting can be undone.
 
 ## 7. Resources
 

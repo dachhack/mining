@@ -192,6 +192,26 @@ export const FRONTIER_SHIFT = {
    * later (owner, question 157: "Trees regrow slowly").
    */
   treeRegrowShifts: 15,
+  /**
+   * Cut grass grows back this many shifts later, if grass grows on a face
+   * neighbour then (progression plan section 6.1). A patch cut bare to its
+   * last tuft stays bare (question 174).
+   */
+  grassRegrowShifts: 4,
+};
+
+/**
+ * Saplings (progression plan section 6.2). Every `saplingEveryFelled`th tree
+ * felled gives a sapling too: counted, not random, so a run replays
+ * exactly. A sapling planted on lit dirt at the surface, or on a stump,
+ * grows into a tree `saplingGrowShifts` shifts later; an apple sapling into
+ * an apple tree full of apples `appleSaplingGrowShifts` later. Apple
+ * saplings are made from apples in the recipe book (FRONTIER_RECIPES).
+ */
+export const FRONTIER_SAPLINGS = {
+  saplingEveryFelled: 2,
+  saplingGrowShifts: 15,
+  appleSaplingGrowShifts: 20,
 };
 
 /**
@@ -231,6 +251,8 @@ export interface FrontierRecipe {
   name: string;
   inputs: ItemStack[];
   output: ItemStack;
+  /** True if it is made only while a smelter stands somewhere. */
+  needsSmelter: boolean;
 }
 
 /**
@@ -247,6 +269,7 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
       { item: 'coal', count: 1 },
     ],
     output: { item: 'ironIngot', count: 2 },
+    needsSmelter: true,
   },
   {
     id: 'smelt-copper',
@@ -256,6 +279,7 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
       { item: 'coal', count: 1 },
     ],
     output: { item: 'copperIngot', count: 2 },
+    needsSmelter: true,
   },
   // What ingots are for (owner, question 163), PR 3: a tool and a lantern.
   {
@@ -266,6 +290,7 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
       { item: 'wood', count: 2 },
     ],
     output: { item: 'ironPickaxe', count: 1 },
+    needsSmelter: true,
   },
   {
     id: 'copper-lantern',
@@ -275,6 +300,7 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
       { item: 'coal', count: 1 },
     ],
     output: { item: 'copperLantern', count: 1 },
+    needsSmelter: true,
   },
   {
     id: 'iron-drill',
@@ -285,6 +311,15 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
       { item: 'wood', count: 2 },
     ],
     output: { item: 'drill', count: 1 },
+    needsSmelter: true,
+  },
+  // An apple sapling from apples (progression plan section 6.2): no smelter.
+  {
+    id: 'apple-sapling',
+    name: 'Apple sapling',
+    inputs: [{ item: 'apple', count: 3 }],
+    output: { item: 'appleSapling', count: 1 },
+    needsSmelter: false,
   },
 ];
 
@@ -403,13 +438,15 @@ export const FRONTIER_MARKET = {
   ] as FrontierLot[],
   /**
    * What the player can buy, and what it costs (question 171). From the
-   * start: an animal and clay. From a level-3 camp: the tools (plan section
-   * 4), dearer than making them at a smelter. Saplings and hay join with
-   * farming (plan section 6).
+   * start: an animal, clay and saplings. From a level-3 camp: the tools (plan section
+   * 4), dearer than making them at a smelter. Hay joins with pens (plan
+   * section 6.3).
    */
   buyPrices: [
     { item: 'animal', count: 1, coins: 8 },
     { item: 'clay', count: 1, coins: 1 },
+    { item: 'sapling', count: 1, coins: 3 },
+    { item: 'appleSapling', count: 1, coins: 6 },
     { item: 'drill', count: 1, coins: 80, fromLevel: 3 },
     { item: 'steelDrill', count: 1, coins: 250, fromLevel: 3 },
     { item: 'ironPickaxe', count: 1, coins: 60, fromLevel: 3 },

@@ -26,6 +26,7 @@ import {
   FRONTIER_MARKET,
   FRONTIER_PICKAXE,
   FRONTIER_RUN,
+  FRONTIER_SAPLINGS,
   FRONTIER_SHIFT,
   FRONTIER_SMELTER,
   FRONTIER_STEEL_DRILL,
@@ -63,6 +64,8 @@ import {
   makeCampRecipe,
   makeRefusal,
   marketOpen,
+  plantCamp,
+  plantRefusal,
   nextMarketShift,
   smelterRefusal,
   tradeCamp,
@@ -107,6 +110,7 @@ import {
   drawAnimal,
   drawAppleTree,
   drawForest,
+  drawSapling,
   drawStump,
   drawGrass,
   featureSwatch,
@@ -132,6 +136,18 @@ const HARVEST_HINTS = {
   caught: 'Animal caught!',
 };
 const GREYED_HINT = 'Out of range now: put a camp nearby to mine here.';
+const PLANT_HINT = `Tap bare dirt: trees in ${FRONTIER_SAPLINGS.saplingGrowShifts} shifts, apples in ${FRONTIER_SAPLINGS.appleSaplingGrowShifts}.`;
+/** Why a sapling cannot be planted, for the hint (progression PR 3). */
+const PLANT_REFUSALS: Record<string, string> = {
+  noTaps: 'No taps left this shift: tap End shift to carry on.',
+  over: 'This run is over. Tap New world to start another.',
+  cost: 'You have none of those left.',
+  notShown: 'Plant only inside a camp’s ring.',
+  camp: 'Not on a camp’s ground.',
+  animal: 'An animal stands there.',
+  ground: 'Saplings grow only on surface dirt that was never dug.',
+  occupied: 'Something grows there already.',
+};
 const PLACE_HINT = 'Tap the middle of a flat, lit 3 × 3 patch for the new camp.';
 const PLACE_CHOSEN_HINT = 'Tap Place camp to build here, or tap another spot.';
 const NOT_LEVEL_TEXT = 'Ground not level: a camp needs a flat 3 × 3.';
@@ -200,7 +216,9 @@ type Mode =
   // The recipe book is open in the tray.
   | { kind: 'book' }
   // The market's card is open (progression PR 1).
-  | { kind: 'market' };
+  | { kind: 'market' }
+  // Planting saplings: each tap on the map plants one `item` (progression PR 3).
+  | { kind: 'planting'; item: string };
 
 /** How long each kind of effect lasts, in milliseconds. */
 function effectMs(kind: Effect['kind']): number {
@@ -813,7 +831,10 @@ export function mountCampLab(
       return;
     }
     if (feature !== TREE && feature !== APPLE_TREE) {
-      if ((world.surface.stumps[i] ?? NO_FEATURE) !== NO_FEATURE) {
+      const stump = world.surface.stumps[i] ?? NO_FEATURE;
+      if (stump !== NO_FEATURE && world.surface.planted[i] === true) {
+        drawSapling(ctx, box, stump === APPLE_TREE); // a planted sapling
+      } else if (stump !== NO_FEATURE) {
         drawStump(ctx, box); // a felled tree that will grow back
       }
       return;
@@ -1307,7 +1328,10 @@ export function mountCampLab(
       'copperIngot',
       FRONTIER_PICKAXE.item,
       FRONTIER_DRILL.item,
+      FRONTIER_STEEL_DRILL.item,
       FRONTIER_LANTERN.item,
+      'sapling',
+      'appleSapling',
     ]) {
       const count = counts.get(item) ?? 0;
       if (count > 0) all.push({ item, count, icon: () => labItemIcon(item, 'lab-chip-icon') });
@@ -1386,6 +1410,8 @@ export function mountCampLab(
     } else if (mode.kind === 'market') {
       showIdleTray();
       showMarketCard();
+    } else if (mode.kind === 'planting') {
+      showPlantingTray(mode.item);
     } else if (mode.kind === 'placing') {
       showPlacingTray(mode.target);
     } else {
@@ -1433,7 +1459,20 @@ export function mountCampLab(
     tool.append(element('span', 'lab2-tool-glyph', '⛺'), element('span', 'lab2-tool-plus', '+'));
     tool.addEventListener('click', () => setMode({ kind: 'placing', target: null }));
     const side = pinStrip();
-    head.append(book, market, tool, side);
+    head.append(book, market, tool);
+    // Planting (progression PR 3): shown only while a sapling is held.
+    const held = (item: string): number => world.lab.counts.get(item) ?? 0;
+    if (held('sapling') > 0 || held('appleSapling') > 0) {
+      const sow = button('lab2-book-button', '🌱');
+      sow.dataset['testid'] = 'lab2-plant-tool';
+      sow.setAttribute('aria-label', 'Plant a sapling');
+      sow.title = 'Plant a sapling';
+      sow.addEventListener('click', () =>
+        setMode({ kind: 'planting', item: held('sapling') > 0 ? 'sapling' : 'appleSapling' }),
+      );
+      head.append(sow);
+    }
+    head.append(side);
     const key = labKey();
     // The key lists the kinds you can see: lit and greyed squares, never what is under the fog.
     const seenTops = tops.filter((_, i) => (sights[i] ?? 'fog') !== 'fog');
@@ -1491,7 +1530,9 @@ export function mountCampLab(
             ? '🔩'
             : item === FRONTIER_LANTERN.item
               ? '🏮'
-              : '🔥';
+              : item === 'appleSapling'
+                ? '🌱'
+                : '🔥';
     const icon = element('span', 'lab2-recipe-icon', face);
     if (recipe.level > 1) {
       icon.append(element('span', 'lab2-recipe-level', String(recipe.level)));
@@ -1769,6 +1810,9 @@ export function mountCampLab(
     if (makes?.item === FRONTIER_DRILL.item) {
       return 'Mines iron and copper ore on any camp’s ground, while you have one.';
     }
+    if (makes?.item === 'appleSapling') {
+      return `Plant it with 🌱: an apple tree in ${FRONTIER_SAPLINGS.appleSaplingGrowShifts} shifts. No smelter needed.`;
+    }
     if (makes?.item === FRONTIER_LANTERN.item) {
       return `Hang it at a camp from its panel: ring +${FRONTIER_LANTERN.ringBonus}.`;
     }
@@ -1789,6 +1833,61 @@ export function mountCampLab(
     setWorld(next);
     const fresh = bookCard.querySelector('.lab2-book-list');
     if (fresh !== null) fresh.scrollTop = scroll;
+  }
+
+  /**
+   * The planting tray (progression PR 3): which sapling to plant, how many
+   * are held, and ×. Each tap on lit dirt plants one, for 1 tap, until ×.
+   */
+  function showPlantingTray(item: string): void {
+    const head = element('div', 'lab2-panel-head');
+    head.append(element('span', 'lab2-panel-title', '🌱 Plant'));
+    const cancel = button('lab2-close', '×');
+    cancel.setAttribute('aria-label', 'Stop planting');
+    cancel.dataset['testid'] = 'lab2-plant-cancel';
+    cancel.addEventListener('click', () => setMode({ kind: 'idle' }));
+    head.append(cancel);
+    const body = element('p', 'lab2-panel-line', PLANT_HINT);
+    body.dataset['testid'] = 'lab2-plant-line';
+    const actions = element('div', 'lab2-actions');
+    for (const kind of ['sapling', 'appleSapling']) {
+      const count = world.lab.counts.get(kind) ?? 0;
+      const choose = button(
+        kind === item ? 'lab2-button lab2-button-main' : 'lab2-button',
+        `${kind === 'sapling' ? '🌲 Sapling' : '🍎 Apple'} ×${count}`,
+      );
+      choose.dataset['testid'] = `lab2-plant-${kind}`;
+      choose.setAttribute('aria-pressed', String(kind === item));
+      choose.disabled = count === 0;
+      choose.addEventListener('click', () => setMode({ kind: 'planting', item: kind }));
+      actions.append(choose);
+    }
+    tray.replaceChildren(head, body, actions);
+  }
+
+  /** A tap on the map while planting: plant one there, or say why not. */
+  function tapWhilePlanting(x: number, y: number, item: string): void {
+    canvas.dataset['lastTap'] = `plant ${x},${y}`;
+    const why = plantRefusal(world, x, y, item);
+    if (why !== null) {
+      setHint(PLANT_REFUSALS[why] ?? 'A sapling cannot go there.', true);
+      return;
+    }
+    remember({ kind: 'plant', x, y, item });
+    setWorld(plantCamp(world, x, y, item));
+    const left = world.lab.counts.get(item) ?? 0;
+    setHint(
+      `Planted. ${left === 0 ? 'None left.' : `${left} left.`} It grows unless its ground is dug.`,
+      false,
+    );
+    if (left === 0) {
+      const other = item === 'sapling' ? 'appleSapling' : 'sapling';
+      setMode(
+        (world.lab.counts.get(other) ?? 0) > 0
+          ? { kind: 'planting', item: other }
+          : { kind: 'idle' },
+      );
+    }
   }
 
   function showPlacingTray(target: { x: number; y: number } | null): void {
@@ -2212,6 +2311,7 @@ export function mountCampLab(
     if (step.kind === 'upgrade') return `the upgrade of camp ${step.id}`;
     if (step.kind === 'demolish') return `demolishing camp ${step.id}`;
     if (step.kind === 'sell' || step.kind === 'buy') return `the ${step.kind} of ${step.item}`;
+    if (step.kind === 'plant') return `planting at ${step.x}, ${step.y}`;
     return 'the end of the shift'; // never in the history: it is emptied when a shift ends
   }
 
@@ -2247,6 +2347,10 @@ export function mountCampLab(
   function tap(x: number, y: number): void {
     if (mode.kind === 'placing') {
       tapWhilePlacing(x, y);
+      return;
+    }
+    if (mode.kind === 'planting') {
+      tapWhilePlanting(x, y, mode.item);
       return;
     }
     const result = campTap(world, x, y);
@@ -2336,12 +2440,18 @@ export function mountCampLab(
       const undoable = result.harvest.kind === 'grass' || result.harvest.kind === 'felled';
       remember({ kind: 'tap', x, y }, undoable);
       setWorld(result.world);
-      setHint(HARVEST_HINTS[result.harvest.kind], false);
+      const extra = result.harvest.extra;
+      setHint(
+        extra === null
+          ? HARVEST_HINTS[result.harvest.kind]
+          : 'Tree felled, and a sapling 🌱 with it: plant it on bare dirt to grow a new tree.',
+        false,
+      );
       addEffect({
         kind: 'mined',
         x,
         y,
-        label: gainText([result.harvest.gain]),
+        label: gainText(extra === null ? [result.harvest.gain] : [result.harvest.gain, extra]),
         higher: [],
         fromRadius: 0,
         toRadius: 0,

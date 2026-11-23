@@ -17,7 +17,7 @@ import type { RngState } from '../rng';
  * not loaded into a new shape. Separate from the old game's STATE_VERSION
  * while the two rule sets live side by side.
  */
-export const FRONTIER_STATE_VERSION = 7; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`
+export const FRONTIER_STATE_VERSION = 8; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming)
 
 /** What grows on a square: nothing, grass, a tree or an apple tree. */
 export const NO_FEATURE = 0;
@@ -83,6 +83,15 @@ export interface FrontierState {
    * (TREE or APPLE_TREE) when its `regrowIn` runs out; NO_FEATURE elsewhere.
    */
   stumps: Feature[];
+  /**
+   * The shifts until cut grass grows back on each square (progression plan
+   * section 6.1); -1 where none is waiting.
+   */
+  grassIn: number[];
+  /** True where the stump is a planted sapling, not a felled tree (plan section 6.2). */
+  planted: boolean[];
+  /** How many trees have been felled in the run: every few give a sapling (FRONTIER_SAPLINGS). */
+  treesFelled: number;
   /** The shift being played: 1 is the first. */
   shift: number;
   /** Taps left in this shift (src/data/frontier.ts, FRONTIER_SHIFT.taps a shift). */

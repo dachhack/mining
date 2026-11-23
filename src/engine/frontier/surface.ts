@@ -7,11 +7,13 @@
 // - a tree, or an apple tree with no apples left, is felled (wood).
 //
 // Only then can the block under the square be mined. Animals moving, and
-// apples and felled trees growing back, happen at the end of a shift (shift.ts). The numbers are in
-// src/data/frontier.ts.
+// apples, felled trees and cut grass growing back, happen at the end of a
+// shift (shift.ts). Every FRONTIER_SAPLINGS.saplingEveryFelled-th tree
+// felled gives a sapling too (progression plan section 6.2). The numbers
+// are in src/data/frontier.ts.
 
 import type { ItemStack } from '../../data';
-import { FRONTIER_SHIFT, FRONTIER_SURFACE } from '../../data/frontier';
+import { FRONTIER_SAPLINGS, FRONTIER_SHIFT, FRONTIER_SURFACE } from '../../data/frontier';
 import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from './state';
 import type { FrontierAnimal, FrontierState } from './state';
 
@@ -22,6 +24,8 @@ export type HarvestKind = 'caught' | 'grass' | 'apple' | 'felled';
 export interface FrontierHarvest {
   state: FrontierState;
   gain: ItemStack;
+  /** A sapling that came with a felled tree, or `null`. */
+  extra: ItemStack | null;
   kind: HarvestKind;
 }
 
@@ -52,11 +56,20 @@ export function gained(inventory: Map<string, number>, gain: ItemStack): Map<str
  * `frontierTap` does.
  */
 export function harvestAt(state: FrontierState, x: number, y: number): FrontierHarvest | null {
-  const take = (next: FrontierState, gain: ItemStack, kind: HarvestKind): FrontierHarvest => ({
-    state: { ...next, inventory: gained(state.inventory, gain) },
-    gain,
-    kind,
-  });
+  const take = (
+    next: FrontierState,
+    gain: ItemStack,
+    kind: HarvestKind,
+    extra: ItemStack | null = null,
+  ): FrontierHarvest => {
+    const inventory = gained(state.inventory, gain);
+    return {
+      state: { ...next, inventory: extra === null ? inventory : gained(inventory, extra) },
+      gain,
+      extra,
+      kind,
+    };
+  };
   const animal = animalAt(state, x, y);
   if (animal !== null) {
     const animals = state.animals.filter((a) => a.id !== animal.id);
@@ -66,8 +79,10 @@ export function harvestAt(state: FrontierState, x: number, y: number): FrontierH
   const feature = state.features[i];
   if (feature === GRASS) {
     const features = replaced(state.features, i, NO_FEATURE);
+    // It grows back some shifts later, if grass grows beside it then (shift.ts).
+    const grassIn = replaced(state.grassIn, i, FRONTIER_SHIFT.grassRegrowShifts);
     return take(
-      { ...state, features },
+      { ...state, features, grassIn },
       { item: 'grass', count: FRONTIER_SURFACE.grassPerTuft },
       'grass',
     );
@@ -89,10 +104,17 @@ export function harvestAt(state: FrontierState, x: number, y: number): FrontierH
     // 157). An apple tree's wait for its apples ends with it: it comes back full.
     const stumps = replaced(state.stumps, i, feature);
     const regrowIn = replaced(state.regrowIn, i, FRONTIER_SHIFT.treeRegrowShifts);
+    // Every few trees felled give a sapling (progression plan section 6.2).
+    const treesFelled = state.treesFelled + 1;
+    const sapling =
+      treesFelled % FRONTIER_SAPLINGS.saplingEveryFelled === 0
+        ? { item: 'sapling' as const, count: 1 }
+        : null;
     return take(
-      { ...state, features, stumps, regrowIn },
+      { ...state, features, stumps, regrowIn, treesFelled },
       { item: 'wood', count: FRONTIER_SURFACE.woodPerTree },
       'felled',
+      sapling,
     );
   }
 

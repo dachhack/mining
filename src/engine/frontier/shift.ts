@@ -6,8 +6,9 @@
 //    (owner, questions 145 and 146). An action that does nothing costs nothing.
 // 2. End shift. It can be pressed with taps left; they are lost. Then, in order:
 //    - each animal takes its steps, and every few shifts a new one walks in;
-//    - apples come back on trees picked bare long enough ago, and felled
-//      trees grow back on their stumps (question 157);
+//    - apples come back on trees picked bare long enough ago, felled trees
+//      and planted saplings grow on their stumps (question 157), and cut
+//      grass grows back beside grass (progression plan section 6.1);
 //    - upkeep is paid in wood and food (question 147): food is an apple,
 //      else 2 grass, else an animal (questions 155 and 158);
 //    - each item of upkeep that cannot be paid costs the crew 1 health
@@ -33,6 +34,7 @@ import { nextFloat } from '../rng';
 import { blockAt } from '../state';
 import { campAt, demolishFrontierCamp, placeFrontierCamp, upgradeFrontierCamp } from './camps';
 import { walkable } from './generation';
+import { plant, plantRefusal } from './farming';
 import { isMarketDay, trade, tradeRefusal } from './market';
 import { animalAt } from './surface';
 import {
@@ -45,7 +47,7 @@ import {
 } from './smelting';
 import { frontierTap } from './tap';
 import type { FrontierTap } from './tap';
-import { APPLE_TREE, NO_FEATURE } from './state';
+import { APPLE_TREE, GRASS, NO_FEATURE } from './state';
 import type { Feature, FrontierAnimal, FrontierState } from './state';
 
 /** Something the player can do. */
@@ -64,6 +66,8 @@ export type FrontierAction =
   | { kind: 'hangLantern'; id: number }
   // Sell or buy `lots` lots of `item` at the market, on a market day (market.ts).
   | { kind: 'sell'; item: string; lots: number }
+  // Plant a sapling or an apple sapling from the store on square (x, y) (farming.ts).
+  | { kind: 'plant'; x: number; y: number; item: string }
   | { kind: 'buy'; item: string; lots: number }
   | { kind: 'close' };
 
@@ -79,8 +83,10 @@ export interface ShiftReport {
   healthLost: number;
   /** Apple trees whose apples came back. */
   regrown: number;
-  /** Felled trees that grew back. */
+  /** Felled trees that grew back, and planted saplings that grew into trees. */
   treesRegrown: number;
+  /** Squares where cut grass grew back. */
+  grassRegrown: number;
   /** Animals that walked in. */
   newAnimals: number;
   /** True if the market is open in the shift that starts now. */
@@ -208,6 +214,8 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
     apples: grown.apples,
     regrowIn: grown.regrowIn,
     stumps: grown.stumps,
+    planted: grown.planted,
+    grassIn: grown.grassIn,
     inventory,
     health,
     shift: state.shift + 1,
@@ -227,6 +235,7 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
       healthLost,
       regrown: grown.regrown,
       treesRegrown: grown.treesRegrown,
+      grassRegrown: grown.grassRegrown,
       newAnimals,
       marketOpens: isMarketDay(next),
     },
@@ -239,8 +248,11 @@ interface Regrowth {
   apples: number[];
   regrowIn: number[];
   stumps: Feature[];
+  planted: boolean[];
+  grassIn: number[];
   regrown: number;
   treesRegrown: number;
+  grassRegrown: number;
 }
 
 /**
@@ -259,6 +271,7 @@ function regrow(state: FrontierState): Regrowth {
   const features = [...state.features];
   const apples = [...state.apples];
   const stumps = [...state.stumps];
+  const planted = [...state.planted];
   let regrown = 0;
   let treesRegrown = 0;
   const regrowIn = state.regrowIn.map((left, i) => {
@@ -277,6 +290,7 @@ function regrow(state: FrontierState): Regrowth {
       return 1; // an animal or a camp stands on it: try again next shift
     }
     stumps[i] = NO_FEATURE;
+    planted[i] = false;
     if (unmined && features[i] === NO_FEATURE) {
       features[i] = stump;
       apples[i] = stump === APPLE_TREE ? FRONTIER_SURFACE.applesPerTree : 0;
@@ -284,7 +298,47 @@ function regrow(state: FrontierState): Regrowth {
     }
     return -1;
   });
-  return { features, apples, regrowIn, stumps, regrown, treesRegrown };
+  // Cut grass (progression plan section 6.1): when its wait is over, it
+  // grows back if the square is still unmined dirt with nothing on it and
+  // no camp, and grass grew on a face neighbour at the start of this End
+  // shift (so the order squares are looked at does not matter). Otherwise
+  // it waits a shift more; on ground dug out it never grows.
+  const height = state.cube.size.y;
+  const grassBefore = state.features;
+  let grassRegrown = 0;
+  const grassIn = state.grassIn.map((left, i) => {
+    if (left < 0) return left;
+    if (left > 1) return left - 1;
+    const x = i % width;
+    const y = Math.floor(i / width);
+    if (!growOn.has(blockAt(state.cube, { x, y, z: 0 }))) return -1; // dug out
+    const neighbours = [
+      { x, y: y - 1 },
+      { x: x + 1, y },
+      { x, y: y + 1 },
+      { x: x - 1, y },
+    ].filter((s) => s.x >= 0 && s.y >= 0 && s.x < width && s.y < height);
+    const beside = neighbours.some((s) => grassBefore[s.x + width * s.y] === GRASS);
+    const free =
+      features[i] === NO_FEATURE &&
+      (stumps[i] ?? NO_FEATURE) === NO_FEATURE &&
+      campAt(state.camps, x, y) === null;
+    if (!beside || !free) return 1; // try again next shift
+    features[i] = GRASS;
+    grassRegrown += 1;
+    return -1;
+  });
+  return {
+    features,
+    apples,
+    regrowIn,
+    stumps,
+    planted,
+    grassIn,
+    regrown,
+    treesRegrown,
+    grassRegrown,
+  };
 }
 
 /** Stacks of the same item added together, in first-seen order: [1 wood, 1 wood] -> [2 wood]. */
@@ -363,6 +417,12 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
   if (action.kind === 'hangLantern') {
     const why = lanternRefusal(state, action.id);
     return why === null ? spent(hangLantern(state, action.id)) : refused(state, why);
+  }
+  if (action.kind === 'plant') {
+    const why = plantRefusal(state, action.x, action.y, action.item);
+    return why === null
+      ? spent(plant(state, action.x, action.y, action.item))
+      : refused(state, why);
   }
   if (action.kind === 'sell' || action.kind === 'buy') {
     const why = tradeRefusal(state, action.kind, action.item, action.lots);

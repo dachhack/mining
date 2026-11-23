@@ -12,6 +12,7 @@ import {
   FRONTIER_PICKAXE,
   FRONTIER_RECIPES,
   FRONTIER_RUN,
+  FRONTIER_SAPLINGS,
   FRONTIER_SMELTER,
   FRONTIER_SHIFT,
   FRONTIER_SURFACE,
@@ -43,7 +44,8 @@ export function frontierHelpText(): string {
     '  npm run play:old -- --help                     the old game (until it is removed)',
     '',
     'Choices: "tap X,Y", "place X,Y", "upgrade N", "demolish N", "smelter N", "make R", "lantern N",',
-    '"sell ITEM N", "buy ITEM N", "end", "rest N", "close", "undo", "look X,Y", or the number of a',
+    '"sell ITEM N", "buy ITEM N", "plant X,Y sapling", "plant X,Y appleSapling", "end", "rest N", "close",',
+    '"undo", "look X,Y", or the number of a',
     'listed choice. Separate several with ";".',
     '',
     'The rules:',
@@ -69,7 +71,11 @@ export function frontierHelpText(): string {
     `- Each item of upkeep you cannot pay costs 1 health (of ${s.startHealth}). At 0 the crew is lost.`,
     '- "rest N" rests at camp N: full health, then the shift ends. "close" closes the mine: the run ends.',
     `- "smelter N" builds a smelter at camp N (level ${FRONTIER_SMELTER.minLevel} or more; ${cost(FRONTIER_SMELTER.cost)}; one a camp, lost with it).`,
-    `  With a smelter anywhere, "make R" makes recipe R: ${FRONTIER_RECIPES.map((r) => `${r.id} (${cost(r.inputs)} -> ${r.output.count} ${r.output.item})`).join(', ')}.`,
+    `  With a smelter anywhere, "make R" makes recipe R: ${FRONTIER_RECIPES.filter(
+      (r) => r.needsSmelter,
+    )
+      .map((r) => `${r.id} (${cost(r.inputs)} -> ${r.output.count} ${r.output.item})`)
+      .join(', ')}.`,
     `  While you hold an iron pickaxe, every mining tap yields ${FRONTIER_PICKAXE.yieldTimes} times as much (a second adds nothing).`,
     `  While you hold an iron drill, iron and copper ore can be mined on any camp's ground; a steel drill also mines`,
     `  crystal, rare ore and relics. No camp level mines those. The market sells both once your best camp is level 3.`,
@@ -78,6 +84,10 @@ export function frontierHelpText(): string {
     `- The market opens every ${FRONTIER_MARKET.everyShifts.join(', ')} shifts while your best camp is level 1, 2, 3, ...`,
     '  (on the shifts that are multiples of that), for the whole shift. "sell ITEM N" sells N lots for coins,',
     '  "buy ITEM N" buys N lots; each trade costs 1 tap. The view lists the prices when it is open.',
+    `- Farming: cut grass grows back ${FRONTIER_SHIFT.grassRegrowShifts} shifts later if grass grows beside it (a patch cut bare stays bare).`,
+    `  Every ${FRONTIER_SAPLINGS.saplingEveryFelled}nd tree felled gives a sapling; 3 apples make an apple sapling ("make apple-sapling", no smelter).`,
+    `  "plant X,Y sapling" plants one on lit surface dirt or a stump (1 tap): a tree in ${FRONTIER_SAPLINGS.saplingGrowShifts} shifts,`,
+    `  an apple tree in ${FRONTIER_SAPLINGS.appleSaplingGrowShifts}. Mining its square digs it out.`,
     '- "undo" takes back your last action in this shift and gives the tap back. Catching an',
     '  animal and picking an apple cannot be undone, and nothing before the shift began can.',
   ].join('\n');

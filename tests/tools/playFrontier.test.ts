@@ -166,3 +166,27 @@ describe('the market and the run’s end in the play interface (progression PR 1
     expect(act(newFrontierSession(SEED), 'sell wood 1').refused).toContain('not open');
   });
 });
+
+describe('planting in the play interface (progression PR 3)', () => {
+  it('reads "plant X,Y sapling" and "plant X Y applesapling"', () => {
+    expect(stepOf('plant 3,4 sapling', [])).toBe('plant 3,4 sapling');
+    expect(stepOf('plant 3 4 applesapling', [])).toBe('plant 3,4 appleSapling');
+    expect(stepOf('plant 3,4 wood', [])).toBeNull();
+  });
+
+  it('plants for 1 tap and shows the sapling on the map; says why it cannot', () => {
+    const start = newFrontierSession(SEED);
+    const state = { ...start.state, inventory: new Map([['sapling', 1]]) };
+    const session = { ...start, state, shiftLog: { start: state, actions: [] } };
+    const camp = state.camps[0] ?? { x: 0, y: 0 };
+    expect(act(session, `plant ${camp.x},${camp.y} sapling`).refused).toBe('A camp stands there.');
+    let done: ReturnType<typeof act> | null = null;
+    for (let d = 2; d < 8 && done === null; d += 1) {
+      const tried = act(session, `plant ${camp.x + d},${camp.y} sapling`);
+      if (tried.refused === null) done = tried;
+    }
+    expect(done).not.toBeNull();
+    expect(done?.session.state.tapsLeft).toBe(FRONTIER_SHIFT.taps - 1);
+    expect(frontierView(done?.session ?? session)).toContain('s0');
+  });
+});

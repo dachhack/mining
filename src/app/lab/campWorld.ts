@@ -36,6 +36,7 @@ import {
   frontierAct,
   frontierStartSquare,
   isMarketDay,
+  plantRefusal as enginePlantRefusal,
   nextMarketShift as engineNextMarketShift,
   tradeRefusal as engineTradeRefusal,
   campAt as engineCampAt,
@@ -175,6 +176,9 @@ export function toFrontier(world: CampWorld): FrontierState {
     mined: world.lab.mined,
     regrowIn: world.surface.regrowIn,
     stumps: world.surface.stumps,
+    grassIn: world.surface.grassIn,
+    planted: world.surface.planted,
+    treesFelled: world.surface.treesFelled,
     shift: world.turn.shift,
     tapsLeft: world.turn.tapsLeft,
     health: world.turn.health,
@@ -204,6 +208,9 @@ export function fromFrontier(world: CampWorld, state: FrontierState): CampWorld 
       apples: state.apples,
       regrowIn: state.regrowIn,
       stumps: state.stumps,
+      grassIn: state.grassIn,
+      planted: state.planted,
+      treesFelled: state.treesFelled,
       animals: state.animals,
       nextAnimalId: state.nextAnimalId,
       rng: state.rng.s,
@@ -267,6 +274,9 @@ export function bareSurface(state: GameState): Surface {
     apples: new Array<number>(squares).fill(0),
     regrowIn: new Array<number>(squares).fill(-1),
     stumps: new Array<typeof NO_FEATURE>(squares).fill(NO_FEATURE),
+    grassIn: new Array<number>(squares).fill(-1),
+    planted: new Array<boolean>(squares).fill(false),
+    treesFelled: 0,
     animals: [],
     nextAnimalId: 1,
     rng: 1,
@@ -404,7 +414,8 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
   const after = fromFrontier(world, outcome.state);
   if (tap.kind === 'harvested') {
     const gain = tap.gain[0] ?? { item: 'grass', count: 0 }; // a harvest always gives one stack
-    const harvest = { surface: after.surface, gain, kind: tap.harvest ?? 'grass' };
+    const extra = tap.gain[1] ?? null; // a sapling with a felled tree
+    const harvest = { surface: after.surface, gain, extra, kind: tap.harvest ?? 'grass' };
     return { ...answer('harvested'), world: after, harvest };
   }
   const result = {
@@ -519,6 +530,18 @@ export function tradeCamp(
   return act(world, { kind: side, item, lots }).world;
 }
 
+// ----- Planting (docs/plans/progression-phases.md, PR 3) -----
+
+/** Why `item` cannot be planted on (x, y) now ('noTaps', 'over', or the engine's reason), or `null` if it can. */
+export function plantRefusal(world: CampWorld, x: number, y: number, item: string): string | null {
+  return turnRefusal(world) ?? enginePlantRefusal(toFrontier(world), x, y, item);
+}
+
+/** Plant `item` on (x, y), for 1 tap; the very same world if it cannot. */
+export function plantCamp(world: CampWorld, x: number, y: number, item: string): CampWorld {
+  return act(world, { kind: 'plant', x, y, item }).world;
+}
+
 /** Why camp `id` cannot be demolished now, or `null` if it can. */
 export function demolishRefusal(
   world: CampWorld,
@@ -615,6 +638,8 @@ export type CampStep =
   // Sell or buy at the market (progression PR 1).
   | { kind: 'sell'; item: string; lots: number }
   | { kind: 'buy'; item: string; lots: number }
+  // Plant a sapling (progression PR 3).
+  | { kind: 'plant'; x: number; y: number; item: string }
   // End the shift, rest at a camp, or close the mine (A4).
   | { kind: 'endShift' }
   | { kind: 'rest'; id: number }
@@ -651,6 +676,9 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   }
   if (step.kind === 'sell' || step.kind === 'buy') {
     return tradeCamp(world, step.kind, step.item, step.lots);
+  }
+  if (step.kind === 'plant') {
+    return plantCamp(world, step.x, step.y, step.item);
   }
   return demolishCamp(world, step.id);
 }

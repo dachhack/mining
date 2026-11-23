@@ -24,6 +24,7 @@ import {
   previewTap,
   newlyCovered,
   placeRefusal,
+  plantRefusal,
   smelterRefusal,
   upgradeCostFrom,
   upgradeRefusal,
@@ -37,7 +38,8 @@ import { NO_FEATURE } from '../src/engine/frontier/state';
  * "buildSmelter ID" (a smelter at camp ID), "make RECIPE" (a recipe id,
  * such as "smelt-iron"), "hangLantern ID" (a lantern at camp ID), or
  * "sell ITEM LOTS" / "buy ITEM LOTS" at the market (an item id, such as
- * "wood", and a whole number of lots).
+ * "wood", and a whole number of lots), or "plant X,Y ITEM" (a sapling or
+ * an apple sapling on square X,Y).
  */
 export type FrontierStep = string;
 
@@ -81,6 +83,9 @@ export function actionOf(step: FrontierStep): FrontierAction {
   const [verb, arg, third] = step.split(' ');
   if ((verb === 'sell' || verb === 'buy') && arg !== undefined && third !== undefined) {
     return { kind: verb, item: arg, lots: Number(third) };
+  }
+  if (verb === 'plant' && arg !== undefined && third !== undefined) {
+    return { kind: 'plant', ...squareOf(arg), item: third };
   }
   if (verb === 'endShift' || verb === 'close') {
     return { kind: verb };
@@ -210,11 +215,32 @@ export function marketStep(state: FrontierState): FrontierStep | null {
 }
 
 /**
+ * Plant a sapling it holds (progression plan section 6.2) on the lit square
+ * farthest from the newest camp where one can be planted, so its own
+ * digging, which starts nearest that camp, leaves it be. Ties go to the
+ * square met first, row by row. `null` with no sapling, or nowhere to plant.
+ */
+export function plantStep(state: FrontierState): FrontierStep | null {
+  if ((state.inventory.get('sapling') ?? 0) < 1) return null;
+  const newest = state.camps[state.camps.length - 1];
+  if (newest === undefined) return null;
+  let best: { x: number; y: number; d: number } | null = null;
+  for (let y = 0; y < state.cube.size.y; y += 1) {
+    for (let x = 0; x < state.cube.size.x; x += 1) {
+      if (plantRefusal(state, x, y, 'sapling') !== null) continue;
+      const d = (x - newest.x) ** 2 + (y - newest.y) ** 2;
+      if (best === null || d > best.d) best = { x, y, d };
+    }
+  }
+  return best === null ? null : `plant ${best.x},${best.y} sapling`;
+}
+
+/**
  * The gatherer: a plain policy for recording golden runs. In order:
  * 0. with no taps left, end the shift, or rest if the crew's health is at
  *    GATHERER_REST_AT or below (plan A4);
- * 1. smelt and craft what it can (`craftStep`), and sell surplus on a
- *    market day (`marketStep`);
+ * 1. smelt and craft what it can (`craftStep`), trade on a market day
+ *    (`marketStep`), and plant the saplings it holds (`plantStep`);
  * 2. upgrade the lowest camp it can pay for;
  * 3. with fewer than 3 camps, place one where it lights the most new
  *    ground, if it can pay;
@@ -230,7 +256,7 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
   if (state.tapsLeft === 0) {
     return state.health <= GATHERER_REST_AT ? restStep(state) : 'endShift';
   }
-  const craft = craftStep(state) ?? marketStep(state);
+  const craft = craftStep(state) ?? marketStep(state) ?? plantStep(state);
   if (craft !== null) return craft;
   const byLevel = [...state.camps].sort((a, b) => a.level - b.level || a.id - b.id);
   for (const camp of byLevel) {
