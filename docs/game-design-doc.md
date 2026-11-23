@@ -212,7 +212,7 @@ Payouts are **credits**, spent between runs. Unlocks add options; they never rai
 | Rule | Now |
 |---|---|
 | Wall slumps, cracks and supports | **Retired** (question 153: the level rule leaves no steep walls; decision note 0053) |
-| Smelting, and crafting with ingots | **Next** (owner, questions 159 and 161 to 164): a smelter at a camp, ingots from raw ore and coal, an iron pickaxe, a copper lantern, an iron drill and camp level 4. The plan: `docs/plans/smelting-and-crafting.md` |
+| Smelting, and crafting with ingots | **Built** (engine 0.8.0; owner, questions 159 and 161 to 164): a smelter at a camp, ingots from raw ore and coal, an iron pickaxe, a copper lantern, an iron drill and camp level 4. The plan: `docs/plans/smelting-and-crafting.md`. The simulator's numbers: decision note 0060; open tuning questions 165 and 166 |
 | Fuel and coal-fuelled digging; the deeper bands' ore | Later: it was first back (question 153) until smelting took its place (question 159) |
 | Water, lava, gas; unstable ore and explosives; tells and scanning; pumps, vents, sealant; the drill | Dropped for now; they come back one at a time, in an order the owner chooses then |
 | AP and per-block mining costs | Replaced by taps, every tap costing 1 |

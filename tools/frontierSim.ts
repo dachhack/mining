@@ -14,6 +14,11 @@
 //   --max-shifts N   stop a run after N shifts (default 40); it is reported as
 //                    outcome "unfinished"
 //   --json           print one JSON document instead of the summary
+//
+// The summary has two lines a policy: the run's outcome, then, for each step
+// of smelting and crafting (levels 2 to 4, smelter, ingot, pickaxe, drill,
+// lantern made and hung), how many runs reached it and the median shift,
+// and the coal, ore and crystal mined (decision note 0060).
 //   --acceptance     play --runs runs of EVERY policy, checking the rules
 //                    after every step (tools/frontierInvariants.ts) and
 //                    replaying every run to the same hash. Prints one line per
