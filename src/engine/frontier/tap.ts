@@ -19,7 +19,7 @@
 
 import { blockDefByCode } from '../../data';
 import type { ItemId, ItemStack } from '../../data';
-import { FRONTIER_PICKAXE, FRONTIER_SAPLINGS, FRONTIER_SURFACE } from '../../data/frontier';
+import { FRONTIER_PICKAXE, FRONTIER_SURFACE } from '../../data/frontier';
 import { mayMine, topBlockAt } from '../heightmap';
 import type { HigherNeighbour, MineRefusal } from '../heightmap';
 import { labMine } from '../lab';
@@ -185,13 +185,7 @@ export function previewTap(
     return { kind: 'harvested', gain: [{ item: 'apple', count: 1 }] };
   }
   if (feature === TREE || feature === APPLE_TREE) {
-    const wood = { item: 'wood' as const, count: FRONTIER_SURFACE.woodPerTree };
-    // Every few trees felled give a sapling too (surface.ts).
-    const sapling = (state.treesFelled + 1) % FRONTIER_SAPLINGS.saplingEveryFelled === 0;
-    return {
-      kind: 'harvested',
-      gain: sapling ? [wood, { item: 'sapling', count: 1 }] : [wood],
-    };
+    return { kind: 'harvested', gain: [{ item: 'wood', count: FRONTIER_SURFACE.woodPerTree }] };
   }
   if (!mayMine(state.cube, x, y).allowed) return { kind: 'refused', gain: [] };
   const code = topBlockAt(state.cube, x, y);

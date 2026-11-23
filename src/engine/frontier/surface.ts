@@ -8,12 +8,11 @@
 //
 // Only then can the block under the square be mined. Animals moving, and
 // apples, felled trees and cut grass growing back, happen at the end of a
-// shift (shift.ts). Every FRONTIER_SAPLINGS.saplingEveryFelled-th tree
-// felled gives a sapling too (progression plan section 6.2). The numbers
-// are in src/data/frontier.ts.
+// shift (shift.ts). Saplings come only from the market (market.ts). The
+// numbers are in src/data/frontier.ts.
 
 import type { ItemStack } from '../../data';
-import { FRONTIER_SAPLINGS, FRONTIER_SHIFT, FRONTIER_SURFACE } from '../../data/frontier';
+import { FRONTIER_SHIFT, FRONTIER_SURFACE } from '../../data/frontier';
 import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from './state';
 import type { FrontierAnimal, FrontierState } from './state';
 
@@ -104,17 +103,12 @@ export function harvestAt(state: FrontierState, x: number, y: number): FrontierH
     // 157). An apple tree's wait for its apples ends with it: it comes back full.
     const stumps = replaced(state.stumps, i, feature);
     const regrowIn = replaced(state.regrowIn, i, FRONTIER_SHIFT.treeRegrowShifts);
-    // Every few trees felled give a sapling (progression plan section 6.2).
+    // Counted, for the record; saplings come only from the market.
     const treesFelled = state.treesFelled + 1;
-    const sapling =
-      treesFelled % FRONTIER_SAPLINGS.saplingEveryFelled === 0
-        ? { item: 'sapling' as const, count: 1 }
-        : null;
     return take(
       { ...state, features, stumps, regrowIn, treesFelled },
       { item: 'wood', count: FRONTIER_SURFACE.woodPerTree },
       'felled',
-      sapling,
     );
   }
 

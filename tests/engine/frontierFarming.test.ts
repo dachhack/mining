@@ -1,8 +1,13 @@
 // Progression PR 3 (docs/plans/progression-phases.md, sections 6.1 and 6.2):
-// cut grass grows back beside grass, felled trees give saplings, and
-// saplings and apple saplings are planted and grow into trees.
+// cut grass grows back beside grass, and saplings and apple saplings (from
+// the market only) are planted and grow into trees.
 import { describe, expect, it } from 'vitest';
-import { FRONTIER_MARKET, FRONTIER_SAPLINGS, FRONTIER_SHIFT } from '../../src/data/frontier';
+import {
+  FRONTIER_MARKET,
+  FRONTIER_RECIPES,
+  FRONTIER_SAPLINGS,
+  FRONTIER_SHIFT,
+} from '../../src/data/frontier';
 import { frontierAct, frontierTap, hashFrontier, previewTap } from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
 import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from '../../src/engine/frontier/state';
@@ -13,7 +18,12 @@ import { AT, MID, world } from './frontierHelpers';
 function endShifts(state: FrontierState, n: number): FrontierState {
   let s = state;
   for (let k = 0; k < n; k += 1) {
-    s = { ...s, inventory: new Map([...s.inventory, ['wood', 50], ['apple', 50]]) };
+    // A market day's market opens after the night; it is closed before the day.
+    s = {
+      ...s,
+      marketOpen: false,
+      inventory: new Map([...s.inventory, ['wood', 50], ['apple', 50]]),
+    };
     s = frontierAct(s, { kind: 'endShift' }).state;
   }
   return s;
@@ -72,9 +82,8 @@ describe('cut grass grows back (plan section 6.1)', () => {
   });
 });
 
-describe('saplings from felling trees (plan section 6.2)', () => {
-  it('every second tree felled gives a sapling too, counted, not random', () => {
-    expect(FRONTIER_SAPLINGS.saplingEveryFelled).toBe(2);
+describe('saplings come only from the market (owner)', () => {
+  it('a felled tree gives wood and no sapling, and the recipe book makes none', () => {
     const w = world({
       features: [
         { ...AT, feature: TREE },
@@ -82,18 +91,14 @@ describe('saplings from felling trees (plan section 6.2)', () => {
       ],
     });
     const first = frontierTap(w, AT.x, AT.y);
-    expect(first.gain.map((g) => g.item)).toEqual(['wood']);
-    expect(first.state.treesFelled).toBe(1);
-    expect(previewTap(first.state, AT.x + 1, AT.y).gain.map((g) => g.item)).toEqual([
-      'wood',
-      'sapling',
-    ]);
     const second = frontierTap(first.state, AT.x + 1, AT.y);
-    expect(second.gain).toEqual([
-      { item: 'wood', count: 2 },
-      { item: 'sapling', count: 1 },
-    ]);
-    expect(second.state.inventory.get('sapling')).toBe(1);
+    expect(previewTap(first.state, AT.x + 1, AT.y).gain).toEqual([{ item: 'wood', count: 2 }]);
+    expect(second.gain).toEqual([{ item: 'wood', count: 2 }]);
+    expect(second.state.treesFelled).toBe(2);
+    expect(second.state.inventory.has('sapling')).toBe(false);
+    expect(
+      FRONTIER_RECIPES.some((r) => r.output.item === 'sapling' || r.output.item === 'appleSapling'),
+    ).toBe(false);
   });
 });
 
@@ -114,14 +119,8 @@ describe('planting (plan section 6.2)', () => {
     expect(grown.stumps[i]).toBe(NO_FEATURE);
   });
 
-  it('grows an apple sapling into an apple tree full of apples; apple saplings are made from apples without a smelter', () => {
-    const made = frontierAct(world({ inventory: { apple: 3 } }), {
-      kind: 'make',
-      recipe: 'apple-sapling',
-    });
-    expect(made.done).toBe(true);
-    expect(made.state.inventory.get('appleSapling')).toBe(1);
-    const s = frontierAct(made.state, {
+  it('grows an apple sapling into an apple tree full of apples', () => {
+    const s = frontierAct(world({ inventory: { appleSapling: 1 } }), {
       kind: 'plant',
       x: AT.x,
       y: AT.y,

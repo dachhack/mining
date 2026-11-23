@@ -37,7 +37,7 @@ import {
   createRng,
   deliverRefusal,
   takeRefusal,
-  isMarketDay,
+  marketIsOpen,
   tradeRefusal,
   previewTap,
   placeRefusal,
@@ -69,11 +69,27 @@ export function isFrontierPolicyName(name: string): name is FrontierPolicyName {
 
 /** A fresh policy for one run on `seed`. */
 export function makeFrontierPolicy(name: FrontierPolicyName, seed: number): FrontierPolicy {
-  if (name === 'random') return randomPolicy(createRng((seed ^ 0x2545f491) >>> 0));
-  if (name === 'careful') return carefulStep;
-  if (name === 'digger') return diggerStep;
-  if (name === 'idle') return idleStep;
-  return gathererStep;
+  if (name === 'random') return withMarket(randomPolicy(createRng((seed ^ 0x2545f491) >>> 0)));
+  if (name === 'careful') return withMarket(carefulStep);
+  if (name === 'digger') return withMarket(diggerStep);
+  if (name === 'idle') return withMarket(idleStep);
+  return withMarket(gathererStep);
+}
+
+/** The steps that can be taken while the market is open (market.ts). */
+const MARKET_VERBS = ['sell', 'buy', 'takeContract', 'closeMarket'];
+
+/**
+ * `policy`, closing the market when it is open and the policy's step is
+ * not a market action: the market opens after a market day's night, and
+ * the day starts only once it is closed.
+ */
+function withMarket(policy: FrontierPolicy): FrontierPolicy {
+  return (state) => {
+    const step = policy(state);
+    if (!state.marketOpen || step === null) return step;
+    return MARKET_VERBS.includes(step.split(' ')[0] ?? '') ? step : 'closeMarket';
+  };
 }
 
 /** The idle policy rests when the crew is low only before this shift; after it, the crew starves. */
@@ -118,8 +134,9 @@ function randomPolicy(rng: RngState): FrontierPolicy {
     for (const recipe of FRONTIER_RECIPES) {
       if (makeRefusal(state, recipe.id) === null) options.push(`make ${recipe.id}`);
     }
-    // On a market day, one lot of anything it can sell or buy.
-    if (isMarketDay(state)) {
+    // While the market is open, one lot of anything it can sell or buy.
+    if (marketIsOpen(state)) {
+      options.push('closeMarket');
       for (const lot of FRONTIER_MARKET.sellPrices) {
         if (tradeRefusal(state, 'sell', lot.item, 1) === null) options.push(`sell ${lot.item} 1`);
       }
@@ -192,6 +209,7 @@ function spendsUpkeep(step: FrontierStep): boolean {
  */
 function carefulStep(state: FrontierState): FrontierStep | null {
   if (state.status !== 'active') return null;
+  if (state.marketOpen) return gathererStep(state); // the market first, then the day
   if (state.tapsLeft === 0) {
     return state.health <= FRONTIER_SHIFT.startHealth / 2 ? restStep(state) : 'endShift';
   }

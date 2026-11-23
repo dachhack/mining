@@ -15,10 +15,19 @@ import type { FrontierState } from '../../src/engine';
 import { actLogged, startLog, undoLast } from '../../src/engine/frontier/undo';
 import { world } from './frontierHelpers';
 
-/** `state` on shift `shift`, its first camp at `level`, holding `inventory`. */
+/**
+ * `state` on shift `shift`, its first camp at `level`, holding `inventory`.
+ * On a market day its market is open, as after the night before it.
+ */
 function at(shift: number, level = 1, inventory: Record<string, number> = {}): FrontierState {
   const w = world({ inventory });
-  return { ...w, shift, camps: w.camps.map((c) => ({ ...c, level })) };
+  const s = { ...w, shift, camps: w.camps.map((c) => ({ ...c, level })) };
+  return { ...s, marketOpen: isMarketDay(s) };
+}
+
+/** `at(...)` with its market closed: the day under way. */
+function day(shift: number, level = 1, inventory: Record<string, number> = {}): FrontierState {
+  return { ...at(shift, level, inventory), marketOpen: false };
 }
 
 /** The lot of `item` in `lots`, which the test expects to be there. */
@@ -33,8 +42,8 @@ function lotOf(
 
 describe('the length of a run (owner: "100 shifts or crew lost")', () => {
   it('is finished when its last shift ends, and nothing more can be done', () => {
-    const last = at(FRONTIER_RUN.shifts, 1, { wood: 10, grass: 30 });
-    const before = frontierAct(at(FRONTIER_RUN.shifts - 1, 1, { wood: 10, grass: 30 }), {
+    const last = day(FRONTIER_RUN.shifts, 1, { wood: 10, grass: 30 });
+    const before = frontierAct(day(FRONTIER_RUN.shifts - 1, 1, { wood: 10, grass: 30 }), {
       kind: 'endShift',
     });
     expect(before.state.status).toBe('active');
@@ -47,7 +56,7 @@ describe('the length of a run (owner: "100 shifts or crew lost")', () => {
   });
 
   it('ends with resting on the last shift too', () => {
-    const rested = frontierAct(at(FRONTIER_RUN.shifts, 1, { wood: 10, grass: 30 }), {
+    const rested = frontierAct(day(FRONTIER_RUN.shifts, 1, { wood: 10, grass: 30 }), {
       kind: 'rest',
       id: 1,
     });
@@ -55,7 +64,7 @@ describe('the length of a run (owner: "100 shifts or crew lost")', () => {
   });
 
   it('is lost, not finished, if the crew dies in the last End shift', () => {
-    const starving = { ...at(FRONTIER_RUN.shifts), health: 1 };
+    const starving = { ...day(FRONTIER_RUN.shifts), health: 1 };
     expect(frontierAct(starving, { kind: 'endShift' }).state.status).toBe('lost');
   });
 });
@@ -94,13 +103,43 @@ describe('when the market opens (owner: every 10, 5 or 3 shifts by the best camp
 
   it('says when it opens next', () => {
     expect(nextMarketShift(at(1, 1))).toBe(10);
-    expect(nextMarketShift(at(10, 1))).toBe(10);
+    expect(nextMarketShift(at(10, 1))).toBe(10); // open now
+    expect(nextMarketShift({ ...at(10, 1), marketOpen: false })).toBe(20); // closed for today
     expect(nextMarketShift(at(11, 2))).toBe(15);
+  });
+
+  it('opens after the night before a market day, takes only market actions, and closes to start the day', () => {
+    const eve = at(9, 1, { wood: 10, grass: 30 });
+    const night = frontierAct(eve, { kind: 'endShift' });
+    expect(night.state.shift).toBe(10);
+    expect(night.state.marketOpen).toBe(true);
+    // While it is open: no taps, no End shift.
+    const open = { ...night.state, inventory: new Map([['wood', 10]]) };
+    expect(frontierAct(open, { kind: 'endShift' }).refusal).toBe('market');
+    expect(frontierAct(open, { kind: 'tap', x: 0, y: 0 }).refusal).toBe('market');
+    const closed = frontierAct(open, { kind: 'closeMarket' });
+    expect(closed.done).toBe(true);
+    expect(closed.state.marketOpen).toBe(false);
+    expect(closed.state.tapsLeft).toBe(open.tapsLeft);
+    // Closed, it does not open again that day.
+    expect(frontierAct(closed.state, { kind: 'sell', item: 'wood', lots: 1 }).refusal).toBe(
+      'closed',
+    );
+    expect(frontierAct(closed.state, { kind: 'closeMarket' }).refusal).toBe('closed');
+    // Not after the night before an ordinary day.
+    expect(
+      frontierAct(at(10, 1, { wood: 10, grass: 30 }), { kind: 'closeMarket' }).state.marketOpen,
+    ).toBe(false);
+    const ordinary = frontierAct(
+      { ...at(10, 1, { wood: 10, grass: 30 }), marketOpen: false },
+      { kind: 'endShift' },
+    );
+    expect(ordinary.state.marketOpen).toBe(false);
   });
 
   it('is announced by the End shift that starts a market day', () => {
     const report = (shift: number): boolean | undefined =>
-      frontierAct(at(shift, 1, { wood: 10, grass: 30 }), { kind: 'endShift' }).report?.marketOpens;
+      frontierAct(day(shift, 1, { wood: 10, grass: 30 }), { kind: 'endShift' }).report?.marketOpens;
     expect(report(9)).toBe(true);
     expect(report(10)).toBe(false);
   });
@@ -114,11 +153,11 @@ describe('selling and buying (plan section 3)', () => {
   const wood = lotOf(FRONTIER_MARKET.sellPrices, 'wood');
   const animal = lotOf(FRONTIER_MARKET.buyPrices, 'animal');
 
-  it('sells whole lots for coins, for 1 tap whatever the number of lots', () => {
+  it('sells whole lots for coins, for no tap: the market comes before the day', () => {
     const w = at(10, 1, { wood: wood.count * 3 + 1 });
     const sold = frontierAct(w, { kind: 'sell', item: 'wood', lots: 3 });
     expect(sold.done).toBe(true);
-    expect(sold.state.tapsLeft).toBe(FRONTIER_SHIFT.taps - 1);
+    expect(sold.state.tapsLeft).toBe(FRONTIER_SHIFT.taps);
     expect(sold.state.inventory.get('wood')).toBe(1);
     expect(coinsHeld(sold.state)).toBe(wood.coins * 3);
   });
@@ -151,9 +190,9 @@ describe('selling and buying (plan section 3)', () => {
     }
   });
 
-  it('is refused with no taps left', () => {
+  it('trades with no taps left: the market comes before the day', () => {
     const w = { ...at(10, 1, { wood: 10 }), tapsLeft: 0 };
-    expect(frontierAct(w, { kind: 'sell', item: 'wood', lots: 1 }).refusal).toBe('noTaps');
+    expect(frontierAct(w, { kind: 'sell', item: 'wood', lots: 1 }).done).toBe(true);
   });
 
   it('says the most lots the store can trade', () => {

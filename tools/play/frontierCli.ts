@@ -39,7 +39,7 @@ import {
   depthAt,
   frontierTap,
   hashFrontier,
-  isMarketDay,
+  marketIsOpen,
   levelNeededFor,
   toolNeededFor,
   lanternRefusal,
@@ -165,6 +165,7 @@ function refusalText(refusal: string | null): string {
     place: 'A camp cannot go there now (see "look").',
     upgrade: 'That camp cannot be upgraded now.',
     demolish: 'That camp cannot be demolished: other camps must cover its 3 x 3 first.',
+    market: 'The market is open: trade, then "leave" to start the day.',
     notYet:
       'The market does not sell that yet: tools from a level-3 camp, a camp kit, wood and apples after a tier-1 contract.',
     placeDeep: `A deep camp cannot go there now (see "look"): it needs the kit, wood and stone, and lit, level ground at depth ${FRONTIER_DEEP_CAMP.minDepth} or more.`,
@@ -175,7 +176,7 @@ function refusalText(refusal: string | null): string {
     noPen: 'That camp has no pen: build one first ("pen N").',
     full: 'That pen is full.',
     empty: 'That pen holds no animals.',
-    closed: 'The market is not open this shift (see "Market" in the view).',
+    closed: 'The market is not open: it opens only after the night before a market day.',
     unknown: 'The market does not trade that item that way.',
     lots: 'Trade a whole number of lots, 1 or more.',
     cost: 'You do not hold enough for that.',
@@ -280,7 +281,12 @@ export function act(session: FrontierSession, step: FrontierStep): StepResult {
     return { session, refused: why, lines: [] };
   }
   const steps = [...session.log.steps, step];
-  const newShift = action.kind === 'endShift' || action.kind === 'rest' || action.kind === 'close';
+  // Closing the market starts a new undo log too (undo.ts).
+  const newShift =
+    action.kind === 'endShift' ||
+    action.kind === 'rest' ||
+    action.kind === 'close' ||
+    action.kind === 'closeMarket';
   const next: FrontierSession = {
     log: { ...session.log, steps },
     state: outcome.state,
@@ -405,6 +411,9 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
     endshift: 'endShift',
     close: 'close',
     'close mine': 'close',
+    leave: 'closeMarket',
+    'close market': 'closeMarket',
+    'leave market': 'closeMarket',
     undo: 'undo',
   };
   if (text === 'rest') {
@@ -431,6 +440,13 @@ export function listedSteps(session: FrontierSession): FrontierStep[] {
   const steps: FrontierStep[] = [];
   const width = state.cube.size.x;
   const height = state.cube.size.y;
+  // While the market is open, only its choices: the board, and leaving.
+  if (state.marketOpen) {
+    for (const offer of contractBoard(state)) {
+      if (takeRefusal(state, offer.id) === null) steps.push(`takeContract ${offer.id}`);
+    }
+    return [...steps, 'closeMarket', 'close'];
+  }
   if (state.tapsLeft > 0) {
     for (const camp of state.camps) {
       if (act(session, `upgrade ${camp.id}`).refused === null) steps.push(`upgrade ${camp.id}`);
@@ -658,13 +674,13 @@ function goalLines(state: FrontierState): string[] {
 /** The market: open today, with its prices, or when it opens next. */
 function marketLines(state: FrontierState): string[] {
   if (state.status !== 'active') return [];
-  if (!isMarketDay(state)) {
+  if (!marketIsOpen(state)) {
     return [
-      `Market: opens on shift ${nextMarketShift(state)} (every ${marketEvery(state)} shifts with your best camp).`,
+      `Market: opens after the night before shift ${nextMarketShift(state)} (every ${marketEvery(state)} shifts with your best camp).`,
     ];
   }
   return [
-    'Market: OPEN this shift. "sell ITEM N" or "buy ITEM N" trades N lots, 1 tap a trade.',
+    'Market: OPEN, before the day. "sell ITEM N" or "buy ITEM N" trades N lots, "take ID" a contract; no taps. "leave" starts the day.',
     `  Sell (coins a lot): ${lotsText(FRONTIER_MARKET.sellPrices)}.`,
     `  Buy (coins a lot): ${lotsText(FRONTIER_MARKET.buyPrices)}.`,
     ...contractBoard(state).map(

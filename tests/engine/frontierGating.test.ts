@@ -80,7 +80,7 @@ describe('camps only in the top levels (owner: "Camps can only be placed in the 
 describe('the tools at the market (plan section 4)', () => {
   /** On a market day, the first camp at `level`, holding 1,000 coins. */
   function market(level: number): FrontierState {
-    return { ...atLevel(world({ inventory: { coin: 1000 } }), level), shift: 30 };
+    return { ...atLevel(world({ inventory: { coin: 1000 } }), level), shift: 30, marketOpen: true };
   }
 
   it('sells the drills, the pickaxe and the lantern only from a level-3 camp', () => {
@@ -102,9 +102,14 @@ describe('the tools at the market (plan section 4)', () => {
   });
 
   it('a bought iron drill mines the ore it could not before', () => {
-    const w = { ...atLevel(world({ top: 'i', inventory: { coin: 1000 } }), 3), shift: 30 };
+    const w = {
+      ...atLevel(world({ top: 'i', inventory: { coin: 1000 } }), 3),
+      shift: 30,
+      marketOpen: true,
+    };
     expect(frontierTap(w, AT.x, AT.y).needsTool).toBe(FRONTIER_DRILL.item);
-    const bought = frontierAct(w, { kind: 'buy', item: FRONTIER_DRILL.item, lots: 1 }).state;
+    const atMarket = frontierAct(w, { kind: 'buy', item: FRONTIER_DRILL.item, lots: 1 }).state;
+    const bought = frontierAct(atMarket, { kind: 'closeMarket' }).state;
     expect(frontierTap(bought, AT.x, AT.y).kind).toBe('mined');
   });
 });

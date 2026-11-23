@@ -79,7 +79,7 @@ import {
   contractRefusal,
   penCamp,
   penRefusal,
-  marketOpen,
+  closeCampMarket,
   plantCamp,
   plantRefusal,
   nextMarketShift,
@@ -241,8 +241,10 @@ type Mode =
   | { kind: 'camp'; id: number }
   // The recipe book is open in the tray.
   | { kind: 'book' }
-  // The market's card is open (progression PR 1).
+  // The market's card is open (progression PR 1): only after a market day's night.
   | { kind: 'market' }
+  // The goals card: the phase, its goal, and the contract held.
+  | { kind: 'goals' }
   // Planting saplings: each tap on the map plants one `item` (progression PR 3).
   | { kind: 'planting'; item: string };
 
@@ -460,12 +462,15 @@ export function mountCampLab(
   // history. Opening the book adds a history entry (same address, so the
   // screen does not reload), and going back from it closes the book.
   window.addEventListener('popstate', () => {
-    if (mode.kind === 'book' || mode.kind === 'market') {
+    if (mode.kind === 'market') {
+      leaveMarket(); // going back closes the market, and the day starts
+    } else if (mode.kind === 'book' || mode.kind === 'goals') {
       setMode({ kind: 'idle' });
     }
   });
   window.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && (mode.kind === 'book' || mode.kind === 'market')) closeBook();
+    const card = mode.kind === 'book' || mode.kind === 'market' || mode.kind === 'goals';
+    if (event.key === 'Escape' && card) closeBook();
   });
 
   // ----- Drawing -----
@@ -1441,8 +1446,11 @@ export function mountCampLab(
 
   function showTray(): void {
     tray.dataset['mode'] = mode.kind;
-    bookCard.hidden = mode.kind !== 'book' && mode.kind !== 'market';
-    bookCard.setAttribute('aria-label', mode.kind === 'market' ? 'Market' : 'Recipe book');
+    bookCard.hidden = mode.kind !== 'book' && mode.kind !== 'market' && mode.kind !== 'goals';
+    bookCard.setAttribute(
+      'aria-label',
+      mode.kind === 'market' ? 'Market' : mode.kind === 'goals' ? 'Goals' : 'Recipe book',
+    );
     if (mode.kind === 'idle') {
       showIdleTray();
     } else if (mode.kind === 'book') {
@@ -1452,6 +1460,9 @@ export function mountCampLab(
     } else if (mode.kind === 'market') {
       showIdleTray();
       showMarketCard();
+    } else if (mode.kind === 'goals') {
+      showIdleTray();
+      showGoalsCard();
     } else if (mode.kind === 'planting') {
       showPlantingTray(mode.item);
     } else if (mode.kind === 'placing') {
@@ -1478,24 +1489,20 @@ export function mountCampLab(
     book.setAttribute('aria-label', 'Recipe book');
     book.title = 'Recipe book';
     book.addEventListener('click', openBook);
-    // The market (progression PR 1): lit on a market day; on other days it
-    // opens the card too, to show the prices and when the market opens.
-    const open = marketOpen(world);
-    // It glows on a market day, and when the contract held can be delivered (progression PR 5).
+    // The goals card (🎯): the phase, its goal, the contract held. It glows
+    // when the contract can be delivered. The market itself opens only
+    // after a market day's night (it has no button).
     const deliverable = deliverRefusal(toFrontier(world)) === null;
     const market = button(
-      open || deliverable ? 'lab2-book-button lab2-market-open' : 'lab2-book-button',
-      '🏪',
+      deliverable ? 'lab2-book-button lab2-market-open' : 'lab2-book-button',
+      '🎯',
     );
     market.dataset['deliverable'] = String(deliverable);
-    market.dataset['testid'] = 'lab2-market';
-    market.dataset['open'] = String(open);
-    const marketLabel = open
-      ? 'Market: open this shift'
-      : `Market: opens on shift ${nextMarketShift(world)}`;
-    market.setAttribute('aria-label', marketLabel);
-    market.title = marketLabel;
-    market.addEventListener('click', openMarket);
+    market.dataset['testid'] = 'lab2-goals';
+    const goalsLabel = deliverable ? 'Goals: your contract can be delivered' : 'Goals and contract';
+    market.setAttribute('aria-label', goalsLabel);
+    market.title = goalsLabel;
+    market.addEventListener('click', openGoals);
     const tool = button('lab2-tool', '');
     tool.dataset['testid'] = 'lab2-camp-tool';
     tool.setAttribute('aria-label', 'New camp: choose where');
@@ -1651,21 +1658,52 @@ export function mountCampLab(
     setMode({ kind: 'book' });
   }
 
-  /** Open the market's card, as the recipe book's: the same card, the back button closes it. */
+  /**
+   * Open the market's card, as the recipe book's: the same card. Only while
+   * the market is open: after a market day's night, before the day.
+   */
   function openMarket(): void {
-    if (mode.kind === 'market') return;
+    if (mode.kind === 'market' || !world.turn.marketOpen) return;
     bookNote.textContent = '';
     window.history.pushState({ lab2Book: true }, '');
     setMode({ kind: 'market' });
   }
 
-  /** Close the recipe book or market card: going back takes away its history entry, and `popstate` closes it. */
+  /** Open the goals card, as the recipe book's. */
+  function openGoals(): void {
+    if (mode.kind === 'goals') return;
+    bookNote.textContent = '';
+    window.history.pushState({ lab2Book: true }, '');
+    setMode({ kind: 'goals' });
+  }
+
+  /**
+   * Close the market: the day starts. Its trades can no longer be undone
+   * (the Undo history starts again, as at End shift).
+   */
+  function leaveMarket(): void {
+    const next = closeCampMarket(world);
+    setMode({ kind: 'idle' });
+    if (next === world) return;
+    history = emptyHistory(next);
+    showUndo();
+    setWorld(next);
+    if (asGame) saveRun(next);
+    setHint('The market closes. The day begins.', false);
+  }
+
+  /**
+   * Close the recipe book, market or goals card: going back takes away its
+   * history entry, and `popstate` closes it (and the market with its card).
+   */
   function closeBook(): void {
-    if (mode.kind !== 'book' && mode.kind !== 'market') return;
+    if (mode.kind !== 'book' && mode.kind !== 'market' && mode.kind !== 'goals') return;
     const state: unknown = window.history.state;
     const ours = typeof state === 'object' && state !== null && 'lab2Book' in state;
     if (ours) {
       window.history.back();
+    } else if (mode.kind === 'market') {
+      leaveMarket();
     } else {
       setMode({ kind: 'idle' });
     }
@@ -1756,17 +1794,14 @@ export function mountCampLab(
     const coins = world.lab.counts.get(FRONTIER_MARKET.coin) ?? 0;
     head.append(element('span', 'lab2-panel-title', `🏪 Market · 🪙 ${coins}`));
     const close = button('lab2-close', '×');
-    close.setAttribute('aria-label', 'Close the market');
+    close.setAttribute('aria-label', 'Close the market and start the day');
     close.dataset['testid'] = 'lab2-market-close';
     close.addEventListener('click', closeBook);
     head.append(close);
-    const open = marketOpen(world);
     const when = element(
       'p',
       'lab2-market-when',
-      open
-        ? 'Open this shift. Each trade costs 1 tap.'
-        : `Closed. It opens on shift ${nextMarketShift(world)}: every ${FRONTIER_MARKET.everyShifts.join(', ')} shifts with your best camp at level 1, 2, 3.`,
+      'Market day: trade before the day starts (no taps). Close it (×) to begin the day; it opens again only after a later night.',
     );
     when.dataset['testid'] = 'lab2-market-when';
     const list = element('div', 'lab2-book-list');
@@ -1774,24 +1809,12 @@ export function mountCampLab(
     const section = (title: string): void => {
       list.append(element('span', 'lab2-market-section', title));
     };
-    // Goals and contracts (progression PR 5): the phase and what moves it
-    // on, the contract held (deliverable on any shift), and the board.
+    // The contract board (progression PR 5): taken only here, at the market.
     const state = toFrontier(world);
-    const phase = runPhase(state);
-    const goal = FRONTIER_PHASES[phase - 1];
-    section(`Phase ${phase} of 5${goal === undefined ? '' : ` · ${goal.title}`}`);
-    const next = element('p', 'lab2-market-when', goal?.next ?? '');
-    next.dataset['testid'] = 'lab2-goal';
-    list.append(next);
     const held = heldContract(state);
-    if (held !== null) {
-      section('Your contract');
-      list.append(contractRow(held, 'held'));
-    }
-    // The one held is shown above, not again on the board.
     const board = contractBoard(state).filter((c) => c.id !== held?.id);
     if (board.length > 0) {
-      section('Contract board');
+      section(held === null ? 'Contract board' : `Contract board · you hold ${held.name}`);
       for (const offer of board) list.append(contractRow(offer, 'offer'));
     }
     section('Sell');
@@ -1802,6 +1825,61 @@ export function mountCampLab(
     for (const lot of FRONTIER_MARKET.buyPrices) list.append(marketRow('buy', lot));
     const inner = element('div', 'lab2-book-inner');
     inner.append(head, when, bookNote, list);
+    bookCard.replaceChildren(inner);
+  }
+
+  /**
+   * The goals card: the phase and what moves it on, the contract held (with
+   * Deliver and Drop, on any shift), the contracts done, and when the market
+   * opens next.
+   */
+  function showGoalsCard(): void {
+    const head = element('div', 'lab2-panel-head');
+    const coins = world.lab.counts.get(FRONTIER_MARKET.coin) ?? 0;
+    head.append(element('span', 'lab2-panel-title', `🎯 Goals · 🪙 ${coins}`));
+    const close = button('lab2-close', '×');
+    close.setAttribute('aria-label', 'Close the goals');
+    close.dataset['testid'] = 'lab2-goals-close';
+    close.addEventListener('click', closeBook);
+    head.append(close);
+    const list = element('div', 'lab2-book-list');
+    const section = (title: string): void => {
+      list.append(element('span', 'lab2-market-section', title));
+    };
+    const state = toFrontier(world);
+    const phase = runPhase(state);
+    const goal = FRONTIER_PHASES[phase - 1];
+    section(`Phase ${phase} of 5${goal === undefined ? '' : ` · ${goal.title}`}`);
+    const next = element('p', 'lab2-market-when', goal?.next ?? '');
+    next.dataset['testid'] = 'lab2-goal';
+    list.append(next);
+    const held = heldContract(state);
+    section('Your contract');
+    if (held === null) {
+      list.append(element('p', 'lab2-market-when', 'None. Take one from the board at the market.'));
+    } else {
+      list.append(contractRow(held, 'held'));
+    }
+    const done = world.turn.contractsDone;
+    if (done.some((n) => n > 0)) {
+      list.append(
+        element(
+          'p',
+          'lab2-market-when',
+          `Delivered: tier 1 ×${done[0] ?? 0}, tier 2 ×${done[1] ?? 0}, tier 3 ×${done[2] ?? 0}.`,
+        ),
+      );
+    }
+    section('Market');
+    const when = element(
+      'p',
+      'lab2-market-when',
+      `It opens after the night before shift ${nextMarketShift(world)}: every ${FRONTIER_MARKET.everyShifts.join(', ')} shifts with your best camp at level 1, 2, 3.`,
+    );
+    when.dataset['testid'] = 'lab2-market-when';
+    list.append(when);
+    const inner = element('div', 'lab2-book-inner');
+    inner.append(head, bookNote, list);
     bookCard.replaceChildren(inner);
   }
 
@@ -2458,6 +2536,8 @@ export function mountCampLab(
         night = null;
         noteSteps(before);
         cues.start();
+        // A market day: the market opens now, after the night, before the day.
+        openMarket();
       },
     });
   }
@@ -2787,4 +2867,6 @@ export function mountCampLab(
 
   showUndo();
   showWorld();
+  // A run saved while its market was open opens it again (a run is saved at End shift).
+  openMarket();
 }

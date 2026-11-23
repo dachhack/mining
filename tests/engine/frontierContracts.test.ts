@@ -3,11 +3,15 @@
 // opening in turn, and the phases of a run.
 import { describe, expect, it } from 'vitest';
 import { FRONTIER_BOARD, FRONTIER_CONTRACTS, FRONTIER_MARKET } from '../../src/data/frontier';
-import { contractBoard, frontierAct, openTiers, runPhase } from '../../src/engine';
+import { contractBoard, frontierAct, isMarketDay, openTiers, runPhase } from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
 import { world } from './frontierHelpers';
 
-/** A world on shift `shift` (30 is a market day at every level), first camp at `level`, holding `inventory`. */
+/**
+ * A world on shift `shift` (30 is a market day at every level), first camp
+ * at `level`, holding `inventory`; on a market day its market is open, as
+ * after the night before it.
+ */
 function at(
   level: number,
   inventory: Record<string, number> = {},
@@ -15,7 +19,8 @@ function at(
   shift = 30,
 ): FrontierState {
   const w = world({ inventory });
-  return { ...w, shift, contractsDone: done, camps: w.camps.map((c) => ({ ...c, level })) };
+  const s = { ...w, shift, contractsDone: done, camps: w.camps.map((c) => ({ ...c, level })) };
+  return { ...s, marketOpen: isMarketDay(s) };
 }
 
 describe('the contract board (plan section 5)', () => {
@@ -64,18 +69,21 @@ describe('the contract board (plan section 5)', () => {
 });
 
 describe('taking, delivering and dropping a contract', () => {
-  it('takes one from the board for 1 tap, delivers it for its coins, and counts it done', () => {
+  it('takes one from the board at the market for no tap, delivers it later for 1 tap and its coins, and counts it done', () => {
     const w = at(3);
     const offer = contractBoard(w)[0];
     if (offer === undefined) throw new Error('no contract on the board');
     const taken = frontierAct(w, { kind: 'takeContract', id: offer.id });
     expect(taken.done).toBe(true);
     expect(taken.state.contract).toEqual({ id: offer.id, takenOn: 30 });
-    expect(taken.state.tapsLeft).toBe(w.tapsLeft - 1);
-    expect(frontierAct(taken.state, { kind: 'deliver' }).refusal).toBe('cost');
+    expect(taken.state.tapsLeft).toBe(w.tapsLeft);
+    // Delivering is a day's action: not while the market is open.
+    expect(frontierAct(taken.state, { kind: 'deliver' }).refusal).toBe('market');
+    const day = frontierAct(taken.state, { kind: 'closeMarket' }).state;
+    expect(frontierAct(day, { kind: 'deliver' }).refusal).toBe('cost');
     // Holding everything, on any day: it is delivered.
     const holding = new Map(offer.asks.map((a) => [a.item, a.count + 1] as [string, number]));
-    const later = { ...taken.state, shift: 31, inventory: holding };
+    const later = { ...day, shift: 31, inventory: holding };
     const out = frontierAct(later, { kind: 'deliver' });
     expect(out.done).toBe(true);
     expect(out.state.contract).toBeNull();
@@ -91,15 +99,14 @@ describe('taking, delivering and dropping a contract', () => {
     if (first === undefined || second === undefined) throw new Error('board too short');
     const taken = frontierAct(w, { kind: 'takeContract', id: first.id }).state;
     expect(frontierAct(taken, { kind: 'takeContract', id: second.id }).refusal).toBe('holding');
-    expect(frontierAct({ ...w, shift: 31 }, { kind: 'takeContract', id: first.id }).refusal).toBe(
-      'closed',
-    );
+    const closed = { ...w, marketOpen: false };
+    expect(frontierAct(closed, { kind: 'takeContract', id: first.id }).refusal).toBe('closed');
     const offTheBoard = FRONTIER_CONTRACTS.find((c) => !contractBoard(w).includes(c));
     expect(frontierAct(w, { kind: 'takeContract', id: offTheBoard?.id ?? 'x' }).refusal).toBe(
       'unknown',
     );
-    expect(frontierAct(w, { kind: 'dropContract' }).refusal).toBe('none');
-    const dropped = frontierAct(taken, { kind: 'dropContract' });
+    expect(frontierAct(closed, { kind: 'dropContract' }).refusal).toBe('none');
+    const dropped = frontierAct({ ...taken, marketOpen: false }, { kind: 'dropContract' });
     expect(dropped.done).toBe(true);
     expect(dropped.state.contract).toBeNull();
     expect(dropped.state.contractsDone).toEqual([0, 0, 0]);

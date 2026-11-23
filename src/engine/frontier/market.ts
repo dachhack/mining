@@ -1,14 +1,18 @@
 // The market (docs/plans/progression-phases.md, section 3; PR 1).
 //
-// - It opens at the start of every shift whose number is a multiple of the
-//   market's cadence for the player's best camp: every 10 shifts while the
-//   best camp is level 1, every 5 at level 2, every 3 at level 3 (the owner;
-//   level 4 is question 167). It stays open for that whole shift
-//   (question 169). Nothing about it is stored: it is worked out from the
-//   shift and the camps.
-// - On a market day the player sells and buys in lots (FRONTIER_MARKET):
-//   each trade is any whole number of one item's lots, for 1 tap (shift.ts
-//   charges it), since every action that does something costs a tap.
+// - A market day is every shift whose number is a multiple of the market's
+//   cadence for the player's best camp: every 10 shifts while the best camp
+//   is level 1, every 5 at level 2, every 3 at level 3 (the owner; level 4
+//   is question 167).
+// - The market opens after the night that starts a market day, before the
+//   day (owner, after the progression playtest build: "Night scene then
+//   market opens. You take your market actions then it closes and the day
+//   starts. That's the only time the market is available."). End shift sets
+//   `marketOpen`; the player trades, then closes it (closeMarket) and the
+//   day's taps begin. While it is open nothing else can be done.
+// - While it is open the player sells and buys in lots (FRONTIER_MARKET):
+//   each trade is any whole number of one item's lots. Trades cost no taps:
+//   they happen before the day.
 // - Money is an item, coins (question 170). The coins held when the run
 //   ends are its score (plan section 7).
 //
@@ -34,19 +38,26 @@ export function marketEvery(state: FrontierState): number {
   return every[index] ?? every[every.length - 1] ?? 1;
 }
 
-/** True if the market is open in the shift being played. */
+/** True if the shift being played is a market day (its market opened after the night before it). */
 export function isMarketDay(state: FrontierState): boolean {
   return state.status === 'active' && state.shift % marketEvery(state) === 0;
 }
 
+/** True while the market is open: after a market day's night, until the player closes it. */
+export function marketIsOpen(state: FrontierState): boolean {
+  return state.status === 'active' && state.marketOpen;
+}
+
 /**
- * The next shift, from the one being played, on which the market opens at
- * today's cadence: the shift itself if it is a market day. The cadence can
+ * The shift whose market opens next, at today's cadence: this shift while
+ * its market is open, else the next market day after it. The cadence can
  * change before then if a camp is upgraded or demolished.
  */
 export function nextMarketShift(state: FrontierState): number {
+  if (state.marketOpen) return state.shift;
+  // The next market day after this shift: its market opens after the night before it.
   const every = marketEvery(state);
-  return Math.ceil(state.shift / every) * every;
+  return (Math.floor(state.shift / every) + 1) * every;
 }
 
 /** The coins held. */
@@ -65,7 +76,7 @@ export function marketLot(side: TradeSide, item: string): FrontierLot | null {
 
 /**
  * Why `lots` lots of `item` cannot be traded on `side` now, or `null` if they can:
- * - 'closed': it is not a market day;
+ * - 'closed': the market is not open;
  * - 'unknown': the market does not trade that item that way;
  * - 'notYet': it does, but only once the best camp is at the lot's
  *   `fromLevel` (the tools, from level 3), or once a tier-1 contract is
@@ -82,7 +93,7 @@ export function tradeRefusal(
   item: string,
   lots: number,
 ): TradeRefusal | null {
-  if (!isMarketDay(state)) return 'closed';
+  if (!marketIsOpen(state)) return 'closed';
   const lot = marketLot(side, item);
   if (lot === null) return 'unknown';
   if (bestCampLevel(state) < (lot.fromLevel ?? 1)) return 'notYet';

@@ -336,6 +336,7 @@ export function createFrontier(seed: number): FrontierState {
     treesFelled: 0,
     contract: null,
     contractsDone: [0, 0, 0],
+    marketOpen: false,
     shift: 1,
     tapsLeft: FRONTIER_SHIFT.taps,
     health: FRONTIER_SHIFT.startHealth,

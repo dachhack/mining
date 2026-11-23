@@ -17,7 +17,7 @@ import type { RngState } from '../rng';
  * not loaded into a new shape. Separate from the old game's STATE_VERSION
  * while the two rule sets live side by side.
  */
-export const FRONTIER_STATE_VERSION = 11; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`
+export const FRONTIER_STATE_VERSION = 12; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`; 12: `marketOpen`
 
 /** What grows on a square: nothing, grass, a tree or an apple tree. */
 export const NO_FEATURE = 0;
@@ -101,12 +101,18 @@ export interface FrontierState {
   grassIn: number[];
   /** True where the stump is a planted sapling, not a felled tree (plan section 6.2). */
   planted: boolean[];
-  /** How many trees have been felled in the run: every few give a sapling (FRONTIER_SAPLINGS). */
+  /** How many trees have been felled in the run (a count only: saplings come from the market). */
   treesFelled: number;
   /** The contract held (contracts.ts): its id and the shift it was taken on; `null` if none. */
   contract: FrontierHeldContract | null;
   /** How many contracts of each tier have been delivered: [tier 1, tier 2, tier 3]. */
   contractsDone: number[];
+  /**
+   * True while the market is open: from the night that starts a market day
+   * until the player closes it (action closeMarket), before the day's taps.
+   * Only then can the player trade or take a contract (market.ts).
+   */
+  marketOpen: boolean;
   /** The shift being played: 1 is the first. */
   shift: number;
   /** Taps left in this shift (src/data/frontier.ts, FRONTIER_SHIFT.taps a shift). */

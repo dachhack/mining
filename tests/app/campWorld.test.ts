@@ -544,17 +544,24 @@ describe('reach (owner, question 138: "Bigger light radius")', () => {
 });
 
 describe('the market on the game screen (progression PR 1)', () => {
-  it('opens on a market day, and a trade is a step that replays and costs 1 tap', () => {
+  it('opens after a market day’s night, and a trade is a step that replays and costs no tap', () => {
     const start = createFrontier(110);
     const closed = campWorldOf({ ...start, inventory: new Map([['wood', 10]]) });
     expect(marketOpen(closed)).toBe(false);
     expect(nextMarketShift(closed)).toBe(10);
     expect(tradeRefusal(closed, 'sell', 'wood', 1)).toBe('closed');
-    const open = campWorldOf({ ...start, shift: 10, inventory: new Map([['wood', 10]]) });
+    const open = campWorldOf({
+      ...start,
+      shift: 10,
+      marketOpen: true,
+      inventory: new Map([['wood', 10]]),
+    });
     expect(marketOpen(open)).toBe(true);
     const sold = applyCampStep(open, { kind: 'sell', item: 'wood', lots: 5 });
     expect(sold.lab.counts.get('wood') ?? 0).toBe(0);
     expect(sold.lab.counts.get('coin')).toBe(5);
-    expect(sold.turn.tapsLeft).toBe(open.turn.tapsLeft - 1);
+    expect(sold.turn.tapsLeft).toBe(open.turn.tapsLeft);
+    const day = applyCampStep(sold, { kind: 'closeMarket' });
+    expect(marketOpen(day)).toBe(false);
   });
 });

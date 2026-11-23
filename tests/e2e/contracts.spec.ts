@@ -1,7 +1,7 @@
-// Progression PR 5 (docs/plans/progression-phases.md, sections 1 and 5): the
-// market's card shows the phase and its goal, the contract board on a
-// market day, and the contract held, which is taken, then delivered for
-// its coins. The run is saved and opened as the game opens any saved run.
+// Progression PR 5 (docs/plans/progression-phases.md, sections 1 and 5): a
+// contract is taken from the board while the market is open, then
+// delivered from the goals card (🎯) during the day, which shows the phase
+// and its goal. The run is saved and opened as the game opens any saved run.
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { FRONTIER_PHASES, FRONTIER_SHIFT } from '../../src/data/frontier';
@@ -22,7 +22,7 @@ async function openGame(page: Page, state: FrontierState): Promise<void> {
   await expect(page.getByTestId('lab-map')).toHaveAttribute('data-camps', '1');
 }
 
-test('take a contract from the board on a market day, and deliver it for its coins', async ({
+test('take a contract at the market, then deliver it from the goals card for its coins', async ({
   page,
 }) => {
   // Seed 110 on shift 30 (a market day), its camp at level 3: tier 1 is open.
@@ -30,6 +30,7 @@ test('take a contract from the board on a market day, and deliver it for its coi
   const base: FrontierState = {
     ...start,
     shift: 30,
+    marketOpen: true,
     camps: start.camps.map((c) => ({ ...c, level: 3 })),
   };
   const offer = contractBoard(base)[0];
@@ -40,11 +41,15 @@ test('take a contract from the board on a market day, and deliver it for its coi
   };
   await openGame(page, state);
 
-  await page.getByTestId('lab2-market').click();
-  await expect(page.getByTestId('lab2-goal')).toHaveText(FRONTIER_PHASES[2]?.next ?? '');
+  // The market is open (saved so): take the contract from its board.
+  await expect(page.getByTestId('lab2-book-card')).toBeVisible();
   await page.getByTestId(`lab2-contract-take-${offer.id}`).click();
   await expect(page.getByTestId('lab2-book-note')).toContainText(`Taken: ${offer.name}`);
-  await expect(page.getByTestId('lab2-market')).toHaveAttribute('data-deliverable', 'true');
+  await page.getByTestId('lab2-market-close').click();
+  // The day: deliver it from the goals card.
+  await expect(page.getByTestId('lab2-goals')).toHaveAttribute('data-deliverable', 'true');
+  await page.getByTestId('lab2-goals').click();
+  await expect(page.getByTestId('lab2-goal')).toHaveText(FRONTIER_PHASES[2]?.next ?? '');
   await page.getByTestId(`lab2-contract-deliver-${offer.id}`).click();
   await expect(page.getByTestId('lab2-book-note')).toHaveText(
     `Delivered: ${offer.name}, for ${offer.pays} coins.`,
@@ -54,6 +59,6 @@ test('take a contract from the board on a market day, and deliver it for its coi
   await expect(page.getByTestId('lab2-goal')).toHaveText(FRONTIER_PHASES[3]?.next ?? '');
   await expect(page.getByTestId('lab2-hud')).toHaveAttribute(
     'data-taps',
-    String(FRONTIER_SHIFT.taps - 2),
+    String(FRONTIER_SHIFT.taps - 1), // taking it cost no tap; delivering it, one
   );
 });

@@ -78,6 +78,8 @@ export type FrontierAction =
   | { kind: 'hangLantern'; id: number }
   // Sell or buy `lots` lots of `item` at the market, on a market day (market.ts).
   | { kind: 'sell'; item: string; lots: number }
+  // Close the market and start the day (market.ts).
+  | { kind: 'closeMarket' }
   // Take contract `id` from today's board, deliver the one held, or drop it (contracts.ts).
   | { kind: 'takeContract'; id: string }
   | { kind: 'deliver' }
@@ -245,9 +247,12 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
     health,
     shift: state.shift + 1,
     tapsLeft: FRONTIER_SHIFT.taps,
+    marketOpen: false,
     // A lost crew ends the run first; otherwise the run is over once its last shift has ended.
     status: health <= 0 ? 'lost' : state.shift >= FRONTIER_RUN.shifts ? 'finished' : 'active',
   };
+  // A market day's market opens now, after the night, before the day (market.ts).
+  next.marketOpen = isMarketDay(next);
   return {
     state: next,
     done: true,
@@ -263,7 +268,7 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
       grassRegrown: grown.grassRegrown,
       born: bred.born,
       newAnimals,
-      marketOpens: isMarketDay(next),
+      marketOpens: next.marketOpen,
     },
   };
 }
@@ -387,6 +392,11 @@ function refused(
   return { state, done: false, refusal: why, tap, report: null };
 }
 
+/** An action that did something and costs no tap: a market action. */
+function free(next: FrontierState): FrontierOutcome {
+  return { state: next, done: true, refusal: null, tap: null, report: null };
+}
+
 /** An action that did something: it costs 1 tap. */
 function spent(next: FrontierState, tap: FrontierTap | null = null): FrontierOutcome {
   return {
@@ -408,6 +418,26 @@ function spent(next: FrontierState, tap: FrontierTap | null = null): FrontierOut
 export function frontierAct(state: FrontierState, action: FrontierAction): FrontierOutcome {
   if (state.status !== 'active') {
     return refused(state, 'over');
+  }
+  // The market (market.ts): while it is open, only market actions; they cost no taps.
+  if (state.marketOpen) {
+    if (action.kind === 'closeMarket') {
+      return free({ ...state, marketOpen: false });
+    }
+    if (action.kind === 'sell' || action.kind === 'buy') {
+      const why = tradeRefusal(state, action.kind, action.item, action.lots);
+      return why === null
+        ? free(trade(state, action.kind, action.item, action.lots))
+        : refused(state, why);
+    }
+    if (action.kind === 'takeContract') {
+      const why = takeRefusal(state, action.id);
+      return why === null ? free(takeContract(state, action.id)) : refused(state, why);
+    }
+    if (action.kind !== 'close') return refused(state, 'market');
+  }
+  if (action.kind === 'closeMarket') {
+    return refused(state, 'closed');
   }
   if (action.kind === 'endShift') {
     return endFrontierShift(state);
