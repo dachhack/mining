@@ -17,7 +17,7 @@ What to play after progression PRs 1 to 6 (engine 0.9.0): a 100-shift run, the m
 3. **Phase 2: does farming matter?** Grass regrows beside grass, every second tree gives a sapling, and pens breed with hay. Did the player plant, pen animals or make hay because they needed to, or did they ignore it? Did the surface run out?
 4. **Apples for level 3 (question 177).** One run in five in the simulator never reaches level 3: it ends a few apples short. Did any player stall there? Did they think to plant apple saplings (3 apples each) or keep apple trees for apples?
 5. **The market.** Was its cadence (every 10, 5 or 3 shifts by the best camp) noticed? Did the player sell, and what? Did buying the first drill feel like the right gate for ore?
-6. **Contracts.** Did the player take contracts they could fill? Did stone contracts feel too easy (question 179)? Did anyone reach tier 3?
+6. **Contracts.** Did the player take contracts they could fill? Did they keep taking small tier-1 contracts after tier 2 opened, and did that feel right (question 179)? Did anyone reach tier 3?
 7. **The deep camp (question 178).** Did the player buy a kit, and where did they put the deep camp? Did anyone place it at the surface as a quick level-3 camp?
 8. **The score.** Does ending at shift 100 with a number of coins feel like an ending?
 9. **Anything that looked wrong.** For example: the camp panel squeezing the map at level 2 and above (question 180), a market button that glows when nothing can be done, or a contract that cannot be delivered with everything held.
