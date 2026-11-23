@@ -24,7 +24,14 @@ import { blockAt } from '../state';
 import { campAt, demolishFrontierCamp, placeFrontierCamp, upgradeFrontierCamp } from './camps';
 import { walkable } from './generation';
 import { animalAt } from './surface';
-import { buildSmelter, makeRecipe, makeRefusal, smelterRefusal } from './smelting';
+import {
+  buildSmelter,
+  hangLantern,
+  lanternRefusal,
+  makeRecipe,
+  makeRefusal,
+  smelterRefusal,
+} from './smelting';
 import { frontierTap } from './tap';
 import type { FrontierTap } from './tap';
 import { APPLE_TREE, NO_FEATURE } from './state';
@@ -42,6 +49,8 @@ export type FrontierAction =
   // Build a smelter at camp `id`; make recipe `recipe` (smelting.ts).
   | { kind: 'buildSmelter'; id: number }
   | { kind: 'make'; recipe: string }
+  // Hang a lantern from the store at camp `id` (smelting.ts).
+  | { kind: 'hangLantern'; id: number }
   | { kind: 'close' };
 
 /** What End shift did: the upkeep paid and unpaid, and the health it cost. */
@@ -293,7 +302,7 @@ function spent(next: FrontierState, tap: FrontierTap | null = null): FrontierOut
 
 /**
  * Do `action`. Taps, placing, upgrading and demolishing a camp, building a
- * smelter and making a recipe cost 1 tap each when they do something; End shift, rest and closing the mine cost none.
+ * smelter, making a recipe and hanging a lantern cost 1 tap each when they do something; End shift, rest and closing the mine cost none.
  * Nothing can be done once the run has ended.
  */
 export function frontierAct(state: FrontierState, action: FrontierAction): FrontierOutcome {
@@ -330,6 +339,10 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
   if (action.kind === 'make') {
     const why = makeRefusal(state, action.recipe);
     return why === null ? spent(makeRecipe(state, action.recipe)) : refused(state, why);
+  }
+  if (action.kind === 'hangLantern') {
+    const why = lanternRefusal(state, action.id);
+    return why === null ? spent(hangLantern(state, action.id)) : refused(state, why);
   }
   if (action.kind === 'tap') {
     const tap = frontierTap(state, action.x, action.y);

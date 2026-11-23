@@ -34,20 +34,20 @@ Lab 2 becomes the game (`docs/plans/lab2-becomes-the-game.md`). Its rules are mo
 
 Recorded with the new simulator's policies (`tools/frontierPolicies.ts`, plan B3), each for at most 10 shifts of 100 taps (the idle run until it is lost):
 
-| File                                 | What it is                                                                                         |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| `frontier/gatherer-seed-1.json`      | The gatherer: places two more camps, mines, upgrades three times, and is never hungry              |
-| `frontier/gatherer-seed-26.json`     | The gatherer on another seed: two more camps, and a camp at level 3                                |
-| `frontier/careful-seed-3.json`       | The careful policy: keeps wood and food back for upkeep, places two more camps, a camp at level 3  |
-| `frontier/digger-seed-5.json`        | The digger: a pit 5 levels deep next to the first camp, gathering only for upkeep                  |
-| `frontier/random-seed-6.json`        | The random policy: a useful step at random; upgrades a camp to level 3                             |
-| `frontier/random-seed-1-smelts.json` | The random policy for 21 shifts: builds smelters, and smelts raw ore into ingots in its last shift |
-| `frontier/idle-seed-2-lost.json`     | The idle policy: gathers nothing, rests at camp 1 once, and loses the crew to hunger at shift 11   |
+| File                                   | What it is                                                                                                                                    |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `frontier/gatherer-seed-1.json`        | The gatherer: places two more camps, mines, upgrades three times, and is never hungry                                                         |
+| `frontier/gatherer-seed-26.json`       | The gatherer on another seed: two more camps, and a camp at level 3                                                                           |
+| `frontier/careful-seed-3.json`         | The careful policy: keeps wood and food back for upkeep, places two more camps, a camp at level 3                                             |
+| `frontier/digger-seed-5.json`          | The digger: a pit 5 levels deep next to the first camp, gathering only for upkeep                                                             |
+| `frontier/random-seed-6.json`          | The random policy: a useful step at random; upgrades a camp to level 3                                                                        |
+| `frontier/random-seed-19-pickaxe.json` | The random policy for 30 shifts: builds smelters, smelts raw ore into ingots, and makes an iron pickaxe in its last shift, then mines with it |
+| `frontier/idle-seed-2-lost.json`       | The idle policy: gathers nothing, rests at camp 1 once, and loses the crew to hunger at shift 11                                              |
 
 Each file holds:
 
 - `seed`: what `createFrontier` is called with.
-- `steps`: every step in order: `"tap X,Y"`, `"place X,Y"`, `"upgrade ID"`, `"demolish ID"`, `"endShift"`, `"rest ID"` (at camp ID) or `"close"`. A step the rules refuse (including a tap with no taps left in the shift) fails the replay.
+- `steps`: every step in order: `"tap X,Y"`, `"place X,Y"`, `"upgrade ID"`, `"demolish ID"`, `"endShift"`, `"rest ID"` (at camp ID), `"close"`, `"buildSmelter ID"`, `"make RECIPE"` or `"hangLantern ID"`. A step the rules refuse (including a tap with no taps left in the shift) fails the replay.
 - `expectedHash`: `hashFrontier` of the state after the last step.
 - `engineVersion`: the engine version it was recorded on. A replay is only expected to match on that version.
 - `stepCount`, `description` and `recordedWith` (the policy): for the reader.

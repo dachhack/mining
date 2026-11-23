@@ -7,7 +7,8 @@
 // 4. grass, a tree or an apple tree is taken before the block under it;
 // 5. the level rule: a square may be at most 1 level below its neighbours ('refused');
 // 6. the camps covering the square must have a level that can mine its top block ('tooHard');
-// 7. then the top block is mined, and what it yields goes into the inventory.
+// 7. then the top block is mined, and what it yields goes into the inventory
+//    (doubled while the store holds an iron pickaxe: FRONTIER_PICKAXE).
 //
 // The level rule is checked before the hardness gate, so a block too steep to
 // mine says so rather than promising that an upgrade would let it be mined
@@ -15,7 +16,7 @@
 
 import { blockDefByCode } from '../../data';
 import type { ItemStack } from '../../data';
-import { FRONTIER_SURFACE } from '../../data/frontier';
+import { FRONTIER_PICKAXE, FRONTIER_SURFACE } from '../../data/frontier';
 import { mayMine, topBlockAt } from '../heightmap';
 import type { HigherNeighbour, MineRefusal } from '../heightmap';
 import { labMine } from '../lab';
@@ -53,6 +54,16 @@ export interface FrontierTap {
   refusal: MineRefusal | 'outside' | null;
   /** For a 'refused' too-steep tap: the neighbours that are too high. */
   higherNeighbours: HigherNeighbour[];
+}
+
+/**
+ * What mining a block that yields `yields` gives: each stack times
+ * FRONTIER_PICKAXE.yieldTimes while `inventory` holds a pickaxe (owner,
+ * question 163), as it is otherwise. A second pickaxe adds nothing.
+ */
+export function miningGain(inventory: Map<string, number>, yields: ItemStack[]): ItemStack[] {
+  const times = (inventory.get(FRONTIER_PICKAXE.item) ?? 0) > 0 ? FRONTIER_PICKAXE.yieldTimes : 1;
+  return yields.map((s) => ({ item: s.item, count: s.count * times }));
 }
 
 /** Tap square (x, y). See the order at the top of this file. */
@@ -101,8 +112,9 @@ export function frontierTap(state: FrontierState, x: number, y: number): Frontie
   if (!mined.mined) {
     return { ...nothing('refused'), refusal: mined.refusal };
   }
+  const gain = miningGain(state.inventory, mined.yields);
   let inventory = state.inventory;
-  for (const stack of mined.yields) {
+  for (const stack of gain) {
     inventory = gained(inventory, stack);
   }
   // Mining the ground under a stump digs it out: no tree grows back there,
@@ -121,7 +133,7 @@ export function frontierTap(state: FrontierState, x: number, y: number): Frontie
   return {
     ...nothing('mined'),
     state: { ...state, cube: mined.state, inventory, mined: state.mined + 1, stumps, regrowIn },
-    gain: mined.yields,
+    gain,
     block: mined.block,
   };
 }
@@ -162,5 +174,5 @@ export function previewTap(
   const needs = levelNeededFor(code);
   if (needs === null || needs > coverLevelAt(state.camps, x, y))
     return { kind: 'tooHard', gain: [] };
-  return { kind: 'mined', gain: blockDefByCode(code).yields.map((s) => ({ ...s })) };
+  return { kind: 'mined', gain: miningGain(state.inventory, blockDefByCode(code).yields) };
 }

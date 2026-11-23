@@ -58,6 +58,7 @@ import type { GameState } from './state';
  * 0.8.0: smelting and crafting, PR 1: the smelter and ingots
  *        (docs/plans/smelting-and-crafting.md). First engine PR of the batch
  *        after the owner's answers of 2026-11-23 (questions 159 to 164).
+ *        PR 3 (the iron pickaxe and the copper lantern) is in the same batch.
  */
 export const ENGINE_VERSION = '0.8.0';
 
@@ -452,6 +453,7 @@ export {
   blocksMinedAt,
   campAt,
   campRadius,
+  campRing,
   canAfford,
   coverLevelAt,
   coverLevels,
@@ -480,16 +482,18 @@ export type { CampChange, CampGround, PlaceRefusal, Sight } from './frontier/cam
 // The surface and a tap (plan A3).
 export { animalAt, gained, harvestAt } from './frontier/surface';
 export type { FrontierHarvest, HarvestKind } from './frontier/surface';
-export { frontierTap, previewTap } from './frontier/tap';
+export { frontierTap, miningGain, previewTap } from './frontier/tap';
 export {
   buildSmelter,
   frontierRecipe,
+  hangLantern,
   hasSmelter,
+  lanternRefusal,
   makeRecipe,
   makeRefusal,
   smelterRefusal,
 } from './frontier/smelting';
-export type { MakeRefusal, SmelterRefusal } from './frontier/smelting';
+export type { LanternRefusal, MakeRefusal, SmelterRefusal } from './frontier/smelting';
 export type { FrontierTap, FrontierTapKind } from './frontier/tap';
 export { hashFrontier } from './frontier/hash';
 // Shifts (plan A4).

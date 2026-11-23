@@ -25,7 +25,10 @@ export type ItemId =
   | 'grass'
   | 'apple'
   | 'animal'
-  | 'clay';
+  | 'clay'
+  // Made from ingots (smelting and crafting, PR 3).
+  | 'ironPickaxe'
+  | 'copperLantern';
 
 // Fuel is a gauge, not an item, so it is not here. The torch and the safety
 // lamp are gone with light (design doc v0.2, section 7). Items have no weight:
@@ -61,4 +64,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   apple: { name: 'Apples' },
   animal: { name: 'Animals' },
   clay: { name: 'Clay' },
+  // Made from ingots (docs/plans/smelting-and-crafting.md, PR 3).
+  ironPickaxe: { name: 'Iron pickaxe' },
+  copperLantern: { name: 'Copper lantern' },
 };

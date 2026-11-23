@@ -20,7 +20,12 @@
 
 import { BLOCKS, blockDefByCode, ITEMS } from '../../data';
 import type { ItemId, ItemStack } from '../../data';
-import { FRONTIER_SHIFT, FRONTIER_SMELTER } from '../../data/frontier';
+import {
+  FRONTIER_LANTERN,
+  FRONTIER_PICKAXE,
+  FRONTIER_SHIFT,
+  FRONTIER_SMELTER,
+} from '../../data/frontier';
 import { LAB_ITEMS, LAB_NEW_CAMP_COST } from '../../data/labCamps';
 import type { HigherNeighbour, SquareDirection } from '../../engine';
 import { SQUARE_STEPS, loadFrontier, saveFrontier } from '../../engine';
@@ -35,6 +40,7 @@ import {
   turnRefusal,
   campAt,
   campRadius,
+  campRing,
   campTap,
   canAfford,
   addedNamesAt,
@@ -42,6 +48,8 @@ import {
   newCampWorld,
   newlyCovered,
   buildCampSmelter,
+  hangCampLantern,
+  lanternRefusal,
   demolishCamp,
   demolishRefusal,
   footprintOf,
@@ -608,7 +616,7 @@ export function mountCampLab(
       if (sightOf(camp.x, camp.y) === 'shown') {
         const selected = mode.kind === 'camp' && mode.id === camp.id;
         if (selected) {
-          drawRing(ctx, camp.x, camp.y, campRadius(camp.level), c, 1, false);
+          drawRing(ctx, camp.x, camp.y, campRing(camp), c, 1, false);
         }
         drawCampMarker(ctx, camp, c, selected);
       }
@@ -1019,6 +1027,21 @@ export function mountCampLab(
       ctx.quadraticCurveTo(fx - tagR * 0.65, ty, fx, ty - tagR * 0.7);
       ctx.fill();
     }
+
+    // A lantern: a small warm light in a tag at the top left.
+    if (camp.lantern) {
+      const lx = cx - r * 0.78;
+      const ly = cy - r * 0.78;
+      ctx.fillStyle = CAMP_MARKS.levelTag;
+      ctx.beginPath();
+      ctx.arc(lx, ly, tagR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffd36b';
+      ctx.fillRect(lx - tagR * 0.35, ly - tagR * 0.4, tagR * 0.7, tagR * 0.8);
+      ctx.fillStyle = '#c27443';
+      ctx.fillRect(lx - tagR * 0.5, ly - tagR * 0.62, tagR, tagR * 0.24);
+      ctx.fillRect(lx - tagR * 0.5, ly + tagR * 0.4, tagR, tagR * 0.22);
+    }
   }
 
   /** A circle round square (x, y) at `radius` squares, as the ring a camp lights. */
@@ -1117,7 +1140,12 @@ export function mountCampLab(
     // A faint tent where the camp would stand.
     ctx.save();
     ctx.globalAlpha = 0.55;
-    drawCampMarker(ctx, { id: 0, x: target.x, y: target.y, level: 1, smelter: false }, c, false);
+    drawCampMarker(
+      ctx,
+      { id: 0, x: target.x, y: target.y, level: 1, smelter: false, lantern: false },
+      c,
+      false,
+    );
     ctx.restore();
   }
 
@@ -1240,8 +1268,9 @@ export function mountCampLab(
         icon: () => blockIcon(entry.iconBlock, 'lab-chip-icon'),
       });
     }
-    // What a smelter makes (no block yields it, so it has its own icon).
-    for (const item of ['ironIngot', 'copperIngot']) {
+    // What a smelter makes, and what is made from ingots (no block yields
+    // them, so each has its own icon).
+    for (const item of ['ironIngot', 'copperIngot', FRONTIER_PICKAXE.item, FRONTIER_LANTERN.item]) {
       const count = counts.get(item) ?? 0;
       if (count > 0) all.push({ item, count, icon: () => labItemIcon(item, 'lab-chip-icon') });
     }
@@ -1396,8 +1425,18 @@ export function mountCampLab(
 
   /** A recipe's icon: a tent, with the camp level it makes for an upgrade. */
   function recipeIcon(recipe: Recipe): HTMLElement {
-    // A camp or an upgrade: a tent; something a smelter makes: a flame.
-    const icon = element('span', 'lab2-recipe-icon', recipe.makes === null ? '⛺' : '🔥');
+    // A camp or an upgrade: a tent; a pickaxe or a lantern: itself;
+    // smelting: a flame.
+    const item = recipe.makes?.item;
+    const face =
+      item === undefined
+        ? '⛺'
+        : item === FRONTIER_PICKAXE.item
+          ? '⛏️'
+          : item === FRONTIER_LANTERN.item
+            ? '🏮'
+            : '🔥';
+    const icon = element('span', 'lab2-recipe-icon', face);
     if (recipe.level > 1) {
       icon.append(element('span', 'lab2-recipe-level', String(recipe.level)));
     }
@@ -1509,14 +1548,21 @@ export function mountCampLab(
       });
       const text = element('div', 'lab2-recipe-text');
       const makes = recipe.makes;
+      // "Smelt iron → 2 iron ingots"; a pickaxe or a lantern is named once.
       const name =
-        makes === null
+        makes === null || makes.count === 1
           ? recipe.name
-          : `${recipe.name} → ${makes.count} ${itemName(makes.item).toLowerCase()}${makes.count > 1 ? 's' : ''}`;
+          : `${recipe.name} → ${makes.count} ${itemName(makes.item).toLowerCase()}s`;
       text.append(
         element('span', 'lab2-recipe-name', name),
         costRow(recipe.cost, `lab2-recipe-${recipe.id}`),
       );
+      const does = whatItDoes(makes);
+      if (does !== null) {
+        const line = element('span', 'lab2-recipe-does', does);
+        line.dataset['testid'] = `lab2-recipe-does-${recipe.id}`;
+        text.append(line);
+      }
       const buttons = element('div', 'lab2-recipe-buttons');
       if (makes !== null) {
         // Made here, for 1 tap, while a smelter stands (smelting and crafting).
@@ -1543,6 +1589,17 @@ export function mountCampLab(
     const inner = element('div', 'lab2-book-inner');
     inner.append(head, bookNote, list);
     bookCard.replaceChildren(inner);
+  }
+
+  /** What a made thing does, for the book; `null` for ingots, which only go into other recipes. */
+  function whatItDoes(makes: { item: string } | null): string | null {
+    if (makes?.item === FRONTIER_PICKAXE.item) {
+      return `Every mining tap gives ${FRONTIER_PICKAXE.yieldTimes}×, while you have one.`;
+    }
+    if (makes?.item === FRONTIER_LANTERN.item) {
+      return `Hang it at a camp from its panel: ring +${FRONTIER_LANTERN.ringBonus}.`;
+    }
+    return null;
   }
 
   /** Make `recipe` once, from the book: its inputs and 1 tap. */
@@ -1659,7 +1716,8 @@ export function mountCampLab(
     // Now: its ring and what it mines.
     const line = element('p', 'lab2-panel-line');
     line.dataset['testid'] = 'lab2-camp-line';
-    line.textContent = `Ring ${campRadius(camp.level)} · mines ${minesText(camp.level)}`;
+    // With a lantern, the ring is its level's plus the lantern's (said on the lantern's line below).
+    line.textContent = `Ring ${campRing(camp)} · mines ${minesText(camp.level)}`;
 
     // Next: what the upgrade gives, and what it costs.
     const next = element('p', 'lab2-panel-line lab2-panel-next');
@@ -1670,7 +1728,8 @@ export function mountCampLab(
       next.textContent = `Top level: the widest ring, and every block the lab has.`;
     } else {
       const up = camp.level + 1;
-      next.textContent = `Level ${up}: ring ${campRadius(up)}, adds ${addedNamesAt(up).join(', ')}`;
+      const ring = campRing({ ...camp, level: up });
+      next.textContent = `Level ${up}: ring ${ring}, adds ${addedNamesAt(up).join(', ')}`;
       actions.append(costRow(cost));
       const upgrade = button('lab2-button lab2-button-main', 'Upgrade');
       upgrade.dataset['testid'] = 'lab2-upgrade';
@@ -1697,6 +1756,28 @@ export function mountCampLab(
       build.disabled = smelterRefusal(world, camp.id) !== null;
       build.addEventListener('click', () => confirmSmelter(camp.id));
       row.append(build);
+      tray.append(row);
+    }
+
+    // The lantern (PR 3): hung here from the store, or here already.
+    if (camp.lantern) {
+      const has = element(
+        'p',
+        'lab2-panel-line',
+        `🏮 Lantern here · ring +${FRONTIER_LANTERN.ringBonus}`,
+      );
+      has.dataset['testid'] = 'lab2-camp-lantern';
+      tray.append(has);
+    } else if ((world.lab.counts.get(FRONTIER_LANTERN.item) ?? 0) > 0) {
+      const row = element('div', 'lab2-actions');
+      row.append(
+        element('span', 'lab2-panel-line', `Ring +${FRONTIER_LANTERN.ringBonus} for 1 lantern`),
+      );
+      const hang = button('lab2-button', '🏮 Hang lantern');
+      hang.dataset['testid'] = 'lab2-hang-lantern';
+      hang.disabled = lanternRefusal(world, camp.id) !== null;
+      hang.addEventListener('click', () => confirmLantern(camp.id));
+      row.append(hang);
       tray.append(row);
     }
   }
@@ -1772,8 +1853,28 @@ export function mountCampLab(
       y: before.y,
       label: '',
       higher: [],
-      fromRadius: campRadius(before.level),
-      toRadius: campRadius(before.level + 1),
+      fromRadius: campRing(before),
+      toRadius: campRing({ ...before, level: before.level + 1 }),
+    });
+  }
+
+  function confirmLantern(id: number): void {
+    const before = world.camps.find((c) => c.id === id);
+    const next = hangCampLantern(world, id);
+    if (before === undefined || next === world) {
+      return; // the button is off whenever this would happen
+    }
+    remember({ kind: 'hangLantern', id });
+    setWorld(next);
+    setHint(`A lantern at camp ${id}: its ring is ${FRONTIER_LANTERN.ringBonus} wider.`, false);
+    addEffect({
+      kind: 'ring',
+      x: before.x,
+      y: before.y,
+      label: '',
+      higher: [],
+      fromRadius: campRing(before),
+      toRadius: campRing({ ...before, lantern: true }),
     });
   }
 

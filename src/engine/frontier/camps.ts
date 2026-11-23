@@ -18,7 +18,12 @@
 
 import { BLOCKS } from '../../data';
 import type { BlockId, ItemStack } from '../../data';
-import { FRONTIER_CAMP_LEVELS, FRONTIER_NEW_CAMP_COST, FRONTIER_SHIFT } from '../../data/frontier';
+import {
+  FRONTIER_CAMP_LEVELS,
+  FRONTIER_LANTERN,
+  FRONTIER_NEW_CAMP_COST,
+  FRONTIER_SHIFT,
+} from '../../data/frontier';
 import { depthAt } from '../heightmap';
 import type { GameState } from '../state';
 import { APPLE_TREE, NO_FEATURE, TREE } from './state';
@@ -58,9 +63,17 @@ function levelData(level: number): (typeof FRONTIER_CAMP_LEVELS)[number] {
   return data;
 }
 
-/** How far a camp of `level` sees, in squares. */
+/** How far a camp of `level` sees, in squares, without a lantern. */
 export function campRadius(level: number): number {
   return levelData(level).radius;
+}
+
+/**
+ * How far this camp sees, in squares: its level's radius, plus
+ * FRONTIER_LANTERN.ringBonus if a lantern is hung there (owner, question 163).
+ */
+export function campRing(camp: FrontierCamp): number {
+  return campRadius(camp.level) + (camp.lantern ? FRONTIER_LANTERN.ringBonus : 0);
 }
 
 /** The block kinds a camp of `level` can mine: its own level's list and every level's below it. */
@@ -117,7 +130,7 @@ export function inCircle(cx: number, cy: number, radius: number, x: number, y: n
 export function coverLevels(camps: FrontierCamp[], width: number, height: number): number[] {
   const levels = new Array<number>(width * height).fill(0);
   for (const camp of camps) {
-    const r = campRadius(camp.level);
+    const r = campRing(camp);
     for (let y = Math.max(0, camp.y - r); y <= Math.min(height - 1, camp.y + r); y += 1) {
       for (let x = Math.max(0, camp.x - r); x <= Math.min(width - 1, camp.x + r); x += 1) {
         const i = x + width * y;
@@ -134,7 +147,7 @@ export function coverLevels(camps: FrontierCamp[], width: number, height: number
 export function coverLevelAt(camps: FrontierCamp[], x: number, y: number): number {
   let best = 0;
   for (const camp of camps) {
-    if (camp.level > best && inCircle(camp.x, camp.y, campRadius(camp.level), x, y)) {
+    if (camp.level > best && inCircle(camp.x, camp.y, campRing(camp), x, y)) {
       best = camp.level;
     }
   }
@@ -274,7 +287,11 @@ export function newlyCovered(ground: CampGround, x: number, y: number): number[]
   const width = ground.cube.size.x;
   const height = ground.cube.size.y;
   const now = coverLevels(ground.camps, width, height);
-  const after = coverLevels([{ id: 0, x, y, level: 1, smelter: false }], width, height);
+  const after = coverLevels(
+    [{ id: 0, x, y, level: 1, smelter: false, lantern: false }],
+    width,
+    height,
+  );
   const fresh: number[] = [];
   for (let i = 0; i < after.length; i += 1) {
     if ((after[i] ?? 0) > 0 && (now[i] ?? 0) === 0) {
@@ -311,7 +328,10 @@ export function placeCamp(ground: CampGround, x: number, y: number): CampChange 
   if (placeRefusal(ground, x, y) !== null) {
     return unchanged(ground);
   }
-  const camps = [...ground.camps, { id: ground.nextCampId, x, y, level: 1, smelter: false }];
+  const camps = [
+    ...ground.camps,
+    { id: ground.nextCampId, x, y, level: 1, smelter: false, lantern: false },
+  ];
   return {
     camps,
     seen: seenWith(ground.seen, camps, ground.cube.size.x, ground.cube.size.y),
@@ -364,7 +384,7 @@ export function demolishRefusal(ground: CampGround, id: number): 'missing' | 'no
   }
   const others = ground.camps.filter((c) => c.id !== id);
   const covered = footprintOf(camp.x, camp.y).every((s) =>
-    others.some((o) => inCircle(o.x, o.y, campRadius(o.level), s.x, s.y)),
+    others.some((o) => inCircle(o.x, o.y, campRing(o), s.x, s.y)),
   );
   return covered ? null : 'notCovered';
 }
