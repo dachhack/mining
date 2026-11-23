@@ -3,7 +3,7 @@
 // contract is done.
 import { describe, expect, it } from 'vitest';
 import { FRONTIER_CAMP_PLACE, FRONTIER_DEEP_CAMP } from '../../src/data/frontier';
-import { campRing, frontierAct, frontierTap, isMarketDay, placeRefusal } from '../../src/engine';
+import { campRing, coverLevelAt, frontierAct, isMarketDay, placeRefusal } from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
 import { MID, NEXT, world } from './frontierHelpers';
 
@@ -21,7 +21,13 @@ function dug(depth: number, inventory: Record<string, number>): FrontierState {
 const KIT = { campKit: 1, wood: 20, stone: 20 };
 
 describe('the deep camp (plan section 2.4)', () => {
-  it('is placed at any depth for its kit, wood and stone, where a camp is refused', () => {
+  it('is placed on deep ground for its kit, wood and stone, where a camp is refused, and not shallower', () => {
+    expect(FRONTIER_DEEP_CAMP.minDepth).toBe(FRONTIER_CAMP_PLACE.maxDepth + 1);
+    for (let depth = 0; depth < FRONTIER_DEEP_CAMP.minDepth; depth += 1) {
+      expect(placeRefusal(dug(depth, KIT), MID + NEXT, MID, true), `depth ${depth}`).toBe(
+        'tooShallow',
+      );
+    }
     expect(FRONTIER_DEEP_CAMP.cost).toEqual([
       { item: 'campKit', count: 1 },
       { item: 'wood', count: 20 },
@@ -47,12 +53,13 @@ describe('the deep camp (plan section 2.4)', () => {
   });
 
   it('mines what a level-3 camp mines, and is never upgraded', () => {
-    const w = dug(1, { ...KIT, wood: 999, stone: 999, clay: 99, animal: 9, apple: 99, hay: 99 });
+    const rich = { ...KIT, wood: 999, stone: 999, clay: 99, animal: 9, apple: 99, hay: 99 };
+    const w = dug(FRONTIER_DEEP_CAMP.minDepth, rich);
     const placed = frontierAct(w, { kind: 'placeDeep', x: MID + NEXT, y: MID }).state;
     expect(frontierAct(placed, { kind: 'upgrade', id: 2 }).refusal).toBe('upgrade');
-    // Stone under the dug ground beside it: the first camp (level 1) alone cannot mine it.
-    expect(frontierTap(w, MID + NEXT - 2, MID).kind).toBe('tooHard');
-    expect(frontierTap(placed, MID + NEXT - 2, MID).kind).toBe('mined');
+    // Beside it, the ground is covered at level 3 now, not only the first camp's level 1.
+    expect(coverLevelAt(w.camps, MID + NEXT - 2, MID)).toBe(1);
+    expect(coverLevelAt(placed.camps, MID + NEXT - 2, MID)).toBe(FRONTIER_DEEP_CAMP.level);
   });
 });
 

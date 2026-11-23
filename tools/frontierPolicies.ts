@@ -54,7 +54,7 @@ import type { FrontierState } from '../src/engine';
 import { nextFloat } from '../src/engine/rng';
 import type { RngState } from '../src/engine/rng';
 import { NO_FEATURE } from '../src/engine/frontier/state';
-import { gathererStep, restStep } from './frontierRun';
+import { gathererStep, isBareAppleTree, restStep } from './frontierRun';
 import type { FrontierStep } from './frontierRun';
 
 export const FRONTIER_POLICY_NAMES = ['random', 'gatherer', 'careful', 'digger', 'idle'] as const;
@@ -213,6 +213,7 @@ function carefulStep(state: FrontierState): FrontierStep | null {
         (Math.abs(b.x - near.x) + Math.abs(b.y - near.y)),
     );
     const wanted = taps.find((s) => {
+      if (isBareAppleTree(state, s.x, s.y)) return false; // left for its apples
       const item = previewTap(state, s.x, s.y).gain[0]?.item;
       return short === 'wood' ? item === 'wood' : isFood(item);
     });
@@ -251,6 +252,7 @@ function diggerStep(state: FrontierState): FrontierStep | null {
   );
   if (woodShort || foodShort) {
     const wanted = taps.find((s) => {
+      if (isBareAppleTree(state, s.x, s.y)) return false; // left for its apples
       const item = previewTap(state, s.x, s.y).gain[0]?.item;
       return woodShort ? item === 'wood' : isFood(item);
     });

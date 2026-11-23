@@ -167,8 +167,7 @@ function refusalText(refusal: string | null): string {
     demolish: 'That camp cannot be demolished: other camps must cover its 3 x 3 first.',
     notYet:
       'The market does not sell that yet: tools from a level-3 camp, a camp kit, wood and apples after a tier-1 contract.',
-    placeDeep:
-      'A deep camp cannot go there now (see "look"): it needs the kit, wood and stone, and lit, level ground.',
+    placeDeep: `A deep camp cannot go there now (see "look"): it needs the kit, wood and stone, and lit, level ground at depth ${FRONTIER_DEEP_CAMP.minDepth} or more.`,
     holding: 'You hold a contract already: deliver it or "drop" it first.',
     none: 'You hold no contract.',
     hasPen: 'That camp has a pen already.',

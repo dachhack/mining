@@ -189,6 +189,9 @@ export function checkStep(
       say(`deep camp ${camp.id} is at level ${camp.level}`);
     if (camp.deep && !oldIds.has(camp.id) && verb !== 'placeDeep')
       say(`a deep camp placed by "${verb}"`);
+    const depth = depthAt(after.cube, camp.x, camp.y);
+    if (camp.deep && !oldIds.has(camp.id) && depth < FRONTIER_DEEP_CAMP.minDepth)
+      say(`deep camp ${camp.id} was placed at depth ${depth}`);
     if (camp.deep) continue;
     if (!oldIds.has(camp.id) && depthAt(after.cube, camp.x, camp.y) > FRONTIER_CAMP_PLACE.maxDepth)
       say(`camp ${camp.id} was placed at depth ${depthAt(after.cube, camp.x, camp.y)}`);

@@ -208,6 +208,8 @@ function placeRefusalText(refusal: PlaceRefusal): string {
   if (refusal === 'notShown') return 'The 3 × 3 must be lit, inside a camp’s ring.';
   if (refusal === 'occupied') return 'It overlaps another camp.';
   if (refusal === 'notLevel') return NOT_LEVEL_TEXT;
+  if (refusal === 'tooShallow')
+    return `A deep camp stands only at depth ${FRONTIER_DEEP_CAMP.minDepth} or more: dig the patch deeper first.`;
   if (refusal === 'tooDeep')
     return `Camps stand only in the top ${FRONTIER_CAMP_PLACE.maxDepth + 1} levels: this ground is dug too deep.`;
   return 'Not enough to build it yet: mine more first.';
@@ -2041,7 +2043,7 @@ export function mountCampLab(
     const missing = missingText(placeCost);
     if (target === null) {
       body.textContent = placingDeep
-        ? `Any depth: level ground. Ring ${FRONTIER_DEEP_CAMP.radius}; mines as level ${FRONTIER_DEEP_CAMP.level}.`
+        ? `Level ground at depth ${FRONTIER_DEEP_CAMP.minDepth}+. Ring ${FRONTIER_DEEP_CAMP.radius}; mines as level ${FRONTIER_DEEP_CAMP.level}.`
         : PLACE_HINT;
     } else if (refusal !== null && refusal !== 'cost') {
       body.textContent = placeRefusalText(refusal);

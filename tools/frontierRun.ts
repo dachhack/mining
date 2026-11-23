@@ -38,7 +38,7 @@ import {
   upgradeRefusal,
 } from '../src/engine';
 import type { FrontierAction, FrontierState } from '../src/engine';
-import { NO_FEATURE } from '../src/engine/frontier/state';
+import { APPLE_TREE, NO_FEATURE } from '../src/engine/frontier/state';
 
 /**
  * One step of the new game, as a short text: "tap X,Y", "place X,Y",
@@ -145,6 +145,17 @@ export function replayFrontier(seed: number, steps: FrontierStep[]): FrontierSta
     state = applyFrontierStep(state, step);
   }
   return state;
+}
+
+/**
+ * True if (x, y) holds an apple tree with no apples left: a tap would fell
+ * it for wood. The steady policies leave such a tree standing and pick its
+ * apples when they come back (owner, after decision note 0062: "don't chop
+ * down the trees and pick apples when they regrow").
+ */
+export function isBareAppleTree(state: FrontierState, x: number, y: number): boolean {
+  const i = x + state.cube.size.x * y;
+  return state.features[i] === APPLE_TREE && (state.apples[i] ?? 0) === 0;
 }
 
 /** The gatherer rests at the end of a shift when the crew's health is this or lower. */
@@ -378,7 +389,8 @@ export function plantStep(state: FrontierState): FrontierStep | null {
  *    ground, if it can pay;
  * 4. catch the lit animal nearest the newest camp;
  * 5. while the next goal (a new camp, or else the lowest camp's upgrade) is
- *    short of wood, grass or apples, take the lit plant nearest the newest camp;
+ *    short of wood, grass or apples, take the lit plant nearest the newest
+ *    camp, but never fell an apple tree picked bare (`isBareAppleTree`);
  * 6. mine the block nearest the newest camp that it can mine;
  * 7. failing that, take the nearest plant.
  * Ties go to the square met first, row by row. `null` when nothing is left to do.
@@ -434,9 +446,11 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
   const animal = squares.find((s) => state.animals.some((a) => a.x === s.x && a.y === s.y));
   if (animal !== undefined) return `tap ${animal.x},${animal.y}`;
   // A plant the tap would take: not on a camp's ground (`frontierTap` checks the rest).
+  // An apple tree picked bare is left standing, for its apples to come back.
   const plant = squares.find(
     (s) =>
       state.features[s.x + width * s.y] !== NO_FEATURE &&
+      !isBareAppleTree(state, s.x, s.y) &&
       !state.camps.some((c) => Math.abs(c.x - s.x) <= 1 && Math.abs(c.y - s.y) <= 1),
   );
   // Plants give wood, grass and apples: take them while the next goal (a new

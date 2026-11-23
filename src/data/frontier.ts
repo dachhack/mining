@@ -117,8 +117,10 @@ export const FRONTIER_CAMP_PLACE = {
 /**
  * The deep camp (progression plan section 2.4; owner: "New camp type can be
  * placed down in deeper areas so now the entire depth is unlocked"; its kit
- * only the market sells). It is placed on level, lit ground at any depth,
- * for `cost` and 1 tap. Its ring is `radius`; it mines what a camp of
+ * only the market sells). It is placed on level, lit ground at a depth of
+ * `minDepth` or more, deeper than any other camp may stand (owner, after
+ * decision note 0062: "min depth required on the deep camp"; question
+ * 178), for `cost` and 1 tap. Its ring is `radius`; it mines what a camp of
  * `level` mines, and counts as that level for the market; it is never
  * upgraded (question 168). It can be demolished, and have a smelter, a pen
  * and a lantern, as any camp.
@@ -131,6 +133,7 @@ export const FRONTIER_DEEP_CAMP = {
   ] as ItemStack[],
   radius: 12,
   level: 3,
+  minDepth: 3,
 };
 
 /**

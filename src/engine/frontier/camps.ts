@@ -307,13 +307,15 @@ export function pay(inventory: Map<string, number>, cost: ItemStack[]): Map<stri
  * - 'notLevel': the nine squares are not all at the same depth;
  * - 'tooDeep': they are deeper than FRONTIER_CAMP_PLACE.maxDepth (owner:
  *   camps only in the top three levels);
+ * - 'tooShallow': a deep camp, on ground shallower than
+ *   FRONTIER_DEEP_CAMP.minDepth (question 178);
  * - 'cost': the inventory does not cover the cost.
  */
-export type PlaceRefusal = 'notShown' | 'occupied' | 'notLevel' | 'tooDeep' | 'cost';
+export type PlaceRefusal = 'notShown' | 'occupied' | 'notLevel' | 'tooDeep' | 'tooShallow' | 'cost';
 
 /**
  * Why a new camp cannot be centred on (x, y), or `null` if it can. With
- * `deep`, a deep camp (FRONTIER_DEEP_CAMP): any depth, and its own cost.
+ * `deep`, a deep camp (FRONTIER_DEEP_CAMP): deep ground only, and its own cost.
  */
 export function placeRefusal(
   ground: CampGround,
@@ -338,6 +340,9 @@ export function placeRefusal(
   }
   if (!deep && depthAt(ground.cube, x, y) > FRONTIER_CAMP_PLACE.maxDepth) {
     return 'tooDeep';
+  }
+  if (deep && depthAt(ground.cube, x, y) < FRONTIER_DEEP_CAMP.minDepth) {
+    return 'tooShallow';
   }
   if (!canAfford(ground.inventory, deep ? FRONTIER_DEEP_CAMP.cost : FRONTIER_NEW_CAMP_COST)) {
     return 'cost';
