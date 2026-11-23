@@ -208,6 +208,9 @@ export function craftStep(state: FrontierState): FrontierStep | null {
 /** The gatherer keeps this much grass back and sells the rest on a market day. */
 const GATHERER_GRASS_KEPT = 60;
 
+/** On a market day that sells wood, the gatherer buys it up to this much. */
+const GATHERER_WOOD_STOCK = 40;
+
 /** The gatherer keeps this much stone back and sells the rest on a market day. */
 const GATHERER_STONE_KEPT = 100;
 
@@ -220,7 +223,8 @@ const GATHERER_SELLS_ALL = ['crystal', 'rareOre', 'relic'];
 
 /**
  * On a market day (docs/plans/progression-phases.md, section 3): buy an
- * iron drill, then a steel drill, when it can (one each); sell every whole
+ * iron drill, then a steel drill, when it can (one each); buy wood up to
+ * GATHERER_WOOD_STOCK once the market sells it; buy a camp kit; sell every whole
  * lot of the items with no use yet (until tier-3 contracts ask for them), then grass above GATHERER_GRASS_KEPT and
  * stone above GATHERER_STONE_KEPT. `null` if there is nothing to trade, or
  * it is not a market day.
@@ -230,6 +234,16 @@ export function marketStep(state: FrontierState): FrontierStep | null {
   for (const tool of [FRONTIER_DRILL.item, FRONTIER_STEEL_DRILL.item]) {
     const held = (state.inventory.get(tool) ?? 0) > 0;
     if (!held && tradeRefusal(state, 'buy', tool, 1) === null) return `buy ${tool} 1`;
+  }
+  // Wood for upkeep once the market sells it (phase 4): up to
+  // GATHERER_WOOD_STOCK, as the coins allow. Leaving apple trees standing
+  // (isBareAppleTree) means less wood from felling late in a run.
+  const wood = state.inventory.get('wood') ?? 0;
+  const woodLot = FRONTIER_MARKET.buyPrices.find((l) => l.item === 'wood');
+  if (woodLot !== undefined && wood < GATHERER_WOOD_STOCK) {
+    const wanted = Math.ceil((GATHERER_WOOD_STOCK - wood) / woodLot.count);
+    const lots = Math.min(wanted, mostLots(state, 'buy', 'wood'));
+    if (lots > 0 && tradeRefusal(state, 'buy', 'wood', lots) === null) return `buy wood ${lots}`;
   }
   // A camp kit for one deep camp (progression PR 6), keeping 100 coins back.
   const kit = (state.inventory.get('campKit') ?? 0) > 0;
