@@ -4,7 +4,7 @@
   "engineVersion": "0.9.0",
   "seed": 16,
   "stepCount": 2004,
-  "expectedHash": "e65d9b054eb53c7e",
+  "expectedHash": "f4460e8c6cde9ce8",
   "steps": [
     "tap 11,9",
     "tap 8,17",

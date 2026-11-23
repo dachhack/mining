@@ -17,7 +17,7 @@ import type { RngState } from '../rng';
  * not loaded into a new shape. Separate from the old game's STATE_VERSION
  * while the two rule sets live side by side.
  */
-export const FRONTIER_STATE_VERSION = 10; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`
+export const FRONTIER_STATE_VERSION = 11; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`
 
 /** What grows on a square: nothing, grass, a tree or an apple tree. */
 export const NO_FEATURE = 0;
@@ -50,6 +50,8 @@ export interface FrontierCamp {
   pen: boolean;
   /** Animals in the pen. */
   penned: number;
+  /** True for a deep camp (FRONTIER_DEEP_CAMP): placed at any depth, its own ring, never upgraded. */
+  deep: boolean;
   /**
    * Shifts until the pen's next animal is born, while it may breed (at least
    * 2 animals and room for one more); 0 while it may not, or waits for hay.

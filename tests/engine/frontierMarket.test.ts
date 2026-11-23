@@ -85,6 +85,7 @@ describe('when the market opens (owner: every 10, 5 or 3 shifts by the best camp
       pen: false,
       penned: 0,
       breedIn: 0,
+      deep: false,
     };
     const two = { ...w, camps: [...w.camps, second] };
     expect(isMarketDay(w)).toBe(false);
@@ -136,7 +137,7 @@ describe('selling and buying (plan section 3)', () => {
     const cases: [FrontierState, 'sell' | 'buy', string, number, string][] = [
       [at(9, 1, rich), 'sell', 'wood', 1, 'closed'],
       [at(10, 1, rich), 'sell', 'campKit', 1, 'unknown'],
-      [at(10, 1, rich), 'buy', 'wood', 1, 'unknown'],
+      [at(10, 1, rich), 'buy', 'stone', 1, 'unknown'],
       [at(10, 1, rich), 'sell', 'wood', 0, 'lots'],
       [at(10, 1, rich), 'sell', 'wood', 1.5, 'lots'],
       [at(10, 1, { wood: wood.count - 1 }), 'sell', 'wood', 1, 'cost'],

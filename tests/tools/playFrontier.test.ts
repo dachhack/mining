@@ -148,7 +148,7 @@ describe('the market and the run’s end in the play interface (progression PR 1
     expect(stepOf('sell wood 3', [])).toBe('sell wood 3');
     expect(stepOf('Sell RawIronOre 2', [])).toBe('sell rawIronOre 2');
     expect(stepOf('buy animal 1', [])).toBe('buy animal 1');
-    expect(stepOf('buy wood 1', [])).toBeNull(); // the market does not sell wood
+    expect(stepOf('buy stone 1', [])).toBeNull(); // the market does not sell stone
   });
 
   it('shows the market’s prices on a market day, and when it opens next otherwise', () => {

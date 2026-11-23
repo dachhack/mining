@@ -16,6 +16,7 @@ import { dirname } from 'node:path';
 import { BLOCKS, ITEMS, blockDefByCode } from '../../src/data';
 import type { BlockId, ItemId, ItemStack } from '../../src/data';
 import {
+  FRONTIER_DEEP_CAMP,
   FRONTIER_DRILL,
   FRONTIER_MARKET,
   FRONTIER_NEW_CAMP_COST,
@@ -164,7 +165,10 @@ function refusalText(refusal: string | null): string {
     place: 'A camp cannot go there now (see "look").',
     upgrade: 'That camp cannot be upgraded now.',
     demolish: 'That camp cannot be demolished: other camps must cover its 3 x 3 first.',
-    notYet: 'The market sells that only once your best camp is level 3.',
+    notYet:
+      'The market does not sell that yet: tools from a level-3 camp, a camp kit, wood and apples after a tier-1 contract.',
+    placeDeep:
+      'A deep camp cannot go there now (see "look"): it needs the kit, wood and stone, and lit, level ground.',
     holding: 'You hold a contract already: deliver it or "drop" it first.',
     none: 'You hold no contract.',
     hasPen: 'That camp has a pen already.',
@@ -337,7 +341,7 @@ function undo(session: FrontierSession): StepResult {
  * The step a typed choice stands for, or `null` if it is not one. Accepts
  * "tap 3,4" (or "t 3 4"), "place 3,4", "upgrade 2", "demolish 1", "end",
  * "rest 1" (or "rest" with one camp), "sell wood 3", "buy animal 1",
- * "plant 3,4 sapling", "take t1-coal", "deliver", "drop",
+ * "plant 3,4 sapling", "take t1-coal", "deliver", "drop", "deep 3,4",
  * "close", "undo", or the number of a listed choice.
  */
 export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | null {
@@ -345,9 +349,10 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
   if (/^\d+$/.test(text)) {
     return listed[Number(text) - 1] ?? null;
   }
-  const square = /^(tap|t|place|p) (\d+)[ ,]+(\d+)$/.exec(text);
+  const square = /^(tap|t|place|p|deep) (\d+)[ ,]+(\d+)$/.exec(text);
   if (square !== null) {
-    const verb = square[1] === 't' ? 'tap' : square[1] === 'p' ? 'place' : (square[1] ?? '');
+    const verbs: Record<string, string> = { t: 'tap', p: 'place', deep: 'placeDeep' };
+    const verb = verbs[square[1] ?? ''] ?? square[1] ?? '';
     return `${verb} ${square[2] ?? ''},${square[3] ?? ''}`;
   }
   const camp = /^(upgrade|demolish|rest) (\d+)$/.exec(text);
@@ -445,6 +450,19 @@ export function listedSteps(session: FrontierSession): FrontierStep[] {
     }
     if (deliverRefusal(state) === null) steps.push('deliver');
     if (state.contract !== null) steps.push('dropContract');
+    if (canAfford(state.inventory, FRONTIER_DEEP_CAMP.cost)) {
+      // The deepest places for a deep camp, deepest first (ties row by row).
+      const deeps: { step: FrontierStep; depth: number }[] = [];
+      for (let y = 1; y < height - 1; y += 1) {
+        for (let x = 1; x < width - 1; x += 1) {
+          if (placeRefusal(state, x, y, true) === null) {
+            deeps.push({ step: `placeDeep ${x},${y}`, depth: depthAt(state.cube, x, y) });
+          }
+        }
+      }
+      deeps.sort((a, b) => b.depth - a.depth);
+      steps.push(...deeps.slice(0, LISTED_PLACES).map((p) => p.step));
+    }
     if (canAfford(state.inventory, FRONTIER_NEW_CAMP_COST)) {
       // The places that light the most new ground, best first (ties row by row).
       const places: { step: FrontierStep; fresh: number }[] = [];
@@ -588,7 +606,7 @@ export function frontierView(session: FrontierSession): string {
       ? `; a pen of ${camp.penned}/${FRONTIER_PEN.capacity}${camp.breedIn > 0 ? `, an animal born in ${camp.breedIn} shift(s) for ${FRONTIER_PEN.hayPerBirth} hay` : ''}`
       : '';
     lines.push(
-      `Camp ${camp.id} at ${camp.x},${camp.y}: level ${camp.level}, ring ${campRing(camp)}; ${up}${smelter}${lantern}${pen}.`,
+      `${camp.deep ? 'Deep camp' : 'Camp'} ${camp.id} at ${camp.x},${camp.y}: level ${camp.level}, ring ${campRing(camp)}; ${camp.deep ? 'never upgraded' : up}${smelter}${lantern}${pen}.`,
     );
   }
   lines.push('', ...mapLines(state), '');

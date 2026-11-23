@@ -310,7 +310,18 @@ export function campWorldFromLab(
   surface: Surface = bareSurface(lab.state),
 ): CampWorld {
   const camps: Camp[] = [
-    { id: 1, x, y, level: 1, smelter: false, lantern: false, pen: false, penned: 0, breedIn: 0 },
+    {
+      id: 1,
+      x,
+      y,
+      level: 1,
+      smelter: false,
+      lantern: false,
+      pen: false,
+      penned: 0,
+      breedIn: 0,
+      deep: false,
+    },
   ];
   const { width, height } = lab.depths;
   const seen = seenWith(new Array<boolean>(width * height).fill(false), camps, width, height);
@@ -450,16 +461,21 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
 // ----- New camps, upgrades and demolishing (the engine's rules) -----
 
 /** Why a new camp cannot be centred on (x, y) now, or `null` if it can. */
-export function placeRefusal(world: CampWorld, x: number, y: number): PlaceRefusal | null {
-  return turnRefusal(world) ?? enginePlaceRefusal(ground(world), x, y);
+export function placeRefusal(
+  world: CampWorld,
+  x: number,
+  y: number,
+  deep = false,
+): PlaceRefusal | null {
+  return turnRefusal(world) ?? enginePlaceRefusal(ground(world), x, y, deep);
 }
 
 /**
  * The squares a new level-1 camp on (x, y) would bring out of fog or out of
  * grey: the part of its circle that no camp covers now. Row by row, as indexes.
  */
-export function newlyCovered(world: CampWorld, x: number, y: number): number[] {
-  return engineNewlyCovered(ground(world), x, y);
+export function newlyCovered(world: CampWorld, x: number, y: number, deep = false): number[] {
+  return engineNewlyCovered(ground(world), x, y, deep);
 }
 
 /**
@@ -467,8 +483,8 @@ export function newlyCovered(world: CampWorld, x: number, y: number): number[] {
  * grew on its 3 x 3 is cleared and gives nothing. If `placeRefusal` says
  * no, the very same world comes back.
  */
-export function placeCamp(world: CampWorld, x: number, y: number): CampWorld {
-  return act(world, { kind: 'place', x, y }).world;
+export function placeCamp(world: CampWorld, x: number, y: number, deep = false): CampWorld {
+  return act(world, { kind: deep ? 'placeDeep' : 'place', x, y }).world;
 }
 
 /** Why camp `id` cannot be upgraded now, or `null` if it can. */
@@ -678,6 +694,8 @@ export const PREPARED_LAB2_KEY = 'mining-game.lab2.prepared';
 export type CampStep =
   | { kind: 'tap'; x: number; y: number }
   | { kind: 'place'; x: number; y: number }
+  // A deep camp (progression PR 6).
+  | { kind: 'placeDeep'; x: number; y: number }
   | { kind: 'upgrade'; id: number }
   | { kind: 'demolish'; id: number }
   // Build a smelter at a camp; make a recipe (smelting and crafting, PR 1).
@@ -708,8 +726,8 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   if (step.kind === 'tap') {
     return campTap(world, step.x, step.y).world;
   }
-  if (step.kind === 'place') {
-    return placeCamp(world, step.x, step.y);
+  if (step.kind === 'place' || step.kind === 'placeDeep') {
+    return placeCamp(world, step.x, step.y, step.kind === 'placeDeep');
   }
   if (step.kind === 'upgrade') {
     return upgradeCamp(world, step.id);

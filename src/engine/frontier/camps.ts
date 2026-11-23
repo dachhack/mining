@@ -24,6 +24,7 @@ import type { BlockId, ItemId, ItemStack } from '../../data';
 import {
   FRONTIER_CAMP_LEVELS,
   FRONTIER_CAMP_PLACE,
+  FRONTIER_DEEP_CAMP,
   FRONTIER_LANTERN,
   FRONTIER_NEW_CAMP_COST,
   FRONTIER_SHIFT,
@@ -78,7 +79,9 @@ export function campRadius(level: number): number {
  * FRONTIER_LANTERN.ringBonus if a lantern is hung there (owner, question 163).
  */
 export function campRing(camp: FrontierCamp): number {
-  return campRadius(camp.level) + (camp.lantern ? FRONTIER_LANTERN.ringBonus : 0);
+  // A deep camp's ring is its own (FRONTIER_DEEP_CAMP), not its level's.
+  const ring = camp.deep ? FRONTIER_DEEP_CAMP.radius : campRadius(camp.level);
+  return ring + (camp.lantern ? FRONTIER_LANTERN.ringBonus : 0);
 }
 
 /** The block kinds a camp of `level` can mine: its own level's list and every level's below it. */
@@ -308,8 +311,16 @@ export function pay(inventory: Map<string, number>, cost: ItemStack[]): Map<stri
  */
 export type PlaceRefusal = 'notShown' | 'occupied' | 'notLevel' | 'tooDeep' | 'cost';
 
-/** Why a new camp cannot be centred on (x, y), or `null` if it can. */
-export function placeRefusal(ground: CampGround, x: number, y: number): PlaceRefusal | null {
+/**
+ * Why a new camp cannot be centred on (x, y), or `null` if it can. With
+ * `deep`, a deep camp (FRONTIER_DEEP_CAMP): any depth, and its own cost.
+ */
+export function placeRefusal(
+  ground: CampGround,
+  x: number,
+  y: number,
+  deep = false,
+): PlaceRefusal | null {
   const width = ground.cube.size.x;
   const height = ground.cube.size.y;
   const footprint = footprintOf(x, y);
@@ -325,10 +336,10 @@ export function placeRefusal(ground: CampGround, x: number, y: number): PlaceRef
   if (!isLevelPatch(ground.cube, x, y)) {
     return 'notLevel';
   }
-  if (depthAt(ground.cube, x, y) > FRONTIER_CAMP_PLACE.maxDepth) {
+  if (!deep && depthAt(ground.cube, x, y) > FRONTIER_CAMP_PLACE.maxDepth) {
     return 'tooDeep';
   }
-  if (!canAfford(ground.inventory, FRONTIER_NEW_CAMP_COST)) {
+  if (!canAfford(ground.inventory, deep ? FRONTIER_DEEP_CAMP.cost : FRONTIER_NEW_CAMP_COST)) {
     return 'cost';
   }
   return null;
@@ -336,14 +347,28 @@ export function placeRefusal(ground: CampGround, x: number, y: number): PlaceRef
 
 /**
  * The squares a new level-1 camp on (x, y) would bring out of fog or out of
- * grey: the part of its circle that no camp covers now. Row by row, as indexes.
+ * grey: the part of its circle that no camp covers now. Row by row, as
+ * indexes. With `deep`, a deep camp's circle instead.
  */
-export function newlyCovered(ground: CampGround, x: number, y: number): number[] {
+export function newlyCovered(ground: CampGround, x: number, y: number, deep = false): number[] {
   const width = ground.cube.size.x;
   const height = ground.cube.size.y;
   const now = coverLevels(ground.camps, width, height);
   const after = coverLevels(
-    [{ id: 0, x, y, level: 1, smelter: false, lantern: false, pen: false, penned: 0, breedIn: 0 }],
+    [
+      {
+        id: 0,
+        x,
+        y,
+        level: deep ? FRONTIER_DEEP_CAMP.level : 1,
+        smelter: false,
+        lantern: false,
+        pen: false,
+        penned: 0,
+        breedIn: 0,
+        deep,
+      },
+    ],
     width,
     height,
   );
@@ -379,8 +404,8 @@ function unchanged(ground: CampGround): CampChange {
  * says no, the same fields come back. (What grows on its 3 x 3 is cleared
  * by `placeFrontierCamp`, which knows the surface.)
  */
-export function placeCamp(ground: CampGround, x: number, y: number): CampChange {
-  if (placeRefusal(ground, x, y) !== null) {
+export function placeCamp(ground: CampGround, x: number, y: number, deep = false): CampChange {
+  if (placeRefusal(ground, x, y, deep) !== null) {
     return unchanged(ground);
   }
   const camps = [
@@ -389,19 +414,21 @@ export function placeCamp(ground: CampGround, x: number, y: number): CampChange 
       id: ground.nextCampId,
       x,
       y,
-      level: 1,
+      // A deep camp mines as FRONTIER_DEEP_CAMP.level, and is never upgraded.
+      level: deep ? FRONTIER_DEEP_CAMP.level : 1,
       smelter: false,
       lantern: false,
       pen: false,
       penned: 0,
       breedIn: 0,
+      deep,
     },
   ];
   return {
     camps,
     seen: seenWith(ground.seen, camps, ground.cube.size.x, ground.cube.size.y),
     nextCampId: ground.nextCampId + 1,
-    inventory: pay(ground.inventory, FRONTIER_NEW_CAMP_COST),
+    inventory: pay(ground.inventory, deep ? FRONTIER_DEEP_CAMP.cost : FRONTIER_NEW_CAMP_COST),
   };
 }
 
@@ -414,8 +441,8 @@ export function upgradeRefusal(ground: CampGround, id: number): 'missing' | 'top
     return 'missing';
   }
   const cost = upgradeCostFrom(camp.level);
-  if (cost === null) {
-    return 'top';
+  if (cost === null || camp.deep) {
+    return 'top'; // a deep camp is never upgraded
   }
   return canAfford(ground.inventory, cost) ? null : 'cost';
 }
@@ -475,8 +502,13 @@ export function demolishCamp(ground: CampGround, id: number): CampChange {
  * back as long as you don't mine the ground directly under them"). A refused place returns the
  * very same state.
  */
-export function placeFrontierCamp(state: FrontierState, x: number, y: number): FrontierState {
-  const change = placeCamp(state, x, y);
+export function placeFrontierCamp(
+  state: FrontierState,
+  x: number,
+  y: number,
+  deep = false,
+): FrontierState {
+  const change = placeCamp(state, x, y, deep);
   if (change.camps === state.camps) {
     return state; // refused
   }

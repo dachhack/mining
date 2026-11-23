@@ -64,6 +64,8 @@ import type { Feature, FrontierAnimal, FrontierState } from './state';
 export type FrontierAction =
   | { kind: 'tap'; x: number; y: number }
   | { kind: 'place'; x: number; y: number }
+  // Place a deep camp (FRONTIER_DEEP_CAMP) at any depth (progression PR 6).
+  | { kind: 'placeDeep'; x: number; y: number }
   | { kind: 'upgrade'; id: number }
   | { kind: 'demolish'; id: number }
   | { kind: 'endShift' }
@@ -478,8 +480,8 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
     return spent(tap.state, tap);
   }
   const next =
-    action.kind === 'place'
-      ? placeFrontierCamp(state, action.x, action.y)
+    action.kind === 'place' || action.kind === 'placeDeep'
+      ? placeFrontierCamp(state, action.x, action.y, action.kind === 'placeDeep')
       : action.kind === 'upgrade'
         ? upgradeFrontierCamp(state, action.id)
         : demolishFrontierCamp(state, action.id);

@@ -192,6 +192,7 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 
   What each level mines is the owner's (progression plan section 2.2); the costs, rings and level 4 are [Default]. The level-2 upgrade costs no stone, since a base camp cannot mine it. Level 4's ingots need a smelter somewhere first.
 
+- **The deep camp** (progression plan section 2.4; owner: "New camp type can be placed down in deeper areas so now the entire depth is unlocked") is placed on level, lit ground at **any depth**, for [Default] a camp kit, 20 wood and 20 stone (`FRONTIER_DEEP_CAMP`); only the market sells the kit, after a tier-1 contract. Its ring is [Default] 12; it mines what a level-3 camp mines and counts as level 3 for the market; it is never upgraded (question 168). It can be demolished, and have a smelter, a pen and a lantern, as any camp. On the map its tag says D. The camp tool switches to it ("⛏ Deep") while a kit is held.
 - **Demolishing** a camp needs other camps' circles to cover its whole 3×3 (question 134). It gives nothing back; its ground can then be mined, and what only it lit turns grey.
 - **A smelter** (owner, question 161) can be built at a camp of level 2 or more, from its panel, for [Default] 20 stone and 10 clay and 1 tap. One per camp; it is lost with the camp. While one stands anywhere, the recipe book can smelt: [Default] 2 raw ore + 1 coal make 2 ingots, 1 tap (question 162). (`docs/plans/smelting-and-crafting.md`.)
 - **Made from ingots** (question 163), in the recipe book while a smelter stands, 1 tap each:
@@ -209,7 +210,7 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 - **Money** is an item, **coins** (question 170). A run starts with none.
 - **Trading:** on a market day, the player sells or buys any whole number of one item's lots, for **1 tap** a trade. A lot is [Default] (`FRONTIER_MARKET`):
   - sold: 5 grass, 2 wood, 2 apples or 2 clay for 1 coin; 10 stone for 1 coin; 1 animal for 3; 1 coal for 1; 1 raw iron or copper ore for 2; 1 ingot for 5; 1 crystal for 20; 1 rare ore for 15; 1 relic for 40;
-  - bought: 1 animal for 8 coins; 1 clay for 1 coin; 1 sapling for 3, 1 apple sapling for 6; 1 hay for 1; and, while the best camp is level 3 or more, an iron drill for 80, a steel drill for 250, an iron pickaxe for 60 and a copper lantern for 40. Saplings and hay join with farming (plan section 6).
+  - bought: 1 animal for 8 coins; 1 clay for 1 coin; 1 sapling for 3, 1 apple sapling for 6; 1 hay for 1; once a tier-1 contract is done, a camp kit for 150, 10 wood for 8 and 5 apples for 5; and, while the best camp is level 3 or more, an iron drill for 80, a steel drill for 250, an iron pickaxe for 60 and a copper lantern for 40. Saplings and hay join with farming (plan section 6).
   - Nothing can be bought and sold back at a profit.
 - A trade can be undone, like any action that is not a harvest.
 - **Interface:** a market button (🏪) beside the recipe book, lit on a market day. It opens a card like the book's: what can be sold (the items held) and bought, each with what the player has, and Sell, Sell all and Buy buttons. On other days the card says when the market opens, and its buttons are off. Coins are shown next to Dug in the counter.

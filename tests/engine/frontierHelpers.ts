@@ -68,6 +68,7 @@ export function world(options: WorldOptions = {}): FrontierState {
       pen: false,
       penned: 0,
       breedIn: 0,
+      deep: false,
     },
   ];
   const animals = options.animals ?? [];

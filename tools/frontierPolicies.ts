@@ -146,6 +146,7 @@ function randomPolicy(rng: RngState): FrontierPolicy {
       const x = Math.floor(nextFloat(rng) * state.cube.size.x);
       const y = Math.floor(nextFloat(rng) * state.cube.size.y);
       if (placeRefusal(state, x, y) === null) options.push(`place ${x},${y}`);
+      if (placeRefusal(state, x, y, true) === null) options.push(`placeDeep ${x},${y}`);
     }
     options.push('endShift'); // sometimes it ends a shift early
     return options[Math.floor(nextFloat(rng) * options.length)] ?? 'endShift';

@@ -21,6 +21,7 @@
 import { BLOCKS, blockDefByCode, ITEMS } from '../../data';
 import type { ItemId, ItemStack } from '../../data';
 import {
+  FRONTIER_DEEP_CAMP,
   FRONTIER_DRILL,
   FRONTIER_LANTERN,
   FRONTIER_MARKET,
@@ -365,6 +366,8 @@ export function mountCampLab(
     pins = next;
     savePins(pins);
   }
+  /** True while the placing tool places a deep camp, not a camp (progression PR 6). */
+  let placingDeep = false;
   /** What the player did, to undo it (undoHistory.ts). A new world starts with none. */
   let history: UndoHistory = emptyHistory(world);
   /**
@@ -1077,7 +1080,8 @@ export function mountCampLab(
     ctx.font = `800 ${Math.round(tagR * 1.3)}px system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(String(camp.level), tx, ty + tagR * 0.06);
+    // A deep camp's tag says D: it has no level to grow (progression PR 6).
+    ctx.fillText(camp.deep ? 'D' : String(camp.level), tx, ty + tagR * 0.06);
 
     // A smelter: a small flame in a tag at the bottom left.
     if (camp.smelter) {
@@ -1156,7 +1160,8 @@ export function mountCampLab(
         const { px, py } = toPx(i % width, Math.floor(i / width));
         ctx.fillRect(px, py, c, c);
       }
-      drawRing(ctx, target.x, target.y, campRadius(1), c, 1, true);
+      const ring = placingDeep ? FRONTIER_DEEP_CAMP.radius : campRadius(1);
+      drawRing(ctx, target.x, target.y, ring, c, 1, true);
     }
     const pulse =
       0.6 +
@@ -1218,6 +1223,7 @@ export function mountCampLab(
         pen: false,
         penned: 0,
         breedIn: 0,
+        deep: false,
       },
       c,
       false,
@@ -2009,7 +2015,18 @@ export function mountCampLab(
     // room for the cost and "Place camp" even on a narrow phone (owner's bug
     // report: "Place camp doesn't show").
     const head = element('div', 'lab2-panel-head');
-    head.append(element('span', 'lab2-panel-title', '⛺ New camp'));
+    head.append(element('span', 'lab2-panel-title', placingDeep ? '⛏ Deep camp' : '⛺ New camp'));
+    // Holding a camp kit (progression PR 6): switch between a camp and a deep camp.
+    if ((world.lab.counts.get('campKit') ?? 0) > 0 || placingDeep) {
+      const swap = button('lab2-button', placingDeep ? '⛺ Camp' : '⛏ Deep');
+      swap.dataset['testid'] = 'lab2-place-deep';
+      swap.setAttribute('aria-pressed', String(placingDeep));
+      swap.addEventListener('click', () => {
+        placingDeep = !placingDeep;
+        setMode(mode);
+      });
+      head.append(swap);
+    }
     const cancel = button('lab2-close', '×');
     cancel.setAttribute('aria-label', 'Cancel');
     cancel.dataset['testid'] = 'lab2-place-cancel';
@@ -2019,10 +2036,13 @@ export function mountCampLab(
     // The line says why "Place camp" is off, whenever it is.
     const body = element('p', 'lab2-panel-line');
     body.dataset['testid'] = 'lab2-place-line';
-    const refusal = target === null ? null : placeRefusal(world, target.x, target.y);
-    const missing = missingText(LAB_NEW_CAMP_COST);
+    const refusal = target === null ? null : placeRefusal(world, target.x, target.y, placingDeep);
+    const placeCost = placingDeep ? FRONTIER_DEEP_CAMP.cost : LAB_NEW_CAMP_COST;
+    const missing = missingText(placeCost);
     if (target === null) {
-      body.textContent = PLACE_HINT;
+      body.textContent = placingDeep
+        ? `Any depth: level ground. Ring ${FRONTIER_DEEP_CAMP.radius}; mines as level ${FRONTIER_DEEP_CAMP.level}.`
+        : PLACE_HINT;
     } else if (refusal !== null && refusal !== 'cost') {
       body.textContent = placeRefusalText(refusal);
       body.classList.add('lab2-panel-warn');
@@ -2038,7 +2058,10 @@ export function mountCampLab(
     }
 
     const actions = element('div', 'lab2-actions');
-    const confirm = button('lab2-button lab2-button-main', 'Place camp');
+    const confirm = button(
+      'lab2-button lab2-button-main',
+      placingDeep ? 'Place deep' : 'Place camp',
+    );
     confirm.dataset['testid'] = 'lab2-place-confirm';
     confirm.disabled = target === null || refusal !== null;
     // A disabled button keeps its outline and text, and says why in its tooltip too.
@@ -2055,7 +2078,7 @@ export function mountCampLab(
         confirmPlace(target.x, target.y);
       }
     });
-    actions.append(costRow(LAB_NEW_CAMP_COST), confirm);
+    actions.append(costRow(placeCost), confirm);
     tray.replaceChildren(head, body, actions);
   }
 
@@ -2074,7 +2097,11 @@ export function mountCampLab(
 
   function showCampTray(camp: Camp): void {
     const head = element('div', 'lab2-panel-head');
-    const title = element('span', 'lab2-panel-title', `⛺ Camp ${camp.id} · Level ${camp.level}`);
+    const title = element(
+      'span',
+      'lab2-panel-title',
+      camp.deep ? `⛏ Deep camp ${camp.id}` : `⛺ Camp ${camp.id} · Level ${camp.level}`,
+    );
     title.dataset['testid'] = 'lab2-camp-title';
     head.append(title);
     // Demolish: only once other camps cover all of this one's base. Otherwise
@@ -2116,8 +2143,10 @@ export function mountCampLab(
     const next = element('p', 'lab2-panel-line lab2-panel-next');
     next.dataset['testid'] = 'lab2-camp-next';
     const actions = element('div', 'lab2-actions');
-    const cost = upgradeCostFrom(camp.level);
-    if (cost === null) {
+    const cost = camp.deep ? null : upgradeCostFrom(camp.level);
+    if (camp.deep) {
+      next.textContent = 'A deep camp is never upgraded.';
+    } else if (cost === null) {
       next.textContent = `Top level: the widest ring, and every block the lab has.`;
     } else {
       const up = camp.level + 1;
@@ -2230,9 +2259,10 @@ export function mountCampLab(
 
   function setMode(next: Mode): void {
     mode = next;
+    if (mode.kind !== 'placing') placingDeep = false;
     preview =
       mode.kind === 'placing' && mode.target !== null
-        ? new Set(newlyCovered(world, mode.target.x, mode.target.y))
+        ? new Set(newlyCovered(world, mode.target.x, mode.target.y, placingDeep))
         : new Set();
     if (mode.kind === 'placing') {
       // While placing, the hint says what to do next: choose a spot, then
@@ -2251,15 +2281,22 @@ export function mountCampLab(
   }
 
   function confirmPlace(x: number, y: number): void {
-    const next = placeCamp(world, x, y);
+    const deep = placingDeep;
+    const next = placeCamp(world, x, y, deep);
     if (next === world) {
       return;
     }
-    remember({ kind: 'place', x, y });
+    remember({ kind: deep ? 'placeDeep' : 'place', x, y });
     mode = { kind: 'idle' };
+    placingDeep = false;
     preview = new Set();
     setWorld(next);
-    setHint('Camp placed: the fog lifts around it.', false);
+    setHint(
+      deep
+        ? 'Deep camp placed: it mines as a level-3 camp, deep down.'
+        : 'Camp placed: the fog lifts around it.',
+      false,
+    );
     addEffect({
       kind: 'ring',
       x,
@@ -2267,7 +2304,7 @@ export function mountCampLab(
       label: '',
       higher: [],
       fromRadius: 0,
-      toRadius: campRadius(1),
+      toRadius: deep ? FRONTIER_DEEP_CAMP.radius : campRadius(1),
     });
   }
 
@@ -2474,6 +2511,7 @@ export function mountCampLab(
   function describeStep(step: CampStep): string {
     if (step.kind === 'tap') return `the tap at ${step.x}, ${step.y}`;
     if (step.kind === 'place') return 'placing the camp';
+    if (step.kind === 'placeDeep') return 'placing the deep camp';
     if (step.kind === 'upgrade') return `the upgrade of camp ${step.id}`;
     if (step.kind === 'demolish') return `demolishing camp ${step.id}`;
     if (step.kind === 'sell' || step.kind === 'buy') return `the ${step.kind} of ${step.item}`;

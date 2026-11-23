@@ -54,6 +54,7 @@ import {
   FRONTIER_CAMP_LEVELS,
   FRONTIER_CAMP_PLACE,
   FRONTIER_CONTRACTS,
+  FRONTIER_DEEP_CAMP,
   FRONTIER_TOOLS,
   FRONTIER_LANTERN,
   FRONTIER_MARKET,
@@ -183,6 +184,12 @@ export function checkStep(
   // New camps stand high.
   const oldIds = new Set(before.camps.map((c) => c.id));
   for (const camp of after.camps) {
+    // A deep camp (progression PR 6) stands at any depth, at its own level, always.
+    if (camp.deep && camp.level !== FRONTIER_DEEP_CAMP.level)
+      say(`deep camp ${camp.id} is at level ${camp.level}`);
+    if (camp.deep && !oldIds.has(camp.id) && verb !== 'placeDeep')
+      say(`a deep camp placed by "${verb}"`);
+    if (camp.deep) continue;
     if (!oldIds.has(camp.id) && depthAt(after.cube, camp.x, camp.y) > FRONTIER_CAMP_PLACE.maxDepth)
       say(`camp ${camp.id} was placed at depth ${depthAt(after.cube, camp.x, camp.y)}`);
   }
@@ -225,6 +232,8 @@ export function checkStep(
     } else {
       if (best < (lot.fromLevel ?? 1))
         say(`bought ${lot.item}, sold from camp level ${lot.fromLevel ?? 1}, with level ${best}`);
+      if (lot.afterTier1 === true && (before.contractsDone[0] ?? 0) === 0)
+        say(`traded ${lot.item} before a tier-1 contract was done`);
       const sign = verb === 'sell' ? 1 : -1;
       const expected = new Map<string, number>([
         [lot.item, -sign * lot.count * lots],

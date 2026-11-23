@@ -115,6 +115,25 @@ export const FRONTIER_CAMP_PLACE = {
 };
 
 /**
+ * The deep camp (progression plan section 2.4; owner: "New camp type can be
+ * placed down in deeper areas so now the entire depth is unlocked"; its kit
+ * only the market sells). It is placed on level, lit ground at any depth,
+ * for `cost` and 1 tap. Its ring is `radius`; it mines what a camp of
+ * `level` mines, and counts as that level for the market; it is never
+ * upgraded (question 168). It can be demolished, and have a smelter, a pen
+ * and a lantern, as any camp.
+ */
+export const FRONTIER_DEEP_CAMP = {
+  cost: [
+    { item: 'campKit', count: 1 },
+    { item: 'wood', count: 20 },
+    { item: 'stone', count: 20 },
+  ] as ItemStack[],
+  radius: 12,
+  level: 3,
+};
+
+/**
  * The free first camp's 3 x 3 patch is centred no further than this many
  * squares from the middle of the map (the most open ground among those
  * patches wins).
@@ -432,6 +451,8 @@ export interface FrontierLot {
   count: number;
   coins: number;
   fromLevel?: number;
+  /** True for a lot traded only once a tier-1 contract is done (progression plan section 3). */
+  afterTier1?: boolean;
 }
 
 /**
@@ -483,6 +504,11 @@ export const FRONTIER_MARKET = {
     { item: 'steelDrill', count: 1, coins: 250, fromLevel: 3 },
     { item: 'ironPickaxe', count: 1, coins: 60, fromLevel: 3 },
     { item: 'copperLantern', count: 1, coins: 40, fromLevel: 3 },
+    // From the first tier-1 contract (phase 4): the deep camp's kit, and
+    // wood and food in bulk, so farming becomes a choice.
+    { item: 'campKit', count: 1, coins: 150, afterTier1: true },
+    { item: 'wood', count: 10, coins: 8, afterTier1: true },
+    { item: 'apple', count: 5, coins: 5, afterTier1: true },
   ] as FrontierLot[],
 };
 

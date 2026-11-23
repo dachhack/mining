@@ -218,6 +218,7 @@ describe('roaming animals (they move at End shift, plan A4)', () => {
           pen: false,
           penned: 0,
           breedIn: 0,
+          deep: false,
         },
       ],
     };

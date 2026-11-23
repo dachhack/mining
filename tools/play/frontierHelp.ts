@@ -6,6 +6,7 @@ import {
   FRONTIER_CAMP_LEVELS,
   FRONTIER_BOARD,
   FRONTIER_CAMP_PLACE,
+  FRONTIER_DEEP_CAMP,
   FRONTIER_FOODS,
   FRONTIER_LANTERN,
   FRONTIER_MARKET,
@@ -96,6 +97,8 @@ export function frontierHelpText(): string {
     `- Contracts: on a market day the board offers ${FRONTIER_BOARD.perTier} of each open tier ("take ID"). Tier 1 opens with a level ${FRONTIER_BOARD.tier1Level} camp,`,
     '  tier 2 after a tier-1 contract is delivered, tier 3 after a tier-2. Hold one at a time; "deliver" on any shift once you',
     '  hold everything it asks for pays its coins; "drop" gives it up. Each costs 1 tap. The view names your phase and goal.',
+    `- "deep X,Y" places a deep camp at any depth (${cost(FRONTIER_DEEP_CAMP.cost)}; the market sells the kit after a tier-1 contract).`,
+    `  Its ring is ${FRONTIER_DEEP_CAMP.radius}; it mines as a level ${FRONTIER_DEEP_CAMP.level} camp and is never upgraded.`,
     '- "undo" takes back your last action in this shift and gives the tap back. Catching an',
     '  animal and picking an apple cannot be undone, and nothing before the shift began can.',
   ].join('\n');

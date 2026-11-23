@@ -6,6 +6,7 @@
 import {
   FRONTIER_DRILL,
   FRONTIER_LANTERN,
+  FRONTIER_MARKET,
   FRONTIER_NEW_CAMP_COST,
   FRONTIER_PEN,
   FRONTIER_PICKAXE,
@@ -19,6 +20,7 @@ import {
   openTiers,
   deliverRefusal,
   createFrontier,
+  depthAt,
   frontierAct,
   hasSmelter,
   isMarketDay,
@@ -47,7 +49,8 @@ import { NO_FEATURE } from '../src/engine/frontier/state';
  * "wood", and a whole number of lots), or "plant X,Y ITEM" (a sapling or
  * an apple sapling on square X,Y), "buildPen ID", "penIn ID" or "penOut ID"
  * (a pen at camp ID, an animal into it or out of it), "takeContract ID"
- * (a contract from today's board), "deliver" or "dropContract".
+ * (a contract from today's board), "deliver", "dropContract", or
+ * "placeDeep X,Y" (a deep camp).
  */
 export type FrontierStep = string;
 
@@ -117,7 +120,7 @@ export function actionOf(step: FrontierStep): FrontierAction {
   if (verb === 'make' && arg !== undefined) {
     return { kind: 'make', recipe: arg };
   }
-  if ((verb === 'tap' || verb === 'place') && arg !== undefined) {
+  if ((verb === 'tap' || verb === 'place' || verb === 'placeDeep') && arg !== undefined) {
     return { kind: verb, ...squareOf(arg) };
   }
   throw new Error(`"${step}" is not a step of the new game`);
@@ -212,6 +215,12 @@ export function marketStep(state: FrontierState): FrontierStep | null {
   for (const tool of [FRONTIER_DRILL.item, FRONTIER_STEEL_DRILL.item]) {
     const held = (state.inventory.get(tool) ?? 0) > 0;
     if (!held && tradeRefusal(state, 'buy', tool, 1) === null) return `buy ${tool} 1`;
+  }
+  // A camp kit for one deep camp (progression PR 6), keeping 100 coins back.
+  const kit = (state.inventory.get('campKit') ?? 0) > 0;
+  const coins = state.inventory.get(FRONTIER_MARKET.coin) ?? 0;
+  if (!kit && !state.camps.some((c) => c.deep) && coins >= 250) {
+    if (tradeRefusal(state, 'buy', 'campKit', 1) === null) return 'buy campKit 1';
   }
   const tier3 = openTiers(state).includes(3);
   for (const item of tier3 ? [] : GATHERER_SELLS_ALL) {
@@ -317,6 +326,25 @@ export function contractStep(state: FrontierState): FrontierStep | null {
 }
 
 /**
+ * A deep camp (progression PR 6), once it holds the kit and none stands:
+ * on the deepest level 3 x 3 it may stand on, so the ground under its pit
+ * is lit and mined as a level-3 camp's. Ties go to the square met first,
+ * row by row. `null` if it cannot place one.
+ */
+export function deepStep(state: FrontierState): FrontierStep | null {
+  if ((state.inventory.get('campKit') ?? 0) < 1 || state.camps.some((c) => c.deep)) return null;
+  let best: { x: number; y: number; depth: number } | null = null;
+  for (let y = 1; y < state.cube.size.y - 1; y += 1) {
+    for (let x = 1; x < state.cube.size.x - 1; x += 1) {
+      if (placeRefusal(state, x, y, true) !== null) continue;
+      const depth = depthAt(state.cube, x, y);
+      if (best === null || depth > best.depth) best = { x, y, depth };
+    }
+  }
+  return best === null ? null : `placeDeep ${best.x},${best.y}`;
+}
+
+/**
  * Plant a sapling it holds (progression plan section 6.2) on the lit square
  * farthest from the newest camp where one can be planted, so its own
  * digging, which starts nearest that camp, leaves it be. Ties go to the
@@ -362,6 +390,7 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
   }
   const craft =
     contractStep(state) ??
+    deepStep(state) ??
     craftStep(state) ??
     farmStep(state) ??
     marketStep(state) ??
