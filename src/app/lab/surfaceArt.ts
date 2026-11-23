@@ -25,6 +25,7 @@ export const SURFACE_PAINT = {
   ironIngot: { face: '#8d949c', top: '#c4cad1' },
   copperIngot: { face: '#b8673a', top: '#e39a66' },
   ironPickaxe: { head: '#aeb5bd', headDark: '#7d848c', handle: '#8a5a32' },
+  drill: { bit: '#b9c0c8', bitDark: '#6f767e', band: '#c27443', handle: '#8a5a32' },
   copperLantern: { body: '#c27443', bodyDark: '#8f4f2a', glow: '#ffd36b', glowLight: '#fff2c2' },
 };
 
@@ -503,6 +504,42 @@ export function labItemIcon(item: string, className: string): HTMLCanvasElement 
     ctx.moveTo(s * 0.32, s * 0.18);
     ctx.quadraticCurveTo(s * 0.7, s * 0.1, s * 0.84, s * 0.5);
     ctx.stroke();
+  } else if (item === 'drill') {
+    // A drill: a wooden handle, a copper band, and a twisted iron bit pointing down-right.
+    const p = SURFACE_PAINT.drill;
+    ctx.fillStyle = '#2a2420';
+    ctx.fillRect(0, 0, s, s);
+    ctx.strokeStyle = p.handle;
+    ctx.lineCap = 'round';
+    ctx.lineWidth = s * 0.14;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.18, s * 0.22);
+    ctx.lineTo(s * 0.38, s * 0.42);
+    ctx.stroke();
+    ctx.strokeStyle = p.band;
+    ctx.lineWidth = s * 0.17;
+    ctx.lineCap = 'butt';
+    ctx.beginPath();
+    ctx.moveTo(s * 0.38, s * 0.42);
+    ctx.lineTo(s * 0.46, s * 0.5);
+    ctx.stroke();
+    ctx.fillStyle = p.bit;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.42, s * 0.56);
+    ctx.lineTo(s * 0.56, s * 0.42);
+    ctx.lineTo(s * 0.86, s * 0.86);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = p.bitDark;
+    ctx.lineWidth = s * 0.035;
+    for (const t of [0.25, 0.45, 0.65]) {
+      const ax = s * (0.49 + 0.37 * t);
+      const ay = s * (0.49 + 0.37 * t);
+      ctx.beginPath();
+      ctx.moveTo(ax - s * 0.09 * (1 - t), ay + s * 0.02);
+      ctx.lineTo(ax + s * 0.02, ay - s * 0.09 * (1 - t));
+      ctx.stroke();
+    }
   } else if (item === 'copperLantern') {
     // A lantern: a copper cap and base round a warm glowing glass.
     const p = SURFACE_PAINT.copperLantern;

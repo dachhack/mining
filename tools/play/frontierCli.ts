@@ -16,6 +16,7 @@ import { dirname } from 'node:path';
 import { BLOCKS, ITEMS, blockDefByCode } from '../../src/data';
 import type { BlockId, ItemId, ItemStack } from '../../src/data';
 import {
+  FRONTIER_DRILL,
   FRONTIER_NEW_CAMP_COST,
   FRONTIER_RECIPES,
   FRONTIER_SHIFT,
@@ -531,7 +532,7 @@ export function lookText(session: FrontierSession, x: number, y: number): string
   if (depth < size.z) {
     const needs = levelNeededFor(code);
     parts.push(
-      `top block ${blockDefByCode(code).name}${needs === null ? ' (no camp can mine it)' : ` (a level ${needs} camp mines it)`}`,
+      `top block ${blockDefByCode(code).name}${needs === null ? ' (no camp can mine it)' : ` (a level ${needs} camp mines it${needs > 1 && needs <= FRONTIER_DRILL.upToLevel ? `, or a level ${needs - FRONTIER_DRILL.levelBonus} camp with a drill` : ''})`}`,
     );
   }
   const i = x + size.x * y;

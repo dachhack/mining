@@ -20,6 +20,7 @@ import { BLOCKS } from '../../data';
 import type { BlockId, ItemStack } from '../../data';
 import {
   FRONTIER_CAMP_LEVELS,
+  FRONTIER_DRILL,
   FRONTIER_LANTERN,
   FRONTIER_NEW_CAMP_COST,
   FRONTIER_SHIFT,
@@ -152,6 +153,35 @@ export function coverLevelAt(camps: FrontierCamp[], x: number, y: number): numbe
     }
   }
   return best;
+}
+
+/**
+ * The level that counts for what can be mined on square (x, y): the best
+ * level of the camps covering it, raised by FRONTIER_DRILL.levelBonus while
+ * `inventory` holds a drill, but never past FRONTIER_DRILL.upToLevel by the
+ * drill alone (owner, question 163). A camp already above that keeps its own
+ * level. 0 if no camp covers the square: a drill lights nothing.
+ */
+export function miningLevelAt(
+  camps: FrontierCamp[],
+  inventory: Map<string, number>,
+  x: number,
+  y: number,
+): number {
+  const level = coverLevelAt(camps, x, y);
+  return level === 0 ? 0 : minesAsLevel(level, inventory);
+}
+
+/**
+ * The level a camp of `level` mines as: its own, or with a drill in
+ * `inventory`, FRONTIER_DRILL.levelBonus more, up to FRONTIER_DRILL.upToLevel
+ * (a camp already above that keeps its own level).
+ */
+export function minesAsLevel(level: number, inventory: Map<string, number>): number {
+  if ((inventory.get(FRONTIER_DRILL.item) ?? 0) < 1) {
+    return level;
+  }
+  return Math.max(level, Math.min(level + FRONTIER_DRILL.levelBonus, FRONTIER_DRILL.upToLevel));
 }
 
 /** How square (x, y) looks: shown inside a circle, greyed if it was once, fog if never. */

@@ -58,7 +58,8 @@ import type { GameState } from './state';
  * 0.8.0: smelting and crafting, PR 1: the smelter and ingots
  *        (docs/plans/smelting-and-crafting.md). First engine PR of the batch
  *        after the owner's answers of 2026-11-23 (questions 159 to 164).
- *        PR 3 (the iron pickaxe and the copper lantern) is in the same batch.
+ *        PR 3 (the iron pickaxe and the copper lantern) and PR 4 (the iron
+ *        drill and camp level 4) are in the same batch.
  */
 export const ENGINE_VERSION = '0.8.0';
 
@@ -465,6 +466,8 @@ export {
   inFootprint,
   isLevelPatch,
   levelNeededFor,
+  minesAsLevel,
+  miningLevelAt,
   newlyCovered,
   pay,
   placeCamp,

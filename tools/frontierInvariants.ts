@@ -10,6 +10,9 @@
 //   changes nothing at all.
 // - THE LEVEL RULE: a mined square went down exactly 1 level, and is no more
 //   than 1 level below any neighbour.
+// - HARDNESS: a mined block needs no higher camp level than the best camp
+//   over it has, or one more with a drill in the store (FRONTIER_DRILL), up
+//   to FRONTIER_DRILL.upToLevel. No camp is above the top level.
 // - SHIFTS AND HEALTH: the shift number goes up by exactly 1 at End shift and
 //   rest; health stays between 0 and full; a run at 0 health is lost; a run
 //   that has ended stays ended.
@@ -28,6 +31,8 @@
 //   one lantern leaves the store.
 
 import {
+  FRONTIER_CAMP_LEVELS,
+  FRONTIER_DRILL,
   FRONTIER_LANTERN,
   FRONTIER_SHIFT,
   FRONTIER_SMELTER,
@@ -36,11 +41,14 @@ import {
 import {
   SQUARE_STEPS,
   campAt,
+  coverLevelAt,
   coverLevels,
   depthAt,
   isLevelPatch,
   isSquare,
+  levelNeededFor,
   previewTap,
+  topBlockAt,
 } from '../src/engine';
 import type { FrontierOutcome, FrontierState } from '../src/engine';
 import { APPLE_TREE, NO_FEATURE, TREE } from '../src/engine/frontier/state';
@@ -89,6 +97,17 @@ export function checkStep(
     const [, coords] = step.split(' ');
     const [x, y] = (coords ?? '').split(',').map(Number);
     if (x !== undefined && y !== undefined) {
+      // Hardness: worked out here from the data, not with the engine's miningLevelAt.
+      let allowed = coverLevelAt(before.camps, x, y);
+      if (allowed > 0 && (before.inventory.get(FRONTIER_DRILL.item) ?? 0) > 0) {
+        allowed = Math.max(
+          allowed,
+          Math.min(allowed + FRONTIER_DRILL.levelBonus, FRONTIER_DRILL.upToLevel),
+        );
+      }
+      const needs = levelNeededFor(topBlockAt(before.cube, x, y));
+      if (needs === null || needs > allowed)
+        say(`mined ${x},${y}, which needs level ${needs}, with level ${allowed} allowed`);
       const was = depthAt(before.cube, x, y);
       const now = depthAt(after.cube, x, y);
       if (now !== was + 1) say(`mined ${x},${y} went from depth ${was} to ${now}`);
@@ -133,6 +152,12 @@ export function checkStep(
     if (before.seen[i] === true && !seen) say(`square ${i} was seen and is not now`);
     if ((lit[i] ?? 0) > 0 && !seen) say(`square ${i} is lit but not seen`);
   });
+
+  // Camp levels: none above the top level.
+  for (const camp of after.camps) {
+    if (camp.level < 1 || camp.level > FRONTIER_CAMP_LEVELS.length)
+      say(`camp ${camp.id} is at level ${camp.level}`);
+  }
 
   // Smelters: only at a camp of the level that may have one.
   for (const camp of after.camps) {

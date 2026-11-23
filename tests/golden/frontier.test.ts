@@ -41,7 +41,7 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
     });
   }
 
-  it('between them, they place camps, upgrade one, build a smelter, smelt, make a pickaxe, mine with it, catch animals, take plants, mine clay, rest, and lose a crew', () => {
+  it('between them, they place camps, upgrade one, build a smelter, smelt, make a pickaxe and a drill, mine with them, reach level 4, catch animals, take plants, mine clay, rest, and lose a crew', () => {
     const seen = new Set<string>();
     for (const name of files) {
       const golden = load(name);
@@ -52,9 +52,12 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
         if (verb !== 'tap') {
           seen.add(verb);
           if (step === 'make iron-pickaxe') seen.add('pickaxe');
+          if (step === 'make iron-drill') seen.add('drill');
+          if (verb === 'upgrade' && next.camps.some((c) => c.level === 4)) seen.add('level4');
         } else if (next.mined > state.mined) {
           seen.add('mine');
           if ((state.inventory.get('ironPickaxe') ?? 0) > 0) seen.add('mineWithPickaxe');
+          if ((state.inventory.get('drill') ?? 0) > 0) seen.add('mineWithDrill');
           const clayBefore = state.inventory.get('clay') ?? 0;
           if ((next.inventory.get('clay') ?? 0) > clayBefore) seen.add('clay');
         } else if (next.animals.length < state.animals.length && step.startsWith('tap')) {
@@ -75,7 +78,10 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
         'lost',
         'make',
         'mine',
+        'mineWithDrill',
         'mineWithPickaxe',
+        'drill',
+        'level4',
         'pickaxe',
         'place',
         'plant',

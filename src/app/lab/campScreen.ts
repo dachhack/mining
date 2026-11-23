@@ -21,6 +21,7 @@
 import { BLOCKS, blockDefByCode, ITEMS } from '../../data';
 import type { ItemId, ItemStack } from '../../data';
 import {
+  FRONTIER_DRILL,
   FRONTIER_LANTERN,
   FRONTIER_PICKAXE,
   FRONTIER_SHIFT,
@@ -44,6 +45,7 @@ import {
   campTap,
   canAfford,
   addedNamesAt,
+  minesAsLevel,
   minesText,
   newCampWorld,
   newlyCovered,
@@ -1270,7 +1272,13 @@ export function mountCampLab(
     }
     // What a smelter makes, and what is made from ingots (no block yields
     // them, so each has its own icon).
-    for (const item of ['ironIngot', 'copperIngot', FRONTIER_PICKAXE.item, FRONTIER_LANTERN.item]) {
+    for (const item of [
+      'ironIngot',
+      'copperIngot',
+      FRONTIER_PICKAXE.item,
+      FRONTIER_DRILL.item,
+      FRONTIER_LANTERN.item,
+    ]) {
       const count = counts.get(item) ?? 0;
       if (count > 0) all.push({ item, count, icon: () => labItemIcon(item, 'lab-chip-icon') });
     }
@@ -1433,9 +1441,11 @@ export function mountCampLab(
         ? '⛺'
         : item === FRONTIER_PICKAXE.item
           ? '⛏️'
-          : item === FRONTIER_LANTERN.item
-            ? '🏮'
-            : '🔥';
+          : item === FRONTIER_DRILL.item
+            ? '🔩'
+            : item === FRONTIER_LANTERN.item
+              ? '🏮'
+              : '🔥';
     const icon = element('span', 'lab2-recipe-icon', face);
     if (recipe.level > 1) {
       icon.append(element('span', 'lab2-recipe-level', String(recipe.level)));
@@ -1596,6 +1606,9 @@ export function mountCampLab(
     if (makes?.item === FRONTIER_PICKAXE.item) {
       return `Every mining tap gives ${FRONTIER_PICKAXE.yieldTimes}×, while you have one.`;
     }
+    if (makes?.item === FRONTIER_DRILL.item) {
+      return `Every camp mines one level harder, up to level ${FRONTIER_DRILL.upToLevel}'s blocks.`;
+    }
     if (makes?.item === FRONTIER_LANTERN.item) {
       return `Hang it at a camp from its panel: ring +${FRONTIER_LANTERN.ringBonus}.`;
     }
@@ -1717,7 +1730,11 @@ export function mountCampLab(
     const line = element('p', 'lab2-panel-line');
     line.dataset['testid'] = 'lab2-camp-line';
     // With a lantern, the ring is its level's plus the lantern's (said on the lantern's line below).
-    line.textContent = `Ring ${campRing(camp)} · mines ${minesText(camp.level)}`;
+    // With a drill in the store, the camp mines as if a level higher, up to FRONTIER_DRILL.upToLevel.
+    const mines = minesAsLevel(camp.level, world.lab.counts);
+    // 🔩: the drill raises what it mines (kept short, so the line fits a phone).
+    const withDrill = mines > camp.level ? '🔩 ' : '';
+    line.textContent = `Ring ${campRing(camp)} · ${withDrill}mines ${minesText(mines)}`;
 
     // Next: what the upgrade gives, and what it costs.
     const next = element('p', 'lab2-panel-line lab2-panel-next');
@@ -1729,7 +1746,11 @@ export function mountCampLab(
     } else {
       const up = camp.level + 1;
       const ring = campRing({ ...camp, level: up });
-      next.textContent = `Level ${up}: ring ${ring}, adds ${addedNamesAt(up).join(', ')}`;
+      const adds = addedNamesAt(up);
+      next.textContent =
+        adds.length === 0
+          ? `Level ${up}: ring ${ring}, nothing new to mine`
+          : `Level ${up}: ring ${ring}, adds ${adds.join(', ')}`;
       actions.append(costRow(cost));
       const upgrade = button('lab2-button lab2-button-main', 'Upgrade');
       upgrade.dataset['testid'] = 'lab2-upgrade';
@@ -1846,7 +1867,8 @@ export function mountCampLab(
     }
     remember({ kind: 'upgrade', id });
     setWorld(next);
-    setHint(`Camp ${id} is level ${before.level + 1}: a wider ring, harder blocks.`, false);
+    const harder = addedNamesAt(before.level + 1).length > 0 ? ', harder blocks' : '';
+    setHint(`Camp ${id} is level ${before.level + 1}: a wider ring${harder}.`, false);
     addEffect({
       kind: 'ring',
       x: before.x,
@@ -2097,7 +2119,11 @@ export function mountCampLab(
       const text =
         result.needs === null
           ? `${name} cannot be mined in this lab.`
-          : `${name} needs a level ${result.needs} camp over it.`;
+          : result.needs > 1 &&
+              result.needs <= FRONTIER_DRILL.upToLevel &&
+              (world.lab.counts.get(FRONTIER_DRILL.item) ?? 0) === 0
+            ? `${name} needs a level ${result.needs} camp over it, or a drill and a level ${result.needs - FRONTIER_DRILL.levelBonus} camp.`
+            : `${name} needs a level ${result.needs} camp over it.`;
       setHint(text, 'hard');
       effects = effects.filter((e) => e.kind !== 'tooHard');
       addEffect({

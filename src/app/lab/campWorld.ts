@@ -123,6 +123,7 @@ export {
   footprintOf,
   inCircle,
   levelNeededFor,
+  minesAsLevel,
   upgradeCostFrom,
 } from '../../engine';
 /** What one square looks like to the player: 'shown', 'greyed' or 'fog'. */
@@ -539,6 +540,10 @@ export function addedNamesAt(level: number): string[] {
  */
 export function minesText(level: number): string {
   const added = addedNamesAt(level).join(', ');
+  if (added === '') {
+    // A level that adds no blocks (level 4): it mines what the level below does.
+    return level > 1 ? minesText(level - 1) : '';
+  }
   return level === 1 ? added : `${added} and everything softer`;
 }
 
