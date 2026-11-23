@@ -204,8 +204,9 @@ Payouts are **credits**, spent between runs. Unlocks add options; they never rai
 | Rule | Now |
 |---|---|
 | Wall slumps, cracks and supports | **Retired** (question 153: the level rule leaves no steep walls; decision note 0053) |
-| Fuel and coal-fuelled digging; the deeper bands' ore | **First back** (question 153) |
-| Water, lava, gas; unstable ore and explosives; tells and scanning; pumps, vents, sealant; the drill; smelting | Dropped for now; they come back one at a time, in an order the owner chooses then |
+| Smelting, and crafting with ingots | **Next** (owner, question 159): a smelter at a camp, ingots from raw ore and coal, an iron pickaxe and a copper lantern. Proposal: `docs/plans/smelting-and-crafting.md` (questions 161 to 164) |
+| Fuel and coal-fuelled digging; the deeper bands' ore | Later: it was first back (question 153) until smelting took its place (question 159) |
+| Water, lava, gas; unstable ore and explosives; tells and scanning; pumps, vents, sealant; the drill | Dropped for now; they come back one at a time, in an order the owner chooses then |
 | AP and per-block mining costs | Replaced by taps, every tap costing 1 |
 | The old camps (camp kit, mining discount, decommission) and field crafting | Replaced by Lab 2's camps and the recipe book |
 
@@ -230,15 +231,16 @@ Not set for the new game yet. The simulator (`npm run sim`) measures runs; at th
 - a player who stays at one camp and digs lost its crew in 10 runs, for want of wood once its ring's ground was mined;
 - a random player loses its crew in 8 runs of 1,000.
 
-With 100 taps, upkeep takes about 2 taps a shift: close to trivial (decision note 0058 lists the levers).
+With 100 taps, upkeep takes about 2 taps a shift: close to trivial, and the owner wants it left that way (question 160).
 
 The targets come with the contracts (section 8).
 
 ## 13. Open questions
 
-1. Run length targets and the contracts (sections 8 and 12).
-2. Art direction and audio: pixel art chosen (decision note 0004); details open.
-3. Monetisation: not yet discussed.
-4. Game title.
+1. Smelting and crafting: where, what it costs, what ingots are for, and the first contract (questions 161 to 164; `docs/plans/smelting-and-crafting.md`).
+2. Run length targets and the contracts (sections 8 and 12).
+3. Art direction and audio: pixel art chosen (decision note 0004); details open.
+4. Monetisation: not yet discussed.
+5. Game title.
 
 Answered by the owner on 2026-11-22, and built (sections 4.2, 5 and 11; decision note 0057): trees regrow slowly (question 157), grass is food (158), animals stay food (155), and the crew rests only at a camp (156).
