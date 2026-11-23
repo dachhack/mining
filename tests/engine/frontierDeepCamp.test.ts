@@ -65,7 +65,7 @@ describe('the deep camp (plan section 2.4)', () => {
 
 describe('the market from the first tier-1 contract (plan section 3)', () => {
   it('sells the camp kit, wood and apples only once a tier-1 contract is done', () => {
-    const w = { ...world({ inventory: { coin: 1000 } }), shift: 30 };
+    const w = { ...world({ inventory: { coin: 1000 } }), shift: 30, marketOpen: true };
     expect(isMarketDay(w)).toBe(true);
     for (const item of ['campKit', 'wood', 'apple']) {
       expect(frontierAct(w, { kind: 'buy', item, lots: 1 }).refusal, item).toBe('notYet');

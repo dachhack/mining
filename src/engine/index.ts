@@ -64,8 +64,11 @@ import type { GameState } from './state';
  *        market and coins (docs/plans/progression-phases.md). First engine
  *        PR of the batch after the owner's answers of 2026-11-23; the
  *        plan's later PRs share it until the next playtest.
+ * 0.10.0: after the progression playtest build: the market opens only after
+ *        a market day's night and closes to start the day; saplings come
+ *        only from the market (decision note 0063).
  */
-export const ENGINE_VERSION = '0.9.0';
+export const ENGINE_VERSION = '0.10.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
@@ -531,6 +534,7 @@ export {
   coinsHeld,
   isMarketDay,
   marketEvery,
+  marketIsOpen,
   marketLot,
   mostLots,
   nextMarketShift,

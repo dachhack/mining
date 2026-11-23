@@ -35,7 +35,7 @@ import {
   depthMapOf,
   frontierAct,
   frontierStartSquare,
-  isMarketDay,
+  marketIsOpen,
   deliverRefusal as engineDeliverRefusal,
   dropRefusal as engineDropRefusal,
   takeRefusal as engineTakeRefusal,
@@ -109,6 +109,8 @@ export interface CampTurn {
   contract: FrontierHeldContract | null;
   /** Contracts delivered, by tier: [tier 1, tier 2, tier 3]. */
   contractsDone: number[];
+  /** True while the market is open, after a market day's night (progression, market scene). */
+  marketOpen: boolean;
 }
 
 /** A fresh run: shift 1, a full shift of taps, full health. */
@@ -120,6 +122,7 @@ export function firstTurn(): CampTurn {
     status: 'active',
     contract: null,
     contractsDone: [0, 0, 0],
+    marketOpen: false,
   };
 }
 
@@ -197,6 +200,7 @@ export function toFrontier(world: CampWorld): FrontierState {
     status: world.turn.status,
     contract: world.turn.contract,
     contractsDone: world.turn.contractsDone,
+    marketOpen: world.turn.marketOpen,
   };
 }
 
@@ -236,6 +240,7 @@ export function fromFrontier(world: CampWorld, state: FrontierState): CampWorld 
       status: state.status,
       contract: state.contract,
       contractsDone: state.contractsDone,
+      marketOpen: state.marketOpen,
     },
   };
 }
@@ -544,9 +549,14 @@ export function penCamp(world: CampWorld, kind: PenAction, id: number): CampWorl
 
 // ----- The market (docs/plans/progression-phases.md, PR 1) -----
 
-/** True if the market is open in the shift being played. */
+/** True while the market is open: after a market day's night, until it is closed. */
 export function marketOpen(world: CampWorld): boolean {
-  return isMarketDay(toFrontier(world));
+  return marketIsOpen(toFrontier(world));
+}
+
+/** Close the market: the day starts. The very same world if it is not open. */
+export function closeCampMarket(world: CampWorld): CampWorld {
+  return act(world, { kind: 'closeMarket' }).world;
 }
 
 /** The shift on which the market opens next at today's cadence (this one, if it is open). */
@@ -706,6 +716,8 @@ export type CampStep =
   // Sell or buy at the market (progression PR 1).
   | { kind: 'sell'; item: string; lots: number }
   | { kind: 'buy'; item: string; lots: number }
+  // Close the market and start the day.
+  | { kind: 'closeMarket' }
   // Take, deliver or drop a contract (progression PR 5).
   | { kind: 'takeContract'; id: string }
   | { kind: 'deliver' }
@@ -755,6 +767,9 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   }
   if (step.kind === 'plant') {
     return plantCamp(world, step.x, step.y, step.item);
+  }
+  if (step.kind === 'closeMarket') {
+    return closeCampMarket(world);
   }
   if (step.kind === 'takeContract' || step.kind === 'deliver' || step.kind === 'dropContract') {
     return contractCamp(world, step);

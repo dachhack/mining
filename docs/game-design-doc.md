@@ -206,20 +206,20 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 
 (Progression plan section 3, `docs/plans/progression-phases.md`; built in its PR 1.)
 
-- **When:** the market is open for the whole of every shift whose number is a multiple of its cadence: every **10** shifts while the best camp standing is level 1, every **5** at level 2, every **3** at level 3 (owner, 2026-11-23), and [Default] 3 at level 4 (question 167). Nothing about it is stored; the shift and the camps decide it. The night before says "Market day".
+- **When:** a market day comes every **10** shifts while the best camp standing is level 1, every **5** at level 2, every **3** at level 3 (owner, 2026-11-23), and [Default] 3 at level 4 (question 167). The market opens **after the night that starts a market day, before the day** (owner, decision note 0063): the night says "Market day", the market's card opens, the player trades, and closing it starts the day. That is the only time it is open.
 - **Money** is an item, **coins** (question 170). A run starts with none.
-- **Trading:** on a market day, the player sells or buys any whole number of one item's lots, for **1 tap** a trade. A lot is [Default] (`FRONTIER_MARKET`):
+- **Trading:** while the market is open, the player sells or buys any whole number of one item's lots, and takes a contract; none of it costs a tap. Nothing else can be done until the market is closed. A lot is [Default] (`FRONTIER_MARKET`):
   - sold: 5 grass, 2 wood, 2 apples or 2 clay for 1 coin; 10 stone for 1 coin; 1 animal for 3; 1 coal for 1; 1 raw iron or copper ore for 2; 1 ingot for 5; 1 crystal for 20; 1 rare ore for 15; 1 relic for 40;
   - bought: 1 animal for 8 coins; 1 clay for 1 coin; 1 sapling for 3, 1 apple sapling for 6; 1 hay for 1; once a tier-1 contract is done, a camp kit for 150, 10 wood for 8 and 5 apples for 5; and, while the best camp is level 3 or more, an iron drill for 80, a steel drill for 250, an iron pickaxe for 60 and a copper lantern for 40. Saplings and hay join with farming (plan section 6).
   - Nothing can be bought and sold back at a profit.
-- A trade can be undone, like any action that is not a harvest.
-- **Interface:** a market button (🏪) beside the recipe book, lit on a market day. It opens a card like the book's: what can be sold (the items held) and bought, each with what the player has, and Sell, Sell all and Buy buttons. On other days the card says when the market opens, and its buttons are off. Coins are shown next to Dug in the counter.
+- A trade can be undone while the market is open; closing it starts a new Undo history.
+- **Interface:** the market's card opens by itself after a market day's night (and when a run saved with its market open is opened); × or the back button closes it and starts the day. A goals card (🎯) beside the recipe book shows the phase and its goal, the contract held (Deliver, Drop) and when the market opens next. Coins are shown next to Dug in the counter.
 
 ## 7a. Saplings [Decided; numbers Default]
 
 (Progression plan section 6.2; built in its PR 3.)
 
-- **Where saplings come from:** every [Default] 2nd tree felled in a run gives a sapling as well as its wood (`FRONTIER_SAPLINGS`; counted, not random). The recipe book makes an apple sapling from [Default] 3 apples, for 1 tap, with no smelter. The market sells both (section 6a).
+- **Where saplings come from:** only the market, which sells saplings and apple saplings (owner, decision note 0063). Felled trees give none, and the recipe book makes none.
 - **Planting** costs 1 tap and one sapling, on a lit square of surface dirt that was never mined, with nothing growing on it, no camp and no animal; a stump may be planted over (the new sapling replaces it). Cut grass waiting there no longer grows.
 - **Growing:** a sapling becomes a tree [Default] 15 shifts later, an apple sapling an apple tree full of apples [Default] 20 shifts later, by the stump rules (section 4.2): it waits under an animal or a camp, and mining its square digs it out.
 - **Interface:** while a sapling is held, a 🌱 button in the tray opens the planting mode: choose a sapling or an apple sapling, then each tap on the map plants one, or the hint says why it cannot. A planted sapling is drawn as a small sprout. Planting can be undone.
@@ -248,7 +248,7 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 - **The board:** on a market day the market's card shows up to [Default] 3 contracts of each open tier (`FRONTIER_BOARD`), drawn from the run's seed and the shift: the same seed and shift always show the same board, and the next market day shows another.
 - **Tiers open in turn:** tier 1 while the best camp is level [Default] 3 or more; tier 2 once a tier-1 contract is delivered; tier 3 once a tier-2 one is.
 - **The contracts** (`FRONTIER_CONTRACTS`, every one [Default]): tier 1 asks for coal, stone, raw ore or ingots, for 50 to 120 coins; tier 2 for the same in bulk, for 200 to 450; tier 3 for crystal, rare ore, relics or the keystone, for 700 to 2,000. Each pays more than its items fetch at the market.
-- **Taking** one costs 1 tap, on a market day, and only one is held at a time (question 173). **Delivering** costs 1 tap on any shift once the store holds everything it asks for: the items leave the store and its coins arrive ("Done on delivery", question 89). **Dropping** it costs 1 tap and gives nothing back. There is no deadline. A contract never ends the run.
+- **Taking** one is done only while the market is open, for no tap, and only one is held at a time (question 173). **Delivering** costs 1 tap on any shift once the store holds everything it asks for: the items leave the store and its coins arrive ("Done on delivery", question 89). **Dropping** it costs 1 tap and gives nothing back. There is no deadline. A contract never ends the run.
 - **Phases** (plan section 1): the run is in phase 1 until a camp reaches level 2, phase 2 until one reaches level 3, phase 3 until a tier-1 contract is delivered, phase 4 until a tier-2 one is, then phase 5 (`runPhase`). The market's card names the phase and what moves it on (`FRONTIER_PHASES`).
 - **Interface:** the top of the market's card shows the phase and its goal, the contract held (have/need for each item, Deliver and Drop), and the board (Take). The market's button glows when the contract held can be delivered.
 

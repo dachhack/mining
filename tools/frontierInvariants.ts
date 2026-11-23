@@ -112,6 +112,9 @@ export function checkStep(
   if (endsShift) {
     if (after.tapsLeft !== FRONTIER_SHIFT.taps && after.status === 'active')
       say(`a new shift has ${after.tapsLeft} taps`);
+  } else if (before.marketOpen) {
+    // Market actions cost no taps (market.ts).
+    if (after.tapsLeft !== before.tapsLeft) say(`a market action changed the taps`);
   } else if (verb !== 'close' && after.tapsLeft !== before.tapsLeft - 1) {
     say(`taps went from ${before.tapsLeft} to ${after.tapsLeft}`);
   }
@@ -223,10 +226,7 @@ export function checkStep(
     const [, item, lotsText] = step.split(' ');
     const lots = Number(lotsText);
     const best = before.camps.reduce((b, c) => Math.max(b, c.level), 1);
-    const every = FRONTIER_MARKET.everyShifts;
-    const cadence = every[Math.min(best, every.length) - 1] ?? 1;
-    if (before.shift % cadence !== 0)
-      say(`a trade on shift ${before.shift}, with the market every ${cadence} shifts`);
+    if (!before.marketOpen) say(`a trade on shift ${before.shift} with the market closed`);
     const lot = (verb === 'sell' ? FRONTIER_MARKET.sellPrices : FRONTIER_MARKET.buyPrices).find(
       (l) => l.item === item,
     );
@@ -250,6 +250,21 @@ export function checkStep(
       }
     }
   }
+  // The market opens only after a market day's night, and only market actions are taken while it is open.
+  if (endsShift && after.status === 'active') {
+    const best = after.camps.reduce((b, c) => Math.max(b, c.level), 1);
+    const every = FRONTIER_MARKET.everyShifts;
+    const cadence = every[Math.min(best, every.length) - 1] ?? 1;
+    if (after.marketOpen !== (after.shift % cadence === 0))
+      say(
+        `after End shift the market is ${after.marketOpen ? 'open' : 'closed'} on shift ${after.shift}`,
+      );
+  }
+  if (before.marketOpen && !['sell', 'buy', 'takeContract', 'closeMarket', 'close'].includes(verb))
+    say(`"${verb}" was done while the market was open`);
+  if (!endsShift && !before.marketOpen && after.marketOpen)
+    say('the market opened without a night');
+
   // The run's end.
   if (after.status === 'finished' && !(endsShift && before.shift === FRONTIER_RUN.shifts))
     say(`the run finished on shift ${before.shift}, by "${verb}"`);

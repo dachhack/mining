@@ -137,10 +137,15 @@ describe('the new game’s play interface (plan B2)', () => {
 });
 
 describe('the market and the run’s end in the play interface (progression PR 1)', () => {
-  /** A session on a market day, holding `inventory`. */
+  /** A session on a market day, its market open after the night, holding `inventory`. */
   function marketSession(inventory: Record<string, number>): ReturnType<typeof newFrontierSession> {
     const session = newFrontierSession(SEED);
-    const state = { ...session.state, shift: 10, inventory: new Map(Object.entries(inventory)) };
+    const state = {
+      ...session.state,
+      shift: 10,
+      marketOpen: true,
+      inventory: new Map(Object.entries(inventory)),
+    };
     return { ...session, state, shiftLog: { start: state, actions: [] } };
   }
 
@@ -152,17 +157,24 @@ describe('the market and the run’s end in the play interface (progression PR 1
   });
 
   it('shows the market’s prices on a market day, and when it opens next otherwise', () => {
-    expect(frontierView(newFrontierSession(SEED))).toContain('Market: opens on shift 10');
+    expect(frontierView(newFrontierSession(SEED))).toContain(
+      'Market: opens after the night before shift 10',
+    );
     const open = frontierView(marketSession({ wood: 10 }));
-    expect(open).toContain('Market: OPEN this shift');
+    expect(open).toContain('Market: OPEN, before the day');
     expect(open).toContain('Coins 0');
   });
 
-  it('sells for coins, for 1 tap, and says why a trade is refused', () => {
+  it('sells for coins and no tap, leaves the market to start the day, and says why a trade is refused', () => {
     const sold = act(marketSession({ wood: 10 }), 'sell wood 2');
     expect(sold.refused).toBeNull();
-    expect(sold.session.state.tapsLeft).toBe(FRONTIER_SHIFT.taps - 1);
+    expect(sold.session.state.tapsLeft).toBe(FRONTIER_SHIFT.taps);
     expect(frontierView(sold.session)).toContain('Coins 2');
+    expect(act(sold.session, 'tap 1,1').refused).toContain('The market is open');
+    expect(stepOf('leave', [])).toBe('closeMarket');
+    const day = act(sold.session, 'closeMarket');
+    expect(day.refused).toBeNull();
+    expect(act(day.session, 'sell wood 1').refused).toContain('not open');
     expect(act(newFrontierSession(SEED), 'sell wood 1').refused).toContain('not open');
   });
 });
@@ -206,6 +218,7 @@ describe('contracts and phases in the play interface (progression PR 5)', () => 
     const state = {
       ...start.state,
       shift: 30,
+      marketOpen: true,
       camps: start.state.camps.map((c) => ({ ...c, level: 3 })),
     };
     const session = { ...start, state, shiftLog: { start: state, actions: [] } };
@@ -215,6 +228,7 @@ describe('contracts and phases in the play interface (progression PR 5)', () => 
     const taken = act(session, `takeContract ${id}`);
     expect(taken.refused).toBeNull();
     expect(frontierView(taken.session)).toContain('Contract: ');
-    expect(act(taken.session, 'deliver').refused).toBe('You do not hold enough for that.');
+    const day = act(taken.session, 'closeMarket').session;
+    expect(act(day, 'deliver').refused).toBe('You do not hold enough for that.');
   });
 });

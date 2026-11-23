@@ -8,8 +8,7 @@
 // of apples after FRONTIER_SAPLINGS.appleSaplingGrowShifts. It waits under
 // an animal or a camp, and it is lost if its square is mined.
 //
-// Saplings come from felling trees (surface.ts) and from the market;
-// apple saplings from apples in the recipe book, and from the market.
+// Saplings and apple saplings come only from the market (owner).
 
 import { BLOCKS } from '../../data';
 import type { ItemId } from '../../data';

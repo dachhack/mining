@@ -27,7 +27,8 @@ import {
   depthAt,
   frontierAct,
   hasSmelter,
-  isMarketDay,
+  coinsHeld,
+  marketIsOpen,
   mostLots,
   tradeRefusal,
   lanternRefusal,
@@ -54,7 +55,8 @@ import { APPLE_TREE, NO_FEATURE } from '../src/engine/frontier/state';
  * an apple sapling on square X,Y), "buildPen ID", "penIn ID" or "penOut ID"
  * (a pen at camp ID, an animal into it or out of it), "takeContract ID"
  * (a contract from today's board), "deliver", "dropContract", or
- * "placeDeep X,Y" (a deep camp).
+ * "placeDeep X,Y" (a deep camp), or "closeMarket" (the market closes and
+ * the day starts).
  */
 export type FrontierStep = string;
 
@@ -102,7 +104,13 @@ export function actionOf(step: FrontierStep): FrontierAction {
   if (verb === 'plant' && arg !== undefined && third !== undefined) {
     return { kind: 'plant', ...squareOf(arg), item: third };
   }
-  if (verb === 'endShift' || verb === 'close' || verb === 'deliver' || verb === 'dropContract') {
+  if (
+    verb === 'endShift' ||
+    verb === 'close' ||
+    verb === 'deliver' ||
+    verb === 'dropContract' ||
+    verb === 'closeMarket'
+  ) {
     return { kind: verb };
   }
   if (verb === 'takeContract' && arg !== undefined) {
@@ -230,7 +238,7 @@ const GATHERER_SELLS_ALL = ['crystal', 'rareOre', 'relic'];
  * it is not a market day.
  */
 export function marketStep(state: FrontierState): FrontierStep | null {
-  if (!isMarketDay(state)) return null;
+  if (!marketIsOpen(state)) return null;
   for (const tool of [FRONTIER_DRILL.item, FRONTIER_STEEL_DRILL.item]) {
     const held = (state.inventory.get(tool) ?? 0) > 0;
     if (!held && tradeRefusal(state, 'buy', tool, 1) === null) return `buy ${tool} 1`;
@@ -245,9 +253,13 @@ export function marketStep(state: FrontierState): FrontierStep | null {
     const lots = Math.min(wanted, mostLots(state, 'buy', 'wood'));
     if (lots > 0 && tradeRefusal(state, 'buy', 'wood', lots) === null) return `buy wood ${lots}`;
   }
+  // Saplings come only from the market: two at a time, keeping 40 coins back.
+  if ((state.inventory.get('sapling') ?? 0) === 0 && coinsHeld(state) >= 40) {
+    if (tradeRefusal(state, 'buy', 'sapling', 2) === null) return 'buy sapling 2';
+  }
   // A camp kit for one deep camp (progression PR 6), keeping 100 coins back.
   const kit = (state.inventory.get('campKit') ?? 0) > 0;
-  const coins = state.inventory.get(FRONTIER_MARKET.coin) ?? 0;
+  const coins = coinsHeld(state);
   if (!kit && !state.camps.some((c) => c.deep) && coins >= 250) {
     if (tradeRefusal(state, 'buy', 'campKit', 1) === null) return 'buy campKit 1';
   }
@@ -340,8 +352,9 @@ export function contractStep(state: FrontierState): FrontierStep | null {
   if (deliverRefusal(state) === null && keepsUpgrade(state)) return 'deliver';
   const held = state.contract;
   if (held !== null) {
+    // Dropped on the first day after the market, so another can be taken at the next.
     const stale = state.shift - held.takenOn >= GATHERER_CONTRACT_PATIENCE;
-    return stale && isMarketDay(state) ? 'dropContract' : null;
+    return stale && !marketIsOpen(state) ? 'dropContract' : null;
   }
   let best: { id: string; share: number; tier: number } | null = null;
   for (const offer of contractBoard(state)) {
@@ -454,6 +467,12 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
   if (state.status !== 'active') return null;
   if (state.tapsLeft === 0) {
     return state.health <= GATHERER_REST_AT ? restStep(state) : 'endShift';
+  }
+  // While the market is open (after a market day's night): trade and take a
+  // contract, then close it and start the day.
+  if (marketIsOpen(state)) {
+    const take = contractStep(state);
+    return marketStep(state) ?? (take?.startsWith('takeContract') === true ? take : 'closeMarket');
   }
   const craft =
     contractStep(state) ??

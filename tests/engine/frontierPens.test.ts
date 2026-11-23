@@ -27,7 +27,8 @@ function play(state: FrontierState, actions: FrontierAction[]): FrontierState {
 /** End a shift with upkeep paid in wood and grass (grass is eaten before hay, apples and animals). */
 function endShift(state: FrontierState): FrontierState {
   const fed = new Map([...state.inventory, ['wood', 50], ['grass', 150]]);
-  return frontierAct({ ...state, inventory: fed }, { kind: 'endShift' }).state;
+  // A market day's market opens after the night; it is closed before the day.
+  return frontierAct({ ...state, inventory: fed, marketOpen: false }, { kind: 'endShift' }).state;
 }
 
 const penAt1 = (s: FrontierState) => s.camps.find((c) => c.id === 1);

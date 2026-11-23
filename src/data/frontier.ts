@@ -226,15 +226,14 @@ export const FRONTIER_SHIFT = {
 };
 
 /**
- * Saplings (progression plan section 6.2). Every `saplingEveryFelled`th tree
- * felled gives a sapling too: counted, not random, so a run replays
- * exactly. A sapling planted on lit dirt at the surface, or on a stump,
+ * Saplings (progression plan section 6.2). Saplings and apple saplings come
+ * only from the market (owner, after the progression playtest build:
+ * "Saplings are only available from the market. Apple saplings are also
+ * available."). A sapling planted on lit dirt at the surface, or on a stump,
  * grows into a tree `saplingGrowShifts` shifts later; an apple sapling into
- * an apple tree full of apples `appleSaplingGrowShifts` later. Apple
- * saplings are made from apples in the recipe book (FRONTIER_RECIPES).
+ * an apple tree full of apples `appleSaplingGrowShifts` later.
  */
 export const FRONTIER_SAPLINGS = {
-  saplingEveryFelled: 2,
   saplingGrowShifts: 15,
   appleSaplingGrowShifts: 20,
 };
@@ -339,14 +338,6 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
     ],
     output: { item: 'drill', count: 1 },
     needsSmelter: true,
-  },
-  // An apple sapling from apples (progression plan section 6.2): no smelter.
-  {
-    id: 'apple-sapling',
-    name: 'Apple sapling',
-    inputs: [{ item: 'apple', count: 3 }],
-    output: { item: 'appleSapling', count: 1 },
-    needsSmelter: false,
   },
   // Hay from grass (progression plan section 6.3): no smelter.
   {
