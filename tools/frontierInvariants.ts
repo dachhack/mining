@@ -29,11 +29,18 @@
 // - SMELTERS: only at camps of FRONTIER_SMELTER.minLevel or more.
 // - LANTERNS: hung ones came from the store: a camp gains a lantern only as
 //   one lantern leaves the store.
+// - THE MARKET AND THE RUN'S END: a trade happens only on a market day
+//   (worked out here from the data), gives up and gets exactly a whole
+//   number of lots at its price, and changes nothing else in the store; a
+//   run is 'finished' only by the End shift or rest of its last shift, and
+//   no shift past the last is ever played.
 
 import {
   FRONTIER_CAMP_LEVELS,
   FRONTIER_DRILL,
   FRONTIER_LANTERN,
+  FRONTIER_MARKET,
+  FRONTIER_RUN,
   FRONTIER_SHIFT,
   FRONTIER_SMELTER,
   FRONTIER_SURFACE,
@@ -173,6 +180,40 @@ export function checkStep(
     if (held(before) - held(after) !== newlyHung)
       say(`${newlyHung} lantern(s) hung, but the store went ${held(before)} -> ${held(after)}`);
   }
+
+  // The market: worked out here from the data, not with the engine's market.ts.
+  if (verb === 'sell' || verb === 'buy') {
+    const [, item, lotsText] = step.split(' ');
+    const lots = Number(lotsText);
+    const best = before.camps.reduce((b, c) => Math.max(b, c.level), 1);
+    const every = FRONTIER_MARKET.everyShifts;
+    const cadence = every[Math.min(best, every.length) - 1] ?? 1;
+    if (before.shift % cadence !== 0)
+      say(`a trade on shift ${before.shift}, with the market every ${cadence} shifts`);
+    const lot = (verb === 'sell' ? FRONTIER_MARKET.sellPrices : FRONTIER_MARKET.buyPrices).find(
+      (l) => l.item === item,
+    );
+    if (lot === undefined) {
+      say(`a trade in ${item ?? '?'}, which the market does not ${verb}`);
+    } else {
+      const sign = verb === 'sell' ? 1 : -1;
+      const expected = new Map<string, number>([
+        [lot.item, -sign * lot.count * lots],
+        [FRONTIER_MARKET.coin, sign * lot.coins * lots],
+      ]);
+      const items = new Set([...before.inventory.keys(), ...after.inventory.keys()]);
+      for (const key of items) {
+        const change = (after.inventory.get(key) ?? 0) - (before.inventory.get(key) ?? 0);
+        if (change !== (expected.get(key) ?? 0))
+          say(`the trade changed ${key} by ${change}, not ${expected.get(key) ?? 0}`);
+      }
+    }
+  }
+  // The run's end.
+  if (after.status === 'finished' && !(endsShift && before.shift === FRONTIER_RUN.shifts))
+    say(`the run finished on shift ${before.shift}, by "${verb}"`);
+  if (after.status === 'active' && after.shift > FRONTIER_RUN.shifts)
+    say(`shift ${after.shift} is past the run's last`);
 
   // The surface.
   const squares = new Set<string>();

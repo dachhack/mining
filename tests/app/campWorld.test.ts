@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { BLOCKS } from '../../src/data';
 import type { BlockId, ItemStack } from '../../src/data';
 import { LAB_CAMP_LEVELS, LAB_NEW_CAMP_COST } from '../../src/data/labCamps';
-import { depthAt, hashState, topBlockAt } from '../../src/engine';
+import { createFrontier, depthAt, hashState, topBlockAt } from '../../src/engine';
 import {
   MAX_CAMP_LEVEL,
   applyCampStep,
@@ -11,12 +11,15 @@ import {
   campRadius,
   campTap,
   campWorldFromState,
+  campWorldOf,
   canAfford,
   coverLevelAt,
   inCircle,
   levelNeededFor,
+  marketOpen,
   newCampWorld,
   newlyCovered,
+  nextMarketShift,
   demolishCamp,
   demolishRefusal,
   endShift,
@@ -28,6 +31,7 @@ import {
   sightAt,
   sightMap,
   startSquare,
+  tradeRefusal,
   upgradeCamp,
   upgradeCostFrom,
   upgradeRefusal,
@@ -530,4 +534,20 @@ describe('reach (owner, question 138: "Bigger light radius")', () => {
       expect(shown, `seed ${seed}`).toBeLessThan((size.x * size.y) / 3);
     }
   }, 60_000); // 200 whole worlds: about 2.4 s alone, but over 5 s on CI with every suite running at once
+});
+
+describe('the market on the game screen (progression PR 1)', () => {
+  it('opens on a market day, and a trade is a step that replays and costs 1 tap', () => {
+    const start = createFrontier(110);
+    const closed = campWorldOf({ ...start, inventory: new Map([['wood', 10]]) });
+    expect(marketOpen(closed)).toBe(false);
+    expect(nextMarketShift(closed)).toBe(10);
+    expect(tradeRefusal(closed, 'sell', 'wood', 1)).toBe('closed');
+    const open = campWorldOf({ ...start, shift: 10, inventory: new Map([['wood', 10]]) });
+    expect(marketOpen(open)).toBe(true);
+    const sold = applyCampStep(open, { kind: 'sell', item: 'wood', lots: 5 });
+    expect(sold.lab.counts.get('wood') ?? 0).toBe(0);
+    expect(sold.lab.counts.get('coin')).toBe(5);
+    expect(sold.turn.tapsLeft).toBe(open.turn.tapsLeft - 1);
+  });
 });

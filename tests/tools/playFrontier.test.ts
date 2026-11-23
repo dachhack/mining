@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { FRONTIER_SHIFT } from '../../src/data/frontier';
+import { FRONTIER_RUN, FRONTIER_SHIFT } from '../../src/data/frontier';
 import { ENGINE_VERSION, hashFrontier } from '../../src/engine';
 import { replayFrontier } from '../../tools/frontierRun';
 import {
@@ -53,7 +53,7 @@ describe('the new game’s play interface (plan B2)', () => {
   it('shows only what the player may know: fog, the camps, the numbers', () => {
     const view = frontierView(newFrontierSession(SEED));
     expect(view).toContain(
-      `Seed ${SEED} · Shift 1 · Taps ${FRONTIER_SHIFT.taps}/${FRONTIER_SHIFT.taps}`,
+      `Seed ${SEED} · Shift 1/${FRONTIER_RUN.shifts} · Coins 0 · Taps ${FRONTIER_SHIFT.taps}/${FRONTIER_SHIFT.taps}`,
     );
     expect(view).toContain('??'); // fog
     expect(view).toContain('Camp 1 at');
@@ -133,5 +133,36 @@ describe('the new game’s play interface (plan B2)', () => {
     expect(result.output).toContain(`${camp.x},${camp.y}: depth 0`);
     expect(result.output).toContain("camp 1's ground");
     expect(result.output).toContain(`Taps ${FRONTIER_SHIFT.taps}/${FRONTIER_SHIFT.taps}`);
+  });
+});
+
+describe('the market and the run’s end in the play interface (progression PR 1)', () => {
+  /** A session on a market day, holding `inventory`. */
+  function marketSession(inventory: Record<string, number>): ReturnType<typeof newFrontierSession> {
+    const session = newFrontierSession(SEED);
+    const state = { ...session.state, shift: 10, inventory: new Map(Object.entries(inventory)) };
+    return { ...session, state, shiftLog: { start: state, actions: [] } };
+  }
+
+  it('reads "sell" and "buy" with any letter case of the item', () => {
+    expect(stepOf('sell wood 3', [])).toBe('sell wood 3');
+    expect(stepOf('Sell RawIronOre 2', [])).toBe('sell rawIronOre 2');
+    expect(stepOf('buy animal 1', [])).toBe('buy animal 1');
+    expect(stepOf('buy wood 1', [])).toBeNull(); // the market does not sell wood
+  });
+
+  it('shows the market’s prices on a market day, and when it opens next otherwise', () => {
+    expect(frontierView(newFrontierSession(SEED))).toContain('Market: opens on shift 10');
+    const open = frontierView(marketSession({ wood: 10 }));
+    expect(open).toContain('Market: OPEN this shift');
+    expect(open).toContain('Coins 0');
+  });
+
+  it('sells for coins, for 1 tap, and says why a trade is refused', () => {
+    const sold = act(marketSession({ wood: 10 }), 'sell wood 2');
+    expect(sold.refused).toBeNull();
+    expect(sold.session.state.tapsLeft).toBe(FRONTIER_SHIFT.taps - 1);
+    expect(frontierView(sold.session)).toContain('Coins 2');
+    expect(act(newFrontierSession(SEED), 'sell wood 1').refused).toContain('not open');
   });
 });

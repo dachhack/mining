@@ -60,8 +60,12 @@ import type { GameState } from './state';
  *        after the owner's answers of 2026-11-23 (questions 159 to 164).
  *        PR 3 (the iron pickaxe and the copper lantern) and PR 4 (the iron
  *        drill and camp level 4) are in the same batch.
+ * 0.9.0: progression in five phases, PR 1: a run lasts 100 shifts, and the
+ *        market and coins (docs/plans/progression-phases.md). First engine
+ *        PR of the batch after the owner's answers of 2026-11-23; the
+ *        plan's later PRs share it until the next playtest.
  */
-export const ENGINE_VERSION = '0.8.0';
+export const ENGINE_VERSION = '0.9.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
@@ -499,6 +503,19 @@ export {
 export type { LanternRefusal, MakeRefusal, SmelterRefusal } from './frontier/smelting';
 export type { FrontierTap, FrontierTapKind } from './frontier/tap';
 export { hashFrontier } from './frontier/hash';
+// The run's end and the market (docs/plans/progression-phases.md, PR 1).
+export {
+  bestCampLevel,
+  coinsHeld,
+  isMarketDay,
+  marketEvery,
+  marketLot,
+  mostLots,
+  nextMarketShift,
+  trade,
+  tradeRefusal,
+} from './frontier/market';
+export type { TradeRefusal, TradeSide } from './frontier/market';
 // Shifts (plan A4).
 export { endFrontierShift, frontierAct, upkeepDue } from './frontier/shift';
 export type { FrontierAction, FrontierOutcome, ShiftReport } from './frontier/shift';

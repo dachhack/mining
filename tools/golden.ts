@@ -321,7 +321,7 @@ const FRONTIER_RUNS: {
     policy: 'gatherer',
     maxShifts: 10,
     description:
-      'The gatherer for 10 shifts of 100 taps: takes plants and animals, places two more camps where they light the most new ground, mines 559 blocks, upgrades three times, builds a smelter, and is never hungry',
+      'The gatherer for 10 shifts of 100 taps: takes plants and animals, places two more camps where they light the most new ground, mines 544 blocks, upgrades three times, builds a smelter, sells grass on market days, and is never hungry',
   },
   {
     name: 'gatherer-seed-26',
@@ -353,7 +353,7 @@ const FRONTIER_RUNS: {
     policy: 'random',
     maxShifts: 10,
     description:
-      'The random policy: a useful step at random, ending each shift when its taps run out; it upgrades a camp to level 3 and is never hungry',
+      'The random policy: a useful step at random, ending each shift when its taps run out; it upgrades a camp to level 2, builds a smelter, buys clay at the market, and is never hungry',
   },
   {
     name: 'random-seed-16-tools',
@@ -361,7 +361,15 @@ const FRONTIER_RUNS: {
     policy: 'random',
     maxShifts: 42,
     description:
-      'The random policy on another seed, for 42 shifts: it builds smelters, smelts, makes an iron pickaxe, an iron drill and copper lanterns, mines with the tools, hangs a lantern, and in its last shift upgrades a camp to level 4',
+      'The random policy on another seed, for 42 shifts: it builds a smelter, smelts, makes an iron pickaxe and copper lanterns, mines with the pickaxe, hangs a lantern, upgrades its camp to level 3, and buys animals and clay at the market',
+  },
+  {
+    name: 'careful-seed-3-finished',
+    seed: 3,
+    policy: 'careful',
+    maxShifts: 100,
+    description:
+      'The careful policy for a whole run of 100 shifts (docs/plans/progression-phases.md): it sells its surplus on market days and the run ends finished, scored in coins',
   },
   {
     name: 'idle-seed-2-lost',

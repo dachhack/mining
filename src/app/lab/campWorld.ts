@@ -35,6 +35,9 @@ import {
   depthMapOf,
   frontierAct,
   frontierStartSquare,
+  isMarketDay,
+  nextMarketShift as engineNextMarketShift,
+  tradeRefusal as engineTradeRefusal,
   campAt as engineCampAt,
   coverLevelAt as engineCoverLevelAt,
   demolishRefusal as engineDemolishRefusal,
@@ -59,6 +62,7 @@ import type {
   PlaceRefusal as EnginePlaceRefusal,
   ShiftReport,
   Sight,
+  TradeSide,
 } from '../../engine';
 import { labWorldFromState } from './labWorld';
 import type { LabTap, LabWorld } from './labWorld';
@@ -92,7 +96,7 @@ export interface CampTurn {
   tapsLeft: number;
   /** The crew's health: 0 loses the run. */
   health: number;
-  /** 'active', 'lost' (the crew's health reached 0) or 'closed' (the mine was closed). */
+  /** 'active', 'lost' (the crew's health reached 0), 'closed' (the mine was closed) or 'finished' (the last shift ended). */
   status: FrontierStatus;
 }
 
@@ -479,6 +483,38 @@ export function hangCampLantern(world: CampWorld, id: number): CampWorld {
   return act(world, { kind: 'hangLantern', id }).world;
 }
 
+// ----- The market (docs/plans/progression-phases.md, PR 1) -----
+
+/** True if the market is open in the shift being played. */
+export function marketOpen(world: CampWorld): boolean {
+  return isMarketDay(toFrontier(world));
+}
+
+/** The shift on which the market opens next at today's cadence (this one, if it is open). */
+export function nextMarketShift(world: CampWorld): number {
+  return engineNextMarketShift(toFrontier(world));
+}
+
+/** Why `lots` lots of `item` cannot be traded now ('noTaps', 'over', or the engine's reason), or `null` if they can. */
+export function tradeRefusal(
+  world: CampWorld,
+  side: TradeSide,
+  item: string,
+  lots: number,
+): string | null {
+  return turnRefusal(world) ?? engineTradeRefusal(toFrontier(world), side, item, lots);
+}
+
+/** Sell or buy `lots` lots of `item`, for 1 tap; the very same world if it cannot. */
+export function tradeCamp(
+  world: CampWorld,
+  side: TradeSide,
+  item: string,
+  lots: number,
+): CampWorld {
+  return act(world, { kind: side, item, lots }).world;
+}
+
 /** Why camp `id` cannot be demolished now, or `null` if it can. */
 export function demolishRefusal(
   world: CampWorld,
@@ -572,6 +608,9 @@ export type CampStep =
   | { kind: 'make'; recipe: string }
   // Hang a lantern at a camp (PR 3).
   | { kind: 'hangLantern'; id: number }
+  // Sell or buy at the market (progression PR 1).
+  | { kind: 'sell'; item: string; lots: number }
+  | { kind: 'buy'; item: string; lots: number }
   // End the shift, rest at a camp, or close the mine (A4).
   | { kind: 'endShift' }
   | { kind: 'rest'; id: number }
@@ -605,6 +644,9 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   }
   if (step.kind === 'hangLantern') {
     return hangCampLantern(world, step.id);
+  }
+  if (step.kind === 'sell' || step.kind === 'buy') {
+    return tradeCamp(world, step.kind, step.item, step.lots);
   }
   return demolishCamp(world, step.id);
 }

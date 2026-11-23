@@ -1,6 +1,6 @@
 # Progression in five phases: the plan
 
-Status: **direction agreed with the owner** (2026-11-23, in conversation; decision note 0061). Nothing here is built yet. Rules marked [Decided] are the owner's words. Everything marked [Default] is a starting value filled in for the owner to tune, held in `src/data/frontier.ts` once built. The defaults that are design choices rather than numbers are owner questions 167 to 176, status `assumed`.
+Status: **direction agreed with the owner** (2026-11-23, in conversation; decision note 0061). PR 1 is built (engine 0.9.0): a run of 100 shifts, coins, and the market with selling and buying (design doc sections 5.1 and 6a). The rest is not built yet. Rules marked [Decided] are the owner's words. Everything marked [Default] is a starting value filled in for the owner to tune, held in `src/data/frontier.ts` once built. The defaults that are design choices rather than numbers are owner questions 167 to 176, status `assumed`.
 
 This replaces "contracts next" (section 8 of the design doc) with a whole run arc. It changes four [Decided] items of the design doc, with the owner's approval: what each camp level mines (section 6), where camps may stand (section 2, Base), what the smelter is for (section 6), and how a run ends (sections 5.1 and 8). The design doc is updated batch by batch, as each rule is built.
 

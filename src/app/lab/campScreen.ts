@@ -23,13 +23,17 @@ import type { ItemId, ItemStack } from '../../data';
 import {
   FRONTIER_DRILL,
   FRONTIER_LANTERN,
+  FRONTIER_MARKET,
   FRONTIER_PICKAXE,
+  FRONTIER_RUN,
   FRONTIER_SHIFT,
   FRONTIER_SMELTER,
 } from '../../data/frontier';
+import type { FrontierLot } from '../../data/frontier';
 import { LAB_ITEMS, LAB_NEW_CAMP_COST } from '../../data/labCamps';
 import type { HigherNeighbour, SquareDirection } from '../../engine';
-import { SQUARE_STEPS, loadFrontier, saveFrontier } from '../../engine';
+import { SQUARE_STEPS, loadFrontier, mostLots, saveFrontier } from '../../engine';
+import type { TradeSide } from '../../engine';
 import { randomSeed } from '../previewSession';
 import { CAMP_LOOK, CAMP_MARKS } from './campLook';
 import {
@@ -57,7 +61,11 @@ import {
   footprintOf,
   makeCampRecipe,
   makeRefusal,
+  marketOpen,
+  nextMarketShift,
   smelterRefusal,
+  tradeCamp,
+  tradeRefusal,
   placeCamp,
   PREPARED_LAB2_KEY,
   placeRefusal,
@@ -137,16 +145,23 @@ export const RUN_KEY = 'mining-game.run';
 function shiftText(report: ShiftReport, turn: CampTurn, rested: boolean): string {
   const paid = report.paid.map((s) => `${s.count} ${itemName(s.item).toLowerCase()}`).join(', ');
   const lacking = report.unpaid.map((s) => s.item).join(' or ');
-  const start = rested ? `Rested. Shift ${report.shift} over` : `Shift ${report.shift} over`;
+  const start = rested
+    ? `Rested. Shift ${report.shift} of ${FRONTIER_RUN.shifts} over`
+    : `Shift ${report.shift} of ${FRONTIER_RUN.shifts} over`;
   if (turn.status === 'lost') {
     return `${start}: no ${lacking}. The crew is lost.`;
+  }
+  // The last shift (progression plan section 7): the coins held are the score.
+  const market = report.marketOpens ? ' Market day: the market 🏪 is open.' : '';
+  if (turn.status === 'finished') {
+    return `${start}. That was the last shift: the run is over.`;
   }
   if (report.healthLost > 0) {
     const part = paid === '' ? '' : `paid ${paid}; `;
     // The crew rests only at a camp (question 156), so say where.
-    return `${start}: ${part}no ${lacking}, −${report.healthLost} health. Tap a camp to rest.`;
+    return `${start}: ${part}no ${lacking}, −${report.healthLost} health. Tap a camp to rest.${market}`;
   }
-  return `${start}: ${paid === '' ? 'nothing due' : `paid ${paid}`}.`;
+  return `${start}: ${paid === '' ? 'nothing due' : `paid ${paid}`}.${market}`;
 }
 
 /** What the place-camp tool says about a target the rules refuse. */
@@ -180,7 +195,9 @@ type Mode =
   | { kind: 'placing'; target: { x: number; y: number } | null }
   | { kind: 'camp'; id: number }
   // The recipe book is open in the tray.
-  | { kind: 'book' };
+  | { kind: 'book' }
+  // The market's card is open (progression PR 1).
+  | { kind: 'market' };
 
 /** How long each kind of effect lasts, in milliseconds. */
 function effectMs(kind: Effect['kind']): number {
@@ -394,12 +411,12 @@ export function mountCampLab(
   // history. Opening the book adds a history entry (same address, so the
   // screen does not reload), and going back from it closes the book.
   window.addEventListener('popstate', () => {
-    if (mode.kind === 'book') {
+    if (mode.kind === 'book' || mode.kind === 'market') {
       setMode({ kind: 'idle' });
     }
   });
   window.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && mode.kind === 'book') closeBook();
+    if (event.key === 'Escape' && (mode.kind === 'book' || mode.kind === 'market')) closeBook();
   });
 
   // ----- Drawing -----
@@ -1238,7 +1255,17 @@ export function mountCampLab(
       element('span', 'lab-chip-count', String(world.lab.mined)),
       element('span', 'lab-chip-name', 'Dug'),
     );
-    const chips: HTMLElement[] = [dug];
+    // Coins (progression PR 1): the run's score, so always shown, next to Dug.
+    const coins = counts.get(FRONTIER_MARKET.coin) ?? 0;
+    const coinChip = element('div', 'lab-chip lab-chip-dug');
+    coinChip.dataset['testid'] = 'lab-coins';
+    coinChip.dataset['count'] = String(coins);
+    coinChip.append(
+      element('span', 'lab-chip-glyph', '🪙'),
+      element('span', 'lab-chip-count', String(coins)),
+      element('span', 'lab-chip-name', 'Coins'),
+    );
+    const chips: HTMLElement[] = [dug, coinChip];
     const chip = (item: string, count: number, icon: HTMLCanvasElement): void => {
       const made = element('div', 'lab-chip');
       made.dataset['testid'] = `lab-res-${item}`;
@@ -1345,13 +1372,17 @@ export function mountCampLab(
 
   function showTray(): void {
     tray.dataset['mode'] = mode.kind;
-    bookCard.hidden = mode.kind !== 'book';
+    bookCard.hidden = mode.kind !== 'book' && mode.kind !== 'market';
+    bookCard.setAttribute('aria-label', mode.kind === 'market' ? 'Market' : 'Recipe book');
     if (mode.kind === 'idle') {
       showIdleTray();
     } else if (mode.kind === 'book') {
       // The tray behind the card stays as it is when nothing is open.
       showIdleTray();
       showBookCard();
+    } else if (mode.kind === 'market') {
+      showIdleTray();
+      showMarketCard();
     } else if (mode.kind === 'placing') {
       showPlacingTray(mode.target);
     } else {
@@ -1376,6 +1407,18 @@ export function mountCampLab(
     book.setAttribute('aria-label', 'Recipe book');
     book.title = 'Recipe book';
     book.addEventListener('click', openBook);
+    // The market (progression PR 1): lit on a market day; on other days it
+    // opens the card too, to show the prices and when the market opens.
+    const open = marketOpen(world);
+    const market = button(open ? 'lab2-book-button lab2-market-open' : 'lab2-book-button', '🏪');
+    market.dataset['testid'] = 'lab2-market';
+    market.dataset['open'] = String(open);
+    const marketLabel = open
+      ? 'Market: open this shift'
+      : `Market: opens on shift ${nextMarketShift(world)}`;
+    market.setAttribute('aria-label', marketLabel);
+    market.title = marketLabel;
+    market.addEventListener('click', openMarket);
     const tool = button('lab2-tool', '');
     tool.dataset['testid'] = 'lab2-camp-tool';
     tool.setAttribute('aria-label', 'New camp: choose where');
@@ -1387,7 +1430,7 @@ export function mountCampLab(
     tool.append(element('span', 'lab2-tool-glyph', '⛺'), element('span', 'lab2-tool-plus', '+'));
     tool.addEventListener('click', () => setMode({ kind: 'placing', target: null }));
     const side = pinStrip();
-    head.append(book, tool, side);
+    head.append(book, market, tool, side);
     const key = labKey();
     // The key lists the kinds you can see: lit and greyed squares, never what is under the fog.
     const seenTops = tops.filter((_, i) => (sights[i] ?? 'fog') !== 'fog');
@@ -1514,9 +1557,17 @@ export function mountCampLab(
     setMode({ kind: 'book' });
   }
 
-  /** Close the recipe book card: going back takes away its history entry, and `popstate` closes it. */
+  /** Open the market's card, as the recipe book's: the same card, the back button closes it. */
+  function openMarket(): void {
+    if (mode.kind === 'market') return;
+    bookNote.textContent = '';
+    window.history.pushState({ lab2Book: true }, '');
+    setMode({ kind: 'market' });
+  }
+
+  /** Close the recipe book or market card: going back takes away its history entry, and `popstate` closes it. */
   function closeBook(): void {
-    if (mode.kind !== 'book') return;
+    if (mode.kind !== 'book' && mode.kind !== 'market') return;
     const state: unknown = window.history.state;
     const ours = typeof state === 'object' && state !== null && 'lab2Book' in state;
     if (ours) {
@@ -1599,6 +1650,112 @@ export function mountCampLab(
     const inner = element('div', 'lab2-book-inner');
     inner.append(head, bookNote, list);
     bookCard.replaceChildren(inner);
+  }
+
+  /**
+   * The market's card (progression PR 1): what it buys and sells, a lot at
+   * a time, with Sell / Sell all / Buy buttons, each 1 tap. On other days it
+   * shows the prices and when it opens, with the buttons off.
+   */
+  function showMarketCard(): void {
+    const head = element('div', 'lab2-panel-head');
+    const coins = world.lab.counts.get(FRONTIER_MARKET.coin) ?? 0;
+    head.append(element('span', 'lab2-panel-title', `🏪 Market · 🪙 ${coins}`));
+    const close = button('lab2-close', '×');
+    close.setAttribute('aria-label', 'Close the market');
+    close.dataset['testid'] = 'lab2-market-close';
+    close.addEventListener('click', closeBook);
+    head.append(close);
+    const open = marketOpen(world);
+    const when = element(
+      'p',
+      'lab2-market-when',
+      open
+        ? 'Open this shift. Each trade costs 1 tap.'
+        : `Closed. It opens on shift ${nextMarketShift(world)}: every ${FRONTIER_MARKET.everyShifts.join(', ')} shifts with your best camp at level 1, 2, 3.`,
+    );
+    when.dataset['testid'] = 'lab2-market-when';
+    const list = element('div', 'lab2-book-list');
+    list.dataset['testid'] = 'lab2-market-list';
+    const section = (title: string): void => {
+      list.append(element('span', 'lab2-market-section', title));
+    };
+    section('Sell');
+    for (const lot of FRONTIER_MARKET.sellPrices) {
+      if ((world.lab.counts.get(lot.item) ?? 0) > 0) list.append(marketRow('sell', lot));
+    }
+    section('Buy');
+    for (const lot of FRONTIER_MARKET.buyPrices) list.append(marketRow('buy', lot));
+    const inner = element('div', 'lab2-book-inner');
+    inner.append(head, when, bookNote, list);
+    bookCard.replaceChildren(inner);
+  }
+
+  /** One lot at the market: what it takes (have/need) and gives, and its buttons. */
+  function marketRow(side: TradeSide, lot: FrontierLot): HTMLElement {
+    const row = element('div', 'lab2-recipe');
+    row.dataset['testid'] = `lab2-${side}-${lot.item}`;
+    const text = element('div', 'lab2-recipe-text');
+    const goods = countText(lot.count, lot.item);
+    const coins = `${lot.coins} 🪙`;
+    // What the trade gives up, with the item's icon: the goods to sell, or the coins to buy with.
+    const gives = side === 'sell' ? lot.item : FRONTIER_MARKET.coin;
+    const held = world.lab.counts.get(gives) ?? 0;
+    const have = element('span', 'lab2-recipe-does', `Have ${countText(held, gives)}`);
+    have.dataset['testid'] = `lab2-${side}-have-${lot.item}`;
+    // The lab's own icon for the item, else the icon of the block that yields it.
+    const block = resourceEntries(new Map([[lot.item, 1]]))[0]?.iconBlock;
+    const icon =
+      labItemIcon(lot.item, 'lab2-cost-icon') ??
+      (block === undefined ? null : blockIcon(block, 'lab2-cost-icon'));
+    const name = element(
+      'span',
+      'lab2-recipe-name',
+      side === 'sell' ? `${goods} → ${coins}` : `${coins} → ${goods}`,
+    );
+    text.append(name, have);
+    const buttons = element('div', 'lab2-recipe-buttons lab2-market-buttons');
+    if (side === 'sell') {
+      const most = mostLots(toFrontier(world), side, lot.item);
+      const all = button('lab2-recipe-pin', `All ×${most}`);
+      all.dataset['testid'] = `lab2-sell-all-${lot.item}`;
+      all.disabled = most < 2 || tradeRefusal(world, side, lot.item, most) !== null;
+      all.addEventListener('click', () => tradeInMarket(side, lot, most));
+      buttons.append(all);
+    }
+    const one = button('lab2-recipe-make', side === 'sell' ? 'Sell' : 'Buy');
+    one.dataset['testid'] = `lab2-${side}-one-${lot.item}`;
+    one.disabled = tradeRefusal(world, side, lot.item, 1) !== null;
+    one.addEventListener('click', () => tradeInMarket(side, lot, 1));
+    buttons.append(one);
+    if (icon !== null) row.append(icon);
+    row.append(text, buttons);
+    return row;
+  }
+
+  /** "1 animal", "5 grass", "40 coins": a count and an item's name, singular for 1. */
+  function countText(count: number, item: string): string {
+    const name = itemName(item).toLowerCase();
+    // The data's names are plural where it reads better ("Animals", "Apples", "Coins").
+    return `${count} ${count === 1 && name.endsWith('s') ? name.slice(0, -1) : name}`;
+  }
+
+  /** Trade `lots` lots at the market, for 1 tap, keeping the card's scroll where it was. */
+  function tradeInMarket(side: TradeSide, lot: FrontierLot, lots: number): void {
+    const next = tradeCamp(world, side, lot.item, lots);
+    if (next === world) {
+      return; // the button is off whenever this would happen
+    }
+    remember({ kind: side, item: lot.item, lots });
+    const list = bookCard.querySelector('.lab2-book-list');
+    const scroll = list === null ? 0 : list.scrollTop;
+    const goods = countText(lot.count * lots, lot.item);
+    const coins = countText(lot.coins * lots, FRONTIER_MARKET.coin);
+    bookNote.textContent =
+      side === 'sell' ? `Sold ${goods} for ${coins}.` : `Bought ${goods} for ${coins}.`;
+    setWorld(next);
+    const fresh = bookCard.querySelector('.lab2-book-list');
+    if (fresh !== null) fresh.scrollTop = scroll;
   }
 
   /** What a made thing does, for the book; `null` for ingots, which only go into other recipes. */
@@ -1945,10 +2102,13 @@ export function mountCampLab(
     // Out of taps: End shift is what to press next, so it stands out.
     endShiftButton.classList.toggle('lab2-end-shift-now', active && turn.tapsLeft === 0);
     overBanner.hidden = active;
+    const score = world.lab.counts.get(FRONTIER_MARKET.coin) ?? 0;
     overBanner.textContent =
       turn.status === 'lost'
         ? `The crew is lost after ${turn.shift - 1} shifts. Tap New world to start again.`
-        : `Mine closed after ${turn.shift} shifts. Tap New world to start again.`;
+        : turn.status === 'finished'
+          ? `The run is over after ${FRONTIER_RUN.shifts} shifts: 🪙 ${score} coins. Tap New world to start again.`
+          : `Mine closed after ${turn.shift} shifts. Tap New world to start again.`;
   }
 
   /**
@@ -2045,6 +2205,7 @@ export function mountCampLab(
     if (step.kind === 'place') return 'placing the camp';
     if (step.kind === 'upgrade') return `the upgrade of camp ${step.id}`;
     if (step.kind === 'demolish') return `demolishing camp ${step.id}`;
+    if (step.kind === 'sell' || step.kind === 'buy') return `the ${step.kind} of ${step.item}`;
     return 'the end of the shift'; // never in the history: it is emptied when a shift ends
   }
 

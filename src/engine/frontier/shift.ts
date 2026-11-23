@@ -14,15 +14,26 @@
 //      (question 148: "Hunger only"); at 0 health the run is lost.
 //
 // Resting, at a camp (question 156: "Only at a camp"), restores the crew's
-// health and takes the rest of the shift. Closing the mine ends the run. The numbers are in src/data/frontier.ts.
+// health and takes the rest of the shift. Closing the mine ends the run.
+//
+// A run lasts FRONTIER_RUN.shifts shifts (owner: "100 shifts or crew
+// lost"): when the last one ends, the run is 'finished', unless the crew was
+// lost in that same End shift. On a market day (market.ts) the player may
+// sell and buy, 1 tap a trade. The numbers are in src/data/frontier.ts.
 
 import { BLOCKS } from '../../data';
 import type { ItemStack } from '../../data';
-import { FRONTIER_FOODS, FRONTIER_SHIFT, FRONTIER_SURFACE } from '../../data/frontier';
+import {
+  FRONTIER_FOODS,
+  FRONTIER_RUN,
+  FRONTIER_SHIFT,
+  FRONTIER_SURFACE,
+} from '../../data/frontier';
 import { nextFloat } from '../rng';
 import { blockAt } from '../state';
 import { campAt, demolishFrontierCamp, placeFrontierCamp, upgradeFrontierCamp } from './camps';
 import { walkable } from './generation';
+import { isMarketDay, trade, tradeRefusal } from './market';
 import { animalAt } from './surface';
 import {
   buildSmelter,
@@ -51,6 +62,9 @@ export type FrontierAction =
   | { kind: 'make'; recipe: string }
   // Hang a lantern from the store at camp `id` (smelting.ts).
   | { kind: 'hangLantern'; id: number }
+  // Sell or buy `lots` lots of `item` at the market, on a market day (market.ts).
+  | { kind: 'sell'; item: string; lots: number }
+  | { kind: 'buy'; item: string; lots: number }
   | { kind: 'close' };
 
 /** What End shift did: the upkeep paid and unpaid, and the health it cost. */
@@ -69,6 +83,8 @@ export interface ShiftReport {
   treesRegrown: number;
   /** Animals that walked in. */
   newAnimals: number;
+  /** True if the market is open in the shift that starts now. */
+  marketOpens: boolean;
 }
 
 /**
@@ -196,7 +212,8 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
     health,
     shift: state.shift + 1,
     tapsLeft: FRONTIER_SHIFT.taps,
-    status: health <= 0 ? 'lost' : 'active',
+    // A lost crew ends the run first; otherwise the run is over once its last shift has ended.
+    status: health <= 0 ? 'lost' : state.shift >= FRONTIER_RUN.shifts ? 'finished' : 'active',
   };
   return {
     state: next,
@@ -211,6 +228,7 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
       regrown: grown.regrown,
       treesRegrown: grown.treesRegrown,
       newAnimals,
+      marketOpens: isMarketDay(next),
     },
   };
 }
@@ -302,7 +320,9 @@ function spent(next: FrontierState, tap: FrontierTap | null = null): FrontierOut
 
 /**
  * Do `action`. Taps, placing, upgrading and demolishing a camp, building a
- * smelter, making a recipe and hanging a lantern cost 1 tap each when they do something; End shift, rest and closing the mine cost none.
+ * smelter, making a recipe, hanging a lantern and a trade at the market
+ * cost 1 tap each when they do something; End shift, rest and closing the
+ * mine cost none.
  * Nothing can be done once the run has ended.
  */
 export function frontierAct(state: FrontierState, action: FrontierAction): FrontierOutcome {
@@ -343,6 +363,12 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
   if (action.kind === 'hangLantern') {
     const why = lanternRefusal(state, action.id);
     return why === null ? spent(hangLantern(state, action.id)) : refused(state, why);
+  }
+  if (action.kind === 'sell' || action.kind === 'buy') {
+    const why = tradeRefusal(state, action.kind, action.item, action.lots);
+    return why === null
+      ? spent(trade(state, action.kind, action.item, action.lots))
+      : refused(state, why);
   }
   if (action.kind === 'tap') {
     const tap = frontierTap(state, action.x, action.y);

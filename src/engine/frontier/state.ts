@@ -89,9 +89,13 @@ export interface FrontierState {
   tapsLeft: number;
   /** The crew's health: 0 loses the run. */
   health: number;
-  /** 'active' while the run goes on; 'lost' when the crew's health reached 0; 'closed' when the player closed the mine. */
+  /**
+   * 'active' while the run goes on; 'lost' when the crew's health reached 0;
+   * 'closed' when the player closed the mine; 'finished' when the last
+   * shift of the run (FRONTIER_RUN.shifts) ended.
+   */
   status: FrontierStatus;
 }
 
-/** How a run stands: going on, lost, or ended by closing the mine. */
-export type FrontierStatus = 'active' | 'lost' | 'closed';
+/** How a run stands: going on, lost, ended by closing the mine, or played to its last shift. */
+export type FrontierStatus = 'active' | 'lost' | 'closed' | 'finished';

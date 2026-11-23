@@ -49,8 +49,8 @@ import type { FrontierStep } from './frontierRun';
 /** What one run did. */
 export interface FrontierRunMetrics {
   seed: number;
-  /** 'lost' (the crew), 'closed' (the mine), or 'unfinished' (the shift cap). */
-  outcome: 'lost' | 'closed' | 'unfinished';
+  /** 'lost' (the crew), 'closed' (the mine), 'finished' (the run's last shift), or 'unfinished' (the shift cap). */
+  outcome: 'lost' | 'closed' | 'finished' | 'unfinished';
   shifts: number;
   steps: number;
   health: number;
@@ -64,6 +64,8 @@ export interface FrontierRunMetrics {
   /** Levels down of the deepest square. */
   deepest: number;
   grassHeld: number;
+  /** Coins held when the run stopped: the score, once the run has finished. */
+  coins: number;
   /**
    * The shift each step of smelting and crafting was first reached in, or -1
    * if never: a camp at level 2, 3 and 4, a smelter, the first ingot, an
@@ -173,8 +175,7 @@ export function playFrontierRun(
     problems,
     metrics: {
       seed,
-      outcome:
-        state.status === 'lost' ? 'lost' : state.status === 'closed' ? 'closed' : 'unfinished',
+      outcome: state.status === 'active' ? 'unfinished' : state.status,
       shifts: state.shift - 1,
       steps: steps.length,
       health: state.health,
@@ -185,6 +186,7 @@ export function playFrontierRun(
       blocksMined: state.mined,
       deepest,
       grassHeld: state.inventory.get('grass') ?? 0,
+      coins: state.inventory.get('coin') ?? 0,
       firsts,
       mined,
       finalHash,
@@ -214,6 +216,7 @@ export function summaryLine(policy: string, runs: FrontierRunMetrics[]): string 
     `mined ${median(runs.map((r) => r.blocksMined))}`,
     `deepest ${median(runs.map((r) => r.deepest))}`,
     `grass held ${median(runs.map((r) => r.grassHeld))}`,
+    `coins ${median(runs.map((r) => r.coins))}`,
   ].join(' · ');
 }
 

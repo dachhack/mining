@@ -15,6 +15,8 @@ import {
   createFrontier,
   frontierAct,
   hasSmelter,
+  isMarketDay,
+  mostLots,
   lanternRefusal,
   makeRefusal,
   previewTap,
@@ -31,7 +33,9 @@ import { NO_FEATURE } from '../src/engine/frontier/state';
  * One step of the new game, as a short text: "tap X,Y", "place X,Y",
  * "upgrade ID", "demolish ID", "endShift", "rest ID" (at camp ID), "close",
  * "buildSmelter ID" (a smelter at camp ID), "make RECIPE" (a recipe id,
- * such as "smelt-iron") or "hangLantern ID" (a lantern at camp ID).
+ * such as "smelt-iron"), "hangLantern ID" (a lantern at camp ID), or
+ * "sell ITEM LOTS" / "buy ITEM LOTS" at the market (an item id, such as
+ * "wood", and a whole number of lots).
  */
 export type FrontierStep = string;
 
@@ -72,7 +76,10 @@ export function restStep(state: FrontierState): FrontierStep {
 
 /** The engine's action for a step. Throws for text that is not a step. */
 export function actionOf(step: FrontierStep): FrontierAction {
-  const [verb, arg] = step.split(' ');
+  const [verb, arg, third] = step.split(' ');
+  if ((verb === 'sell' || verb === 'buy') && arg !== undefined && third !== undefined) {
+    return { kind: verb, item: arg, lots: Number(third) };
+  }
   if (verb === 'endShift' || verb === 'close') {
     return { kind: verb };
   }
@@ -159,11 +166,39 @@ export function craftStep(state: FrontierState): FrontierStep | null {
   return null;
 }
 
+/** The gatherer keeps this much grass back and sells the rest on a market day. */
+const GATHERER_GRASS_KEPT = 60;
+
+/** Items with no use yet (design doc section 7), which the gatherer sells whenever it can. */
+const GATHERER_SELLS_ALL = ['crystal', 'rareOre', 'relic'];
+
+/**
+ * On a market day (docs/plans/progression-phases.md, section 3): sell every
+ * whole lot of the items with no use yet, then grass above
+ * GATHERER_GRASS_KEPT. `null` if there is nothing to sell, or it is not a
+ * market day.
+ */
+export function marketStep(state: FrontierState): FrontierStep | null {
+  if (!isMarketDay(state)) return null;
+  for (const item of GATHERER_SELLS_ALL) {
+    const lots = mostLots(state, 'sell', item);
+    if (lots > 0) return `sell ${item} ${lots}`;
+  }
+  const spare = { ...state, inventory: new Map(state.inventory) };
+  spare.inventory.set(
+    'grass',
+    Math.max(0, (state.inventory.get('grass') ?? 0) - GATHERER_GRASS_KEPT),
+  );
+  const grass = mostLots(spare, 'sell', 'grass');
+  return grass > 0 ? `sell grass ${grass}` : null;
+}
+
 /**
  * The gatherer: a plain policy for recording golden runs. In order:
  * 0. with no taps left, end the shift, or rest if the crew's health is at
  *    GATHERER_REST_AT or below (plan A4);
- * 1. smelt and craft what it can (`craftStep`);
+ * 1. smelt and craft what it can (`craftStep`), and sell surplus on a
+ *    market day (`marketStep`);
  * 2. upgrade the lowest camp it can pay for;
  * 3. with fewer than 3 camps, place one where it lights the most new
  *    ground, if it can pay;
@@ -179,7 +214,7 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
   if (state.tapsLeft === 0) {
     return state.health <= GATHERER_REST_AT ? restStep(state) : 'endShift';
   }
-  const craft = craftStep(state);
+  const craft = craftStep(state) ?? marketStep(state);
   if (craft !== null) return craft;
   const byLevel = [...state.camps].sort((a, b) => a.level - b.level || a.id - b.id);
   for (const camp of byLevel) {

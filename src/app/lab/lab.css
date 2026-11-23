@@ -436,6 +436,42 @@ body[data-screen='lab2'] {
   border: 1px solid #6b5a45;
 }
 
+/* The market's button (progression PR 1): lit gold on a market day. */
+.lab .lab2-book-button.lab2-market-open {
+  color: #1b1510;
+  background: linear-gradient(180deg, #f2c983, #cf9550);
+  border-color: #f3d29c;
+  box-shadow: 0 0 10px rgba(242, 201, 131, 0.55);
+}
+
+/* The market's card: when it is open, and its two lists. A lot's buttons
+   sit side by side, so each row stays low. */
+.lab2-recipe-buttons.lab2-market-buttons {
+  flex-direction: row;
+  align-items: center;
+}
+
+.lab2-market-when {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+  line-height: 1.3;
+  color: #d9c7a8;
+}
+
+.lab2-market-section {
+  flex: 0 0 auto;
+  margin: 6px 0 2px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #b9a585;
+}
+
+.lab .lab2-recipe-buttons .lab2-recipe-pin:disabled {
+  opacity: 0.45;
+}
+
 /* The camp tool: a tent, then choose where on the map. */
 .lab .lab2-tool {
   flex: 0 0 auto;

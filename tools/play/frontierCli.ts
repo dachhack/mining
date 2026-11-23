@@ -6,7 +6,7 @@
 //
 // A play log is JSON: { engineVersion, seed, steps }, where each step is one
 // of the steps of tools/frontierRun.ts ("tap 3,4", "place 5,6", "upgrade 2",
-// "demolish 1", "endShift", "rest 1", "close"). Only steps that did something
+// "demolish 1", "endShift", "rest 1", "sell wood 3", "close"). Only steps that did something
 // are logged; an undone step is taken out of the log. Replaying the steps on
 // the seed gives the same run, on the engine version the log names.
 
@@ -17,8 +17,10 @@ import { BLOCKS, ITEMS, blockDefByCode } from '../../src/data';
 import type { BlockId, ItemId, ItemStack } from '../../src/data';
 import {
   FRONTIER_DRILL,
+  FRONTIER_MARKET,
   FRONTIER_NEW_CAMP_COST,
   FRONTIER_RECIPES,
+  FRONTIER_RUN,
   FRONTIER_SHIFT,
   FRONTIER_SMELTER,
 } from '../../src/data/frontier';
@@ -29,14 +31,18 @@ import {
   campAt,
   campRing,
   canAfford,
+  coinsHeld,
   createFrontier,
   depthAt,
   frontierTap,
   hashFrontier,
+  isMarketDay,
   levelNeededFor,
   lanternRefusal,
   makeRefusal,
+  marketEvery,
   newlyCovered,
+  nextMarketShift,
   previewTap,
   placeRefusal,
   shiftUndoCount,
@@ -149,6 +155,10 @@ function refusalText(refusal: string | null): string {
     place: 'A camp cannot go there now (see "look").',
     upgrade: 'That camp cannot be upgraded now.',
     demolish: 'That camp cannot be demolished: other camps must cover its 3 x 3 first.',
+    closed: 'The market is not open this shift (see "Market" in the view).',
+    unknown: 'The market does not trade that item that way.',
+    lots: 'Trade a whole number of lots, 1 or more.',
+    cost: 'You do not hold enough for that.',
   };
   return texts[refusal ?? ''] ?? `Refused: ${refusal ?? 'unknown'}.`;
 }
@@ -193,7 +203,14 @@ function shiftLine(report: ShiftReport, state: FrontierState): string {
     report.treesRegrown > 0 ? `${report.treesRegrown} felled tree(s) grew back` : '',
     report.newAnimals > 0 ? 'an animal walked in' : '',
   ].filter((t) => t !== '');
-  const end = state.status === 'lost' ? ' The crew is lost: the run is over.' : '';
+  const end =
+    state.status === 'lost'
+      ? ' The crew is lost: the run is over.'
+      : state.status === 'finished'
+        ? ` That was the last shift: the run is over. Score: ${coinsHeld(state)} coins.`
+        : report.marketOpens
+          ? ' Market day: the market is open this shift.'
+          : '';
   return `Shift ${report.shift} over: ${paid}${hunger}.${more.length > 0 ? ` ${more.join('; ')}.` : ''}${end}`;
 }
 
@@ -276,7 +293,8 @@ function undo(session: FrontierSession): StepResult {
 /**
  * The step a typed choice stands for, or `null` if it is not one. Accepts
  * "tap 3,4" (or "t 3 4"), "place 3,4", "upgrade 2", "demolish 1", "end",
- * "rest 1" (or "rest" with one camp), "close", "undo", or the number of a listed choice.
+ * "rest 1" (or "rest" with one camp), "sell wood 3", "buy animal 1",
+ * "close", "undo", or the number of a listed choice.
  */
 export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | null {
   const text = typed.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -299,6 +317,13 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
   const lantern = /^(lantern|hang|hang lantern|hanglantern) (\d+)$/.exec(text);
   if (lantern !== null) {
     return `hangLantern ${lantern[2] ?? ''}`;
+  }
+  const tradeStep = /^(sell|buy) ([a-z]+) (\d+)$/.exec(text);
+  if (tradeStep !== null) {
+    // Item ids are camelCase ("rawIronOre"); the typed text is lower case.
+    const lots = tradeStep[1] === 'sell' ? FRONTIER_MARKET.sellPrices : FRONTIER_MARKET.buyPrices;
+    const lot = lots.find((l) => l.item.toLowerCase() === tradeStep[2]);
+    return lot === undefined ? null : `${tradeStep[1] ?? ''} ${lot.item} ${tradeStep[3] ?? ''}`;
   }
   const make = /^make ([a-z-]+)$/.exec(text);
   if (make !== null) {
@@ -459,9 +484,11 @@ export function frontierView(session: FrontierSession): string {
       ? ''
       : state.status === 'lost'
         ? ' · RUN OVER: the crew is lost'
-        : ' · RUN OVER: mine closed';
+        : state.status === 'finished'
+          ? ' · RUN OVER: the last shift is done'
+          : ' · RUN OVER: mine closed';
   lines.push(
-    `Seed ${state.seed} · Shift ${state.shift} · Taps ${state.tapsLeft}/${FRONTIER_SHIFT.taps} · Health ${state.health}/${FRONTIER_SHIFT.startHealth} · Dug ${state.mined}${status}`,
+    `Seed ${state.seed} · Shift ${state.shift}/${FRONTIER_RUN.shifts} · Coins ${coinsHeld(state)} · Taps ${state.tapsLeft}/${FRONTIER_SHIFT.taps} · Health ${state.health}/${FRONTIER_SHIFT.startHealth} · Dug ${state.mined}${status}`,
   );
   const held = [...state.inventory.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
   lines.push(
@@ -471,6 +498,7 @@ export function frontierView(session: FrontierSession): string {
     `Upkeep at the end of this shift: ${stacksText(upkeepDue(state.shift, state.camps.length)) || 'nothing'}`,
   );
   lines.push(`New camp costs ${stacksText(FRONTIER_NEW_CAMP_COST)}.`);
+  lines.push(...marketLines(state));
   for (const camp of state.camps) {
     const cost = upgradeCostFrom(camp.level);
     const up = cost === null ? 'top level' : `upgrade costs ${stacksText(cost)}`;
@@ -503,6 +531,26 @@ export function frontierView(session: FrontierSession): string {
     lines.push('  Also: "look X,Y" to see what a square is and what a tap would do.');
   }
   return lines.join('\n');
+}
+
+/** "5 grass for 1 coin" for each lot. */
+function lotsText(lots: { item: string; count: number; coins: number }[]): string {
+  return lots.map((l) => `${l.count} ${l.item} for ${l.coins}`).join(', ');
+}
+
+/** The market: open today, with its prices, or when it opens next. */
+function marketLines(state: FrontierState): string[] {
+  if (state.status !== 'active') return [];
+  if (!isMarketDay(state)) {
+    return [
+      `Market: opens on shift ${nextMarketShift(state)} (every ${marketEvery(state)} shifts with your best camp).`,
+    ];
+  }
+  return [
+    'Market: OPEN this shift. "sell ITEM N" or "buy ITEM N" trades N lots, 1 tap a trade.',
+    `  Sell (coins a lot): ${lotsText(FRONTIER_MARKET.sellPrices)}.`,
+    `  Buy (coins a lot): ${lotsText(FRONTIER_MARKET.buyPrices)}.`,
+  ];
 }
 
 /** How many squares a tap would take or mine something on now. */

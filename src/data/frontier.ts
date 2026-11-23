@@ -304,3 +304,67 @@ export const FRONTIER_LANTERN = {
   item: 'copperLantern' as ItemId,
   ringBonus: 3,
 };
+
+// ----- The run and the market (docs/plans/progression-phases.md, PR 1) -----
+
+/**
+ * How long a run lasts (owner, 2026-11-23: "100 shifts or crew lost"). At
+ * the end of shift `shifts` the run is over, and the coins held are the
+ * score (plan section 7; question 176).
+ */
+export const FRONTIER_RUN = {
+  shifts: 100,
+};
+
+/**
+ * One lot at the market: `count` of `item` for `coins` coins. Selling trades
+ * the item for the coins; buying, the coins for the item. A trade is any
+ * whole number of lots, for 1 tap (plan section 3).
+ */
+export interface FrontierLot {
+  item: ItemId;
+  count: number;
+  coins: number;
+}
+
+/**
+ * The market (plan section 3). It opens at the start of every shift whose
+ * number is a multiple of `everyShifts[best - 1]`, where `best` is the
+ * highest level of any camp standing (owner: every 10 shifts at level 1,
+ * 5 at level 2, 3 at level 3; level 4 is question 167), and stays open for
+ * that whole shift (question 169). Coins are an item, `coin` (question 170).
+ */
+export const FRONTIER_MARKET = {
+  coin: 'coin' as ItemId,
+  everyShifts: [10, 5, 3, 3],
+  /**
+   * What the player can sell, and what the market pays for it. Surface
+   * goods are cheap; what is dug and made pays more. An item not listed
+   * cannot be sold.
+   */
+  sellPrices: [
+    { item: 'grass', count: 5, coins: 1 },
+    { item: 'wood', count: 2, coins: 1 },
+    { item: 'apple', count: 2, coins: 1 },
+    { item: 'animal', count: 1, coins: 3 },
+    { item: 'clay', count: 2, coins: 1 },
+    { item: 'stone', count: 2, coins: 1 },
+    { item: 'coal', count: 1, coins: 1 },
+    { item: 'rawIronOre', count: 1, coins: 2 },
+    { item: 'rawCopperOre', count: 1, coins: 2 },
+    { item: 'ironIngot', count: 1, coins: 5 },
+    { item: 'copperIngot', count: 1, coins: 5 },
+    { item: 'crystal', count: 1, coins: 20 },
+    { item: 'rareOre', count: 1, coins: 15 },
+    { item: 'relic', count: 1, coins: 40 },
+  ] as FrontierLot[],
+  /**
+   * What the player can buy, and what it costs (question 171). From the
+   * start: an animal and clay. Saplings and hay join with farming (plan
+   * section 6), the tools with camp gating (section 4).
+   */
+  buyPrices: [
+    { item: 'animal', count: 1, coins: 8 },
+    { item: 'clay', count: 1, coins: 1 },
+  ] as FrontierLot[],
+};

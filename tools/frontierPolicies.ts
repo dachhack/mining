@@ -6,11 +6,12 @@
 // - random:   a step at random among the useful ones (a tap that takes or
 //             mines something, a camp it can place, upgrade or demolish, a
 //             smelter it can build, a recipe it can make, a lantern it
-//             can hang),
+//             can hang, one lot it can sell or buy on a market day),
 //             ending the shift when out of taps; it never closes the mine.
 // - gatherer: tools/frontierRun.ts: builds a smelter, smelts and makes the
-//             tools and lanterns, upgrades, places up to 3 camps, takes
-//             plants and animals, mines; spends everything as it comes.
+//             tools and lanterns, sells surplus on market days,
+//             upgrades, places up to 3 camps, takes plants and animals,
+//             mines; spends everything as it comes.
 // - careful:  the gatherer, but it keeps wood and food back for upkeep (no
 //             camp, upgrade or wood-using recipe while short), and rests
 //             when the crew's health is low.
@@ -20,11 +21,18 @@
 //             crew is at half health or less until shift IDLE_RESTS_UNTIL,
 //             then lets the crew starve. The hunger path, start to end.
 
-import { FRONTIER_FOODS, FRONTIER_RECIPES, FRONTIER_SHIFT } from '../src/data/frontier';
+import {
+  FRONTIER_FOODS,
+  FRONTIER_MARKET,
+  FRONTIER_RECIPES,
+  FRONTIER_SHIFT,
+} from '../src/data/frontier';
 import {
   campAt,
   coverLevels,
   createRng,
+  isMarketDay,
+  mostLots,
   previewTap,
   placeRefusal,
   upgradeRefusal,
@@ -98,6 +106,15 @@ function randomPolicy(rng: RngState): FrontierPolicy {
     }
     for (const recipe of FRONTIER_RECIPES) {
       if (makeRefusal(state, recipe.id) === null) options.push(`make ${recipe.id}`);
+    }
+    // On a market day, one lot of anything it can sell or buy.
+    if (isMarketDay(state)) {
+      for (const lot of FRONTIER_MARKET.sellPrices) {
+        if (mostLots(state, 'sell', lot.item) > 0) options.push(`sell ${lot.item} 1`);
+      }
+      for (const lot of FRONTIER_MARKET.buyPrices) {
+        if (mostLots(state, 'buy', lot.item) > 0) options.push(`buy ${lot.item} 1`);
+      }
     }
     // A few places for a camp, tried at random squares (all of them would be slow).
     for (let i = 0; i < 8; i += 1) {

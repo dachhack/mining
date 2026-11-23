@@ -40,7 +40,7 @@ v0.2 is in the git history, as v0.1 is.
 | Hazards | **None for now** (owner: "Lab 2 becomes the game"). The old ones come back one at a time, fuel and depth bands first; wall slumps and supports are retired (question 153, section 10) |
 | Harm | **Hunger only** (owner, question 148): each item of upkeep that cannot be paid costs the crew 1 health (section 5) |
 | Base | **Camps** (Lab 2's): placed on a level 3×3 of lit ground, upgraded to see further and dig harder rock, demolished once other camps cover them. The recipe book shows what each costs; there is no crafting for now (section 6) |
-| Win condition | Finish the contract (not built yet; section 8). Until then a run ends when the crew is lost or the player closes the mine (question 152) |
+| Win condition | **A run lasts 100 shifts** (owner, 2026-11-23: "100 shifts or crew lost"), or ends sooner when the crew is lost or the player closes the mine (question 152). The coins held at the end are the score [Default; question 170]. Contracts are not built yet (section 8) |
 | Meta-progression | Unlocks only (new options between runs); no permanent stat upgrades |
 | Platforms | Android and iOS |
 
@@ -162,7 +162,8 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 
 ### 5.1 How a run ends, and saving
 
-- A run ends when the crew is lost, or when the player closes the mine (question 152).
+- A run ends after its last shift, [Default] 100 (`FRONTIER_RUN.shifts`; owner, 2026-11-23): when the End shift or rest of that shift is done, the run is **finished**. It ends sooner when the crew is lost (in the last shift too: a lost crew counts first) or when the player closes the mine (question 152).
+- **The score** is the coins held when the run ends [Default; question 170]. The end banner shows it.
 - **Saving:** the run is saved at the start of every shift and carried on when the app opens again. Taps within a shift are not saved.
 
 ## 6. Camps [Decided: Lab 2's camps]
@@ -194,9 +195,22 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
   - **The iron drill**, [Default] 4 iron ingots + 2 copper ingots + 2 wood. While the store holds one, every camp mines as if it were [Default] one level higher, but never past what level 3 mines: a level-1 camp mines hard rock, a level-2 camp mines ore, crystal and relics. A camp's ring stays its own level's. It does not wear out, and a second one adds nothing.
 - **The recipe book** lists what a new camp and each upgrade cost, and what is made with a smelter (with a Make button). Pinned recipes show, in the tray, how much of each item the player holds against what is needed. Pins are saved (question 143).
 
+## 6a. The market [Decided cadence; prices Default]
+
+(Progression plan section 3, `docs/plans/progression-phases.md`; built in its PR 1.)
+
+- **When:** the market is open for the whole of every shift whose number is a multiple of its cadence: every **10** shifts while the best camp standing is level 1, every **5** at level 2, every **3** at level 3 (owner, 2026-11-23), and [Default] 3 at level 4 (question 167). Nothing about it is stored; the shift and the camps decide it. The night before says "Market day".
+- **Money** is an item, **coins** (question 170). A run starts with none.
+- **Trading:** on a market day, the player sells or buys any whole number of one item's lots, for **1 tap** a trade. A lot is [Default] (`FRONTIER_MARKET`):
+  - sold: 5 grass, 2 wood, 2 apples, 2 clay or 2 stone for 1 coin; 1 animal for 3; 1 coal for 1; 1 raw iron or copper ore for 2; 1 ingot for 5; 1 crystal for 20; 1 rare ore for 15; 1 relic for 40;
+  - bought: 1 animal for 8 coins; 1 clay for 1 coin. Saplings and hay join with farming, the tools with camp gating (plan sections 4 and 6).
+  - Nothing can be bought and sold back at a profit.
+- A trade can be undone, like any action that is not a harvest.
+- **Interface:** a market button (🏪) beside the recipe book, lit on a market day. It opens a card like the book's: what can be sold (the items held) and bought, each with what the player has, and Sell, Sell all and Buy buttons. On other days the card says when the market opens, and its buttons are off. Coins are shown next to Dug in the counter.
+
 ## 7. Resources
 
-- **Items:** wood, grass, apples, animals, clay, stone, coal, and the ores. Everything gathered goes into one store with no limit.
+- **Items:** wood, grass, apples, animals, clay, stone, coal, the ores, and coins (section 6a). Everything gathered goes into one store with no limit.
 - **What uses them:** camps and upgrades (section 6), and upkeep (section 4.2): wood, and grass, apples or animals as food. Stone and clay build smelters; raw ore and coal smelt into iron and copper ingots; iron ingots and wood make the pickaxe; copper ingots and coal make the lantern; both ingots and wood make the drill; ingots pay for camp level 4 (section 6).
 - **Coal and raw iron and copper are smelted into ingots** at a smelter. Ingots make the pickaxe, the lantern and the drill, and pay for camp level 4; the first contract asks for ingots (questions 163 and 164). Crystal and the rare ores have no use yet; a later contract may ask for crystal.
 - **There is no crafting for now:** the recipe book replaces it, and recipes can be added to it later.
