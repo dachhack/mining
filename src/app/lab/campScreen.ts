@@ -84,6 +84,7 @@ import {
   contractRefusal,
   penCamp,
   penRefusal,
+  foundationDepthOf,
   buildCampDefense,
   defenseRefusal,
   raidStrengthOf,
@@ -129,6 +130,7 @@ import { LAB_LOOK } from './labLook';
 import { topBlocksOf } from './labWorld';
 import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from './surface';
 import type { Animal } from './surface';
+import type { FrontierDragon } from '../../engine';
 import {
   clayTexture,
   drawAnimal,
@@ -146,7 +148,14 @@ import type { Recipe } from './recipes';
 import { emptyHistory, noteAction, undoCount, undoLast } from './undoHistory';
 import type { UndoHistory } from './undoHistory';
 import { shadowEdges } from './shadows';
-import { drawDragon, drawFire, drawPump, drawWater } from './hazardArt';
+import {
+  drawCampWall,
+  drawDefenseTag,
+  drawDragon,
+  drawFire,
+  drawPump,
+  drawWater,
+} from './hazardArt';
 import { showNight } from './night';
 import type { Night } from './night';
 
@@ -249,7 +258,9 @@ function placeRefusalText(refusal: PlaceRefusal): string {
   if (refusal === 'notLevel') return NOT_LEVEL_TEXT;
   if (refusal === 'flooded') return 'The ground is flooded 💧: a pump must drain it first.';
   if (refusal === 'tooShallow')
-    return `A deep camp stands only at depth ${FRONTIER_DEEP_CAMP.minDepth} or more: dig the patch deeper first.`;
+    return `A deep camp's foundation levels the patch to its deepest square, which must be at depth ${FRONTIER_DEEP_CAMP.minDepth} or more: dig deeper first.`;
+  if (refusal === 'animal')
+    return 'An animal stands where the foundation would dig: catch it first.';
   if (refusal === 'tooDeep')
     return `Camps stand only in the top ${FRONTIER_CAMP_PLACE.maxDepth + 1} levels: this ground is dug too deep.`;
   return 'Not enough to build it yet: mine more first.';
@@ -258,6 +269,7 @@ function placeRefusalText(refusal: PlaceRefusal): string {
 /** A contract action, as a step (progression PR 5). */
 type ContractStep =
   | { kind: 'takeContract'; id: string }
+  | { kind: 'fillContract'; id: string }
   | { kind: 'deliver'; id: string }
   | { kind: 'dropContract'; id: string };
 
@@ -432,6 +444,8 @@ export function mountCampLab(
    * when a shift ends).
    */
   const lastStep = new Map<number, { x: number; y: number; at: number; facing: number }>();
+  /** Where each dragon flew from in the last night, and when the morning began (hazards PR 4). */
+  const lastFlight = new Map<number, { x: number; y: number; at: number; ms: number }>();
 
   // ----- The page -----
   const page = element('main', 'lab lab2');
@@ -590,6 +604,10 @@ export function mountCampLab(
       world.surface.apples[i],
       world.surface.stumps[i],
       sights[i],
+      // The hazards drawn on the ground (owner: "Can't see pump when you set it down").
+      world.hazards.flooded[i] === true ? 'w' : '',
+      world.hazards.fires[i] === true ? 'f' : '',
+      world.hazards.pumps.some((p) => p.x + world.lab.state.size.x * p.y === i) ? 'p' : '',
     ].join(',');
   }
 
@@ -636,7 +654,14 @@ export function mountCampLab(
       }
       groundCamera = { ...camera };
       drawnView = viewKey;
-      groundKey = [world.lab.state, world.lab.depths, world.surface, world.camps, sights];
+      groundKey = [
+        world.lab.state,
+        world.lab.depths,
+        world.surface,
+        world.camps,
+        sights,
+        world.hazards,
+      ];
       drawnSquares = [];
       for (let i = 0; i < size.x * size.y; i += 1) drawnSquares.push(squareLook(i));
       groundDraws += 1;
@@ -646,7 +671,14 @@ export function mountCampLab(
       drawGroundOn(ctx, null);
       return;
     }
-    const key = [world.lab.state, world.lab.depths, world.surface, world.camps, sights];
+    const key = [
+      world.lab.state,
+      world.lab.depths,
+      world.surface,
+      world.camps,
+      sights,
+      world.hazards,
+    ];
     if (key.every((k, i) => k === groundKey[i])) {
       return; // the same world: the ground is as it was
     }
@@ -734,10 +766,20 @@ export function mountCampLab(
     }
 
     drawAnimals(ctx, c);
-    // Dragons (hazards PR 4), on lit squares only.
+    // Dragons (hazards PR 4), on lit squares only. In the morning one glides
+    // from where it was to where it flew in the night, so it is seen to move.
     for (const dragon of world.hazards.dragons) {
       if (sightOf(dragon.x, dragon.y) !== 'shown') continue;
-      const { px, py } = toPx(dragon.x, dragon.y);
+      const flight = lastFlight.get(dragon.id);
+      let fx = dragon.x;
+      let fy = dragon.y;
+      if (flight !== undefined) {
+        const t = Math.min(1, Math.max(0, (now - flight.at) / flight.ms));
+        const eased = t * t * (3 - 2 * t);
+        fx = flight.x + (dragon.x - flight.x) * eased;
+        fy = flight.y + (dragon.y - flight.y) * eased;
+      }
+      const { px, py } = toPx(fx, fy);
       drawDragon(ctx, px + c / 2, py + c / 2, c);
     }
     if (mode.kind === 'placing' && mode.target !== null) {
@@ -920,6 +962,8 @@ export function mountCampLab(
     });
     canvas.dataset['fires'] = fires.join(' ');
     canvas.dataset['dragons'] = world.hazards.dragons.map((d) => `${d.x},${d.y}`).join(' ');
+    // Each camp's defense level, as drawn on its marker: "id:level".
+    canvas.dataset['defenses'] = world.camps.map((camp) => `${camp.id}:${camp.defense}`).join(' ');
   }
 
   /** True if square (x, y) is on the map, not in fog, and has a tree or an apple tree: part of a forest. */
@@ -998,6 +1042,17 @@ export function mountCampLab(
   }
 
   /** Note each animal that moved between `before` and the world now, for `drawAnimals`. */
+  /** Note each dragon that flew in the night, so it glides there in the morning. */
+  function noteFlights(before: FrontierDragon[], ms = CAMP_LOOK.dragonFlightMs): void {
+    for (const dragon of world.hazards.dragons) {
+      const was = before.find((d) => d.id === dragon.id);
+      if (was !== undefined && (was.x !== dragon.x || was.y !== dragon.y)) {
+        lastFlight.set(dragon.id, { x: was.x, y: was.y, at: performance.now(), ms });
+      }
+    }
+    if (lastFlight.size > 0) cues.start();
+  }
+
   function noteSteps(before: Animal[]): void {
     for (const animal of world.surface.animals) {
       const was = before.find((a) => a.id === animal.id);
@@ -1130,6 +1185,8 @@ export function mountCampLab(
     ctx.lineWidth = Math.max(2, c * (selected ? 0.09 : 0.06));
     ctx.strokeStyle = CAMP_MARKS.markerRing;
     ctx.strokeRect(base.x, base.y, base.size, base.size);
+    // Its defenses round the edge (hazards PR 5): stakes, a wall, a gatehouse.
+    drawCampWall(ctx, base, c, camp.defense);
     const r = c * CAMP_LOOK.markerRadius;
     ctx.save();
     ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
@@ -1206,6 +1263,9 @@ export function mountCampLab(
       ctx.fillRect(lx - tagR * 0.5, ly - tagR * 0.62, tagR, tagR * 0.24);
       ctx.fillRect(lx - tagR * 0.5, ly + tagR * 0.4, tagR, tagR * 0.22);
     }
+
+    // Defenses: a shield with the level, at the top right (hazards PR 5).
+    drawDefenseTag(ctx, cx + r * 0.78, cy - r * 0.78, tagR * 2, camp.defense);
   }
 
   /** A circle round square (x, y) at `radius` squares, as the ring a camp lights. */
@@ -1387,9 +1447,26 @@ export function mountCampLab(
     draw(now);
     // While the camp tool has a target, keep drawing: its square pulses. So
     // too while an animal is still sliding to where End shift moved it.
-    const sliding = [...lastStep.values()].some((step) => now - step.at < CAMP_LOOK.animalSlideMs);
+    const sliding =
+      [...lastStep.values()].some((step) => now - step.at < CAMP_LOOK.animalSlideMs) ||
+      [...lastFlight.values()].some((f) => now - f.at < f.ms);
     return effects.length > 0 || sliding || (mode.kind === 'placing' && mode.target !== null);
   });
+
+  // Draw again whenever the map's box changes size (owner, on the hazards
+  // build: "I clicked on a block outside of the circle and the screen
+  // stretched out"). The canvas takes its pixel size only when it is drawn;
+  // if the tray or a panel grows or shrinks after the last draw, the browser
+  // would stretch the old picture to the new box until something drew again.
+  if (typeof ResizeObserver !== 'undefined') {
+    let drawnBox = '';
+    new ResizeObserver(() => {
+      const box = `${canvas.clientWidth}x${canvas.clientHeight}`;
+      if (box === drawnBox) return;
+      drawnBox = box;
+      draw();
+    }).observe(canvas);
+  }
 
   function addEffect(effect: Omit<Effect, 'start'>): void {
     effects.push({ ...effect, start: performance.now() });
@@ -1917,6 +1994,12 @@ export function mountCampLab(
     // Those held are not offered again; up to the best camp's level are held at once.
     const held = state.contracts.map((c) => c.id);
     const board = contractBoard(state).filter((c) => !held.includes(c.id));
+    // Contracts held can be delivered here too (owner, on the hazards build).
+    const heldDefs = heldContracts(state);
+    if (heldDefs.length > 0) {
+      section('Your contracts');
+      for (const contract of heldDefs) list.append(contractRow(contract, 'marketHeld'));
+    }
     if (board.length > 0) {
       section(`Contract board · you hold ${held.length} of ${contractLimit(state)}`);
       for (const offer of board) list.append(contractRow(offer, 'offer'));
@@ -1992,9 +2075,15 @@ export function mountCampLab(
 
   /**
    * A contract: its name, tier and pay, what it asks for (have/need), and
-   * Take for one on the board, or Deliver and Drop for the one held.
+   * its buttons: for one on the board, Fill when the store holds everything
+   * it asks for (owner, on the hazards build: "Should be able to immediately
+   * fill contracts if you have the materials"), else Take; for one held,
+   * Deliver and Drop, or at the market Deliver only.
    */
-  function contractRow(contract: FrontierContractDef, as: 'held' | 'offer'): HTMLElement {
+  function contractRow(
+    contract: FrontierContractDef,
+    as: 'held' | 'offer' | 'marketHeld',
+  ): HTMLElement {
     const row = element('div', 'lab2-recipe');
     row.dataset['testid'] = `lab2-contract-${as}-${contract.id}`;
     const text = element('div', 'lab2-recipe-text');
@@ -2007,13 +2096,18 @@ export function mountCampLab(
       costRow(contract.asks, `lab2-contract-${contract.id}`),
     );
     const buttons = element('div', 'lab2-recipe-buttons lab2-market-buttons');
+    const fill: ContractStep = { kind: 'fillContract', id: contract.id };
     const actions: { label: string; action: ContractStep }[] =
       as === 'offer'
-        ? [{ label: 'Take', action: { kind: 'takeContract', id: contract.id } }]
-        : [
-            { label: 'Drop', action: { kind: 'dropContract', id: contract.id } },
-            { label: 'Deliver', action: { kind: 'deliver', id: contract.id } },
-          ];
+        ? contractRefusal(world, fill) === null
+          ? [{ label: 'Fill', action: fill }]
+          : [{ label: 'Take', action: { kind: 'takeContract', id: contract.id } }]
+        : as === 'marketHeld'
+          ? [{ label: 'Deliver', action: { kind: 'deliver', id: contract.id } }]
+          : [
+              { label: 'Drop', action: { kind: 'dropContract', id: contract.id } },
+              { label: 'Deliver', action: { kind: 'deliver', id: contract.id } },
+            ];
     for (const { label, action } of actions) {
       const b = button(label === 'Drop' ? 'lab2-recipe-pin' : 'lab2-recipe-make', label);
       b.dataset['testid'] = `lab2-contract-${label.toLowerCase()}-${contract.id}`;
@@ -2032,6 +2126,7 @@ export function mountCampLab(
     remember(action);
     const notes = {
       takeContract: `Taken: ${contract.name}. Deliver it from 🎯 on any shift once you hold everything.`,
+      fillContract: `Filled: ${contract.name}, for ${contract.pays} coins.`,
       deliver: `Delivered: ${contract.name}, for ${contract.pays} coins.`,
       dropContract: `Dropped: ${contract.name}.`,
     };
@@ -2228,7 +2323,7 @@ export function mountCampLab(
     const missing = missingText(placeCost);
     if (target === null) {
       body.textContent = placingDeep
-        ? `Level ground at depth ${FRONTIER_DEEP_CAMP.minDepth}+. Ring ${FRONTIER_DEEP_CAMP.radius}; mines as level ${FRONTIER_DEEP_CAMP.level}.`
+        ? `Any lit 3 × 3 that levels at depth ${FRONTIER_DEEP_CAMP.minDepth}+: its concrete foundation digs the patch level. Ring ${FRONTIER_DEEP_CAMP.radius}; mines as level ${FRONTIER_DEEP_CAMP.level}.`
         : PLACE_HINT;
     } else if (refusal !== null && refusal !== 'cost') {
       body.textContent = placeRefusalText(refusal);
@@ -2240,7 +2335,9 @@ export function mountCampLab(
         body.textContent = `${missing} · ${lights}`;
         body.classList.add('lab2-panel-warn');
       } else {
-        body.textContent = `At ${target.x}, ${target.y} · level ground · ${lights}`;
+        body.textContent = placingDeep
+          ? `At ${target.x}, ${target.y} · foundation at depth ${foundationDepthOf(world, target.x, target.y)} · ${lights}`
+          : `At ${target.x}, ${target.y} · level ground · ${lights}`;
       }
     }
 
@@ -2654,6 +2751,7 @@ export function mountCampLab(
    */
   function finishShift(restAt: number | null): void {
     const before = world.surface.animals;
+    const dragonsBefore = world.hazards.dragons;
     const rest = restAt !== null;
     const result = restAt !== null ? restCrew(world, restAt) : endShift(world);
     if (result.report === null) {
@@ -2677,11 +2775,13 @@ export function mountCampLab(
     night = showNight(root, {
       shift: result.report.shift,
       summary: text,
+      rain: result.report.rained,
       page,
       reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
       onDone: () => {
         night = null;
         noteSteps(before);
+        noteFlights(dragonsBefore);
         cues.start();
         // A market day: the market opens now, after the night, before the day.
         openMarket();
@@ -2748,6 +2848,7 @@ export function mountCampLab(
     if (step.kind === 'buildPen') return `the pen at camp ${step.id}`;
     if (step.kind === 'buildDefense') return `the defenses at camp ${step.id}`;
     if (step.kind === 'takeContract') return 'taking the contract';
+    if (step.kind === 'fillContract') return 'filling the contract';
     if (step.kind === 'deliver') return 'the delivery';
     if (step.kind === 'dropContract') return 'dropping the contract';
     if (step.kind === 'penIn' || step.kind === 'penOut')
@@ -2945,7 +3046,10 @@ export function mountCampLab(
     // Mined.
     effects = effects.filter((e) => !(e.x === x && e.y === y));
     remember({ kind: 'tap', x, y });
+    const dragonsBeforeTap = world.hazards.dragons;
     setWorld(result.world);
+    // The dragons flew on a square: they glide there (hazards PR 4).
+    noteFlights(dragonsBeforeTap, CAMP_LOOK.dragonStepMs);
     if (result.gas === 'exploded') {
       const n = result.fires.length;
       setHint(
@@ -3026,6 +3130,7 @@ export function mountCampLab(
     history = emptyHistory(world);
     showUndo();
     lastStep.clear();
+    lastFlight.clear();
     effects = [];
     mode = { kind: 'idle' };
     preview = new Set();

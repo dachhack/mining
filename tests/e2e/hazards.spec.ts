@@ -55,7 +55,7 @@ test('a dragon needs a sword; with one, a tap drives it off (hazards PR 4)', asy
   const start = createFrontier(110);
   const camp = start.camps[0] ?? { x: 0, y: 0 };
   const at = { x: camp.x + 3, y: camp.y };
-  const dragons = [{ id: 1, x: at.x, y: at.y }];
+  const dragons = [{ id: 1, x: at.x, y: at.y, dx: 1, dy: 0, restMines: 5 }];
   const state: FrontierState = {
     ...start,
     hazards: { ...start.hazards, dragons, nextDragonId: 2 },
@@ -81,12 +81,100 @@ test('a level-2 camp builds its defenses from its panel (hazards PR 5)', async (
   };
   const camp = state.camps[0] ?? { x: 0, y: 0 };
   const canvas = await openGame(page, state);
+  await expect(canvas).toHaveAttribute('data-defenses', '1:0');
   await tapSquare(page, canvas, camp.x, camp.y);
   await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'camp');
   await expect(page.getByTestId('lab2-camp-defense')).toContainText('No defenses · 0/3');
   await page.getByTestId('lab2-build-defense').click();
   await expect(page.getByTestId('lab2-camp-defense')).toContainText('Palisade · 1/3');
+  // The camp's marker shows it: a palisade round it and a shield with 1.
+  await expect(canvas).toHaveAttribute('data-defenses', '1:1');
   await expect(page.getByTestId('lab-res-wood')).toHaveAttribute('data-count', '15');
   // The next level needs stone, which the store does not hold.
   await expect(page.getByTestId('lab2-build-defense')).toBeDisabled();
+});
+
+test('a rainy night shows rain falling, and its news one line at a time (hazards PR 1)', async ({
+  page,
+}) => {
+  // Owner, on the hazards build: "We need a rain scene for when it rains."
+  // Find a seed and shift whose night rains: End shift from shift 1 until one does.
+  const state: FrontierState = {
+    ...createFrontier(110),
+    inventory: new Map([
+      ['wood', 50],
+      ['apple', 50],
+    ]),
+  };
+  await openGame(page, state);
+  const night = page.getByTestId('lab2-night');
+  let rained = false;
+  for (let k = 0; k < 30 && !rained; k += 1) {
+    await page.getByTestId('lab2-end-shift').click();
+    await expect(night).toBeVisible();
+    rained = (await night.getAttribute('data-rain')) === 'true';
+    if (rained) {
+      await expect(page.getByTestId('lab2-night-rain')).toBeVisible();
+      await expect(night).toContainText('Rain 🌧');
+    } else {
+      await expect(page.getByTestId('lab2-night-rain')).toHaveCount(0);
+    }
+    // Each sentence of the news is a line of its own.
+    expect(await page.getByTestId('lab2-night-summary').locator('p').count()).toBeGreaterThan(0);
+    await night.click();
+    await expect(night).toHaveCount(0);
+    // A market day's market opens after the night: close it to go on.
+    const close = page.getByTestId('lab2-market-close');
+    if ((await close.count()) > 0 && (await close.isVisible())) await close.click();
+  }
+  expect(rained).toBe(true);
+});
+
+test('setting a pump and putting a fire out redraw the ground, so the map shows them', async ({
+  page,
+}) => {
+  // Owner, on the hazards build: "Can't see pump when you set it down." The
+  // ground is drawn once and kept; a change to the hazards alone must draw
+  // it again.
+  const start = createFrontier(110);
+  const camp = start.camps[0] ?? { x: 0, y: 0 };
+  const width = start.cube.size.x;
+  // Two bare squares in the camp's ring: nothing growing and no animal, so
+  // a tap meets the water or the fire first.
+  const bare: { x: number; y: number }[] = [];
+  for (let d = 2; d <= 5 && bare.length < 2; d += 1) {
+    for (const [dx, dy] of [
+      [d, 0],
+      [-d, 0],
+      [0, d],
+      [0, -d],
+    ] as const) {
+      const x = camp.x + dx;
+      const y = camp.y + dy;
+      const i = x + width * y;
+      const animal = start.animals.some((a) => a.x === x && a.y === y);
+      if ((start.features[i] ?? 0) === 0 && !animal && bare.length < 2) bare.push({ x, y });
+    }
+  }
+  const [wet, hot] = bare;
+  if (wet === undefined || hot === undefined) throw new Error('two bare squares near the camp');
+  const state: FrontierState = {
+    ...start,
+    inventory: new Map([['pump', 1]]),
+    hazards: {
+      ...start.hazards,
+      flooded: start.hazards.flooded.map((_, i) => i === wet.x + width * wet.y),
+      fires: start.hazards.fires.map((_, i) => i === hot.x + width * hot.y),
+    },
+  };
+  const canvas = await openGame(page, state);
+  const draws = async (): Promise<number> => Number(await canvas.getAttribute('data-ground-draws'));
+  const before = await draws();
+  await tapSquare(page, canvas, wet.x, wet.y);
+  await expect(canvas).toHaveAttribute('data-pumps', `${wet.x},${wet.y}`);
+  await expect.poll(draws).toBeGreaterThan(before);
+  const afterPump = await draws();
+  await tapSquare(page, canvas, hot.x, hot.y);
+  await expect(canvas).toHaveAttribute('data-fires', '');
+  await expect.poll(draws).toBeGreaterThan(afterPump);
 });

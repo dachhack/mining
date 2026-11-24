@@ -6,6 +6,10 @@ import { FRONTIER_BOARD, FRONTIER_CONTRACTS, FRONTIER_MARKET } from '../../src/d
 import {
   contractBoard,
   contractLimit,
+  createFrontier,
+  groundStock,
+  worldCanFill,
+  worldStock,
   frontierAct,
   heldContracts,
   isMarketDay,
@@ -31,6 +35,16 @@ function at(
   return { ...s, marketOpen: isMarketDay(s) };
 }
 
+/**
+ * A store holding plenty of everything any contract asks for: the test world
+ * (dirt and stone, 3 layers) holds no ore, coal, clay or relics, and the
+ * board offers only what the world can fill (stock.ts).
+ */
+const PLENTY: Record<string, number> = {};
+for (const c of FRONTIER_CONTRACTS) {
+  for (const a of c.asks) PLENTY[a.item] = Math.max(PLENTY[a.item] ?? 0, a.count * 10);
+}
+
 describe('the contract board (plan section 5)', () => {
   it('opens tier 1 with a level-3 camp, tier 2 after a tier-1 contract, tier 3 after a tier-2', () => {
     expect(FRONTIER_BOARD.tier1Level).toBe(3);
@@ -41,17 +55,17 @@ describe('the contract board (plan section 5)', () => {
   });
 
   it('shows up to 3 of each open tier on a market day only, different ones, the same for the same seed and shift', () => {
-    const board = contractBoard(at(3, {}, [1, 1, 0]));
+    const board = contractBoard(at(3, PLENTY, [1, 1, 0]));
     expect(board).toHaveLength(9);
     for (const tier of [1, 2, 3]) {
       const ids = board.filter((c) => c.tier === tier).map((c) => c.id);
       expect(new Set(ids).size).toBe(FRONTIER_BOARD.perTier);
     }
-    expect(contractBoard(at(3, {}, [1, 1, 0]))).toEqual(board);
+    expect(contractBoard(at(3, PLENTY, [1, 1, 0]))).toEqual(board);
     expect(contractBoard(at(3, {}, [0, 0, 0], 31))).toEqual([]); // not a market day
     // Another market day shows another draw (over a few days, at least one differs).
     const days = [33, 36, 39, 42].map((s) =>
-      contractBoard(at(3, {}, [0, 0, 0], s))
+      contractBoard(at(3, PLENTY, [0, 0, 0], s))
         .map((c) => c.id)
         .join(),
     );
@@ -100,8 +114,8 @@ describe('taking, delivering and dropping contracts', () => {
     expect(taken.done).toBe(true);
     expect(taken.state.contracts).toEqual([{ id: offer.id, takenOn: 30 }]);
     expect(taken.state.tapsLeft).toBe(w.tapsLeft);
-    // Delivering is a day's action: not while the market is open.
-    expect(frontierAct(taken.state, { kind: 'deliver', id: offer.id }).refusal).toBe('market');
+    // At the market it can be delivered too, but only with everything it asks for.
+    expect(frontierAct(taken.state, { kind: 'deliver', id: offer.id }).refusal).toBe('cost');
     const day = frontierAct(taken.state, { kind: 'closeMarket' }).state;
     expect(frontierAct(day, { kind: 'deliver', id: offer.id }).refusal).toBe('cost');
     // Holding everything, on any day: it is delivered.
@@ -117,7 +131,7 @@ describe('taking, delivering and dropping contracts', () => {
   });
 
   it('holds as many as the best camp’s level (owner), each once, and delivers or drops each by name', () => {
-    const w = at(3, {}, [1, 1, 0]); // nine on the board
+    const w = at(3, PLENTY, [1, 1, 0]); // nine on the board
     expect(contractLimit(w)).toBe(3);
     const offers = contractBoard(w);
     let s = w;
@@ -172,5 +186,105 @@ describe('the phases of a run (plan section 1)', () => {
     expect(runPhase(at(3))).toBe(3);
     expect(runPhase(at(3, {}, [1, 0, 0]))).toBe(4);
     expect(runPhase(at(4, {}, [2, 1, 0]))).toBe(5);
+  });
+});
+
+describe('filling a contract at once (owner, on the hazards build)', () => {
+  // "Should be able to immediately fill contracts if you have the materials."
+  /** The first tier-1 contract on the board at level 3, and a store holding all it asks for. */
+  function offerAndRich(): { state: FrontierState; id: string; pays: number } {
+    const probe = at(3);
+    const offer = contractBoard(probe)[0];
+    if (offer === undefined) throw new Error('the board offers a contract');
+    const inventory: Record<string, number> = {};
+    for (const a of offer.asks) inventory[a.item] = a.count + 5;
+    return { state: at(3, inventory), id: offer.id, pays: offer.pays };
+  }
+
+  it('delivers a contract from the board at once, for no tap, without holding it', () => {
+    const { state, id, pays } = offerAndRich();
+    const out = frontierAct(state, { kind: 'fillContract', id });
+    expect(out.done).toBe(true);
+    expect(out.state.tapsLeft).toBe(state.tapsLeft);
+    expect(out.state.contracts).toEqual([]);
+    expect(out.state.contractsDone[0]).toBe(1);
+    expect(out.state.inventory.get(FRONTIER_MARKET.coin)).toBe(pays);
+    const def = FRONTIER_CONTRACTS.find((c) => c.id === id);
+    for (const a of def?.asks ?? []) expect(out.state.inventory.get(a.item)).toBe(5);
+  });
+
+  it('needs no free place: it works while holding as many as the limit allows', () => {
+    const { state, id } = offerAndRich();
+    // Held: as many others as the limit allows (any contracts but this one).
+    const others = FRONTIER_CONTRACTS.filter((c) => c.id !== id)
+      .slice(0, contractLimit(state))
+      .map((c) => ({ id: c.id, takenOn: 1 }));
+    const full = { ...state, contracts: others };
+    expect(frontierAct(full, { kind: 'takeContract', id }).refusal).toBe('holding');
+    expect(frontierAct(full, { kind: 'fillContract', id }).done).toBe(true);
+  });
+
+  it('is refused without everything it asks for, with the market closed, or off the board', () => {
+    const { state, id } = offerAndRich();
+    expect(frontierAct(at(3), { kind: 'fillContract', id }).refusal).toBe('cost');
+    expect(frontierAct({ ...state, marketOpen: false }, { kind: 'fillContract', id }).refusal).toBe(
+      'closed',
+    );
+    expect(frontierAct(state, { kind: 'fillContract', id: 'no-such' }).refusal).toBe('unknown');
+  });
+
+  it('lets a contract held be delivered at the market too, for no tap', () => {
+    const { state, id } = offerAndRich();
+    const holding = { ...state, contracts: [{ id, takenOn: 1 }] };
+    const out = frontierAct(holding, { kind: 'deliver', id });
+    expect(out.done).toBe(true);
+    expect(out.state.tapsLeft).toBe(holding.tapsLeft);
+    expect(out.state.contracts).toEqual([]);
+    // A held one is delivered, not filled again from the board.
+    expect(frontierAct(holding, { kind: 'fillContract', id }).refusal).toBe('unknown');
+  });
+});
+
+describe('the board offers only what the world can fill (owner, on the hazards build)', () => {
+  // "Let's inventory the entire board so that the contracts offered are not unfillable."
+  it('counts the ground under every square, the store, and what smelting could make', () => {
+    const w = at(3, { coal: 3, rawIronOre: 5 });
+    const stock = worldStock(w);
+    // The test world: a top layer of dirt and two of stone, 25 x 25.
+    expect(stock.get('stone')).toBe(25 * 25 * 2);
+    expect(stock.get('coal')).toBe(3);
+    // Smelting: 2 raw iron and 1 coal make 2 ingots, twice with 5 raw iron.
+    expect(stock.get('ironIngot')).toBe(4);
+    expect(groundStock(w.cube).get('coal') ?? 0).toBe(0);
+  });
+
+  it('leaves out a contract the world cannot fill, and keeps it once the store holds enough', () => {
+    const bare = at(3);
+    const board = contractBoard(bare);
+    // Stone is in the ground; coal, ore and clay are not.
+    expect(board.length).toBeGreaterThan(0);
+    for (const c of board) expect(worldCanFill(worldStock(bare), c.asks)).toBe(true);
+    expect(board.some((c) => c.asks.some((a) => a.item === 'coal'))).toBe(false);
+    const rich = at(3, PLENTY);
+    expect(contractBoard(rich).length).toBe(FRONTIER_BOARD.perTier);
+  });
+
+  it('never offers a contract the world cannot fill, on real worlds and many market days', () => {
+    for (let seed = 1; seed <= 6; seed += 1) {
+      const start = createFrontier(seed);
+      for (const shift of [30, 60, 90]) {
+        const s = {
+          ...start,
+          shift,
+          contractsDone: [1, 1, 0],
+          camps: start.camps.map((c) => ({ ...c, level: 3 })),
+          marketOpen: true,
+        };
+        const stock = worldStock(s);
+        for (const c of contractBoard(s)) expect(worldCanFill(stock, c.asks), c.id).toBe(true);
+        // Relics and keystones are nowhere in the world: never asked for.
+        expect(contractBoard(s).some((c) => c.asks.some((a) => a.item === 'relic'))).toBe(false);
+      }
+    }
   });
 });

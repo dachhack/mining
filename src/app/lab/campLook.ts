@@ -28,6 +28,10 @@ export const CAMP_LOOK = {
   ringMs: 900,
   /** How long an animal takes to slide to where End shift moved it, in milliseconds. */
   animalSlideMs: 400,
+  /** How long a dragon takes to glide, in the morning, along its night's flight (hazards PR 4). */
+  dragonFlightMs: 1400,
+  /** How long a dragon takes to glide the square it flies on each mining tap. */
+  dragonStepMs: 350,
   /** How long the pulse on the square a new camp would go on takes, once round, in milliseconds. */
   targetPulseMs: 1200,
 };

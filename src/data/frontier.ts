@@ -759,7 +759,9 @@ export const FRONTIER_WATER = {
  */
 export const FRONTIER_PUMP = {
   item: 'pump' as ItemId,
-  drainPerShift: 2,
+  // A whole flood in one night (owner, on the hazards build: "Pump takes too
+  // long"): as many as a flood can hold (FRONTIER_WATER.maxSquares).
+  drainPerShift: 12,
 };
 
 /**
@@ -784,8 +786,8 @@ export const FRONTIER_GAS = {
  * and apples and set fire to things. They don't go away until you get a
  * sword and drive them away." From shift `fromShift`, at End shift, a dragon
  * flies in at the map's edge with a chance of `chance`, while fewer than
- * `most` are on the map. Each night each dragon flies `steps` squares (over
- * anything), eats one animal on or beside its square (or, on a camp's
+ * `most` are on the map. Each night each dragon flies `steps` squares in a
+ * straight line in one of 8 directions (over anything, bouncing off the edge), eats one animal on or beside its square (or, on a camp's
  * ground, one from its pen) and every apple on the apple trees on or beside
  * its square, and with a chance of `fireChance` sets fire to one thing that
  * can burn on or beside its square. A tap on it with a sword in the store
@@ -796,6 +798,14 @@ export const FRONTIER_DRAGON = {
   chance: 1 / 12,
   most: 1,
   steps: 4,
+  /**
+   * In the day a dragon rests for `restMines` mining taps (a whole number
+   * from the first to the second, drawn from the run's generator), then flies
+   * `stepsPerMine` squares along its heading (owner: "Let's make the dragon
+   * fly every time you mine. Or every 3-7 mines. So it stays put for a bit.").
+   */
+  stepsPerMine: 1,
+  restMines: [3, 7] as [number, number],
   fireChance: 1 / 3,
   sword: 'sword' as ItemId,
 };

@@ -1130,7 +1130,7 @@ test('out of taps: a tap does nothing and says so, and End shift stands out', as
   await expect.poll(() => counts(page)).toEqual(expectedCounts(world));
 });
 
-test('night between shifts: End shift shows the night, with the moon of the shift number, and it clears', async ({
+test('night between shifts: End shift shows the night, with the moon of the shift number, and waits for a tap', async ({
   page,
 }) => {
   // Owner, after the playtest of PR #146: "After a shift is night time."
@@ -1149,8 +1149,13 @@ test('night between shifts: End shift shows the night, with the moon of the shif
   );
   // Nothing behind it takes input meanwhile.
   await expect(page.locator('.lab')).toHaveJSProperty('inert', true);
-  // It clears by itself in about 3 s.
-  await page.clock.runFor(3000);
+  // It waits, however long, with "Tap to continue" (owner, on the hazards
+  // build: "Night goes too fast to read what happens").
+  await page.clock.runFor(10000);
+  await expect(night).toBeVisible();
+  await expect(night).toHaveClass(/lab2-night-wait/);
+  await expect(page.getByTestId('lab2-night-continue')).toBeVisible();
+  await night.click();
   await expect(night).toHaveCount(0);
   await expect(page.locator('.lab')).toHaveJSProperty('inert', false);
   // The next night has the next phase: one step a shift.
@@ -1158,7 +1163,7 @@ test('night between shifts: End shift shows the night, with the moon of the shif
   await expect(night).toHaveAttribute('data-night', '2');
   await expect(night).toHaveAttribute('data-phase', String(moonPhase(2)));
   expect(moonPhase(2)).toBe((moonPhase(1) + 1) % MOON_PHASES.length);
-  await page.clock.runFor(3000);
+  await night.click();
   await expect(night).toHaveCount(0);
   await expect(canvas).toBeVisible();
 });
@@ -1181,7 +1186,7 @@ test('night between shifts: a tap skips it, and the tap does nothing else', asyn
   );
 });
 
-test('night between shifts, with reduced motion: a still moon and a quick fade', async ({
+test('night between shifts, with reduced motion: a still moon, at once, until a tap', async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -1190,7 +1195,9 @@ test('night between shifts, with reduced motion: a still moon and a quick fade',
   await page.getByTestId('lab2-end-shift').click();
   await expect(night).toHaveClass(/lab2-night-still/);
   await expect(night).toHaveClass(/lab2-night-dark/);
-  await page.clock.runFor(1000);
+  await page.clock.runFor(5000);
+  await expect(page.getByTestId('lab2-night-continue')).toBeVisible();
+  await night.click();
   await expect(night).toHaveCount(0);
 });
 

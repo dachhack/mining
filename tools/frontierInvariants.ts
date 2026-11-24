@@ -38,7 +38,8 @@
 //   pen may breed.
 // - CONTRACTS: one is taken only while the market is open, from that day's
 //   board, while fewer are held than the best camp's level and not that
-//   one already; delivering pays its coins and takes its items, and
+//   one already; filling one (only while the market is open, from the
+//   board) and delivering pay its coins and take its items, and
 //   counts one more done for its tier; the counts done never fall.
 // - FARMING: a planted sapling is a waiting stump on unmined dirt; cut grass
 //   waits only on a square with nothing growing on it; a planting takes one
@@ -67,7 +68,8 @@
 //   stump may wait to grow back).
 // - DRAGONS: never more than FRONTIER_DRAGON.most, always on the map; one
 //   comes only at night, at the edge, from FRONTIER_DRAGON.fromShift; they
-//   move only at night, at most FRONTIER_DRAGON.steps squares; one leaves
+//   move at night (at most FRONTIER_DRAGON.steps squares) and on a mining tap
+//   (at most FRONTIER_DRAGON.stepsPerMine), never otherwise; one leaves
 //   only by a tap on it with a sword held, and the sword stays.
 // - RAIDS AND DEFENSES: a camp's defenses stay between 0 and
 //   FRONTIER_DEFENSE.length, go up only by buildDefense, 1 level, and never
@@ -211,10 +213,21 @@ export function checkStep(
           const j = nx + w * ny;
           if ((was[j] ?? 0) > d) deeper = true;
           if ((was[j] ?? 0) < d) shallower = true;
-          if (Math.abs(n - (now[j] ?? 0)) > 1)
+          // Steep sides (a deep camp's foundation) may stay; no gap may grow past 1.
+          const gap = Math.abs(n - (now[j] ?? 0));
+          // A deep camp's foundation may leave steep sides where it dug.
+          if (gap > 1 && gap > Math.abs(d - (was[j] ?? 0)) && verb !== 'placeDeep')
             say(`after the night ${x},${y} breaks the level rule`);
         }
         if (n === d) continue;
+        // A deep camp's foundation digs its 3 x 3 level (owner, on the hazards build).
+        const foundation =
+          verb === 'placeDeep' &&
+          after.camps.some((c) => c.deep && Math.abs(c.x - x) <= 1 && Math.abs(c.y - y) <= 1);
+        if (foundation) {
+          if (n < d) say(`the foundation raised ${x},${y}`);
+          continue;
+        }
         if (!endsShift) say(`${x},${y} went from depth ${d} to ${n} without a mining tap`);
         else if (n !== d - 1) say(`rain took ${x},${y} from depth ${d} to ${n}`);
         else if (deeper || !shallower) say(`rain filled ${x},${y}, which was not a low spot`);
@@ -286,11 +299,18 @@ export function checkStep(
       if (blownSeen) {
         for (let y = 0; y < h; y += 1) {
           for (let x = 0; x < w; x += 1) {
+            // A gap past 1 (a deep camp's foundation) may stay; none may grow.
             const d = depthAt(after.cube, x, y);
-            if (x + 1 < w && Math.abs(d - depthAt(after.cube, x + 1, y)) > 1)
-              say(`after the blast ${x},${y} breaks the level rule`);
-            if (y + 1 < h && Math.abs(d - depthAt(after.cube, x, y + 1)) > 1)
-              say(`after the blast ${x},${y} breaks the level rule`);
+            const d0 = depthAt(before.cube, x, y);
+            for (const [nx, ny] of [
+              [x + 1, y],
+              [x, y + 1],
+            ] as const) {
+              if (nx >= w || ny >= h) continue;
+              const gap = Math.abs(d - depthAt(after.cube, nx, ny));
+              if (gap > 1 && gap > Math.abs(d0 - depthAt(before.cube, nx, ny)))
+                say(`after the blast ${x},${y} breaks the level rule`);
+            }
           }
         }
       }
@@ -361,9 +381,19 @@ export function checkStep(
         if (before.shift < FRONTIER_DRAGON.fromShift)
           say(`dragon ${d.id} came on shift ${before.shift}`);
       } else {
-        const moved = Math.abs(d.x - was.x) + Math.abs(d.y - was.y);
-        if (moved > 0 && !endsShift) say(`dragon ${d.id} moved by "${step}"`);
-        if (moved > FRONTIER_DRAGON.steps) say(`dragon ${d.id} flew ${moved} squares`);
+        // Straight flights in 8 directions: at most `steps` squares each way.
+        const moved = Math.max(Math.abs(d.x - was.x), Math.abs(d.y - was.y));
+        // At night a flight; on a mining tap a step along its heading; else still.
+        const mined = verb === 'tap' && after.mined > before.mined;
+        const most = endsShift ? FRONTIER_DRAGON.steps : mined ? FRONTIER_DRAGON.stepsPerMine : 0;
+        if (moved > most) say(`dragon ${d.id} flew ${moved} squares by "${step}"`);
+        if (Math.abs(d.dx) > 1 || Math.abs(d.dy) > 1 || (d.dx === 0 && d.dy === 0))
+          say(`dragon ${d.id} has heading ${d.dx},${d.dy}`);
+        const [restLow, restHigh] = FRONTIER_DRAGON.restMines;
+        if (d.restMines < 1 || d.restMines > restHigh || !Number.isInteger(d.restMines))
+          say(`dragon ${d.id} rests ${d.restMines} mines`);
+        if (moved > 0 && mined && d.restMines < restLow)
+          say(`dragon ${d.id} flew and rests only ${d.restMines}`);
       }
     }
     for (const d of before.hazards.dragons) {
@@ -504,7 +534,12 @@ export function checkStep(
         `after End shift the market is ${after.marketOpen ? 'open' : 'closed'} on shift ${after.shift}`,
       );
   }
-  if (before.marketOpen && !['sell', 'buy', 'takeContract', 'closeMarket', 'close'].includes(verb))
+  if (
+    before.marketOpen &&
+    !['sell', 'buy', 'takeContract', 'fillContract', 'deliver', 'closeMarket', 'close'].includes(
+      verb,
+    )
+  )
     say(`"${verb}" was done while the market was open`);
   if (!endsShift && !before.marketOpen && after.marketOpen)
     say('the market opened without a night');
@@ -527,9 +562,16 @@ export function checkStep(
     if (!contractBoard(before).some((c) => c.id === id))
       say(`took ${id}, which is not on the board`);
   }
-  if (verb === 'deliver') {
+  if (verb === 'fillContract') {
+    // Filled at once from the board, while the market is open; never held after.
     const id = step.split(' ')[1] ?? '';
-    const isHeld = before.contracts.some((c) => c.id === id);
+    if (!before.marketOpen) say(`filled ${id} with the market closed`);
+    if (!contractBoard(before).some((c) => c.id === id)) say(`filled ${id}, not on the board`);
+    if (after.contracts.some((c) => c.id === id)) say(`filled ${id}, and it is still held`);
+  }
+  if (verb === 'deliver' || verb === 'fillContract') {
+    const id = step.split(' ')[1] ?? '';
+    const isHeld = verb === 'fillContract' || before.contracts.some((c) => c.id === id);
     const held = isHeld ? FRONTIER_CONTRACTS.find((c) => c.id === id) : undefined;
     if (held === undefined) {
       say('delivered with no contract held');

@@ -57,7 +57,7 @@ This changes the design doc's Hazards row (section 2: "None for now") and sectio
 ## 4. Dragons and the sword (PR 4)
 
 - **When:** from shift `FRONTIER_DRAGON.fromShift` (20), at End shift, a dragon flies in at the map's edge with a chance of `chance` (1 in 12), if none is on the map (`most`: 1).
-- **What it does each night:** it flies `steps` (4) squares (over anything: trees, pits, water), then eats: an animal on its square or beside it, or one from the pen of a camp it is on, and every apple on an apple tree it is on or beside. Then, with a chance of `fireChance` (1 in 3), it sets fire to one combustible square beside it.
+- **What it does each night:** it flies `steps` (4) squares in a straight line, in one of 8 directions (over anything: trees, pits, water; bouncing off the edge), then eats: an animal on its square or beside it, or one from the pen of a camp it is on, and every apple on an apple tree it is on or beside. Then, with a chance of `fireChance` (1 in 3), it sets fire to one combustible square beside it.
 - **It stays** until it is driven away.
 - **The sword:** made in the recipe book at a camp with a smelter, from 3 iron ingots and 2 wood, or bought at the market for 60 coins from camp level 3 (question 187). Tap the dragon with a sword in the store (1 tap): it is driven off the map. The sword is kept. A tap on a dragon without one is refused ("Needs a sword").
 - **Screen:** the dragon drawn on its square, a ⚔ chip, and what it ate in the night report.

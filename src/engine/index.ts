@@ -72,8 +72,11 @@ import type { GameState } from './state';
  * 0.12.0: after the 0.11.0 build: clay contracts in volume (tiers 1 and 2).
  * 0.13.0: hazards (docs/plans/hazards.md, decision note 0064): rain first;
  *        the plan's later PRs share it until the build with all of them.
+ * 0.14.0: after the hazards build: contracts are filled at the market at
+ *        once when the store holds what they ask for, and held ones can be
+ *        delivered there.
  */
-export const ENGINE_VERSION = '0.13.0';
+export const ENGINE_VERSION = '0.14.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
@@ -484,6 +487,8 @@ export {
   inCircle,
   inFootprint,
   isLevelPatch,
+  foundationDepth,
+  layFoundation,
   holdsToolFor,
   levelNeededFor,
   frontierMineCheck,
@@ -534,10 +539,14 @@ export {
   heldContracts,
   openTiers,
   runPhase,
+  fillContract,
+  fillRefusal,
   takeContract,
   takeRefusal,
 } from './frontier/contracts';
 export type { ContractRefusal } from './frontier/contracts';
+// What the whole world still holds, for the contract board (owner, on the hazards build).
+export { groundStock, worldCanFill, worldStock } from './frontier/stock';
 // Animal pens (PR 4).
 export { breedPens, penAct, penRefusal } from './frontier/pens';
 // Marauders and camp defenses (hazards PR 5).

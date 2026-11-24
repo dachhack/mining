@@ -150,3 +150,109 @@ export function drawDragon(ctx: CanvasRenderingContext2D, cx: number, cy: number
   ctx.fill();
   ctx.restore();
 }
+
+/** The colours of each level of a camp's defenses: palisade, stone wall, gatehouse. */
+export const DEFENSE_PAINT = [
+  { face: '#9a6a3c', edge: '#4e3318' },
+  { face: '#a9adb3', edge: '#4c5056' },
+  { face: '#d9b45a', edge: '#5a4515' },
+];
+
+/**
+ * A camp's defenses as a shield tag centred on (x, y), `size` pixels
+ * across: coloured by the level (`DEFENSE_PAINT`), with the level on it.
+ * Nothing for level 0.
+ */
+export function drawDefenseTag(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  level: number,
+): void {
+  const paint = DEFENSE_PAINT[level - 1];
+  if (paint === undefined) return;
+  const w = size * 0.5;
+  const h = size * 0.6;
+  ctx.save();
+  ctx.fillStyle = paint.face;
+  ctx.strokeStyle = paint.edge;
+  ctx.lineWidth = Math.max(1.5, size * 0.09);
+  ctx.beginPath();
+  ctx.moveTo(x - w, y - h * 0.75);
+  ctx.lineTo(x + w, y - h * 0.75);
+  ctx.lineTo(x + w, y);
+  ctx.quadraticCurveTo(x + w, y + h * 0.7, x, y + h);
+  ctx.quadraticCurveTo(x - w, y + h * 0.7, x - w, y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = paint.edge;
+  ctx.font = `800 ${Math.round(size * 0.62)}px system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(level), x, y + h * 0.05);
+  ctx.restore();
+}
+
+/**
+ * A camp's defenses round its 3 x 3 (the square `box`, in pixels): a
+ * palisade of wooden stakes (level 1), a thick stone wall (level 2), or the
+ * wall with a gate at the bottom (level 3). Nothing for level 0.
+ */
+export function drawCampWall(
+  ctx: CanvasRenderingContext2D,
+  box: { x: number; y: number; size: number },
+  c: number,
+  level: number,
+): void {
+  const paint = DEFENSE_PAINT[level - 1];
+  if (paint === undefined) return;
+  ctx.save();
+  if (level === 1) {
+    // Stakes round the edge.
+    const step = c * 0.3;
+    const stake = Math.max(2, c * 0.12);
+    ctx.fillStyle = paint.face;
+    ctx.strokeStyle = paint.edge;
+    ctx.lineWidth = Math.max(1, c * 0.03);
+    for (let d = 0; d <= box.size - stake; d += step) {
+      for (const [sx, sy] of [
+        [box.x + d, box.y],
+        [box.x + d, box.y + box.size - stake],
+        [box.x, box.y + d],
+        [box.x + box.size - stake, box.y + d],
+      ] as const) {
+        ctx.fillRect(sx, sy, stake, stake);
+        ctx.strokeRect(sx, sy, stake, stake);
+      }
+    }
+  } else {
+    // A stone wall: a thick grey edge with joints.
+    const t = Math.max(3, c * 0.14);
+    ctx.strokeStyle = paint.edge;
+    ctx.lineWidth = t + Math.max(1, c * 0.04);
+    ctx.strokeRect(box.x + t / 2, box.y + t / 2, box.size - t, box.size - t);
+    ctx.strokeStyle = DEFENSE_PAINT[1]?.face ?? paint.face;
+    ctx.lineWidth = t;
+    ctx.setLineDash([c * 0.28, c * 0.06]);
+    ctx.strokeRect(box.x + t / 2, box.y + t / 2, box.size - t, box.size - t);
+    ctx.setLineDash([]);
+    if (level >= 3) {
+      // The gatehouse: two gold towers either side of a gate in the bottom wall.
+      const gx = box.x + box.size / 2;
+      const gy = box.y + box.size - t;
+      ctx.fillStyle = '#2a1d10';
+      ctx.fillRect(gx - c * 0.25, gy - t * 0.2, c * 0.5, t * 1.4);
+      ctx.fillStyle = paint.face;
+      ctx.strokeStyle = paint.edge;
+      ctx.lineWidth = Math.max(1, c * 0.04);
+      for (const side of [-1, 1]) {
+        const tx = gx + side * c * 0.38 - c * 0.13;
+        ctx.fillRect(tx, gy - t * 0.6, c * 0.26, t * 2.2);
+        ctx.strokeRect(tx, gy - t * 0.6, c * 0.26, t * 2.2);
+      }
+    }
+  }
+  ctx.restore();
+}

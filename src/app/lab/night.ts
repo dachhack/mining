@@ -7,10 +7,13 @@
 // 1. fades to black and white (DUSK_MS),
 // 2. fades to dark (DARK_MS),
 // 3. shows the moon, whose phase turns from last night's to tonight's, with
-//    a line about the shift that ended (MOON_MS),
-// 4. fades back to the new shift (DAWN_MS).
-// A tap skips it. With prefers-reduced-motion, the dark screen and the moon
-// show at once, still, and fade out quickly.
+//    what the night brought, one sentence a line (MOON_MS turns the moon),
+// 4. waits there, with "Tap to continue", until the player taps (owner, on
+//    the hazards build: "Night goes too fast to read what happens").
+// A tap at any point ends it. On a night it rained, rain falls across the
+// sky (owner: "We need a rain scene for when it rains"). With
+// prefers-reduced-motion, the dark screen, the moon and still rain show at
+// once.
 //
 // The moon's phase comes from the shift number only, so it is the same on
 // every phone: one step a shift through the 8 phases. This is the screen's
@@ -30,14 +33,10 @@ export const MOON_PHASES = [
   'Waning crescent',
 ] as const;
 
-/** How long each part of the night lasts, in milliseconds: about 2.6 s in all. */
+/** How long each part of the night takes to come, in milliseconds; then it waits for a tap. */
 const DUSK_MS = 500;
 const DARK_MS = 450;
 const MOON_MS = 1200;
-const DAWN_MS = 450;
-/** With prefers-reduced-motion: the still moon, then a quick fade. */
-const REDUCED_HOLD_MS = 700;
-const REDUCED_FADE_MS = 200;
 
 /** The phase (0 to 7, an index into MOON_PHASES) of the night after shift `shift`. */
 export function moonPhase(shift: number): number {
@@ -103,8 +102,10 @@ export interface Night {
 export interface NightOptions {
   /** The shift that just ended. */
   shift: number;
-  /** A line about it ("Shift 3 over: paid 1 wood."), or ''. */
+  /** What the night brought ("Shift 3 over: paid 1 wood. It rained 🌧."), or ''. */
   summary: string;
+  /** True if it rained this night: rain falls across the sky. */
+  rain: boolean;
   /** The page behind the night: greyed, then covered; it takes no input meanwhile. */
   page: HTMLElement;
   /** Show the still version (prefers-reduced-motion). */
@@ -133,12 +134,29 @@ export function showNight(host: HTMLElement, options: NightOptions): Night {
   const cssSize = 160;
   canvas.width = Math.round(cssSize * scale);
   canvas.height = Math.round(cssSize * scale);
-  const title = element('p', 'lab2-night-title', `Night ${options.shift}`);
+  const title = element(
+    'p',
+    'lab2-night-title',
+    options.rain ? `Night ${options.shift} · Rain 🌧` : `Night ${options.shift}`,
+  );
   const phaseName = element('p', 'lab2-night-phase', MOON_PHASES[phase] ?? '');
   phaseName.dataset['testid'] = 'lab2-night-phase';
-  const summary = element('p', 'lab2-night-summary', options.summary);
+  // What the night brought, one sentence a line, so it can be read.
+  const summary = element('div', 'lab2-night-summary');
   summary.dataset['testid'] = 'lab2-night-summary';
-  sky.append(title, canvas, phaseName, summary);
+  for (const sentence of sentencesOf(options.summary)) {
+    summary.append(element('p', 'lab2-night-line', sentence));
+  }
+  const tapOn = element('p', 'lab2-night-continue', 'Tap to continue');
+  tapOn.dataset['testid'] = 'lab2-night-continue';
+  sky.append(title, canvas, phaseName, summary, tapOn);
+  if (options.rain) {
+    // Rain: streaks falling over the whole sky, behind the words.
+    const rain = element('div', 'lab2-night-rain');
+    rain.dataset['testid'] = 'lab2-night-rain';
+    overlay.dataset['rain'] = 'true';
+    overlay.append(rain);
+  }
   overlay.append(sky);
   host.append(overlay);
 
@@ -175,8 +193,6 @@ export function showNight(host: HTMLElement, options: NightOptions): Night {
   if (options.reducedMotion) {
     overlay.classList.add('lab2-night-still', 'lab2-night-dark', 'lab2-night-moonup');
     paint(phase);
-    at(REDUCED_HOLD_MS, () => overlay.classList.add('lab2-night-dawn'));
-    at(REDUCED_HOLD_MS + REDUCED_FADE_MS, finish);
     return { skip: finish };
   }
 
@@ -200,11 +216,15 @@ export function showNight(host: HTMLElement, options: NightOptions): Night {
     paint(phase - 1);
     frame = window.requestAnimationFrame(step);
   });
-  // 4. Dawn: everything fades back.
-  at(DUSK_MS + DARK_MS + MOON_MS, () => {
-    overlay.classList.add('lab2-night-dawn');
-    options.page.classList.remove('lab2-dusk');
-  });
-  at(DUSK_MS + DARK_MS + MOON_MS + DAWN_MS, finish);
+  // 4. It waits for a tap: "Tap to continue" shows once the moon has turned.
+  at(DUSK_MS + DARK_MS + MOON_MS, () => overlay.classList.add('lab2-night-wait'));
   return { skip: finish };
+}
+
+/** `text` cut into its sentences: after each '.', '!' or '?' that a space follows. */
+export function sentencesOf(text: string): string[] {
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t !== '');
 }

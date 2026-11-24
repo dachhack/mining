@@ -46,6 +46,8 @@ import {
   deliverRefusal,
   dropContract,
   dropRefusal,
+  fillContract,
+  fillRefusal,
   takeContract,
   takeRefusal,
 } from './contracts';
@@ -94,6 +96,8 @@ export type FrontierAction =
   | { kind: 'closeMarket' }
   // Take contract `id` from today's board, deliver the one held, or drop it (contracts.ts).
   | { kind: 'takeContract'; id: string }
+  // Fill contract `id` from today's board at once, holding its asks (market only).
+  | { kind: 'fillContract'; id: string }
   | { kind: 'deliver'; id: string }
   | { kind: 'dropContract'; id: string }
   // Build a pen at camp `id`, or put an animal in or take one out (pens.ts).
@@ -519,6 +523,15 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
       const why = takeRefusal(state, action.id);
       return why === null ? free(takeContract(state, action.id)) : refused(state, why);
     }
+    // Filling a contract from the board, or delivering one held (contracts.ts).
+    if (action.kind === 'fillContract') {
+      const why = fillRefusal(state, action.id);
+      return why === null ? free(fillContract(state, action.id)) : refused(state, why);
+    }
+    if (action.kind === 'deliver') {
+      const why = deliverRefusal(state, action.id);
+      return why === null ? free(deliverContract(state, action.id)) : refused(state, why);
+    }
     if (action.kind !== 'close') return refused(state, 'market');
   }
   if (action.kind === 'closeMarket') {
@@ -562,6 +575,9 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
   if (action.kind === 'takeContract') {
     const why = takeRefusal(state, action.id);
     return why === null ? spent(takeContract(state, action.id)) : refused(state, why);
+  }
+  if (action.kind === 'fillContract') {
+    return refused(state, 'closed'); // only while the market is open
   }
   if (action.kind === 'deliver') {
     const why = deliverRefusal(state, action.id);

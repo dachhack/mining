@@ -3,7 +3,15 @@
 // contract is done.
 import { describe, expect, it } from 'vitest';
 import { FRONTIER_CAMP_PLACE, FRONTIER_DEEP_CAMP } from '../../src/data/frontier';
-import { campRing, coverLevelAt, frontierAct, isMarketDay, placeRefusal } from '../../src/engine';
+import {
+  campRing,
+  coverLevelAt,
+  depthAt,
+  foundationDepth,
+  frontierAct,
+  isMarketDay,
+  placeRefusal,
+} from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
 import { MID, NEXT, world } from './frontierHelpers';
 
@@ -72,5 +80,67 @@ describe('the market from the first tier-1 contract (plan section 3)', () => {
       const done = { ...w, contractsDone: [1, 0, 0] };
       expect(frontierAct(done, { kind: 'buy', item, lots: 1 }).done, item).toBe(true);
     }
+  });
+});
+
+describe("the deep camp's concrete foundation (owner, on the hazards build)", () => {
+  // "The deep mine should come with a concrete foundation that levels any spot you place it into 3by3."
+  /** `dug(3)`, but the east column of the 3 x 3 at (MID + NEXT, MID) only dug `shallow` deep. */
+  function uneven(shallow: number, inventory: Record<string, number> = KIT): FrontierState {
+    const cx = MID + NEXT;
+    const special = [];
+    for (let y = 0; y < 25; y += 1) {
+      for (let x = MID + 2; x < 25; x += 1) {
+        const east = x === cx + 1 && Math.abs(y - MID) <= 1;
+        const depth = east ? shallow : 3;
+        for (let z = 0; z < depth; z += 1) special.push({ x, y, z, char: '.' });
+      }
+    }
+    return world({ special, inventory });
+  }
+
+  it('is placed on uneven ground, and digs its 3 x 3 down to the deepest square', () => {
+    const w = uneven(2);
+    const cx = MID + NEXT;
+    expect(depthAt(w.cube, cx + 1, MID)).toBe(2);
+    expect(placeRefusal(w, cx, MID, true)).toBeNull();
+    // An ordinary camp still needs level ground (and stands no deeper than 2).
+    expect(
+      placeRefusal(
+        {
+          ...w,
+          inventory: new Map([
+            ['wood', 99],
+            ['grass', 99],
+          ]),
+        },
+        cx,
+        MID,
+      ),
+    ).toBe('notLevel');
+    const placed = frontierAct(w, { kind: 'placeDeep', x: cx, y: MID });
+    expect(placed.done).toBe(true);
+    for (const dy of [-1, 0, 1]) {
+      for (const dx of [-1, 0, 1]) {
+        expect(depthAt(placed.state.cube, cx + dx, MID + dy)).toBe(3);
+      }
+    }
+    // The dug blocks gave nothing, and Dug did not count them.
+    expect(placed.state.mined).toBe(w.mined);
+    expect(placed.state.inventory.size).toBe(0);
+  });
+
+  it('levels to the deepest square: refused if even that is too shallow', () => {
+    // Everything at depth 2 or less: the foundation would stand at 2.
+    const flat2 = dug(2, KIT);
+    expect(foundationDepth(flat2.cube, MID + NEXT, MID)).toBe(2);
+    expect(placeRefusal(flat2, MID + NEXT, MID, true)).toBe('tooShallow');
+  });
+
+  it('is not dug where an animal stands', () => {
+    const w = uneven(2);
+    const cx = MID + NEXT;
+    const withAnimal = { ...w, animals: [{ id: 1, x: cx + 1, y: MID }] };
+    expect(placeRefusal(withAnimal, cx, MID, true)).toBe('animal');
   });
 });
