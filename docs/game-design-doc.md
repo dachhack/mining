@@ -37,7 +37,7 @@ v0.2 is in the git history, as v0.1 is.
 | Genre | Resource gathering and management; roguelike |
 | Pacing | **Turn-based, in shifts of [Default] 100 taps.** Every tap that does something costs 1 (owner, questions 145 and 146: "Fixed number of taps"). End shift moves the world on (section 4) |
 | Player | No avatar. A tap on a lit square takes what is on it (an animal, grass, an apple, a tree) or mines its top block. An abstract **crew** with a health bar does the work (section 5) |
-| Hazards | **None for now** (owner: "Lab 2 becomes the game"). The old ones come back one at a time, fuel and depth bands first; wall slumps and supports are retired (question 153, section 10) |
+| Hazards | **Coming back** (owner, 2026-11-24; plan `docs/plans/hazards.md`, decision note 0064): rain fills low spots, water from depth 3 (a pump drains it), gas from depth 4 (blasts and fires, put out with a tap), dragons (a sword drives them off), marauders (camp defenses turn them away). Until each is built, none is in play. Wall slumps and supports stay retired (question 153, section 10) |
 | Harm | **Hunger only** (owner, question 148): each item of upkeep that cannot be paid costs the crew 1 health (section 5) |
 | Base | **Camps** (Lab 2's): placed on a level 3×3 of lit ground **in the top three levels** (depth 0 to 2; owner, 2026-11-23), upgraded to see further and dig harder rock, demolished once other camps cover them. A base camp mines only dirt and clay; ore, crystal and relics need tools (section 6). The recipe book shows what each costs |
 | Win condition | **A run lasts 100 shifts** (owner, 2026-11-23: "100 shifts or crew lost"), or ends sooner when the crew is lost or the player closes the mine (question 152). The coins held at the end are the score [Default; question 170]; contracts in three tiers pay most of them (section 8) |
@@ -265,7 +265,8 @@ Payouts are **credits**, spent between runs. Unlocks add options; they never rai
 | Wall slumps, cracks and supports | **Retired** (question 153: the level rule leaves no steep walls; decision note 0053) |
 | Smelting, and crafting with ingots | **Built** (engine 0.8.0; owner, questions 159 and 161 to 164): a smelter at a camp, ingots from raw ore and coal, an iron pickaxe, a copper lantern, an iron drill and camp level 4. The plan: `docs/plans/smelting-and-crafting.md`. The simulator's numbers: decision note 0060; tuning questions 165 and 166 answered (the lantern takes coal; the drill is unchanged) |
 | Fuel and coal-fuelled digging; the deeper bands' ore | Later: it was first back (question 153) until smelting took its place (question 159) |
-| Water, lava, gas; unstable ore and explosives; tells and scanning; pumps, vents, sealant; the drill | Dropped for now; they come back one at a time, in an order the owner chooses then |
+| Water and gas; pumps | **Coming back** in the frontier's own form: `docs/plans/hazards.md` |
+| Lava; unstable ore and explosives; tells and scanning; vents, sealant | Dropped for now; they come back one at a time, in an order the owner chooses then |
 | AP and per-block mining costs | Replaced by taps, every tap costing 1 |
 | The old camps (camp kit, mining discount, decommission) and field crafting | Replaced by Lab 2's camps and the recipe book |
 
