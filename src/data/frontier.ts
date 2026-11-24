@@ -799,3 +799,65 @@ export const FRONTIER_DRAGON = {
   fireChance: 1 / 3,
   sword: 'sword' as ItemId,
 };
+
+/** A level of a camp's defenses (hazards plan, section 5): its name and what it costs. */
+export interface FrontierDefenseLevel {
+  name: string;
+  cost: ItemStack[];
+}
+
+/**
+ * Camp defenses (hazards plan, section 5; question 189): "If the camp has
+ * defenses though, they can be turned away." A camp's defense level goes up
+ * one level at a time from its panel, for the next level's cost and 1 tap,
+ * at a camp of level FRONTIER_DEFENSE_MIN_LEVEL or more (as the smelter and
+ * the pen: a base camp's panel has no room for another row; question 194),
+ * deep camps too. A raid never takes them down (question 191).
+ */
+export const FRONTIER_DEFENSE_MIN_LEVEL = 2;
+
+export const FRONTIER_DEFENSE: FrontierDefenseLevel[] = [
+  { name: 'Palisade', cost: [{ item: 'wood', count: 15 }] },
+  {
+    name: 'Stone wall',
+    cost: [
+      { item: 'stone', count: 20 },
+      { item: 'wood', count: 10 },
+    ],
+  },
+  {
+    name: 'Gatehouse',
+    cost: [
+      { item: 'ironIngot', count: 10 },
+      { item: 'stone', count: 20 },
+    ],
+  },
+];
+
+/**
+ * Marauders (hazards plan, section 5): "Marauders can come and steal things
+ * from your camps and remove their upgrades and put them back to basic ...
+ * The strength of the marauders depends on how far you have dug. The damage
+ * they do depends on what level of defense your targeted camp has." From
+ * shift `fromShift`, at End shift, with a chance of `chance`, they raid one
+ * camp drawn at random (question 188). Their strength is the `strength` of
+ * the last entry of `strengthFromDepth` whose `depth` the deepest square on
+ * the map has reached. A camp whose defense level is at least that turns
+ * them away. Otherwise the shortfall (strength minus defense) sets the
+ * damage: `stealShare` of each goods stack in the store for each point of
+ * shortfall, rounded down, never coins (question 190); and
+ * `upgradesPerShortfall` of the camp's upgrades for each point, in the order
+ * fire takes them (lantern, pen and its animals, smelter, then levels).
+ */
+export const FRONTIER_RAID = {
+  fromShift: 15,
+  chance: 0.1,
+  strengthFromDepth: [
+    { depth: 0, strength: 1 },
+    { depth: 4, strength: 2 },
+    { depth: 8, strength: 3 },
+    { depth: 16, strength: 4 },
+  ],
+  stealShare: 0.1,
+  upgradesPerShortfall: 2,
+};

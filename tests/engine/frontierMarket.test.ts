@@ -95,6 +95,7 @@ describe('when the market opens (owner: every 10, 5 or 3 shifts by the best camp
       penned: 0,
       breedIn: 0,
       deep: false,
+      defense: 0,
     };
     const two = { ...w, camps: [...w.camps, second] };
     expect(isMarketDay(w)).toBe(false);

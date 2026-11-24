@@ -41,6 +41,8 @@ import {
   dropRefusal as engineDropRefusal,
   takeRefusal as engineTakeRefusal,
   penRefusal as enginePenRefusal,
+  defenseRefusal as engineDefenseRefusal,
+  raidStrength as engineRaidStrength,
   plantRefusal as enginePlantRefusal,
   nextMarketShift as engineNextMarketShift,
   tradeRefusal as engineTradeRefusal,
@@ -333,6 +335,7 @@ export function campWorldFromLab(
       penned: 0,
       breedIn: 0,
       deep: false,
+      defense: 0,
     },
   ];
   const { width, height } = lab.depths;
@@ -609,6 +612,21 @@ export function penCamp(world: CampWorld, kind: PenAction, id: number): CampWorl
   return act(world, { kind, id }).world;
 }
 
+/** Why camp `id` cannot build its next defenses now ('noTaps', 'over', or the engine's reason), or `null` if it can. */
+export function defenseRefusal(world: CampWorld, id: number): string | null {
+  return turnRefusal(world) ?? engineDefenseRefusal(toFrontier(world), id);
+}
+
+/** How strong marauders would come now: from the deepest square dug (hazards PR 5). */
+export function raidStrengthOf(world: CampWorld): number {
+  return engineRaidStrength(toFrontier(world));
+}
+
+/** Build camp `id`'s next level of defenses (hazards PR 5), for 1 tap; the very same world if it cannot. */
+export function buildCampDefense(world: CampWorld, id: number): CampWorld {
+  return act(world, { kind: 'buildDefense', id }).world;
+}
+
 // ----- The market (docs/plans/progression-phases.md, PR 1) -----
 
 /** True while the market is open: after a market day's night, until it is closed. */
@@ -798,6 +816,8 @@ export type CampStep =
   | { kind: 'penOut'; id: number }
   // Plant a sapling (progression PR 3).
   | { kind: 'plant'; x: number; y: number; item: string }
+  // Build a camp's next defenses (hazards PR 5).
+  | { kind: 'buildDefense'; id: number }
   // End the shift, rest at a camp, or close the mine (A4).
   | { kind: 'endShift' }
   | { kind: 'rest'; id: number }
@@ -846,6 +866,9 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   }
   if (step.kind === 'buildPen' || step.kind === 'penIn' || step.kind === 'penOut') {
     return penCamp(world, step.kind, step.id);
+  }
+  if (step.kind === 'buildDefense') {
+    return buildCampDefense(world, step.id);
   }
   return demolishCamp(world, step.id);
 }

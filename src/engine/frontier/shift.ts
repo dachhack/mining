@@ -18,6 +18,7 @@
 //    - pumps drain their floods (water.ts; hazards plan section 2);
 //    - dragons fly, eat and set fires, and a new one may come (dragons.ts;
 //      hazards plan section 4);
+//    - marauders may raid a camp (raids.ts; hazards plan section 5);
 //    - it may rain, filling low spots (rain.ts; hazards plan section 1).
 //
 // Resting, at a camp (question 156: "Only at a camp"), restores the crew's
@@ -53,6 +54,8 @@ import { rainfall } from './rain';
 import { drainPumps, isFlooded } from './water';
 import { burnFires } from './fire';
 import { nightOfDragons } from './dragons';
+import { buildDefense, defenseRefusal, nightOfRaids } from './raids';
+import type { Raid } from './raids';
 import { breedPens, penAct, penRefusal } from './pens';
 import { isMarketDay, trade, tradeRefusal } from './market';
 import { animalAt } from './surface';
@@ -97,6 +100,8 @@ export type FrontierAction =
   | { kind: 'buildPen'; id: number }
   | { kind: 'penIn'; id: number }
   | { kind: 'penOut'; id: number }
+  // Build camp `id`'s next level of defenses (raids.ts).
+  | { kind: 'buildDefense'; id: number }
   // Plant a sapling or an apple sapling from the store on square (x, y) (farming.ts).
   | { kind: 'plant'; x: number; y: number; item: string }
   | { kind: 'buy'; item: string; lots: number }
@@ -146,6 +151,8 @@ export interface ShiftReport {
   dragonFires: number;
   /** True if a new dragon flew in. */
   dragonCame: boolean;
+  /** What marauders did, or `null` if none came (raids.ts). */
+  raid: Raid | null;
 }
 
 /**
@@ -277,8 +284,14 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
   // Pumps drain their floods (water.ts).
   const pumped = drainPumps(burnt, bred.inventory);
   // Dragons fly, eat and set fires; a new one may come (dragons.ts).
-  const dragon = nightOfDragons({ ...burnt, hazards: pumped.hazards, animals }, rng);
-  const pumping = { ...pumped, hazards: dragon.state.hazards };
+  const dragoned = nightOfDragons(
+    { ...burnt, hazards: pumped.hazards, animals, inventory: pumped.inventory },
+    rng,
+  );
+  // Marauders may raid a camp (raids.ts).
+  const raided = nightOfRaids(dragoned.state, rng);
+  const dragon = { ...dragoned, state: raided.state };
+  const pumping = { ...pumped, hazards: dragon.state.hazards, inventory: raided.state.inventory };
   // Rain, last, so the morning shows where it fell (rain.ts). It does not
   // fill a flooded or burning square.
   const rain = rainfall(
@@ -340,6 +353,7 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
       dragonApples: dragon.applesEaten,
       dragonFires: dragon.fires.length,
       dragonCame: dragon.came,
+      raid: raided.raid,
     },
   };
 }
@@ -560,6 +574,10 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
   if (action.kind === 'buildPen' || action.kind === 'penIn' || action.kind === 'penOut') {
     const why = penRefusal(state, action.kind, action.id);
     return why === null ? spent(penAct(state, action.kind, action.id)) : refused(state, why);
+  }
+  if (action.kind === 'buildDefense') {
+    const why = defenseRefusal(state, action.id);
+    return why === null ? spent(buildDefense(state, action.id)) : refused(state, why);
   }
   if (action.kind === 'plant') {
     const why = plantRefusal(state, action.x, action.y, action.item);

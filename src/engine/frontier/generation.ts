@@ -308,6 +308,7 @@ export function createFrontier(seed: number): FrontierState {
       penned: 0,
       breedIn: 0,
       deep: false,
+      defense: 0,
     },
   ];
   return {

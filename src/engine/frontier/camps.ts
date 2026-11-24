@@ -383,6 +383,7 @@ export function newlyCovered(ground: CampGround, x: number, y: number, deep = fa
         penned: 0,
         breedIn: 0,
         deep,
+        defense: 0,
       },
     ],
     width,
@@ -438,6 +439,7 @@ export function placeCamp(ground: CampGround, x: number, y: number, deep = false
       penned: 0,
       breedIn: 0,
       deep,
+      defense: 0,
     },
   ];
   return {

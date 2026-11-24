@@ -17,6 +17,7 @@ import { BLOCKS, ITEMS, blockDefByCode } from '../../src/data';
 import type { BlockId, ItemId, ItemStack } from '../../src/data';
 import {
   FRONTIER_DEEP_CAMP,
+  FRONTIER_DEFENSE,
   FRONTIER_PUMP,
   FRONTIER_DRILL,
   FRONTIER_MARKET,
@@ -44,6 +45,7 @@ import {
   levelNeededFor,
   toolNeededFor,
   lanternRefusal,
+  defenseRefusal,
   makeRefusal,
   marketEvery,
   contractBoard,
@@ -161,6 +163,8 @@ function refusalText(refusal: string | null): string {
     camp: 'A camp stands there; it is never mined.',
     tooHard: 'Too hard for the camps over it.',
     flooded: 'That square is flooded: buy a pump at the market and tap the water to set it.',
+    max: 'That camp has every level of defenses already.',
+    level: 'Defenses go only at a camp of level 2 or more.',
     needsSword:
       'A dragon is there: only a sword drives it off ("make sword" at a smelter, or buy one at the market from a level-3 camp).',
     outside: 'That square is off the map.',
@@ -256,6 +260,11 @@ function shiftLine(report: ShiftReport, state: FrontierState): string {
     report.burned > 0
       ? `fire burned out ${report.burned} square(s)${report.campUpgradesBurned > 0 ? ` (camps lost ${report.campUpgradesBurned} upgrade(s))` : ''}${report.fireSpread > 0 ? ` and spread to ${report.fireSpread} more` : ''}`
       : '',
+    report.raid === null
+      ? ''
+      : report.raid.turnedAway
+        ? `marauders (strength ${report.raid.strength}) were turned away from camp ${report.raid.campId}`
+        : `marauders (strength ${report.raid.strength}) raided camp ${report.raid.campId} (defenses ${report.raid.defense}): stole ${stacksText(report.raid.stolen) || 'nothing'}, ${report.raid.upgradesLost} upgrade(s) torn down`,
     report.dragonCame ? 'a dragon flew in' : '',
     report.dragonAte > 0 ? `a dragon ate ${report.dragonAte} animal(s)` : '',
     report.dragonApples > 0 ? `a dragon ate ${report.dragonApples} apple(s)` : '',
@@ -416,6 +425,10 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
     };
     return `${verbs[pen[1] ?? ''] ?? ''} ${pen[2] ?? ''}`;
   }
+  const defend = /^(defend|defense|defence|builddefense) (\d+)$/.exec(text);
+  if (defend !== null) {
+    return `buildDefense ${defend[2] ?? ''}`;
+  }
   const lantern = /^(lantern|hang|hang lantern|hanglantern) (\d+)$/.exec(text);
   if (lantern !== null) {
     return `hangLantern ${lantern[2] ?? ''}`;
@@ -493,6 +506,7 @@ export function listedSteps(session: FrontierSession): FrontierStep[] {
       if (act(session, `demolish ${camp.id}`).refused === null) steps.push(`demolish ${camp.id}`);
       if (smelterRefusal(state, camp.id) === null) steps.push(`buildSmelter ${camp.id}`);
       if (lanternRefusal(state, camp.id) === null) steps.push(`hangLantern ${camp.id}`);
+      if (defenseRefusal(state, camp.id) === null) steps.push(`buildDefense ${camp.id}`);
       for (const kind of ['buildPen', 'penIn', 'penOut'] as const) {
         if (penRefusal(state, kind, camp.id) === null) steps.push(`${kind} ${camp.id}`);
       }
@@ -663,11 +677,13 @@ export function frontierView(session: FrontierSession): string {
         ? `; a smelter costs ${stacksText(FRONTIER_SMELTER.cost)}`
         : '';
     const lantern = camp.lantern ? '; a lantern' : '';
+    const defense =
+      camp.defense > 0 ? `; defenses ${camp.defense}/${FRONTIER_DEFENSE.length}` : '; no defenses';
     const pen = camp.pen
       ? `; a pen of ${camp.penned}/${FRONTIER_PEN.capacity}${camp.breedIn > 0 ? `, an animal born in ${camp.breedIn} shift(s) for ${FRONTIER_PEN.hayPerBirth} hay` : ''}`
       : '';
     lines.push(
-      `${camp.deep ? 'Deep camp' : 'Camp'} ${camp.id} at ${camp.x},${camp.y}: level ${camp.level}, ring ${campRing(camp)}; ${camp.deep ? 'never upgraded' : up}${smelter}${lantern}${pen}.`,
+      `${camp.deep ? 'Deep camp' : 'Camp'} ${camp.id} at ${camp.x},${camp.y}: level ${camp.level}, ring ${campRing(camp)}; ${camp.deep ? 'never upgraded' : up}${smelter}${lantern}${pen}${defense}.`,
     );
   }
   lines.push('', ...mapLines(state), '');

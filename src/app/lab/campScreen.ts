@@ -22,6 +22,8 @@ import { BLOCKS, blockDefByCode, ITEMS } from '../../data';
 import type { ItemId, ItemStack } from '../../data';
 import {
   FRONTIER_DEEP_CAMP,
+  FRONTIER_DEFENSE,
+  FRONTIER_DEFENSE_MIN_LEVEL,
   FRONTIER_DRAGON,
   FRONTIER_DRILL,
   FRONTIER_LANTERN,
@@ -82,6 +84,9 @@ import {
   contractRefusal,
   penCamp,
   penRefusal,
+  buildCampDefense,
+  defenseRefusal,
+  raidStrengthOf,
   closeCampMarket,
   plantCamp,
   plantRefusal,
@@ -216,7 +221,14 @@ function shiftText(report: ShiftReport, turn: CampTurn, rested: boolean): string
     report.dragonApples > 0 ? ` A dragon ate ${report.dragonApples} apples.` : '',
     report.dragonFires > 0 ? ' A dragon set a fire 🔥.' : '',
   ].join('');
-  const market = `${born}${rain}${pumped}${burnt}${dragon}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
+  const raid = report.raid;
+  const raided =
+    raid === null
+      ? ''
+      : raid.turnedAway
+        ? ` Marauders 🏴 came for camp ${raid.campId}, but its defenses turned them away.`
+        : ` Marauders 🏴 raided camp ${raid.campId}${raid.stolen.length > 0 ? `, stole ${raid.stolen.map((st) => `${st.count} ${itemName(st.item).toLowerCase()}`).join(', ')}` : ''}${raid.upgradesLost > 0 ? `, and tore down ${raid.upgradesLost === 1 ? 'an upgrade' : `${raid.upgradesLost} upgrades`}` : ''}. Build defenses 🛡 at your camps.`;
+  const market = `${born}${rain}${pumped}${burnt}${dragon}${raided}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
   if (turn.status === 'finished') {
     return `${start}. That was the last shift: the run is over.`;
   }
@@ -1306,6 +1318,7 @@ export function mountCampLab(
         penned: 0,
         breedIn: 0,
         deep: false,
+        defense: 0,
       },
       c,
       false,
@@ -2395,6 +2408,32 @@ export function mountCampLab(
       tray.append(row);
     }
 
+    // Defenses (hazards PR 5): built a level at a time, against marauders,
+    // from level 2 as the smelter and pen (a base camp's panel has no room).
+    if (camp.level >= FRONTIER_DEFENSE_MIN_LEVEL) {
+      const row = element('div', 'lab2-actions');
+      const next = FRONTIER_DEFENSE[camp.defense];
+      const have =
+        camp.defense === 0 ? 'No defenses' : (FRONTIER_DEFENSE[camp.defense - 1]?.name ?? '');
+      const line = element(
+        'span',
+        'lab2-panel-line',
+        `🛡 ${have} · ${camp.defense}/${FRONTIER_DEFENSE.length}`,
+      );
+      line.title = `Marauders now come ${raidStrengthOf(world)} strong: a camp with that many levels of defenses turns them away.`;
+      line.dataset['testid'] = 'lab2-camp-defense';
+      row.append(line);
+      if (next !== undefined) {
+        row.append(costRow(next.cost, 'lab2-defense-cost'));
+        const build = button('lab2-button', `🛡 ${next.name}`);
+        build.dataset['testid'] = 'lab2-build-defense';
+        build.disabled = defenseRefusal(world, camp.id) !== null;
+        build.addEventListener('click', () => confirmDefense(camp.id));
+        row.append(build);
+      }
+      tray.append(row);
+    }
+
     // The lantern (PR 3): hung here from the store, or here already.
     if (camp.lantern) {
       const has = element(
@@ -2501,6 +2540,20 @@ export function mountCampLab(
       fromRadius: campRing(before),
       toRadius: campRing({ ...before, level: before.level + 1 }),
     });
+  }
+
+  function confirmDefense(id: number): void {
+    const next = buildCampDefense(world, id);
+    if (next === world) {
+      return; // the button is off whenever this would happen
+    }
+    remember({ kind: 'buildDefense', id });
+    setWorld(next);
+    const level = next.camps.find((c) => c.id === id)?.defense ?? 0;
+    setHint(
+      `Camp ${id} has a ${FRONTIER_DEFENSE[level - 1]?.name.toLowerCase() ?? 'defense'} 🛡: it turns away marauders up to ${level} strong.`,
+      false,
+    );
   }
 
   function confirmLantern(id: number): void {
@@ -2693,6 +2746,7 @@ export function mountCampLab(
     if (step.kind === 'sell' || step.kind === 'buy') return `the ${step.kind} of ${step.item}`;
     if (step.kind === 'plant') return `planting at ${step.x}, ${step.y}`;
     if (step.kind === 'buildPen') return `the pen at camp ${step.id}`;
+    if (step.kind === 'buildDefense') return `the defenses at camp ${step.id}`;
     if (step.kind === 'takeContract') return 'taking the contract';
     if (step.kind === 'deliver') return 'the delivery';
     if (step.kind === 'dropContract') return 'dropping the contract';

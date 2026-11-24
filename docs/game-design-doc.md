@@ -149,8 +149,9 @@ In this order:
 9. **Fires** spread and burn out their squares (section 4.6).
 10. **Pumps** drain [Default] 2 squares of their flood each (section 4.5).
 11. **Dragons** fly, eat and set fires; a new one may come (section 4.7).
-12. **Rain** (hazards plan section 1; owner, 2026-11-24): on [Default] 1 night in 5 it rains (`FRONTIER_RAIN`). Each **low spot** (a dug square that no face neighbour is deeper than, and that at least one is shallower than) is filled with a [Default] 1 in 2 chance: one block of clay (1 in 3) or dirt goes back on top, so it is 1 shallower. What was on top is buried, not lost. A camp's ground, flooded squares and burning squares are never filled. The level rule still holds after it. Dug does not go down.
-13. The next shift starts with a full set of taps.
+12. **Marauders** may raid a camp (section 4.8).
+13. **Rain** (hazards plan section 1; owner, 2026-11-24): on [Default] 1 night in 5 it rains (`FRONTIER_RAIN`). Each **low spot** (a dug square that no face neighbour is deeper than, and that at least one is shallower than) is filled with a [Default] 1 in 2 chance: one block of clay (1 in 3) or dirt goes back on top, so it is 1 shallower. What was on top is buried, not lost. A camp's ground, flooded squares and burning squares are never filled. The level rule still holds after it. Dug does not go down.
+14. The next shift starts with a full set of taps.
 
 ### 4.3 Mining and the level rule [Decided; numbers Default]
 
@@ -189,6 +190,16 @@ The owner (2026-11-24): "Wandering dragons can eat your sheep and apples and set
 - **When:** from [Default] shift 20, at End shift, a dragon flies in at the map's edge on [Default] 1 night in 12, while fewer than [Default] 1 are on the map (`FRONTIER_DRAGON`).
 - **Each night** each dragon flies [Default] 4 squares, over anything; eats one animal on or beside its square (or, on a camp's ground, one from its pen) and every apple on the apple trees on or beside it (they come back as if picked); and on [Default] 1 night in 3 sets fire to one thing that can burn on or beside it. "Beside" is the 8 squares round it.
 - **The sword** (question 187): made at a camp with a smelter from 3 iron ingots and 2 wood, or [Default] 60 coins at the market from a level-3 camp. A tap on a dragon with a sword drives it off the map (1 tap); the sword is kept. Without one, a tap on a dragon does nothing.
+
+### 4.8 Marauders and defenses [Decided; numbers Default]
+
+The owner (2026-11-24): "Marauders can come and steal things from your camps and remove their upgrades and put them back to basic. If the camp has defenses though, they can be turned away. The strength of the marauders depends on how far you have dug. The damage they do depends on what level of defense your targeted camp has." Plan: `docs/plans/hazards.md`, section 5.
+
+- **Defenses** (`FRONTIER_DEFENSE`; question 189): three levels, built one at a time from a camp's panel for 1 tap each, at a camp of level 2 or more (question 194), deep camps too: [Default] a palisade (15 wood), a stone wall (20 stone, 10 wood), a gatehouse (10 iron ingots, 20 stone). A raid never takes them down (question 191).
+- **When:** from [Default] shift 15, at End shift, on [Default] 1 night in 10, marauders raid one camp drawn at random (question 188; `FRONTIER_RAID`).
+- **Strength:** from the deepest square on the map: [Default] 1, then 2 from depth 4, 3 from depth 8, 4 from depth 16.
+- **Turned away** if the camp's defense level is at least their strength.
+- **Otherwise** each point of shortfall (strength minus defense) steals [Default] 10% of each goods stack in the store, rounded down, never coins (question 190), and tears down [Default] 2 of the camp's upgrades: the lantern, the pen and its animals, the smelter, then levels down to 1. A deep camp keeps its level.
 
 ## 5. The crew
 

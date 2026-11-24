@@ -68,6 +68,10 @@
 //   comes only at night, at the edge, from FRONTIER_DRAGON.fromShift; they
 //   move only at night, at most FRONTIER_DRAGON.steps squares; one leaves
 //   only by a tap on it with a sword held, and the sword stays.
+// - RAIDS AND DEFENSES: a camp's defenses stay between 0 and
+//   FRONTIER_DEFENSE.length, go up only by buildDefense, 1 level, and never
+//   come down; a camp loses a level only at night (fire or a raid); the
+//   night never takes coins.
 
 import { BLOCKS } from '../src/data';
 import {
@@ -75,6 +79,7 @@ import {
   FRONTIER_CAMP_PLACE,
   FRONTIER_CONTRACTS,
   FRONTIER_DEEP_CAMP,
+  FRONTIER_DEFENSE,
   FRONTIER_DRAGON,
   FRONTIER_GAS,
   FRONTIER_TOOLS,
@@ -370,6 +375,26 @@ export function checkStep(
       if ((after.inventory.get(FRONTIER_DRAGON.sword) ?? 0) < 1) say('the sword was used up');
     }
   }
+
+  // Raids and defenses (hazards PR 5).
+  for (const camp of after.camps) {
+    if (camp.defense < 0 || camp.defense > FRONTIER_DEFENSE.length)
+      say(`camp ${camp.id} has defenses ${camp.defense}`);
+    const was = before.camps.find((c) => c.id === camp.id);
+    if (was === undefined) {
+      if (camp.defense !== 0) say(`new camp ${camp.id} has defenses ${camp.defense}`);
+      continue;
+    }
+    if (camp.defense < was.defense) say(`camp ${camp.id}'s defenses came down`);
+    if (
+      camp.defense > was.defense &&
+      !(verb === 'buildDefense' && camp.defense === was.defense + 1)
+    )
+      say(`camp ${camp.id}'s defenses went up by "${step}"`);
+    if (camp.level < was.level && !endsShift) say(`camp ${camp.id} lost a level by "${step}"`);
+  }
+  if (endsShift && (after.inventory.get('coin') ?? 0) < (before.inventory.get('coin') ?? 0))
+    say('the night took coins');
 
   // Shifts and health.
   if (endsShift && after.shift !== before.shift + 1)

@@ -17,7 +17,7 @@ import type { RngState } from '../rng';
  * not loaded into a new shape. Separate from the old game's STATE_VERSION
  * while the two rule sets live side by side.
  */
-export const FRONTIER_STATE_VERSION = 16; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`; 12: `marketOpen`; 13: `contracts` (several held) for `contract`; 14: `hazards` (flooded squares, pumps); 15: `hazards.fires`; 16: `hazards.dragons`, `nextDragonId`
+export const FRONTIER_STATE_VERSION = 17; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`; 12: `marketOpen`; 13: `contracts` (several held) for `contract`; 14: `hazards` (flooded squares, pumps); 15: `hazards.fires`; 16: `hazards.dragons`, `nextDragonId`; 17: a camp's `defense`
 
 /** What grows on a square: nothing, grass, a tree or an apple tree. */
 export const NO_FEATURE = 0;
@@ -52,6 +52,8 @@ export interface FrontierCamp {
   penned: number;
   /** True for a deep camp (FRONTIER_DEEP_CAMP): placed at any depth, its own ring, never upgraded. */
   deep: boolean;
+  /** 0 to 3: how many levels of defenses it has built (FRONTIER_DEFENSE; raids.ts). */
+  defense: number;
   /**
    * Shifts until the pen's next animal is born, while it may breed (at least
    * 2 animals and room for one more); 0 while it may not, or waits for hay.

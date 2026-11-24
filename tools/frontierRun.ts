@@ -13,6 +13,7 @@ import {
   FRONTIER_PEN,
   FRONTIER_PICKAXE,
   FRONTIER_PUMP,
+  FRONTIER_RAID,
   FRONTIER_STEEL_DRILL,
 } from '../src/data/frontier';
 import {
@@ -40,6 +41,9 @@ import {
   newlyCovered,
   placeRefusal,
   sightAt,
+  defenseRefusal,
+  nextDefense,
+  raidStrength,
   penRefusal,
   plantRefusal,
   smelterRefusal,
@@ -125,7 +129,8 @@ export function actionOf(step: FrontierStep): FrontierAction {
       verb === 'hangLantern' ||
       verb === 'buildPen' ||
       verb === 'penIn' ||
-      verb === 'penOut') &&
+      verb === 'penOut' ||
+      verb === 'buildDefense') &&
     arg !== undefined
   ) {
     return { kind: verb, id: Number(arg) };
@@ -358,9 +363,39 @@ export function hazardStep(state: FrontierState): FrontierStep | null {
     (burning, i) => burning && sightAt(state, i % width, Math.floor(i / width)) === 'shown',
   );
   if (fire >= 0) return `tap ${fire % width},${Math.floor(fire / width)}`;
-  if ((state.inventory.get(FRONTIER_PUMP.item) ?? 0) === 0) return null;
-  const flood = unpumpedFlood(state);
-  return flood === null ? null : `tap ${flood.x},${flood.y}`;
+  if ((state.inventory.get(FRONTIER_PUMP.item) ?? 0) > 0) {
+    const flood = unpumpedFlood(state);
+    if (flood !== null) return `tap ${flood.x},${flood.y}`;
+  }
+  return defendStep(state);
+}
+
+/** The gatherer builds defenses only while it keeps this much wood after paying (hazards PR 5). */
+const GATHERER_DEFENSE_WOOD_KEPT = 20;
+
+/** ...and only from this many shifts before marauders can first come. */
+const GATHERER_DEFENSE_LEAD = 3;
+
+/**
+ * Build defenses (hazards PR 5) at the camp with the fewest, while it has
+ * fewer levels than marauders would come strong now, keeping
+ * GATHERER_DEFENSE_WOOD_KEPT wood, from GATHERER_DEFENSE_LEAD shifts before
+ * raids can start; `null` if none is wanted or affordable.
+ */
+function defendStep(state: FrontierState): FrontierStep | null {
+  if (state.shift < FRONTIER_RAID.fromShift - GATHERER_DEFENSE_LEAD) return null;
+  const camps = [...state.camps].sort((a, b) => a.defense - b.defense || a.id - b.id);
+  // The strength is worked out only once a camp could build (it reads every square).
+  let strength: number | null = null;
+  for (const camp of camps) {
+    const next = nextDefense(state, camp.id);
+    if (next === null || defenseRefusal(state, camp.id) !== null) continue;
+    const wood = next.cost.find((st) => st.item === 'wood')?.count ?? 0;
+    if ((state.inventory.get('wood') ?? 0) - wood < GATHERER_DEFENSE_WOOD_KEPT) continue;
+    strength ??= raidStrength(state); // `??=` sets it only while it is still null
+    if (camp.defense < strength) return `buildDefense ${camp.id}`;
+  }
+  return null;
 }
 
 /** The gatherer keeps this much hay: the level-3 upgrade's 10, and some for breeding. */

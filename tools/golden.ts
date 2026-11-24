@@ -332,6 +332,14 @@ const FRONTIER_RUNS: {
       'The gatherer on another seed: places two more camps, brings all three to level 2, builds a smelter, never hungry',
   },
   {
+    name: 'careful-seed-8-pen',
+    seed: 8,
+    policy: 'careful',
+    maxShifts: 10,
+    description:
+      'The careful policy on seed 8: keeps a pen whose animals breed by shift 8 (hazards PR 5: the other runs no longer show a birth)',
+  },
+  {
     name: 'careful-seed-3',
     seed: 3,
     policy: 'careful',
