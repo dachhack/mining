@@ -129,3 +129,52 @@ test('a rainy night shows rain falling, and its news one line at a time (hazards
   }
   expect(rained).toBe(true);
 });
+
+test('setting a pump and putting a fire out redraw the ground, so the map shows them', async ({
+  page,
+}) => {
+  // Owner, on the hazards build: "Can't see pump when you set it down." The
+  // ground is drawn once and kept; a change to the hazards alone must draw
+  // it again.
+  const start = createFrontier(110);
+  const camp = start.camps[0] ?? { x: 0, y: 0 };
+  const width = start.cube.size.x;
+  // Two bare squares in the camp's ring: nothing growing and no animal, so
+  // a tap meets the water or the fire first.
+  const bare: { x: number; y: number }[] = [];
+  for (let d = 2; d <= 5 && bare.length < 2; d += 1) {
+    for (const [dx, dy] of [
+      [d, 0],
+      [-d, 0],
+      [0, d],
+      [0, -d],
+    ] as const) {
+      const x = camp.x + dx;
+      const y = camp.y + dy;
+      const i = x + width * y;
+      const animal = start.animals.some((a) => a.x === x && a.y === y);
+      if ((start.features[i] ?? 0) === 0 && !animal && bare.length < 2) bare.push({ x, y });
+    }
+  }
+  const [wet, hot] = bare;
+  if (wet === undefined || hot === undefined) throw new Error('two bare squares near the camp');
+  const state: FrontierState = {
+    ...start,
+    inventory: new Map([['pump', 1]]),
+    hazards: {
+      ...start.hazards,
+      flooded: start.hazards.flooded.map((_, i) => i === wet.x + width * wet.y),
+      fires: start.hazards.fires.map((_, i) => i === hot.x + width * hot.y),
+    },
+  };
+  const canvas = await openGame(page, state);
+  const draws = async (): Promise<number> => Number(await canvas.getAttribute('data-ground-draws'));
+  const before = await draws();
+  await tapSquare(page, canvas, wet.x, wet.y);
+  await expect(canvas).toHaveAttribute('data-pumps', `${wet.x},${wet.y}`);
+  await expect.poll(draws).toBeGreaterThan(before);
+  const afterPump = await draws();
+  await tapSquare(page, canvas, hot.x, hot.y);
+  await expect(canvas).toHaveAttribute('data-fires', '');
+  await expect.poll(draws).toBeGreaterThan(afterPump);
+});

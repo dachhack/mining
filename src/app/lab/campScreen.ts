@@ -598,6 +598,10 @@ export function mountCampLab(
       world.surface.apples[i],
       world.surface.stumps[i],
       sights[i],
+      // The hazards drawn on the ground (owner: "Can't see pump when you set it down").
+      world.hazards.flooded[i] === true ? 'w' : '',
+      world.hazards.fires[i] === true ? 'f' : '',
+      world.hazards.pumps.some((p) => p.x + world.lab.state.size.x * p.y === i) ? 'p' : '',
     ].join(',');
   }
 
@@ -644,7 +648,14 @@ export function mountCampLab(
       }
       groundCamera = { ...camera };
       drawnView = viewKey;
-      groundKey = [world.lab.state, world.lab.depths, world.surface, world.camps, sights];
+      groundKey = [
+        world.lab.state,
+        world.lab.depths,
+        world.surface,
+        world.camps,
+        sights,
+        world.hazards,
+      ];
       drawnSquares = [];
       for (let i = 0; i < size.x * size.y; i += 1) drawnSquares.push(squareLook(i));
       groundDraws += 1;
@@ -654,7 +665,14 @@ export function mountCampLab(
       drawGroundOn(ctx, null);
       return;
     }
-    const key = [world.lab.state, world.lab.depths, world.surface, world.camps, sights];
+    const key = [
+      world.lab.state,
+      world.lab.depths,
+      world.surface,
+      world.camps,
+      sights,
+      world.hazards,
+    ];
     if (key.every((k, i) => k === groundKey[i])) {
       return; // the same world: the ground is as it was
     }
