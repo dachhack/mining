@@ -485,7 +485,7 @@ export const FRONTIER_MARKET = {
   ] as FrontierLot[],
   /**
    * What the player can buy, and what it costs (question 171). From the
-   * start: an animal, clay, saplings and hay. From a level-3 camp: the tools (plan section
+   * start: an animal, clay, saplings, hay and a pump. From a level-3 camp: the tools (plan section
    * 4), dearer than making them at a smelter.
    */
   buyPrices: [
@@ -494,6 +494,8 @@ export const FRONTIER_MARKET = {
     { item: 'sapling', count: 1, coins: 3 },
     { item: 'appleSapling', count: 1, coins: 6 },
     { item: 'hay', count: 1, coins: 1 },
+    // The pump drains a flood (hazards plan, section 2): from the start.
+    { item: 'pump', count: 1, coins: 30 },
     { item: 'drill', count: 1, coins: 80, fromLevel: 3 },
     { item: 'steelDrill', count: 1, coins: 250, fromLevel: 3 },
     { item: 'ironPickaxe', count: 1, coins: 60, fromLevel: 3 },
@@ -720,4 +722,29 @@ export const FRONTIER_RAIN = {
   clayChance: 1 / 3,
   fillBlock: 'dirt' as BlockId,
   clayBlock: 'clay' as BlockId,
+};
+
+/**
+ * Water (hazards plan, section 2): "You can hit water starting at level 3"
+ * (depth 4: owner, question 181). A tap that opens one of the cube's water
+ * pockets, leaving its square at depth `fromDepth` or more, floods that
+ * square and the dug squares joined to it at the same depth or deeper, up to
+ * `maxSquares`, nearest first. A pocket opened higher up just collapses, as
+ * before.
+ */
+export const FRONTIER_WATER = {
+  fromDepth: 4,
+  maxSquares: 12,
+};
+
+/**
+ * The pump (hazards plan, section 2): "you need to purchase a pump to remove
+ * it by clicking it and waiting". Bought at the market (FRONTIER_MARKET). A
+ * tap on a flooded square sets one from the store there; at each End shift
+ * it drains `drainPerShift` squares of its flood, the farthest first, its own
+ * square last; then it comes back to the store (question 184).
+ */
+export const FRONTIER_PUMP = {
+  item: 'pump' as ItemId,
+  drainPerShift: 2,
 };

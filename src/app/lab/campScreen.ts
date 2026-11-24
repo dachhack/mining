@@ -28,6 +28,7 @@ import {
   FRONTIER_PEN,
   FRONTIER_PHASES,
   FRONTIER_PICKAXE,
+  FRONTIER_PUMP,
   FRONTIER_RUN,
   FRONTIER_SAPLINGS,
   FRONTIER_SHIFT,
@@ -139,6 +140,7 @@ import type { Recipe } from './recipes';
 import { emptyHistory, noteAction, undoCount, undoLast } from './undoHistory';
 import type { UndoHistory } from './undoHistory';
 import { shadowEdges } from './shadows';
+import { drawPump, drawWater } from './hazardArt';
 import { showNight } from './night';
 import type { Night } from './night';
 
@@ -197,7 +199,11 @@ function shiftText(report: ShiftReport, turn: CampTurn, rested: boolean): string
       : report.rained
         ? ' It rained 🌧.'
         : '';
-  const market = `${born}${rain}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
+  const pumped =
+    report.drained > 0
+      ? ` Pumps drained ${report.drained} flooded ${report.drained === 1 ? 'square' : 'squares'}${report.pumpsBack > 0 ? `; ${report.pumpsBack === 1 ? 'a pump is' : `${report.pumpsBack} pumps are`} back in your store` : ''}.`
+      : '';
+  const market = `${born}${rain}${pumped}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
   if (turn.status === 'finished') {
     return `${start}. That was the last shift: the run is over.`;
   }
@@ -216,6 +222,7 @@ function placeRefusalText(refusal: PlaceRefusal): string {
   if (refusal === 'notShown') return 'The 3 × 3 must be lit, inside a camp’s ring.';
   if (refusal === 'occupied') return 'It overlaps another camp.';
   if (refusal === 'notLevel') return NOT_LEVEL_TEXT;
+  if (refusal === 'flooded') return 'The ground is flooded 💧: a pump must drain it first.';
   if (refusal === 'tooShallow')
     return `A deep camp stands only at depth ${FRONTIER_DEEP_CAMP.minDepth} or more: dig the patch deeper first.`;
   if (refusal === 'tooDeep')
@@ -267,6 +274,11 @@ function effectMs(kind: Effect['kind']): number {
 }
 
 /** The display name of an item. */
+/** What the market asks for a pump (hazards PR 2). */
+function pumpCoins(): number {
+  return FRONTIER_MARKET.buyPrices.find((l) => l.item === FRONTIER_PUMP.item)?.coins ?? 0;
+}
+
 function itemName(item: string): string {
   const lab = LAB_ITEMS[item];
   if (lab !== undefined) {
@@ -802,6 +814,11 @@ export function mountCampLab(
           clay,
         );
         drawFeature(ctx, i, box, x, y, { px, py, c });
+        // Hazards (docs/plans/hazards.md): water, and a pump on it.
+        if (world.hazards.flooded[i] === true) {
+          drawWater(ctx, box, x, y);
+          if (world.hazards.pumps.some((p) => p.x === x && p.y === y)) drawPump(ctx, box);
+        }
         if (sight === 'greyed') {
           drawGreyed(ctx, px, py, c);
         }
@@ -843,6 +860,13 @@ export function mountCampLab(
       if (stump !== NO_FEATURE) stumps.push(`${i % width},${Math.floor(i / width)}`);
     });
     canvas.dataset['stumps'] = stumps.join(' ');
+    // ...and the hazards: flooded squares and pumps (hazards PR 2).
+    const flooded: string[] = [];
+    world.hazards.flooded.forEach((wet, i) => {
+      if (wet) flooded.push(`${i % width},${Math.floor(i / width)}`);
+    });
+    canvas.dataset['flooded'] = flooded.join(' ');
+    canvas.dataset['pumps'] = world.hazards.pumps.map((p) => `${p.x},${p.y}`).join(' ');
   }
 
   /** True if square (x, y) is on the map, not in fog, and has a tree or an apple tree: part of a forest. */
@@ -1389,6 +1413,7 @@ export function mountCampLab(
       'sapling',
       'appleSapling',
       'hay',
+      FRONTIER_PUMP.item,
     ]) {
       const count = counts.get(item) ?? 0;
       if (count > 0) all.push({ item, count, icon: () => labItemIcon(item, 'lab-chip-icon') });
@@ -2733,6 +2758,25 @@ export function mountCampLab(
       });
       return;
     }
+    // Water (hazards PR 2): a flooded square, and the pump.
+    if (result.kind === 'flooded') {
+      setHint(
+        `Flooded 💧: buy a pump at the market 🏪 (${pumpCoins()} coins), then tap the water to set it.`,
+        true,
+      );
+      return;
+    }
+    if (result.kind === 'pump') {
+      remember({ kind: 'tap', x, y });
+      setWorld(result.world);
+      setHint(
+        result.pump === 'set'
+          ? `Pump set: it drains ${FRONTIER_PUMP.drainPerShift} flooded squares a night, then comes back to your store.`
+          : 'Pump picked up: the water stays until a pump drains it.',
+        false,
+      );
+      return;
+    }
     if (result.kind === 'refused') {
       const refusal = result.tap?.result.refusal;
       setHint(refusal === 'bottom' ? BOTTOM_HINT : STEEP_HINT, true);
@@ -2781,7 +2825,15 @@ export function mountCampLab(
     effects = effects.filter((e) => !(e.x === x && e.y === y));
     remember({ kind: 'tap', x, y });
     setWorld(result.world);
-    setHint(HINT, false);
+    if (result.flooded.length > 0) {
+      const n = result.flooded.length;
+      setHint(
+        `You hit water 💧: ${n} ${n === 1 ? 'square is' : 'squares are'} flooded. A pump from the market 🏪 drains it.`,
+        true,
+      );
+    } else {
+      setHint(HINT, false);
+    }
     addEffect({
       kind: 'mined',
       x,

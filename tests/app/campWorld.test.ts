@@ -565,3 +565,44 @@ describe('the market on the game screen (progression PR 1)', () => {
     expect(marketOpen(day)).toBe(false);
   });
 });
+
+describe('water and the pump on the screen (hazards PR 2)', () => {
+  it("brings the engine's floods and pumps across, and a tap on the water sets a pump", () => {
+    const base = newCampWorld(3);
+    const camp = base.camps[0];
+    if (camp === undefined) throw new Error('a new world has a camp');
+    // A square in the camp's ring, flooded by hand.
+    const x = camp.x + 3;
+    const y = camp.y;
+    const width = base.lab.state.size.x;
+    const flooded = base.hazards.flooded.map((_, i) => i === x + width * y);
+    const wet: CampWorld = { ...base, hazards: { flooded, pumps: [] } };
+    expect(campTap(wet, x, y).kind).toBe('flooded');
+    const counts = new Map(wet.lab.counts);
+    counts.set('pump', 1);
+    const withPump: CampWorld = { ...wet, lab: { ...wet.lab, counts } };
+    const set = campTap(withPump, x, y);
+    expect(set.kind).toBe('pump');
+    expect(set.pump).toBe('set');
+    expect(set.world.hazards.pumps).toEqual([{ x, y }]);
+    expect(set.world.lab.counts.has('pump')).toBe(false);
+    expect(set.world.turn.tapsLeft).toBe(withPump.turn.tapsLeft - 1);
+    // A camp may not stand on the water.
+    expect(
+      placeRefusal(
+        {
+          ...wet,
+          lab: {
+            ...wet.lab,
+            counts: new Map([
+              ['wood', 99],
+              ['grass', 99],
+            ]),
+          },
+        },
+        x,
+        y,
+      ),
+    ).not.toBe(null);
+  });
+});

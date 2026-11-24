@@ -33,7 +33,7 @@ import {
 import { depthAt } from '../heightmap';
 import type { GameState } from '../state';
 import { APPLE_TREE, NO_FEATURE, TREE } from './state';
-import type { FrontierCamp, FrontierState } from './state';
+import type { FrontierCamp, FrontierHazards, FrontierState } from './state';
 
 /**
  * What the camp rules read and change. `FrontierState` has all of these
@@ -50,6 +50,11 @@ export interface CampGround {
   nextCampId: number;
   /** Items held: item id -> count. Only items with a count above 0 are in it. */
   inventory: Map<string, number>;
+  /**
+   * The hazards' marks (docs/plans/hazards.md): a camp cannot stand on a
+   * flooded square. A ground made without them (a hand-made test) has none.
+   */
+  hazards?: FrontierHazards;
 }
 
 /** What one square looks like to the player. */
@@ -309,9 +314,11 @@ export function pay(inventory: Map<string, number>, cost: ItemStack[]): Map<stri
  *   camps only in the top three levels);
  * - 'tooShallow': a deep camp, on ground shallower than
  *   FRONTIER_DEEP_CAMP.minDepth (question 178);
+ * - 'flooded': some square of it is flooded (water.ts);
  * - 'cost': the inventory does not cover the cost.
  */
-export type PlaceRefusal = 'notShown' | 'occupied' | 'notLevel' | 'tooDeep' | 'tooShallow' | 'cost';
+export type PlaceRefusal =
+  'notShown' | 'occupied' | 'notLevel' | 'tooDeep' | 'tooShallow' | 'flooded' | 'cost';
 
 /**
  * Why a new camp cannot be centred on (x, y), or `null` if it can. With
@@ -343,6 +350,10 @@ export function placeRefusal(
   }
   if (deep && depthAt(ground.cube, x, y) < FRONTIER_DEEP_CAMP.minDepth) {
     return 'tooShallow';
+  }
+  const flooded = ground.hazards?.flooded;
+  if (flooded !== undefined && footprint.some((s) => flooded[s.x + width * s.y] === true)) {
+    return 'flooded';
   }
   if (!canAfford(ground.inventory, deep ? FRONTIER_DEEP_CAMP.cost : FRONTIER_NEW_CAMP_COST)) {
     return 'cost';

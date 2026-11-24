@@ -50,8 +50,14 @@
 //   run is 'finished' only by the End shift or rest of its last shift, and
 //   no shift past the last is ever played.
 // - RAIN: a square's depth changes without a mining tap only at End shift
-//   or rest, by 1 block, at a low spot that is not a camp's ground; the
-//   level rule holds everywhere after the night.
+//   or rest, by 1 block, at a low spot that is not a camp's ground or
+//   flooded; the level rule holds everywhere after the night.
+// - WATER: a flooded square is never mined, never a camp's ground; squares
+//   become flooded only by a mining tap, at FRONTIER_WATER.fromDepth or
+//   deeper, at most FRONTIER_WATER.maxSquares at once; they dry only at the
+//   night, at most FRONTIER_PUMP.drainPerShift a pump; a pump always stands
+//   on a flooded square, and pumps set plus pumps held change only by a
+//   trade.
 
 import { BLOCKS } from '../src/data';
 import {
@@ -63,10 +69,12 @@ import {
   FRONTIER_LANTERN,
   FRONTIER_MARKET,
   FRONTIER_PEN,
+  FRONTIER_PUMP,
   FRONTIER_RUN,
   FRONTIER_SHIFT,
   FRONTIER_SMELTER,
   FRONTIER_SURFACE,
+  FRONTIER_WATER,
 } from '../src/data/frontier';
 import {
   SQUARE_STEPS,
@@ -193,8 +201,46 @@ export function checkStep(
         else if (n !== d - 1) say(`rain took ${x},${y} from depth ${d} to ${n}`);
         else if (deeper || !shallower) say(`rain filled ${x},${y}, which was not a low spot`);
         else if (campAt(after.camps, x, y) !== null) say(`rain filled ${x},${y}, a camp's ground`);
+        else if (after.hazards.flooded[i] === true) say(`rain filled flooded ${x},${y}`);
       }
     }
+  }
+
+  // Water and pumps (hazards PR 2).
+  {
+    const w = after.cube.size.x;
+    let wetted = 0;
+    let dried = 0;
+    after.hazards.flooded.forEach((wet, i) => {
+      const was = before.hazards.flooded[i] === true;
+      const x = i % w;
+      const y = Math.floor(i / w);
+      if (wet && campAt(after.camps, x, y) !== null) say(`camp ground ${x},${y} is flooded`);
+      if (wet && !was) {
+        wetted += 1;
+        if (depthAt(after.cube, x, y) < FRONTIER_WATER.fromDepth)
+          say(`${x},${y} flooded at depth ${depthAt(after.cube, x, y)}`);
+      }
+      if (!wet && was) dried += 1;
+      if (was && verb === 'tap' && after.mined > before.mined) {
+        const [mx, my] = (step.split(' ')[1] ?? '').split(',').map(Number);
+        if (mx === x && my === y) say(`flooded ${x},${y} was mined`);
+      }
+    });
+    if (wetted > 0 && !(verb === 'tap' && after.mined > before.mined))
+      say(`${wetted} squares flooded by "${verb}"`);
+    if (wetted > FRONTIER_WATER.maxSquares) say(`${wetted} squares flooded at once`);
+    if (dried > 0 && !endsShift) say(`${dried} squares dried by "${verb}"`);
+    if (dried > before.hazards.pumps.length * FRONTIER_PUMP.drainPerShift)
+      say(`${dried} squares dried by ${before.hazards.pumps.length} pumps`);
+    for (const pump of after.hazards.pumps) {
+      if (after.hazards.flooded[pump.x + w * pump.y] !== true)
+        say(`a pump stands on dry ${pump.x},${pump.y}`);
+    }
+    const pumps = (x: FrontierState): number =>
+      x.hazards.pumps.length + (x.inventory.get(FRONTIER_PUMP.item) ?? 0);
+    if (pumps(after) !== pumps(before) && verb !== 'buy')
+      say(`pumps went from ${pumps(before)} to ${pumps(after)} by "${verb}"`);
   }
 
   // Shifts and health.

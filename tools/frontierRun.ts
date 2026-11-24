@@ -11,6 +11,7 @@ import {
   FRONTIER_NEW_CAMP_COST,
   FRONTIER_PEN,
   FRONTIER_PICKAXE,
+  FRONTIER_PUMP,
   FRONTIER_STEEL_DRILL,
 } from '../src/data/frontier';
 import {
@@ -37,6 +38,7 @@ import {
   previewTap,
   newlyCovered,
   placeRefusal,
+  sightAt,
   penRefusal,
   plantRefusal,
   smelterRefusal,
@@ -237,6 +239,14 @@ const GATHERER_SELLS_ALL = ['crystal', 'rareOre', 'relic'];
  */
 export function marketStep(state: FrontierState): FrontierStep | null {
   if (!marketIsOpen(state)) return null;
+  // A pump for a lit flood no pump drains (hazards PR 2).
+  if (
+    unpumpedFlood(state) !== null &&
+    (state.inventory.get(FRONTIER_PUMP.item) ?? 0) === 0 &&
+    tradeRefusal(state, 'buy', FRONTIER_PUMP.item, 1) === null
+  ) {
+    return `buy ${FRONTIER_PUMP.item} 1`;
+  }
   for (const tool of [FRONTIER_DRILL.item, FRONTIER_STEEL_DRILL.item]) {
     const held = (state.inventory.get(tool) ?? 0) > 0;
     if (!held && tradeRefusal(state, 'buy', tool, 1) === null) return `buy ${tool} 1`;
@@ -279,6 +289,54 @@ export function marketStep(state: FrontierState): FrontierStep | null {
   );
   const stone = mostLots(spare, 'sell', 'stone');
   return stone > 0 ? `sell stone ${stone}` : null;
+}
+
+/**
+ * A lit flooded square in a flood that no pump drains (hazards PR 2), the
+ * first row by row, or `null`. A flood is the flooded squares joined to one
+ * another; it counts as drained if a pump stands on any of them.
+ */
+export function unpumpedFlood(state: FrontierState): { x: number; y: number } | null {
+  const width = state.cube.size.x;
+  const height = state.cube.size.y;
+  const { flooded, pumps } = state.hazards;
+  if (!flooded.includes(true)) return null;
+  // Every square of a flood with a pump on it.
+  const drained = new Set<number>();
+  for (const pump of pumps) {
+    const queue = [pump.x + width * pump.y];
+    drained.add(queue[0] ?? 0);
+    for (let k = 0; k < queue.length; k += 1) {
+      const i = queue[k] ?? 0;
+      for (const [dx, dy] of [
+        [0, -1],
+        [1, 0],
+        [0, 1],
+        [-1, 0],
+      ] as const) {
+        const nx = (i % width) + dx;
+        const ny = Math.floor(i / width) + dy;
+        const j = nx + width * ny;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        if (flooded[j] !== true || drained.has(j)) continue;
+        drained.add(j);
+        queue.push(j);
+      }
+    }
+  }
+  for (let i = 0; i < flooded.length; i += 1) {
+    const x = i % width;
+    const y = Math.floor(i / width);
+    if (flooded[i] === true && !drained.has(i) && sightAt(state, x, y) === 'shown') return { x, y };
+  }
+  return null;
+}
+
+/** Set a pump from the store on a lit flood no pump drains (hazards PR 2), or `null`. */
+export function hazardStep(state: FrontierState): FrontierStep | null {
+  if ((state.inventory.get(FRONTIER_PUMP.item) ?? 0) === 0) return null;
+  const flood = unpumpedFlood(state);
+  return flood === null ? null : `tap ${flood.x},${flood.y}`;
 }
 
 /** The gatherer keeps this much hay: the level-3 upgrade's 10, and some for breeding. */
@@ -477,6 +535,7 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
     return marketStep(state) ?? (take?.startsWith('takeContract') === true ? take : 'closeMarket');
   }
   const craft =
+    hazardStep(state) ??
     contractStep(state) ??
     deepStep(state) ??
     craftStep(state) ??

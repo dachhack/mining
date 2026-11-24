@@ -126,6 +126,8 @@ A run is a sequence of **shifts** (owner: "Keep shifts").
 | An apple tree with apples | 1 apple a tap |
 | A tree, or an apple tree with no apples | 2 wood |
 | Nothing growing, and the level rule and the camps allow it | The top block's yield (section 3.5) |
+| Flooded (hazards plan section 2), with a pump in the store | Sets the pump there |
+| A pump | Picks it up again |
 
 ### 4.2 End shift [Default]
 
@@ -142,8 +144,9 @@ In this order:
    - 1 more wood every 4th shift for each camp after the first.
 7. **Pens breed** (section 7b), once the upkeep is paid: the crew eats first.
 8. **Hunger:** each item of upkeep that cannot be paid costs 1 health (section 5).
-9. **Rain** (hazards plan section 1; owner, 2026-11-24): on [Default] 1 night in 5 it rains (`FRONTIER_RAIN`). Each **low spot** (a dug square that no face neighbour is deeper than, and that at least one is shallower than) is filled with a [Default] 1 in 2 chance: one block of clay (1 in 3) or dirt goes back on top, so it is 1 shallower. What was on top is buried, not lost. A camp's ground is never filled. The level rule still holds after it. Dug does not go down.
-10. The next shift starts with a full set of taps.
+9. **Pumps** drain [Default] 2 squares of their flood each (section 4.5).
+10. **Rain** (hazards plan section 1; owner, 2026-11-24): on [Default] 1 night in 5 it rains (`FRONTIER_RAIN`). Each **low spot** (a dug square that no face neighbour is deeper than, and that at least one is shallower than) is filled with a [Default] 1 in 2 chance: one block of clay (1 in 3) or dirt goes back on top, so it is 1 shallower. What was on top is buried, not lost. A camp's ground and flooded squares are never filled. The level rule still holds after it. Dug does not go down.
+11. The next shift starts with a full set of taps.
 
 ### 4.3 Mining and the level rule [Decided; numbers Default]
 
@@ -156,6 +159,14 @@ In this order:
 ### 4.4 Undo
 
 Undo takes back the player's own actions within the current shift, newest first, and gives each one's tap back (question 151). Catching an animal and picking an apple cannot be undone (owner, question 141: "animal and apple harvest cannot be undone"). End shift, rest and closing the mine cannot be undone, and nothing before them can.
+
+### 4.5 Water and the pump [Decided: depth 4; numbers Default]
+
+The owner (2026-11-24): "You can hit water starting at level 3. It fills the area and you need to purchase a pump to remove it by clicking it and waiting." Water starts at depth 4 (question 181). Plan: `docs/plans/hazards.md`, section 2.
+
+- **Hitting water:** the cube's middle band (depth 4 and down) holds water pockets. A mine that opens one, leaving its square at depth 4 or more, floods that square and the dug squares joined to it through face neighbours at the same depth or deeper, up to [Default] 12, nearest first (`FRONTIER_WATER`). A camp's ground is never flooded. A pocket opened higher up collapses to rubble, as before.
+- **A flooded square** cannot be mined, a camp cannot stand on it, and rain does not fill it. The water does not spread later.
+- **The pump** (`FRONTIER_PUMP`): [Default] 30 coins at the market, from the start. A tap on a flooded square sets one from the store there (1 tap); a tap on it picks it up (1 tap). At each End shift a pump drains [Default] 2 squares of its flood (the flooded squares joined to its own), the farthest from it first so what is left stays joined to it, its own square last. Then it comes back to the store (question 184).
 
 ## 5. The crew
 

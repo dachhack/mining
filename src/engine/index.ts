@@ -458,7 +458,7 @@ export {
 export { shiftsUntilRegrowth } from './surface/regrowth';
 // The new game's world (plan A1), beside the old game until phase C.
 export { createFrontier, startSquare as frontierStartSquare } from './frontier/generation';
-export { APPLE_TREE, FRONTIER_STATE_VERSION, GRASS, NO_FEATURE, TREE } from './frontier/state';
+export { APPLE_TREE, FRONTIER_STATE_VERSION, GRASS, NO_FEATURE, TREE, noHazards } from './frontier/state';
 // Camps and fog (plan A2).
 export {
   CAMP_HALF_SIZE,
@@ -568,7 +568,9 @@ export type {
   Feature,
   FrontierAnimal,
   FrontierCamp,
+  FrontierHazards,
   FrontierHeldContract,
+  FrontierPump,
   FrontierState,
 } from './frontier/state';
 // The cube seen from above (design doc v0.2 section 3.1; issue #84): a

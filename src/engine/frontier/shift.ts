@@ -14,6 +14,7 @@
 //    - animals in pens breed, eating hay (pens.ts; plan section 6.3);
 //    - each item of upkeep that cannot be paid costs the crew 1 health
 //      (question 148: "Hunger only"); at 0 health the run is lost;
+//    - pumps drain their floods (water.ts; hazards plan section 2);
 //    - it may rain, filling low spots (rain.ts; hazards plan section 1).
 //
 // Resting, at a camp (question 156: "Only at a camp"), restores the crew's
@@ -46,6 +47,7 @@ import {
 } from './contracts';
 import { plant, plantRefusal } from './farming';
 import { rainfall } from './rain';
+import { drainPumps, isFlooded } from './water';
 import { breedPens, penAct, penRefusal } from './pens';
 import { isMarketDay, trade, tradeRefusal } from './market';
 import { animalAt } from './surface';
@@ -121,6 +123,10 @@ export interface ShiftReport {
   rained: boolean;
   /** Squares the rain filled. */
   rainFilled: number;
+  /** Flooded squares the pumps drained (water.ts). */
+  drained: number;
+  /** Pumps whose flood is dry: back in the store. */
+  pumpsBack: number;
 }
 
 /**
@@ -237,11 +243,17 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
   const bred = breedPens(state.camps, inventory);
   const healthLost = unpaid.length;
   const health = Math.max(0, state.health - healthLost);
-  // Rain, last, so the morning shows where it fell (rain.ts).
-  const rain = rainfall(state.cube, bred.camps, rng);
+  // Pumps drain their floods (water.ts).
+  const pumping = drainPumps(state, bred.inventory);
+  // Rain, last, so the morning shows where it fell (rain.ts). It does not
+  // fill a flooded square.
+  const rain = rainfall(state.cube, bred.camps, rng, (x, y) =>
+    isFlooded({ cube: state.cube, hazards: pumping.hazards }, x, y),
+  );
   const next: FrontierState = {
     ...state,
     cube: rain.cube,
+    hazards: pumping.hazards,
     animals,
     nextAnimalId,
     rng,
@@ -252,7 +264,7 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
     planted: grown.planted,
     grassIn: grown.grassIn,
     camps: bred.camps,
-    inventory: bred.inventory,
+    inventory: pumping.inventory,
     health,
     shift: state.shift + 1,
     tapsLeft: FRONTIER_SHIFT.taps,
@@ -280,6 +292,8 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
       marketOpens: next.marketOpen,
       rained: rain.rained,
       rainFilled: rain.filled.length,
+      drained: pumping.drained,
+      pumpsBack: pumping.pumpsBack,
     },
   };
 }
@@ -515,7 +529,7 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
   }
   if (action.kind === 'tap') {
     const tap = frontierTap(state, action.x, action.y);
-    if (tap.kind !== 'mined' && tap.kind !== 'harvested') {
+    if (tap.kind !== 'mined' && tap.kind !== 'harvested' && tap.kind !== 'pump') {
       return refused(state, tap.kind, tap);
     }
     return spent(tap.state, tap);

@@ -1,6 +1,6 @@
 # Hazards: the plan
 
-Status: **agreed** (owner, 2026-11-24, in conversation; decision note 0064). Owner's answers: water and gas both from depth 4 (question 181); one APK build when all the hazards are in (question 192). PR 1 (rain) is built (engine 0.13.0).
+Status: **agreed** (owner, 2026-11-24, in conversation; decision note 0064). Owner's answers: water and gas both from depth 4 (question 181); one APK build when all the hazards are in (question 192). PR 1 (rain) and PR 2 (water and the pump) are built (engine 0.13.0).
 
 The owner's direction:
 
@@ -40,7 +40,7 @@ This changes the design doc's Hazards row (section 2: "None for now") and sectio
 - **Where:** the cube's water pockets, from depth 4: the old game's pockets in the middle band (depth 4 to 11). No pockets are added (question 183 is superseded).
 - **Hitting water:** when a tap mines a block and the square's new top cell is in a water pocket, the water floods: that square and every dug square joined to it by face neighbours at **the same depth or deeper**, up to `maxSquares` (12), nearest first. Today the frontier treats a pocket as rubble; this replaces that for water.
 - **A flooded square** cannot be mined, a camp cannot be placed on it, rain does not fill it, and animals do not walk on it. It is drawn as water.
-- **The pump:** bought at the market (`FRONTIER_PUMP`: 30 coins), from the start. Tap a flooded square with a pump in the store to set it there (1 tap); it starts pumping. At each End shift it drains `drainPerShift` (2) squares of its flood, the deepest first. When the flood is dry, the pump comes back to the store: it is used again (question 184). Tapping a working pump picks it up again (1 tap), leaving the rest flooded.
+- **The pump:** bought at the market (`FRONTIER_PUMP`: 30 coins), from the start. Tap a flooded square with a pump in the store to set it there (1 tap); it starts pumping. At each End shift it drains `drainPerShift` (2) squares of its flood, the farthest from it first (so what is left stays joined to it), its own square last. When the flood is dry, the pump comes back to the store: it is used again (question 184). Tapping a working pump picks it up again (1 tap), leaving the rest flooded.
 - **After draining:** the square can be mined again; the pocket's cells are dry.
 - **Screen:** water squares, the pump drawn on its square with how many squares are left, and the pump in the market and the counter.
 

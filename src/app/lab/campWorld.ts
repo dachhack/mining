@@ -31,6 +31,7 @@ import { LAB_CAMP_LEVELS } from '../../data/labCamps';
 import {
   FRONTIER_STATE_VERSION,
   NO_FEATURE,
+  noHazards,
   createFrontier,
   depthMapOf,
   frontierAct,
@@ -61,6 +62,7 @@ import type {
   CampGround,
   FrontierAction,
   FrontierCamp,
+  FrontierHazards,
   FrontierHeldContract,
   FrontierState,
   FrontierStatus,
@@ -93,6 +95,8 @@ export interface CampWorld {
   surface: Surface;
   /** The shift being played, its taps left, the crew's health, and whether the run goes on (A4). */
   turn: CampTurn;
+  /** The hazards' marks: flooded squares, pumps (docs/plans/hazards.md). The engine's own record. */
+  hazards: FrontierHazards;
 }
 
 /** Where the run stands (plan A4). */
@@ -170,6 +174,7 @@ function ground(world: CampWorld): CampGround {
     seen: world.seen,
     nextCampId: world.nextCampId,
     inventory: world.lab.counts,
+    hazards: world.hazards,
   };
 }
 
@@ -201,6 +206,7 @@ export function toFrontier(world: CampWorld): FrontierState {
     contracts: world.turn.contracts,
     contractsDone: world.turn.contractsDone,
     marketOpen: world.turn.marketOpen,
+    hazards: world.hazards,
   };
 }
 
@@ -242,6 +248,7 @@ export function fromFrontier(world: CampWorld, state: FrontierState): CampWorld 
       contractsDone: state.contractsDone,
       marketOpen: state.marketOpen,
     },
+    hazards: state.hazards,
   };
 }
 
@@ -330,7 +337,15 @@ export function campWorldFromLab(
   ];
   const { width, height } = lab.depths;
   const seen = seenWith(new Array<boolean>(width * height).fill(false), camps, width, height);
-  return { lab, camps, seen, nextCampId: 2, surface, turn: firstTurn() };
+  return {
+    lab,
+    camps,
+    seen,
+    nextCampId: 2,
+    surface,
+    turn: firstTurn(),
+    hazards: noHazards(width * height),
+  };
 }
 
 /** A camp world on a hand-made cube, with the first camp at (x, y). */
@@ -373,6 +388,7 @@ export function campWorldOf(state: FrontierState): CampWorld {
     camps: [],
     seen: [],
     nextCampId: 1,
+    hazards: state.hazards,
     surface: bareSurface(state.cube),
     turn: firstTurn(),
   };
@@ -393,11 +409,23 @@ export function campWorldOf(state: FrontierState): CampWorld {
  * - 'tooHard': the level rule allows it, but the camps covering the square
  *   cannot mine its top block (`needs` says which level can, `needsTool`
  *   which tool);
+ * - 'flooded': the square is flooded and no pump is held (hazards PR 2);
+ * - 'pump': a pump was set on the flooded square, or picked up (`pump` says which);
  * - 'noTaps': the shift has no taps left (A4);
  * - 'over': the run has ended (A4).
  */
 export type CampTapKind =
-  'mined' | 'harvested' | 'fog' | 'greyed' | 'camp' | 'tooHard' | 'refused' | 'noTaps' | 'over';
+  | 'mined'
+  | 'harvested'
+  | 'fog'
+  | 'greyed'
+  | 'camp'
+  | 'tooHard'
+  | 'refused'
+  | 'flooded'
+  | 'pump'
+  | 'noTaps'
+  | 'over';
 
 export interface CampTap {
   kind: CampTapKind;
@@ -410,6 +438,10 @@ export interface CampTap {
   needsTool: string | null;
   /** For 'harvested': what was taken and what it gave; `null` otherwise. */
   harvest: Harvest | null;
+  /** For 'pump': whether a pump was set or picked up; `null` otherwise. */
+  pump: 'set' | 'taken' | null;
+  /** For 'mined': the squares its water flooded (hazards PR 2), nearest first. */
+  flooded: { x: number; y: number }[];
 }
 
 /**
@@ -427,6 +459,8 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
     needs: tap?.needs ?? null,
     needsTool: tap?.needsTool ?? null,
     harvest: null,
+    pump: null,
+    flooded: [],
   });
   if (tap === null) {
     return answer(outcome.refusal === 'over' ? 'over' : 'noTaps');
@@ -443,9 +477,12 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
     return { ...answer('refused'), tap: { world: world.lab, result } };
   }
   if (!outcome.done) {
-    return answer(tap.kind); // 'fog', 'greyed', 'camp' or 'tooHard': nothing changes
+    return answer(tap.kind); // 'fog', 'greyed', 'camp', 'tooHard' or 'flooded': nothing changes
   }
   const after = fromFrontier(world, outcome.state);
+  if (tap.kind === 'pump') {
+    return { ...answer('pump'), world: after, pump: tap.pump };
+  }
   if (tap.kind === 'harvested') {
     const gain = tap.gain[0] ?? { item: 'grass', count: 0 }; // a harvest always gives one stack
     const extra = tap.gain[1] ?? null; // a sapling with a felled tree
@@ -460,7 +497,12 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
     refusal: null,
     higherNeighbours: [],
   };
-  return { ...answer('mined'), world: after, tap: { world: after.lab, result } };
+  return {
+    ...answer('mined'),
+    world: after,
+    tap: { world: after.lab, result },
+    flooded: tap.flooded,
+  };
 }
 
 // ----- New camps, upgrades and demolishing (the engine's rules) -----

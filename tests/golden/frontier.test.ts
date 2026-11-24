@@ -41,7 +41,7 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
     });
   }
 
-  it('between them, they place camps, upgrade one, build a smelter, smelt, make a pickaxe, make or buy the drills, mine with them, hang a lantern, reach level 4, catch animals, take plants, mine clay, rest, sell and buy at the market, plant saplings, make hay, keep a pen that breeds, take and deliver contracts, place a deep camp, see rain fill a pit, finish a run, and lose a crew', () => {
+  it('between them, they place camps, upgrade one, build a smelter, smelt, make a pickaxe, make or buy the drills, mine with them, hang a lantern, reach level 4, catch animals, take plants, mine clay, rest, sell and buy at the market, plant saplings, make hay, keep a pen that breeds, take and deliver contracts, place a deep camp, see rain fill a pit, hit water and pump it out, finish a run, and lose a crew', () => {
     const seen = new Set<string>();
     for (const name of files) {
       const golden = load(name);
@@ -62,9 +62,16 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
           // Rain filled a square: the cube changed at the night (hazards PR 1).
           if ((verb === 'endShift' || verb === 'rest') && next.cube !== state.cube)
             seen.add('rain');
+          const pumps = (x: typeof state): number => x.hazards.pumps.length;
+          if ((verb === 'endShift' || verb === 'rest') && pumps(next) < pumps(state))
+            seen.add('pumpBack');
           if (verb === 'upgrade' && next.camps.some((c) => c.level === 4)) seen.add('level4');
+        } else if (next.hazards.pumps.length > state.hazards.pumps.length) {
+          seen.add('pumpSet');
         } else if (next.mined > state.mined) {
           seen.add('mine');
+          const wet = (x: typeof state): number => x.hazards.flooded.filter((f) => f).length;
+          if (wet(next) > wet(state)) seen.add('flood');
           if ((state.inventory.get('ironPickaxe') ?? 0) > 0) seen.add('mineWithPickaxe');
           if ((state.inventory.get('drill') ?? 0) > 0) seen.add('mineWithDrill');
           const clayBefore = state.inventory.get('clay') ?? 0;
@@ -82,6 +89,9 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
     expect([...seen]).toEqual(
       expect.arrayContaining([
         'rain',
+        'flood',
+        'pumpSet',
+        'pumpBack',
         'born',
         'buildPen',
         'deliver',

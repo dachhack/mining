@@ -16,7 +16,7 @@ import type { RngState } from '../rng';
 import { blockAt } from '../state';
 import type { GameState } from '../state';
 import { CAMP_HALF_SIZE, campRadius, footprintOf, inCircle, inFootprint, seenWith } from './camps';
-import { APPLE_TREE, FRONTIER_STATE_VERSION, GRASS, NO_FEATURE, TREE } from './state';
+import { APPLE_TREE, FRONTIER_STATE_VERSION, GRASS, NO_FEATURE, TREE, noHazards } from './state';
 import type { Feature, FrontierAnimal, FrontierCamp, FrontierState } from './state';
 
 /**
@@ -337,6 +337,7 @@ export function createFrontier(seed: number): FrontierState {
     contracts: [],
     contractsDone: [0, 0, 0],
     marketOpen: false,
+    hazards: noHazards(cube.size.x * cube.size.y),
     shift: 1,
     tapsLeft: FRONTIER_SHIFT.taps,
     health: FRONTIER_SHIFT.startHealth,

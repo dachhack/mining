@@ -17,6 +17,7 @@ import { BLOCKS, ITEMS, blockDefByCode } from '../../src/data';
 import type { BlockId, ItemId, ItemStack } from '../../src/data';
 import {
   FRONTIER_DEEP_CAMP,
+  FRONTIER_PUMP,
   FRONTIER_DRILL,
   FRONTIER_MARKET,
   FRONTIER_NEW_CAMP_COST,
@@ -159,6 +160,7 @@ function refusalText(refusal: string | null): string {
     greyed: 'That square is out of range now: no camp lights it.',
     camp: 'A camp stands there; it is never mined.',
     tooHard: 'Too hard for the camps over it.',
+    flooded: 'That square is flooded: buy a pump at the market and tap the water to set it.',
     outside: 'That square is off the map.',
     neighbourHigher:
       'Too steep: a neighbour is more than 1 level higher. Mine the higher blocks first.',
@@ -249,6 +251,9 @@ function shiftLine(report: ShiftReport, state: FrontierState): string {
     report.born > 0 ? `${report.born} animal(s) born in pens` : '',
     report.grassRegrown > 0 ? `grass grew back on ${report.grassRegrown} square(s)` : '',
     report.rained ? `it rained: ${report.rainFilled} low square(s) filled` : '',
+    report.drained > 0
+      ? `pumps drained ${report.drained} flooded square(s)${report.pumpsBack > 0 ? `, ${report.pumpsBack} pump(s) back in the store` : ''}`
+      : '',
   ].filter((t) => t !== '');
   const end =
     state.status === 'lost'
@@ -297,10 +302,20 @@ export function act(session: FrontierSession, step: FrontierStep): StepResult {
     shiftStart: newShift ? steps.length : session.shiftStart,
   };
   const lines: string[] = [];
-  if (outcome.tap !== null) {
+  if (outcome.tap !== null && outcome.tap.kind === 'pump') {
+    lines.push(
+      outcome.tap.pump === 'set'
+        ? `${step}: pump set; it drains ${FRONTIER_PUMP.drainPerShift} flooded squares a night, then comes back to your store.`
+        : `${step}: pump picked up.`,
+    );
+  } else if (outcome.tap !== null) {
     const gain = outcome.tap.gain.length > 0 ? `+${stacksText(outcome.tap.gain)}` : 'nothing';
     const what = TAP_DONE[outcome.tap.harvest ?? 'mined'] ?? 'done';
-    lines.push(`${step}: ${what}, ${gain}.`);
+    const water =
+      outcome.tap.flooded.length > 0
+        ? ` You hit water: ${outcome.tap.flooded.length} square(s) flooded.`
+        : '';
+    lines.push(`${step}: ${what}, ${gain}.${water}`);
   } else if (outcome.report !== null) {
     lines.push(
       `${action.kind === 'rest' ? 'Rested. ' : ''}${shiftLine(outcome.report, outcome.state)}`,
@@ -537,7 +552,9 @@ function squareChars(state: FrontierState, sight: string, x: number, y: number):
   const i = x + state.cube.size.x * y;
   const camp = campAt(state.camps, x, y);
   let first: string;
+  const flooded = state.hazards.flooded[i] === true;
   if (animalAt(state, x, y) !== null) first = 'm';
+  else if (flooded) first = state.hazards.pumps.some((p) => p.x === x && p.y === y) ? 'P' : '~';
   else if (camp !== null) first = camp.x === x && camp.y === y ? String(camp.id % 10) : '+';
   else if (state.features[i] === GRASS) first = '"';
   else if (state.features[i] === TREE) first = 'T';
@@ -636,6 +653,7 @@ export function frontierView(session: FrontierSession): string {
     'Map: two characters a square: what is on it, then its depth. ?? fog, -- out of range now.',
     '  m animal  " grass  T tree  A apple tree (a: no apples)  s sapling  N camp N\'s middle  + camp ground',
     '  . dirt  # stone  k clay  o coal  H hard rock  i iron  u copper  x crystal  R rubble  _ nothing left',
+    '  ~ flooded  P pump on the water',
   );
   const listed = listedSteps(session);
   if (listed.length > 0) {
@@ -750,13 +768,19 @@ export function lookText(session: FrontierSession, x: number, y: number): string
     );
   }
   if (animalAt(state, x, y) !== null) parts.push('an animal on it');
+  if (state.hazards.flooded[i] === true) {
+    const pumped = state.hazards.pumps.some((p) => p.x === x && p.y === y);
+    parts.push(pumped ? 'flooded, with a pump draining it' : 'flooded');
+  }
   const camp = campAt(state.camps, x, y);
   if (camp !== null) parts.push(`camp ${camp.id}'s ground`);
   const tap = frontierTap(state, x, y);
   const would =
-    tap.kind === 'mined' || tap.kind === 'harvested'
-      ? `a tap would ${TAP_VERBS[tap.harvest ?? 'mined'] ?? 'take'} it, for ${stacksText(tap.gain) || 'nothing'}`
-      : `a tap would do nothing: ${refusalText(tap.kind === 'refused' ? tap.refusal : tap.kind)}`;
+    tap.kind === 'pump'
+      ? `a tap would ${tap.pump === 'set' ? 'set a pump' : 'pick up the pump'}`
+      : tap.kind === 'mined' || tap.kind === 'harvested'
+        ? `a tap would ${TAP_VERBS[tap.harvest ?? 'mined'] ?? 'take'} it, for ${stacksText(tap.gain) || 'nothing'}`
+        : `a tap would do nothing: ${refusalText(tap.kind === 'refused' ? tap.refusal : tap.kind)}`;
   const place = placeRefusal(state, x, y);
   parts.push(would, place === null ? 'a camp could go here' : `no camp here (${place})`);
   return `${parts.join('; ')}.`;

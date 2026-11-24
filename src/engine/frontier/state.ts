@@ -17,7 +17,7 @@ import type { RngState } from '../rng';
  * not loaded into a new shape. Separate from the old game's STATE_VERSION
  * while the two rule sets live side by side.
  */
-export const FRONTIER_STATE_VERSION = 13; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`; 12: `marketOpen`; 13: `contracts` (several held) for `contract`
+export const FRONTIER_STATE_VERSION = 14; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`; 12: `marketOpen`; 13: `contracts` (several held) for `contract`; 14: `hazards` (flooded squares, pumps)
 
 /** What grows on a square: nothing, grass, a tree or an apple tree. */
 export const NO_FEATURE = 0;
@@ -116,6 +116,8 @@ export interface FrontierState {
    * Only then can the player trade or take a contract (market.ts).
    */
   marketOpen: boolean;
+  /** What the hazards have done to the world (docs/plans/hazards.md). */
+  hazards: FrontierHazards;
   /** The shift being played: 1 is the first. */
   shift: number;
   /** Taps left in this shift (src/data/frontier.ts, FRONTIER_SHIFT.taps a shift). */
@@ -138,3 +140,25 @@ export interface FrontierHeldContract {
 
 /** How a run stands: going on, lost, ended by closing the mine, or played to its last shift. */
 export type FrontierStatus = 'active' | 'lost' | 'closed' | 'finished';
+
+/**
+ * The hazards' marks on the world (docs/plans/hazards.md). Rain (section 1)
+ * changes only the cube, so it has none here.
+ */
+export interface FrontierHazards {
+  /** True where a square is flooded (water.ts; section 2), row by row. */
+  flooded: boolean[];
+  /** Pumps set on flooded squares, in the order they were set (water.ts). */
+  pumps: FrontierPump[];
+}
+
+/** A pump set on a flooded square. */
+export interface FrontierPump {
+  x: number;
+  y: number;
+}
+
+/** No hazard marks, for a world of `squares` squares. */
+export function noHazards(squares: number): FrontierHazards {
+  return { flooded: new Array<boolean>(squares).fill(false), pumps: [] };
+}
