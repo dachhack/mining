@@ -190,7 +190,14 @@ function shiftText(report: ShiftReport, turn: CampTurn, rested: boolean): string
     report.born > 0
       ? ` ${report.born === 1 ? 'An animal was' : `${report.born} animals were`} born in a pen.`
       : '';
-  const market = `${born}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
+  // Hazards (docs/plans/hazards.md): what the night brought.
+  const rain =
+    report.rainFilled > 0
+      ? ` Rain 🌧 washed soil into ${report.rainFilled} low ${report.rainFilled === 1 ? 'square' : 'squares'}.`
+      : report.rained
+        ? ' It rained 🌧.'
+        : '';
+  const market = `${born}${rain}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
   if (turn.status === 'finished') {
     return `${start}. That was the last shift: the run is over.`;
   }

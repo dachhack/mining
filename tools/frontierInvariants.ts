@@ -49,6 +49,9 @@
 //   number of lots at its price, and changes nothing else in the store; a
 //   run is 'finished' only by the End shift or rest of its last shift, and
 //   no shift past the last is ever played.
+// - RAIN: a square's depth changes without a mining tap only at End shift
+//   or rest, by 1 block, at a low spot that is not a camp's ground; the
+//   level rule holds everywhere after the night.
 
 import { BLOCKS } from '../src/data';
 import {
@@ -149,6 +152,47 @@ export function checkStep(
         if (isSquare(after.cube, nx, ny) && now - depthAt(after.cube, nx, ny) > 1) {
           say(`${x},${y} is more than 1 level below its neighbour ${nx},${ny}`);
         }
+      }
+    }
+  }
+
+  // Rain (hazards plan, section 1): at End shift a square may be filled by
+  // 1 block, only if it was a low spot (worked out here: dug, no neighbour
+  // deeper, some neighbour shallower) and not a camp's ground; the level rule
+  // still holds everywhere. Other steps never fill a square.
+  if (after.cube !== before.cube && !(after.mined > before.mined)) {
+    const w = before.cube.size.x;
+    const h = before.cube.size.y;
+    const was: number[] = [];
+    const now: number[] = [];
+    for (let y = 0; y < h; y += 1) {
+      for (let x = 0; x < w; x += 1) {
+        was.push(depthAt(before.cube, x, y));
+        now.push(depthAt(after.cube, x, y));
+      }
+    }
+    for (let y = 0; y < h; y += 1) {
+      for (let x = 0; x < w; x += 1) {
+        const i = x + w * y;
+        const d = was[i] ?? 0;
+        const n = now[i] ?? 0;
+        let deeper = false;
+        let shallower = false;
+        for (const st of SQUARE_STEPS) {
+          const nx = x + st.dx;
+          const ny = y + st.dy;
+          if (!isSquare(after.cube, nx, ny)) continue;
+          const j = nx + w * ny;
+          if ((was[j] ?? 0) > d) deeper = true;
+          if ((was[j] ?? 0) < d) shallower = true;
+          if (Math.abs(n - (now[j] ?? 0)) > 1)
+            say(`after the night ${x},${y} breaks the level rule`);
+        }
+        if (n === d) continue;
+        if (!endsShift) say(`${x},${y} went from depth ${d} to ${n} without a mining tap`);
+        else if (n !== d - 1) say(`rain took ${x},${y} from depth ${d} to ${n}`);
+        else if (deeper || !shallower) say(`rain filled ${x},${y}, which was not a low spot`);
+        else if (campAt(after.camps, x, y) !== null) say(`rain filled ${x},${y}, a camp's ground`);
       }
     }
   }

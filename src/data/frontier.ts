@@ -703,3 +703,21 @@ export const FRONTIER_PHASES: { title: string; next: string }[] = [
     next: 'Deliver tier-3 contracts (crystal, rare ore, relics: a steel drill mines them) and end rich.',
   },
 ];
+
+// ----- Hazards (docs/plans/hazards.md; owner, 2026-11-24) -----
+
+/**
+ * Rain (hazards plan, section 1): "Rain overnight washes clay and soil into
+ * low areas and covers them." At End shift it rains with a chance of
+ * `chance`. Each low spot (a dug square no face neighbour is deeper than, and
+ * at least one is shallower than) is then filled with a chance of
+ * `fillChance`: one block goes back on top of it, clay with a chance of
+ * `clayChance`, else dirt.
+ */
+export const FRONTIER_RAIN = {
+  chance: 0.2,
+  fillChance: 0.5,
+  clayChance: 1 / 3,
+  fillBlock: 'dirt' as BlockId,
+  clayBlock: 'clay' as BlockId,
+};

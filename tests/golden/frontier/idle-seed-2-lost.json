@@ -1,10 +1,10 @@
 {
   "description": "The idle policy: gathers nothing, rests at camp 1 once the crew is at half health, then starves at shift 11",
   "recordedWith": "idle",
-  "engineVersion": "0.12.0",
+  "engineVersion": "0.13.0",
   "seed": 2,
   "stepCount": 12,
-  "expectedHash": "855b4faefa73b64b",
+  "expectedHash": "a46a9346677ee705",
   "steps": [
     "endShift",
     "endShift",

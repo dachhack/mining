@@ -1,6 +1,6 @@
 # Hazards: the plan
 
-Status: **agreed** (owner, 2026-11-24, in conversation; decision note 0064). Owner's answers: water and gas both from depth 4 (question 181); one APK build when all the hazards are in (question 192). Nothing is built yet.
+Status: **agreed** (owner, 2026-11-24, in conversation; decision note 0064). Owner's answers: water and gas both from depth 4 (question 181); one APK build when all the hazards are in (question 192). PR 1 (rain) is built (engine 0.13.0).
 
 The owner's direction:
 

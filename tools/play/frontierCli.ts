@@ -248,6 +248,7 @@ function shiftLine(report: ShiftReport, state: FrontierState): string {
     report.newAnimals > 0 ? 'an animal walked in' : '',
     report.born > 0 ? `${report.born} animal(s) born in pens` : '',
     report.grassRegrown > 0 ? `grass grew back on ${report.grassRegrown} square(s)` : '',
+    report.rained ? `it rained: ${report.rainFilled} low square(s) filled` : '',
   ].filter((t) => t !== '');
   const end =
     state.status === 'lost'

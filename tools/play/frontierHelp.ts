@@ -13,6 +13,7 @@ import {
   FRONTIER_NEW_CAMP_COST,
   FRONTIER_PEN,
   FRONTIER_PICKAXE,
+  FRONTIER_RAIN,
   FRONTIER_RECIPES,
   FRONTIER_RUN,
   FRONTIER_SAPLINGS,
@@ -72,6 +73,9 @@ export function frontierHelpText(): string {
     `  ${s.woodEveryShift} wood every shift, 1 food (${foods}) every ${s.foodEveryShifts} shifts, and 1 more wood`,
     `  every ${s.campWoodEveryShifts} shifts for each camp after the first.`,
     `- Each item of upkeep you cannot pay costs 1 health (of ${s.startHealth}). At 0 the crew is lost.`,
+    `- Hazards. Rain: on about ${Math.round(FRONTIER_RAIN.chance * 100)}% of nights it rains, and about ${Math.round(FRONTIER_RAIN.fillChance * 100)}% of the low spots`,
+    '  (dug squares lower than a neighbour, with no neighbour lower) are filled by 1 block of dirt or clay.',
+    "  What was on top is buried, not lost: dig it out again. A camp's ground is never filled.",
     '- "rest N" rests at camp N: full health, then the shift ends. "close" closes the mine: the run ends.',
     `- "smelter N" builds a smelter at camp N (level ${FRONTIER_SMELTER.minLevel} or more; ${cost(FRONTIER_SMELTER.cost)}; one a camp, lost with it).`,
     `  With a smelter anywhere, "make R" makes recipe R: ${FRONTIER_RECIPES.filter(

@@ -70,8 +70,10 @@ import type { GameState } from './state';
  * 0.11.0: after the market-scene build: as many contracts held at once as
  *        the best camp's level.
  * 0.12.0: after the 0.11.0 build: clay contracts in volume (tiers 1 and 2).
+ * 0.13.0: hazards (docs/plans/hazards.md, decision note 0064): rain first;
+ *        the plan's later PRs share it until the build with all of them.
  */
-export const ENGINE_VERSION = '0.12.0';
+export const ENGINE_VERSION = '0.13.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {

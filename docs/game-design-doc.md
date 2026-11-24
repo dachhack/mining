@@ -142,7 +142,8 @@ In this order:
    - 1 more wood every 4th shift for each camp after the first.
 7. **Pens breed** (section 7b), once the upkeep is paid: the crew eats first.
 8. **Hunger:** each item of upkeep that cannot be paid costs 1 health (section 5).
-9. The next shift starts with a full set of taps.
+9. **Rain** (hazards plan section 1; owner, 2026-11-24): on [Default] 1 night in 5 it rains (`FRONTIER_RAIN`). Each **low spot** (a dug square that no face neighbour is deeper than, and that at least one is shallower than) is filled with a [Default] 1 in 2 chance: one block of clay (1 in 3) or dirt goes back on top, so it is 1 shallower. What was on top is buried, not lost. A camp's ground is never filled. The level rule still holds after it. Dug does not go down.
+10. The next shift starts with a full set of taps.
 
 ### 4.3 Mining and the level rule [Decided; numbers Default]
 

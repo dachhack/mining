@@ -13,7 +13,8 @@
 //      else 2 grass, else an animal (questions 155 and 158);
 //    - animals in pens breed, eating hay (pens.ts; plan section 6.3);
 //    - each item of upkeep that cannot be paid costs the crew 1 health
-//      (question 148: "Hunger only"); at 0 health the run is lost.
+//      (question 148: "Hunger only"); at 0 health the run is lost;
+//    - it may rain, filling low spots (rain.ts; hazards plan section 1).
 //
 // Resting, at a camp (question 156: "Only at a camp"), restores the crew's
 // health and takes the rest of the shift. Closing the mine ends the run.
@@ -44,6 +45,7 @@ import {
   takeRefusal,
 } from './contracts';
 import { plant, plantRefusal } from './farming';
+import { rainfall } from './rain';
 import { breedPens, penAct, penRefusal } from './pens';
 import { isMarketDay, trade, tradeRefusal } from './market';
 import { animalAt } from './surface';
@@ -115,6 +117,10 @@ export interface ShiftReport {
   newAnimals: number;
   /** True if the market is open in the shift that starts now. */
   marketOpens: boolean;
+  /** True if it rained in the night (rain.ts). */
+  rained: boolean;
+  /** Squares the rain filled. */
+  rainFilled: number;
 }
 
 /**
@@ -231,8 +237,11 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
   const bred = breedPens(state.camps, inventory);
   const healthLost = unpaid.length;
   const health = Math.max(0, state.health - healthLost);
+  // Rain, last, so the morning shows where it fell (rain.ts).
+  const rain = rainfall(state.cube, bred.camps, rng);
   const next: FrontierState = {
     ...state,
+    cube: rain.cube,
     animals,
     nextAnimalId,
     rng,
@@ -269,6 +278,8 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
       born: bred.born,
       newAnimals,
       marketOpens: next.marketOpen,
+      rained: rain.rained,
+      rainFilled: rain.filled.length,
     },
   };
 }
