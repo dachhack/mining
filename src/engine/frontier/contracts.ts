@@ -9,7 +9,8 @@
 // - Tiers open in turn: tier 1 while the best camp is at least
 //   FRONTIER_BOARD.tier1Level; tier 2 once a tier-1 contract is done; tier 3
 //   once a tier-2 contract is done.
-// - Taking one (while the market is open, holding none; no tap), delivering it (any shift,
+// - Up to `contractLimit` (the best camp's level) are held at once.
+// - Taking one (while the market is open, holding fewer than the limit; no tap), delivering it (any shift,
 //   holding everything it asks for: the items leave the store and its
 //   coins arrive), and dropping it (any shift, nothing back) cost 1 tap
 //   each; shift.ts charges it. A contract never ends the run.
@@ -68,60 +69,81 @@ export function contractById(id: string): FrontierContractDef | null {
   return FRONTIER_CONTRACTS.find((c) => c.id === id) ?? null;
 }
 
-/** The contract held now, or `null`. */
-export function heldContract(state: FrontierState): FrontierContractDef | null {
-  return state.contract === null ? null : contractById(state.contract.id);
+/**
+ * How many contracts may be held at once: the best camp's level (owner,
+ * after the market-scene build: "Let's allow multiple contracts at a time.
+ * As many as your highest camp level"). A deep camp counts as its level.
+ */
+export function contractLimit(state: FrontierState): number {
+  return bestCampLevel(state);
+}
+
+/** The contracts held now, oldest first. */
+export function heldContracts(state: FrontierState): FrontierContractDef[] {
+  const held: FrontierContractDef[] = [];
+  for (const h of state.contracts) {
+    const def = contractById(h.id);
+    if (def !== null) held.push(def);
+  }
+  return held;
 }
 
 /**
  * Why a contract action cannot be done now, or `null` if it can:
- * - 'holding': taking one while one is held already;
+ * - 'holding': taking one while as many are held as `contractLimit` allows;
  * - 'closed': taking one while the market is not open;
- * - 'unknown': taking one that is not on today's board;
- * - 'none': delivering or dropping with none held;
- * - 'cost': delivering without everything it asks for.
+ * - 'unknown': taking one that is not on today's board, or is held already;
+ * - 'none': delivering or dropping one that is not held;
+ * - 'cost': delivering one without everything it asks for.
  */
 export type ContractRefusal = 'holding' | 'closed' | 'unknown' | 'none' | 'cost';
 
 export function takeRefusal(state: FrontierState, id: string): ContractRefusal | null {
-  if (state.contract !== null) return 'holding';
+  if (state.contracts.length >= contractLimit(state)) return 'holding';
   if (!marketIsOpen(state)) return 'closed';
   if (!contractBoard(state).some((c) => c.id === id)) return 'unknown';
+  if (state.contracts.some((c) => c.id === id)) return 'unknown';
   return null;
 }
 
-export function deliverRefusal(state: FrontierState): ContractRefusal | null {
-  const held = heldContract(state);
+export function deliverRefusal(state: FrontierState, id: string): ContractRefusal | null {
+  const held = state.contracts.some((c) => c.id === id) ? contractById(id) : null;
   if (held === null) return 'none';
   return canAfford(state.inventory, held.asks) ? null : 'cost';
 }
 
-export function dropRefusal(state: FrontierState): ContractRefusal | null {
-  return state.contract === null ? 'none' : null;
+export function dropRefusal(state: FrontierState, id: string): ContractRefusal | null {
+  return state.contracts.some((c) => c.id === id) ? null : 'none';
+}
+
+/** True if some contract held can be delivered now. */
+export function anyDeliverable(state: FrontierState): boolean {
+  return state.contracts.some((c) => deliverRefusal(state, c.id) === null);
 }
 
 /** Take contract `id` from today's board. If `takeRefusal` says no, the very same state comes back. */
 export function takeContract(state: FrontierState, id: string): FrontierState {
   if (takeRefusal(state, id) !== null) return state;
-  return { ...state, contract: { id, takenOn: state.shift } };
+  return { ...state, contracts: [...state.contracts, { id, takenOn: state.shift }] };
 }
 
-/** Deliver the held contract: its items go, its coins come, and it counts as done for its tier. */
-export function deliverContract(state: FrontierState): FrontierState {
-  const held = heldContract(state);
-  if (held === null || deliverRefusal(state) !== null) return state;
+/** Deliver held contract `id`: its items go, its coins come, and it counts as done for its tier. */
+export function deliverContract(state: FrontierState, id: string): FrontierState {
+  const held = contractById(id);
+  if (held === null || deliverRefusal(state, id) !== null) return state;
   const contractsDone = state.contractsDone.map((n, i) => (i === held.tier - 1 ? n + 1 : n));
   const inventory = gained(pay(state.inventory, held.asks), {
     item: FRONTIER_MARKET.coin,
     count: held.pays,
   });
-  return { ...state, inventory, contract: null, contractsDone };
+  const contracts = state.contracts.filter((c) => c.id !== id);
+  return { ...state, inventory, contracts, contractsDone };
 }
 
-/** Drop the held contract: nothing back, nothing lost. */
-export function dropContract(state: FrontierState): FrontierState {
-  if (dropRefusal(state) !== null) return state;
-  return { ...state, contract: null };
+/** Drop held contract `id`: nothing back, nothing lost. */
+export function dropContract(state: FrontierState, id: string): FrontierState {
+  if (dropRefusal(state, id) !== null) return state;
+  return { ...state, contracts: state.contracts.filter((c) => c.id !== id) };
 }
 
 /** The phase of the run, 1 to 5 (plan section 1). */

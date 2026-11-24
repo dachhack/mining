@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   centredLabCamera,
+  LAB_EDGE_MARGIN_PX,
   clampLabCamera,
   pannedLab,
   rowsOf,
@@ -23,15 +24,31 @@ describe('the lab camera', () => {
     expect(camera).toEqual({ x: 11, y: 6, cells: 10 });
   });
 
-  it('keeps the window over the map', () => {
+  it('keeps the window over the map, but for a margin past each edge', () => {
     const camera = pannedLab({ x: 0, y: 0, cells: 10 }, 10000, -10000, GROUND, TALL);
-    expect(camera.x).toBe(0);
-    expect(camera.y).toBe(12); // 32 rows - 20 shown
+    // The margin, in squares at this zoom: 64 px with 30 px squares.
+    const margin = (LAB_EDGE_MARGIN_PX * 10) / TALL.width;
+    expect(camera.x).toBeCloseTo(-margin);
+    expect(camera.y).toBeCloseTo(12 + margin); // 32 rows - 20 shown, then the margin
+    // Enough to drag a corner square clear of the buttons over the map's corners (8 px in, 40 px tall).
+    expect(LAB_EDGE_MARGIN_PX).toBeGreaterThanOrEqual(8 + 40);
   });
 
-  it('centres the map when the window shows more rows than it has', () => {
+  it('allows the same margin, on screen, at every zoom', () => {
+    for (const cells of [8, 16, 32]) {
+      const camera = pannedLab({ x: 0, y: 0, cells }, 100000, 0, GROUND, TALL);
+      const cellPx = TALL.width / cells;
+      expect(-camera.x * cellPx).toBeCloseTo(LAB_EDGE_MARGIN_PX);
+    }
+  });
+
+  it('centres the map down when the window shows more rows than it has, and keeps the side margin', () => {
     const camera = clampLabCamera({ x: 5, y: 5, cells: 32 }, GROUND, TALL);
-    expect(camera).toEqual({ x: 0, y: -16, cells: 32 });
+    expect(camera.y).toBe(-16);
+    expect(camera.x).toBe(5); // within the margin: 64 px is about 6.8 squares at this zoom
+    expect(clampLabCamera({ x: 50, y: 5, cells: 32 }, GROUND, TALL).x).toBeCloseTo(
+      (LAB_EDGE_MARGIN_PX * 32) / TALL.width,
+    );
   });
 
   it('keeps the zoom inside its range', () => {

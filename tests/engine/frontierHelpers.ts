@@ -91,7 +91,7 @@ export function world(options: WorldOptions = {}): FrontierState {
     grassIn: new Array<number>(SIDE * SIDE).fill(-1),
     planted: new Array<boolean>(SIDE * SIDE).fill(false),
     treesFelled: 0,
-    contract: null,
+    contracts: [],
     contractsDone: [0, 0, 0],
     marketOpen: false,
     shift: 1,

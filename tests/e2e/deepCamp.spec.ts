@@ -80,3 +80,18 @@ test('switch the camp tool to a deep camp, place it, and open its panel', async 
   await expect(page.getByTestId('lab2-camp-title')).toContainText('Deep camp 2');
   await expect(page.getByTestId('lab2-camp-next')).toHaveText('A deep camp is never upgraded.');
 });
+
+test('the recipe book lists the deep camp as a camp of its own; its pin opens the camp tool switched to it', async ({
+  page,
+}) => {
+  await openGame(page, { ...createFrontier(110), inventory: new Map([['campKit', 1]]) });
+  await page.getByTestId('lab2-book').click();
+  await expect(page.getByTestId('lab2-recipe-deep-camp')).toContainText('Deep camp');
+  await expect(page.getByTestId('lab2-recipe-deep-camp-campKit')).toContainText('1/1');
+  await expect(page.getByTestId('lab2-recipe-does-deep-camp')).toContainText('never upgraded');
+  await page.getByTestId('lab2-recipe-pin-deep-camp').click();
+  await page.getByTestId('lab2-book-close').click();
+  await page.getByTestId('lab2-pin-deep-camp').getByRole('button').first().click();
+  await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'placing');
+  await expect(page.getByTestId('lab2-place-deep')).toHaveAttribute('aria-pressed', 'true');
+});

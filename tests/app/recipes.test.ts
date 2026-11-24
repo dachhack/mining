@@ -1,20 +1,30 @@
 // UI lab 2: the recipe book's recipes come from the lab's data.
 import { describe, expect, it } from 'vitest';
-import { FRONTIER_RECIPES } from '../../src/data/frontier';
+import { FRONTIER_DEEP_CAMP, FRONTIER_RECIPES } from '../../src/data/frontier';
 import { LAB_CAMP_LEVELS, LAB_NEW_CAMP_COST } from '../../src/data/labCamps';
 import { MAX_CAMP_LEVEL, upgradeCostFrom } from '../../src/app/lab/campWorld';
 import { FIRST_PINS, labRecipes, parsePins, recipeById } from '../../src/app/lab/recipes';
 
 describe('the recipe book', () => {
-  it('holds a new camp, then an upgrade to each level above 1, then what a smelter makes, in order', () => {
+  it('holds a new camp, the deep camp, then an upgrade to each level above 1, then what is made in the book, in order', () => {
     expect(labRecipes().map((r) => r.id)).toEqual([
       'new-camp',
+      'deep-camp',
       'upgrade-2',
       'upgrade-3',
       'upgrade-4',
       ...FRONTIER_RECIPES.map((r) => r.id),
     ]);
-    expect(labRecipes().filter((r) => r.makes === null)).toHaveLength(MAX_CAMP_LEVEL);
+    expect(labRecipes().filter((r) => r.makes === null)).toHaveLength(MAX_CAMP_LEVEL + 1);
+  });
+
+  it('lists the deep camp as a camp of its own, not an upgrade, at its own advanced cost (owner)', () => {
+    const deep = recipeById('deep-camp');
+    expect(deep?.deep).toBe(true);
+    expect(deep?.cost).toBe(FRONTIER_DEEP_CAMP.cost);
+    expect(deep?.cost.map((s) => s.item)).toContain('campKit');
+    expect(deep?.level).toBe(0); // no upgrade level
+    expect(labRecipes().filter((r) => r.deep)).toHaveLength(1);
   });
 
   it('asks for what smelting takes, and says what it makes: one source, src/data', () => {

@@ -50,6 +50,8 @@ test('take a contract at the market, then deliver it from the goals card for its
   await expect(page.getByTestId('lab2-goals')).toHaveAttribute('data-deliverable', 'true');
   await page.getByTestId('lab2-goals').click();
   await expect(page.getByTestId('lab2-goal')).toHaveText(FRONTIER_PHASES[2]?.next ?? '');
+  // As many contracts as the best camp's level (3) may be held.
+  await expect(page.getByTestId('lab2-book-card')).toContainText('Your contracts · 1 of 3');
   await page.getByTestId(`lab2-contract-deliver-${offer.id}`).click();
   await expect(page.getByTestId('lab2-book-note')).toHaveText(
     `Delivered: ${offer.name}, for ${offer.pays} coins.`,

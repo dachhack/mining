@@ -23,6 +23,7 @@ import {
   coverLevels,
   openTiers,
   deliverRefusal,
+  takeRefusal,
   createFrontier,
   depthAt,
   frontierAct,
@@ -54,7 +55,7 @@ import { APPLE_TREE, NO_FEATURE } from '../src/engine/frontier/state';
  * "wood", and a whole number of lots), or "plant X,Y ITEM" (a sapling or
  * an apple sapling on square X,Y), "buildPen ID", "penIn ID" or "penOut ID"
  * (a pen at camp ID, an animal into it or out of it), "takeContract ID"
- * (a contract from today's board), "deliver", "dropContract", or
+ * (a contract from today's board), "deliver ID", "dropContract ID", or
  * "placeDeep X,Y" (a deep camp), or "closeMarket" (the market closes and
  * the day starts).
  */
@@ -104,17 +105,14 @@ export function actionOf(step: FrontierStep): FrontierAction {
   if (verb === 'plant' && arg !== undefined && third !== undefined) {
     return { kind: 'plant', ...squareOf(arg), item: third };
   }
-  if (
-    verb === 'endShift' ||
-    verb === 'close' ||
-    verb === 'deliver' ||
-    verb === 'dropContract' ||
-    verb === 'closeMarket'
-  ) {
+  if (verb === 'endShift' || verb === 'close' || verb === 'closeMarket') {
     return { kind: verb };
   }
-  if (verb === 'takeContract' && arg !== undefined) {
-    return { kind: 'takeContract', id: arg };
+  if (
+    (verb === 'takeContract' || verb === 'deliver' || verb === 'dropContract') &&
+    arg !== undefined
+  ) {
+    return { kind: verb, id: arg };
   }
   if (
     (verb === 'upgrade' ||
@@ -323,12 +321,12 @@ export function farmStep(state: FrontierState): FrontierStep | null {
 }
 
 /**
- * True if delivering the held contract leaves the store holding what the
+ * True if delivering held contract `id` leaves the store holding what the
  * lowest camp's next upgrade needs of the same items (or the store did not
  * hold that much anyway): the gatherer does not trade an upgrade for coins.
  */
-function keepsUpgrade(state: FrontierState): boolean {
-  const asks = contractById(state.contract?.id ?? '')?.asks ?? [];
+function keepsUpgrade(state: FrontierState, id: string): boolean {
+  const asks = contractById(id)?.asks ?? [];
   const lowest = [...state.camps].sort((a, b) => a.level - b.level)[0];
   const upgrade = lowest === undefined ? [] : (upgradeCostFrom(lowest.level) ?? []);
   return upgrade.every((need) => {
@@ -342,22 +340,26 @@ function keepsUpgrade(state: FrontierState): boolean {
 const GATHERER_CONTRACT_PATIENCE = 20;
 
 /**
- * Contracts (progression plan section 5), in order: deliver the one held
- * if it can; drop it on a market day once it has been held
- * GATHERER_CONTRACT_PATIENCE shifts; with none held, take the board's
- * contract whose asks the store holds the most of (as a share), the
- * highest tier first among equals. `null` if none of these can be done.
+ * Contracts (progression plan section 5), in order: deliver one held if
+ * it can; drop one held GATHERER_CONTRACT_PATIENCE shifts, on a day after
+ * the market; while fewer are held than the best camp's level allows, take
+ * the board's contract whose asks the store holds the most of (as a
+ * share), the highest tier first among equals. `null` if none of these
+ * can be done.
  */
 export function contractStep(state: FrontierState): FrontierStep | null {
-  if (deliverRefusal(state) === null && keepsUpgrade(state)) return 'deliver';
-  const held = state.contract;
-  if (held !== null) {
-    // Dropped on the first day after the market, so another can be taken at the next.
+  for (const held of state.contracts) {
+    if (deliverRefusal(state, held.id) === null && keepsUpgrade(state, held.id))
+      return `deliver ${held.id}`;
+  }
+  // Dropped on the first day after the market, so another can be taken at the next.
+  for (const held of state.contracts) {
     const stale = state.shift - held.takenOn >= GATHERER_CONTRACT_PATIENCE;
-    return stale && !marketIsOpen(state) ? 'dropContract' : null;
+    if (stale && !marketIsOpen(state)) return `dropContract ${held.id}`;
   }
   let best: { id: string; share: number; tier: number } | null = null;
   for (const offer of contractBoard(state)) {
+    if (takeRefusal(state, offer.id) !== null) continue;
     const shares = offer.asks.map((a) => Math.min(1, (state.inventory.get(a.item) ?? 0) / a.count));
     const share = shares.reduce((sum, x) => sum + x, 0) / shares.length;
     if (best === null || share > best.share || (share === best.share && offer.tier > best.tier)) {
