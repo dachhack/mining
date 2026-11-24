@@ -81,11 +81,14 @@ test('a level-2 camp builds its defenses from its panel (hazards PR 5)', async (
   };
   const camp = state.camps[0] ?? { x: 0, y: 0 };
   const canvas = await openGame(page, state);
+  await expect(canvas).toHaveAttribute('data-defenses', '1:0');
   await tapSquare(page, canvas, camp.x, camp.y);
   await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'camp');
   await expect(page.getByTestId('lab2-camp-defense')).toContainText('No defenses · 0/3');
   await page.getByTestId('lab2-build-defense').click();
   await expect(page.getByTestId('lab2-camp-defense')).toContainText('Palisade · 1/3');
+  // The camp's marker shows it: a palisade round it and a shield with 1.
+  await expect(canvas).toHaveAttribute('data-defenses', '1:1');
   await expect(page.getByTestId('lab-res-wood')).toHaveAttribute('data-count', '15');
   // The next level needs stone, which the store does not hold.
   await expect(page.getByTestId('lab2-build-defense')).toBeDisabled();

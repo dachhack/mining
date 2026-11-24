@@ -146,7 +146,14 @@ import type { Recipe } from './recipes';
 import { emptyHistory, noteAction, undoCount, undoLast } from './undoHistory';
 import type { UndoHistory } from './undoHistory';
 import { shadowEdges } from './shadows';
-import { drawDragon, drawFire, drawPump, drawWater } from './hazardArt';
+import {
+  drawCampWall,
+  drawDefenseTag,
+  drawDragon,
+  drawFire,
+  drawPump,
+  drawWater,
+} from './hazardArt';
 import { showNight } from './night';
 import type { Night } from './night';
 
@@ -920,6 +927,8 @@ export function mountCampLab(
     });
     canvas.dataset['fires'] = fires.join(' ');
     canvas.dataset['dragons'] = world.hazards.dragons.map((d) => `${d.x},${d.y}`).join(' ');
+    // Each camp's defense level, as drawn on its marker: "id:level".
+    canvas.dataset['defenses'] = world.camps.map((camp) => `${camp.id}:${camp.defense}`).join(' ');
   }
 
   /** True if square (x, y) is on the map, not in fog, and has a tree or an apple tree: part of a forest. */
@@ -1130,6 +1139,8 @@ export function mountCampLab(
     ctx.lineWidth = Math.max(2, c * (selected ? 0.09 : 0.06));
     ctx.strokeStyle = CAMP_MARKS.markerRing;
     ctx.strokeRect(base.x, base.y, base.size, base.size);
+    // Its defenses round the edge (hazards PR 5): stakes, a wall, a gatehouse.
+    drawCampWall(ctx, base, c, camp.defense);
     const r = c * CAMP_LOOK.markerRadius;
     ctx.save();
     ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
@@ -1206,6 +1217,9 @@ export function mountCampLab(
       ctx.fillRect(lx - tagR * 0.5, ly - tagR * 0.62, tagR, tagR * 0.24);
       ctx.fillRect(lx - tagR * 0.5, ly + tagR * 0.4, tagR, tagR * 0.22);
     }
+
+    // Defenses: a shield with the level, at the top right (hazards PR 5).
+    drawDefenseTag(ctx, cx + r * 0.78, cy - r * 0.78, tagR * 2, camp.defense);
   }
 
   /** A circle round square (x, y) at `radius` squares, as the ring a camp lights. */
