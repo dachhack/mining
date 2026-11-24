@@ -1,6 +1,6 @@
 # Hazards: the plan
 
-Status: **agreed** (owner, 2026-11-24, in conversation; decision note 0064). Owner's answers: water and gas both from depth 4 (question 181); one APK build when all the hazards are in (question 192). PR 1 (rain), PR 2 (water and the pump) and PR 3 (gas and fire) are built (engine 0.13.0).
+Status: **agreed** (owner, 2026-11-24, in conversation; decision note 0064). Owner's answers: water and gas both from depth 4 (question 181); one APK build when all the hazards are in (question 192). PRs 1 to 4 (rain, water and the pump, gas and fire, dragons and the sword) are built (engine 0.13.0).
 
 The owner's direction:
 

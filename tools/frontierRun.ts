@@ -5,6 +5,7 @@
 
 import {
   FRONTIER_DEEP_CAMP,
+  FRONTIER_DRAGON,
   FRONTIER_DRILL,
   FRONTIER_LANTERN,
   FRONTIER_MARKET,
@@ -239,6 +240,14 @@ const GATHERER_SELLS_ALL = ['crystal', 'rareOre', 'relic'];
  */
 export function marketStep(state: FrontierState): FrontierStep | null {
   if (!marketIsOpen(state)) return null;
+  // A sword while a dragon is on the map (hazards PR 4).
+  if (
+    state.hazards.dragons.length > 0 &&
+    (state.inventory.get(FRONTIER_DRAGON.sword) ?? 0) === 0 &&
+    tradeRefusal(state, 'buy', FRONTIER_DRAGON.sword, 1) === null
+  ) {
+    return `buy ${FRONTIER_DRAGON.sword} 1`;
+  }
   // A pump for a lit flood no pump drains (hazards PR 2).
   if (
     unpumpedFlood(state) !== null &&
@@ -333,12 +342,18 @@ export function unpumpedFlood(state: FrontierState): { x: number; y: number } | 
 }
 
 /**
- * Deal with the hazards: put out a lit fire (hazards PR 3), the first row by
- * row; else set a pump from the store on a lit flood no pump drains (PR 2).
- * `null` if there is nothing to do.
+ * Deal with the hazards: drive off a lit dragon with a sword, or make a sword
+ * while a dragon is on the map (hazards PR 4); put out a lit fire (PR 3), the
+ * first row by row; else set a pump from the store on a lit flood no pump
+ * drains (PR 2). `null` if there is nothing to do.
  */
 export function hazardStep(state: FrontierState): FrontierStep | null {
   const width = state.cube.size.x;
+  const sword = (state.inventory.get(FRONTIER_DRAGON.sword) ?? 0) > 0;
+  const dragons = state.hazards.dragons;
+  const litDragon = dragons.find((d) => sightAt(state, d.x, d.y) === 'shown');
+  if (litDragon !== undefined && sword) return `tap ${litDragon.x},${litDragon.y}`;
+  if (dragons.length > 0 && !sword && makeRefusal(state, 'sword') === null) return 'make sword';
   const fire = state.hazards.fires.findIndex(
     (burning, i) => burning && sightAt(state, i % width, Math.floor(i / width)) === 'shown',
   );

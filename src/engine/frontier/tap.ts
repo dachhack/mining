@@ -2,7 +2,9 @@
 // (src/app/lab/campWorld.ts), in the engine. In order:
 //
 // 1. a square outside every camp's circle does nothing ('fog' or 'greyed');
-// 1a. a burning square: the tap puts its fire out ('fire'; fire.ts);
+// 1a. a dragon there: with a sword in the store the tap drives it off
+//    ('dragon'), without one it does nothing ('needsSword'; dragons.ts);
+// 1b. a burning square: the tap puts its fire out ('fire'; fire.ts);
 // 2. an animal there is caught, even on a camp's ground;
 // 3. a camp's own 3 x 3 is never mined ('camp');
 // 4. grass, a tree or an apple tree is taken before the block under it;
@@ -25,7 +27,12 @@
 
 import { blockDefByCode } from '../../data';
 import type { ItemId, ItemStack } from '../../data';
-import { FRONTIER_PICKAXE, FRONTIER_PUMP, FRONTIER_SURFACE } from '../../data/frontier';
+import {
+  FRONTIER_DRAGON,
+  FRONTIER_PICKAXE,
+  FRONTIER_PUMP,
+  FRONTIER_SURFACE,
+} from '../../data/frontier';
 import { depthAt, mayMine, topBlockAt } from '../heightmap';
 import type { HigherNeighbour, MineRefusal } from '../heightmap';
 import { labMine } from '../lab';
@@ -34,6 +41,7 @@ import { gained, harvestAt } from './surface';
 import { isFlooded, pumpIndexAt, takeWaterOpened, withFlood } from './water';
 import { isBurning, putOut } from './fire';
 import { gasOpened } from './gas';
+import { dragonAt, driveOff } from './dragons';
 import type { GasOutcome } from './gas';
 import type { HarvestKind } from './surface';
 import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from './state';
@@ -50,7 +58,9 @@ import type { FrontierState } from './state';
  *   or `needsTool`);
  * - 'flooded': the square is flooded and no pump is in the store (water.ts);
  * - 'pump': a pump was set on the flooded square, or picked up (`pump`);
- * - 'fire': the fire burning on the square was put out (fire.ts).
+ * - 'fire': the fire burning on the square was put out (fire.ts);
+ * - 'dragon': the dragon on the square was driven off with a sword (dragons.ts);
+ * - 'needsSword': a dragon is on the square and no sword is in the store.
  */
 export type FrontierTapKind =
   | 'mined'
@@ -62,7 +72,9 @@ export type FrontierTapKind =
   | 'tooHard'
   | 'flooded'
   | 'pump'
-  | 'fire';
+  | 'fire'
+  | 'dragon'
+  | 'needsSword';
 
 export interface FrontierTap {
   kind: FrontierTapKind;
@@ -127,6 +139,12 @@ export function frontierTap(state: FrontierState, x: number, y: number): Frontie
   const sight = sightAt(state, x, y);
   if (sight !== 'shown') {
     return nothing(sight);
+  }
+  // A dragon first: driven off with a sword, else nothing (dragons.ts).
+  const dragon = dragonAt(state, x, y);
+  if (dragon !== null) {
+    if ((state.inventory.get(FRONTIER_DRAGON.sword) ?? 0) < 1) return nothing('needsSword');
+    return { ...nothing('dragon'), state: driveOff(state, dragon.id) };
   }
   // A fire is put out before anything else on the square (fire.ts).
   if (isBurning(state, x, y)) {
@@ -254,6 +272,10 @@ export function previewTap(
   }
   const sight = sightAt(state, x, y);
   if (sight !== 'shown') return { kind: sight, gain: [] };
+  if (dragonAt(state, x, y) !== null) {
+    const sword = (state.inventory.get(FRONTIER_DRAGON.sword) ?? 0) > 0;
+    return { kind: sword ? 'dragon' : 'needsSword', gain: [] };
+  }
   if (isBurning(state, x, y)) return { kind: 'fire', gain: [] };
   const animalHere = state.animals.some((a) => a.x === x && a.y === y);
   if (animalHere) return { kind: 'harvested', gain: [{ item: 'animal', count: 1 }] };

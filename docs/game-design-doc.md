@@ -129,6 +129,7 @@ A run is a sequence of **shifts** (owner: "Keep shifts").
 | Flooded (hazards plan section 2), with a pump in the store | Sets the pump there |
 | A pump | Picks it up again |
 | A fire (section 4.6) | Puts it out |
+| A dragon (section 4.7), with a sword in the store | Drives it off |
 
 ### 4.2 End shift [Default]
 
@@ -147,8 +148,9 @@ In this order:
 8. **Hunger:** each item of upkeep that cannot be paid costs 1 health (section 5).
 9. **Fires** spread and burn out their squares (section 4.6).
 10. **Pumps** drain [Default] 2 squares of their flood each (section 4.5).
-11. **Rain** (hazards plan section 1; owner, 2026-11-24): on [Default] 1 night in 5 it rains (`FRONTIER_RAIN`). Each **low spot** (a dug square that no face neighbour is deeper than, and that at least one is shallower than) is filled with a [Default] 1 in 2 chance: one block of clay (1 in 3) or dirt goes back on top, so it is 1 shallower. What was on top is buried, not lost. A camp's ground, flooded squares and burning squares are never filled. The level rule still holds after it. Dug does not go down.
-12. The next shift starts with a full set of taps.
+11. **Dragons** fly, eat and set fires; a new one may come (section 4.7).
+12. **Rain** (hazards plan section 1; owner, 2026-11-24): on [Default] 1 night in 5 it rains (`FRONTIER_RAIN`). Each **low spot** (a dug square that no face neighbour is deeper than, and that at least one is shallower than) is filled with a [Default] 1 in 2 chance: one block of clay (1 in 3) or dirt goes back on top, so it is 1 shallower. What was on top is buried, not lost. A camp's ground, flooded squares and burning squares are never filled. The level rule still holds after it. Dug does not go down.
+13. The next shift starts with a full set of taps.
 
 ### 4.3 Mining and the level rule [Decided; numbers Default]
 
@@ -179,6 +181,14 @@ The owner (2026-11-24): "Pockets of gas can explode starting at level 4. This bl
 - **Fires** start on everything that can burn within [Default] 3 squares: grass, trees, apple trees, stumps, saplings and camps' ground.
 - **Putting a fire out:** a tap on it, 1 tap, before anything else on the square.
 - **A fire left burning** at End shift spreads to what can burn beside it, then burns its own square out: plants and stumps are gone for good (nothing grows back there); a camp loses one upgrade a night (the lantern, the pen and its animals, the smelter, then a level; a deep camp keeps its level). A fire in the fog burns unseen.
+
+### 4.7 Dragons and the sword [Decided; numbers Default]
+
+The owner (2026-11-24): "Wandering dragons can eat your sheep and apples and set fire to things. They don't go away until you get a sword and drive them away." Plan: `docs/plans/hazards.md`, section 4.
+
+- **When:** from [Default] shift 20, at End shift, a dragon flies in at the map's edge on [Default] 1 night in 12, while fewer than [Default] 1 are on the map (`FRONTIER_DRAGON`).
+- **Each night** each dragon flies [Default] 4 squares, over anything; eats one animal on or beside its square (or, on a camp's ground, one from its pen) and every apple on the apple trees on or beside it (they come back as if picked); and on [Default] 1 night in 3 sets fire to one thing that can burn on or beside it. "Beside" is the 8 squares round it.
+- **The sword** (question 187): made at a camp with a smelter from 3 iron ingots and 2 wood, or [Default] 60 coins at the market from a level-3 camp. A tap on a dragon with a sword drives it off the map (1 tap); the sword is kept. Without one, a tap on a dragon does nothing.
 
 ## 5. The crew
 

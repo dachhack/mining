@@ -17,7 +17,7 @@ import type { RngState } from '../rng';
  * not loaded into a new shape. Separate from the old game's STATE_VERSION
  * while the two rule sets live side by side.
  */
-export const FRONTIER_STATE_VERSION = 15; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`; 12: `marketOpen`; 13: `contracts` (several held) for `contract`; 14: `hazards` (flooded squares, pumps); 15: `hazards.fires`
+export const FRONTIER_STATE_VERSION = 16; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`; 12: `marketOpen`; 13: `contracts` (several held) for `contract`; 14: `hazards` (flooded squares, pumps); 15: `hazards.fires`; 16: `hazards.dragons`, `nextDragonId`
 
 /** What grows on a square: nothing, grass, a tree or an apple tree. */
 export const NO_FEATURE = 0;
@@ -152,6 +152,18 @@ export interface FrontierHazards {
   pumps: FrontierPump[];
   /** True where a square is burning (fire.ts; section 3), row by row. */
   fires: boolean[];
+  /** The dragons on the map (dragons.ts; section 4). */
+  dragons: FrontierDragon[];
+  /** The id the next dragon will get. */
+  nextDragonId: number;
+}
+
+/** A dragon, on square (x, y). */
+export interface FrontierDragon {
+  /** A number that names the dragon; new dragons get the next one. */
+  id: number;
+  x: number;
+  y: number;
 }
 
 /** A pump set on a flooded square. */
@@ -166,5 +178,7 @@ export function noHazards(squares: number): FrontierHazards {
     flooded: new Array<boolean>(squares).fill(false),
     pumps: [],
     fires: new Array<boolean>(squares).fill(false),
+    dragons: [],
+    nextDragonId: 1,
   };
 }

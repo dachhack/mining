@@ -42,7 +42,7 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
     });
   }
 
-  it('between them, they place camps, upgrade one, build a smelter, smelt, make a pickaxe, make or buy the drills, mine with them, hang a lantern, reach level 4, catch animals, take plants, mine clay, rest, sell and buy at the market, plant saplings, make hay, keep a pen that breeds, take and deliver contracts, place a deep camp, see rain fill a pit, hit water and pump it out, set off gas and put out its fires, finish a run, and lose a crew', () => {
+  it('between them, they place camps, upgrade one, build a smelter, smelt, make a pickaxe, make or buy the drills, mine with them, hang a lantern, reach level 4, catch animals, take plants, mine clay, rest, sell and buy at the market, plant saplings, make hay, keep a pen that breeds, take and deliver contracts, place a deep camp, see rain fill a pit, hit water and pump it out, set off gas and put out its fires, let a fire burn, meet a dragon and drive one off, finish a run, and lose a crew', () => {
     const seen = new Set<string>();
     const fireCount = (x: FrontierState): number => x.hazards.fires.filter((f) => f).length;
     for (const name of files) {
@@ -64,12 +64,18 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
           // Rain filled a square: the cube changed at the night (hazards PR 1).
           if ((verb === 'endShift' || verb === 'rest') && next.cube !== state.cube)
             seen.add('rain');
+          const ends = verb === 'endShift' || verb === 'rest';
+          if (ends && fireCount(state) > 0) seen.add('burned');
+          if (ends && next.hazards.dragons.length > state.hazards.dragons.length)
+            seen.add('dragonCame');
           const pumps = (x: typeof state): number => x.hazards.pumps.length;
           if ((verb === 'endShift' || verb === 'rest') && pumps(next) < pumps(state))
             seen.add('pumpBack');
           if (verb === 'upgrade' && next.camps.some((c) => c.level === 4)) seen.add('level4');
         } else if (next.hazards.pumps.length > state.hazards.pumps.length) {
           seen.add('pumpSet');
+        } else if (next.hazards.dragons.length < state.hazards.dragons.length) {
+          seen.add('dragonDriven');
         } else if (fireCount(next) < fireCount(state)) {
           seen.add('fireOut');
         } else if (next.mined > state.mined) {
@@ -99,6 +105,9 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
         'pumpBack',
         'blast',
         'fireOut',
+        'burned',
+        'dragonCame',
+        'dragonDriven',
         'born',
         'buildPen',
         'deliver',

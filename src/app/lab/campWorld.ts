@@ -412,6 +412,8 @@ export function campWorldOf(state: FrontierState): CampWorld {
  * - 'flooded': the square is flooded and no pump is held (hazards PR 2);
  * - 'pump': a pump was set on the flooded square, or picked up (`pump` says which);
  * - 'fire': the fire on the square was put out (hazards PR 3);
+ * - 'dragon': the dragon on the square was driven off with a sword (hazards PR 4);
+ * - 'needsSword': a dragon is on the square and no sword is held;
  * - 'noTaps': the shift has no taps left (A4);
  * - 'over': the run has ended (A4).
  */
@@ -426,6 +428,8 @@ export type CampTapKind =
   | 'flooded'
   | 'pump'
   | 'fire'
+  | 'dragon'
+  | 'needsSword'
   | 'noTaps'
   | 'over';
 
@@ -493,8 +497,8 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
   if (tap.kind === 'pump') {
     return { ...answer('pump'), world: after, pump: tap.pump };
   }
-  if (tap.kind === 'fire') {
-    return { ...answer('fire'), world: after };
+  if (tap.kind === 'fire' || tap.kind === 'dragon') {
+    return { ...answer(tap.kind), world: after };
   }
   if (tap.kind === 'harvested') {
     const gain = tap.gain[0] ?? { item: 'grass', count: 0 }; // a harvest always gives one stack

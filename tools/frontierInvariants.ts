@@ -61,9 +61,13 @@
 // - GAS AND FIRE: on a mining tap, squares other than the one mined change
 //   depth only if gas exploded, only within FRONTIER_GAS.blastRadius, by 1,
 //   and the level rule holds everywhere after; a fire starts only by a blast
-//   (within FRONTIER_GAS.fireRadius) or at night beside a fire, and only on
-//   something that can burn; a tap puts out exactly the fire it is on; at
+//   (within FRONTIER_GAS.fireRadius) or at night beside a fire or a dragon,
+//   and only on something that can burn; a tap puts out exactly the fire it is on; at
 //   night every fire burning before goes out, leaving nothing growing.
+// - DRAGONS: never more than FRONTIER_DRAGON.most, always on the map; one
+//   comes only at night, at the edge, from FRONTIER_DRAGON.fromShift; they
+//   move only at night, at most FRONTIER_DRAGON.steps squares; one leaves
+//   only by a tap on it with a sword held, and the sword stays.
 
 import { BLOCKS } from '../src/data';
 import {
@@ -71,6 +75,7 @@ import {
   FRONTIER_CAMP_PLACE,
   FRONTIER_CONTRACTS,
   FRONTIER_DEEP_CAMP,
+  FRONTIER_DRAGON,
   FRONTIER_GAS,
   FRONTIER_TOOLS,
   FRONTIER_LANTERN,
@@ -305,7 +310,11 @@ export function checkStep(
             (st) =>
               isSquare(after.cube, x + st.dx, y + st.dy) && burningBefore(x + st.dx, y + st.dy),
           );
-          if (!beside) say(`a fire started on ${x},${y} at night with no fire beside it`);
+          const dragonNear = after.hazards.dragons.some(
+            (d) => Math.abs(d.x - x) <= 1 && Math.abs(d.y - y) <= 1,
+          );
+          if (!beside && !dragonNear)
+            say(`a fire started on ${x},${y} at night with no fire or dragon beside it`);
         } else {
           const near =
             Math.abs(x - (tx ?? -99)) <= FRONTIER_GAS.fireRadius &&
@@ -313,7 +322,12 @@ export function checkStep(
           if (!exploded || !near) say(`a fire started on ${x},${y} by "${step}"`);
         }
       }
-      if (was && burning && endsShift) say(`the fire on ${x},${y} burned on through the night`);
+      // A camp's ground can burn again: a dragon beside it may set it alight once more.
+      const dragonBy = after.hazards.dragons.some(
+        (d) => Math.abs(d.x - x) <= 1 && Math.abs(d.y - y) <= 1,
+      );
+      if (was && burning && endsShift && !dragonBy)
+        say(`the fire on ${x},${y} burned on through the night`);
       if (was && endsShift) {
         if (
           (after.features[i] ?? NO_FEATURE) !== NO_FEATURE ||
@@ -324,6 +338,37 @@ export function checkStep(
       if (was && !burning && !endsShift && !(outcome.tap?.kind === 'fire' && x === tx && y === ty))
         say(`the fire on ${x},${y} went out by "${step}"`);
     });
+  }
+
+  // Dragons (hazards PR 4).
+  {
+    const dw = after.cube.size.x;
+    const dh = after.cube.size.y;
+    if (after.hazards.dragons.length > FRONTIER_DRAGON.most)
+      say(`${after.hazards.dragons.length} dragons on the map`);
+    for (const d of after.hazards.dragons) {
+      if (d.x < 0 || d.y < 0 || d.x >= dw || d.y >= dh) say(`dragon ${d.id} is off the map`);
+      const was = before.hazards.dragons.find((b) => b.id === d.id);
+      if (was === undefined) {
+        const edge = d.x === 0 || d.y === 0 || d.x === dw - 1 || d.y === dh - 1;
+        if (!endsShift) say(`dragon ${d.id} came by "${step}"`);
+        if (!edge) say(`dragon ${d.id} came in at ${d.x},${d.y}, not the edge`);
+        if (before.shift < FRONTIER_DRAGON.fromShift)
+          say(`dragon ${d.id} came on shift ${before.shift}`);
+      } else {
+        const moved = Math.abs(d.x - was.x) + Math.abs(d.y - was.y);
+        if (moved > 0 && !endsShift) say(`dragon ${d.id} moved by "${step}"`);
+        if (moved > FRONTIER_DRAGON.steps) say(`dragon ${d.id} flew ${moved} squares`);
+      }
+    }
+    for (const d of before.hazards.dragons) {
+      if (after.hazards.dragons.some((a) => a.id === d.id)) continue;
+      const [tx, ty] = verb === 'tap' ? (step.split(' ')[1] ?? '').split(',').map(Number) : [];
+      const sword = (before.inventory.get(FRONTIER_DRAGON.sword) ?? 0) > 0;
+      if (!(outcome.tap?.kind === 'dragon' && tx === d.x && ty === d.y && sword))
+        say(`dragon ${d.id} left by "${step}"`);
+      if ((after.inventory.get(FRONTIER_DRAGON.sword) ?? 0) < 1) say('the sword was used up');
+    }
   }
 
   // Shifts and health.

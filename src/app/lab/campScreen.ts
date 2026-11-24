@@ -22,6 +22,7 @@ import { BLOCKS, blockDefByCode, ITEMS } from '../../data';
 import type { ItemId, ItemStack } from '../../data';
 import {
   FRONTIER_DEEP_CAMP,
+  FRONTIER_DRAGON,
   FRONTIER_DRILL,
   FRONTIER_LANTERN,
   FRONTIER_MARKET,
@@ -140,7 +141,7 @@ import type { Recipe } from './recipes';
 import { emptyHistory, noteAction, undoCount, undoLast } from './undoHistory';
 import type { UndoHistory } from './undoHistory';
 import { shadowEdges } from './shadows';
-import { drawFire, drawPump, drawWater } from './hazardArt';
+import { drawDragon, drawFire, drawPump, drawWater } from './hazardArt';
 import { showNight } from './night';
 import type { Night } from './night';
 
@@ -207,7 +208,15 @@ function shiftText(report: ShiftReport, turn: CampTurn, rested: boolean): string
     report.burned > 0
       ? ` Fire 🔥 burned out ${report.burned} ${report.burned === 1 ? 'square' : 'squares'}${report.campUpgradesBurned > 0 ? `, and a camp lost ${report.campUpgradesBurned === 1 ? 'an upgrade' : `${report.campUpgradesBurned} upgrades`}` : ''}${report.fireSpread > 0 ? `; it spread to ${report.fireSpread} more: put them out` : ''}.`
       : '';
-  const market = `${born}${rain}${pumped}${burnt}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
+  const dragon = [
+    report.dragonCame ? ' A dragon 🐉 flew in.' : '',
+    report.dragonAte > 0
+      ? ` A dragon ate ${report.dragonAte === 1 ? 'an animal' : `${report.dragonAte} animals`}.`
+      : '',
+    report.dragonApples > 0 ? ` A dragon ate ${report.dragonApples} apples.` : '',
+    report.dragonFires > 0 ? ' A dragon set a fire 🔥.' : '',
+  ].join('');
+  const market = `${born}${rain}${pumped}${burnt}${dragon}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
   if (turn.status === 'finished') {
     return `${start}. That was the last shift: the run is over.`;
   }
@@ -278,6 +287,11 @@ function effectMs(kind: Effect['kind']): number {
 }
 
 /** The display name of an item. */
+/** What the market asks for a sword (hazards PR 4). */
+function swordCoins(): number {
+  return FRONTIER_MARKET.buyPrices.find((l) => l.item === FRONTIER_DRAGON.sword)?.coins ?? 0;
+}
+
 /** What the market asks for a pump (hazards PR 2). */
 function pumpCoins(): number {
   return FRONTIER_MARKET.buyPrices.find((l) => l.item === FRONTIER_PUMP.item)?.coins ?? 0;
@@ -708,6 +722,12 @@ export function mountCampLab(
     }
 
     drawAnimals(ctx, c);
+    // Dragons (hazards PR 4), on lit squares only.
+    for (const dragon of world.hazards.dragons) {
+      if (sightOf(dragon.x, dragon.y) !== 'shown') continue;
+      const { px, py } = toPx(dragon.x, dragon.y);
+      drawDragon(ctx, px + c / 2, py + c / 2, c);
+    }
     if (mode.kind === 'placing' && mode.target !== null) {
       drawPlacePreview(ctx, mode.target, c, now);
     }
@@ -887,6 +907,7 @@ export function mountCampLab(
       if (burning) fires.push(`${i % width},${Math.floor(i / width)}`);
     });
     canvas.dataset['fires'] = fires.join(' ');
+    canvas.dataset['dragons'] = world.hazards.dragons.map((d) => `${d.x},${d.y}`).join(' ');
   }
 
   /** True if square (x, y) is on the map, not in fog, and has a tree or an apple tree: part of a forest. */
@@ -1434,6 +1455,7 @@ export function mountCampLab(
       'appleSapling',
       'hay',
       FRONTIER_PUMP.item,
+      FRONTIER_DRAGON.sword,
     ]) {
       const count = counts.get(item) ?? 0;
       if (count > 0) all.push({ item, count, icon: () => labItemIcon(item, 'lab-chip-icon') });
@@ -2784,6 +2806,19 @@ export function mountCampLab(
         `Flooded 💧: buy a pump at the market 🏪 (${pumpCoins()} coins), then tap the water to set it.`,
         true,
       );
+      return;
+    }
+    if (result.kind === 'needsSword') {
+      setHint(
+        `A dragon 🐉! It eats animals and apples and sets fires until a sword ⚔ drives it off: make one at a smelter (3 iron ingots, 2 wood) or buy one at the market 🏪 (${swordCoins()} coins, from a level-3 camp).`,
+        true,
+      );
+      return;
+    }
+    if (result.kind === 'dragon') {
+      remember({ kind: 'tap', x, y });
+      setWorld(result.world);
+      setHint('You drove the dragon off with your sword ⚔.', false);
       return;
     }
     if (result.kind === 'fire') {

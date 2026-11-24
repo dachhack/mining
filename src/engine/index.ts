@@ -568,6 +568,7 @@ export type {
   Feature,
   FrontierAnimal,
   FrontierCamp,
+  FrontierDragon,
   FrontierHazards,
   FrontierHeldContract,
   FrontierPump,

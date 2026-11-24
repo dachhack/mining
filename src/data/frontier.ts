@@ -339,6 +339,17 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
     output: { item: 'drill', count: 1 },
     needsSmelter: true,
   },
+  // A sword drives a dragon off (hazards plan, section 4; question 187).
+  {
+    id: 'sword',
+    name: 'Sword',
+    inputs: [
+      { item: 'ironIngot', count: 3 },
+      { item: 'wood', count: 2 },
+    ],
+    output: { item: 'sword', count: 1 },
+    needsSmelter: true,
+  },
   // Hay from grass (progression plan section 6.3): no smelter.
   {
     id: 'hay',
@@ -500,6 +511,8 @@ export const FRONTIER_MARKET = {
     { item: 'steelDrill', count: 1, coins: 250, fromLevel: 3 },
     { item: 'ironPickaxe', count: 1, coins: 60, fromLevel: 3 },
     { item: 'copperLantern', count: 1, coins: 40, fromLevel: 3 },
+    // The sword drives a dragon off (hazards plan, section 4).
+    { item: 'sword', count: 1, coins: 60, fromLevel: 3 },
     // From the first tier-1 contract (phase 4): the deep camp's kit, and
     // wood and food in bulk, so farming becomes a choice.
     { item: 'campKit', count: 1, coins: 150, afterTier1: true },
@@ -764,4 +777,25 @@ export const FRONTIER_GAS = {
   explodeChance: 0.5,
   blastRadius: 1,
   fireRadius: 3,
+};
+
+/**
+ * Dragons (hazards plan, section 4): "Wandering dragons can eat your sheep
+ * and apples and set fire to things. They don't go away until you get a
+ * sword and drive them away." From shift `fromShift`, at End shift, a dragon
+ * flies in at the map's edge with a chance of `chance`, while fewer than
+ * `most` are on the map. Each night each dragon flies `steps` squares (over
+ * anything), eats one animal on or beside its square (or, on a camp's
+ * ground, one from its pen) and every apple on the apple trees on or beside
+ * its square, and with a chance of `fireChance` sets fire to one thing that
+ * can burn on or beside its square. A tap on it with a sword in the store
+ * (`sword`) drives it off the map; the sword is kept.
+ */
+export const FRONTIER_DRAGON = {
+  fromShift: 20,
+  chance: 1 / 12,
+  most: 1,
+  steps: 4,
+  fireChance: 1 / 3,
+  sword: 'sword' as ItemId,
 };

@@ -1,6 +1,6 @@
 // The hazards' drawings (docs/plans/hazards.md): water standing on a flooded
-// square and the pump on it; flames on a burning square. Drawn over a
-// square's block, inside its box.
+// square and the pump on it; flames on a burning square; a dragon. Drawn over
+// a square's block, inside its box.
 // This is the screen's own drawing: nothing here changes the game.
 
 import type { SquareBox } from './labDraw';
@@ -14,6 +14,9 @@ export const HAZARD_PAINT = {
   flameOuter: '#f0632a',
   flameInner: '#ffd34d',
   scorch: 'rgba(40, 20, 10, 0.35)',
+  dragonBody: '#7a2fa0',
+  dragonWing: '#b45bd6',
+  dragonEye: '#ffe066',
 };
 
 /**
@@ -104,5 +107,46 @@ export function drawFire(
   tongue(left + s * 0.64, s * (0.5 - flick), s * 0.16, HAZARD_PAINT.flameOuter);
   tongue(left + s * 0.4, s * (0.36 + flick), s * 0.1, HAZARD_PAINT.flameInner);
   tongue(left + s * 0.64, s * (0.28 - flick), s * 0.08, HAZARD_PAINT.flameInner);
+  ctx.restore();
+}
+
+/**
+ * A dragon, centred on (cx, cy), `c` pixels a square: a body with two
+ * spread wings, a tail and a glowing eye, a little bigger than a square so it
+ * stands out on the map.
+ */
+export function drawDragon(ctx: CanvasRenderingContext2D, cx: number, cy: number, c: number): void {
+  const s = c * 1.1;
+  ctx.save();
+  ctx.translate(cx, cy);
+  // The wings.
+  ctx.fillStyle = HAZARD_PAINT.dragonWing;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(0, -s * 0.05);
+    ctx.lineTo(side * s * 0.5, -s * 0.35);
+    ctx.lineTo(side * s * 0.42, s * 0.05);
+    ctx.lineTo(side * s * 0.12, s * 0.08);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // The body, head and tail.
+  ctx.fillStyle = HAZARD_PAINT.dragonBody;
+  ctx.beginPath();
+  ctx.ellipse(0, s * 0.05, s * 0.12, s * 0.26, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(0, -s * 0.24, s * 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.05, s * 0.28);
+  ctx.quadraticCurveTo(s * 0.2, s * 0.45, s * 0.1, s * 0.5);
+  ctx.quadraticCurveTo(s * 0.12, s * 0.42, s * 0.04, s * 0.3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = HAZARD_PAINT.dragonEye;
+  ctx.beginPath();
+  ctx.arc(s * 0.04, -s * 0.26, s * 0.025, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }

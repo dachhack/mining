@@ -13,6 +13,7 @@ import {
   FRONTIER_NEW_CAMP_COST,
   FRONTIER_PEN,
   FRONTIER_PICKAXE,
+  FRONTIER_DRAGON,
   FRONTIER_GAS,
   FRONTIER_PUMP,
   FRONTIER_RAIN,
@@ -87,6 +88,10 @@ export function frontierHelpText(): string {
     `  the squares within ${FRONTIER_GAS.blastRadius} (where the level rule allows; nothing gained) and sets fire (*) to what can burn within ${FRONTIER_GAS.fireRadius}:`,
     '  grass, trees, stumps, saplings and camps. A tap puts a fire out. A fire left at End shift spreads to what can',
     '  burn beside it, then burns its square out: plants never grow back there; a camp loses one upgrade.',
+    `  Dragons (D): from shift ${FRONTIER_DRAGON.fromShift}, about 1 night in ${Math.round(1 / FRONTIER_DRAGON.chance)} one flies in at the edge (at most ${FRONTIER_DRAGON.most}). Each night it flies`,
+    `  ${FRONTIER_DRAGON.steps} squares, eats an animal beside it (or one from the pen of the camp it is on) and the apples round it,`,
+    '  and sometimes sets a fire. It stays until "tap X,Y" on it with a sword drives it off ("make sword" at a smelter,',
+    '  or buy one at the market from a level-3 camp). The sword is kept.',
     '- "rest N" rests at camp N: full health, then the shift ends. "close" closes the mine: the run ends.',
     `- "smelter N" builds a smelter at camp N (level ${FRONTIER_SMELTER.minLevel} or more; ${cost(FRONTIER_SMELTER.cost)}; one a camp, lost with it).`,
     `  With a smelter anywhere, "make R" makes recipe R: ${FRONTIER_RECIPES.filter(

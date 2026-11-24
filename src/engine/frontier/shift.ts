@@ -16,6 +16,8 @@
 //      (question 148: "Hunger only"); at 0 health the run is lost;
 //    - fires spread and burn out their squares (fire.ts; hazards plan section 3);
 //    - pumps drain their floods (water.ts; hazards plan section 2);
+//    - dragons fly, eat and set fires, and a new one may come (dragons.ts;
+//      hazards plan section 4);
 //    - it may rain, filling low spots (rain.ts; hazards plan section 1).
 //
 // Resting, at a camp (question 156: "Only at a camp"), restores the crew's
@@ -50,6 +52,7 @@ import { plant, plantRefusal } from './farming';
 import { rainfall } from './rain';
 import { drainPumps, isFlooded } from './water';
 import { burnFires } from './fire';
+import { nightOfDragons } from './dragons';
 import { breedPens, penAct, penRefusal } from './pens';
 import { isMarketDay, trade, tradeRefusal } from './market';
 import { animalAt } from './surface';
@@ -135,6 +138,14 @@ export interface ShiftReport {
   fireSpread: number;
   /** Camp upgrades lost to fire. */
   campUpgradesBurned: number;
+  /** Animals the dragons ate, roaming and penned (dragons.ts). */
+  dragonAte: number;
+  /** Apples the dragons ate. */
+  dragonApples: number;
+  /** Fires the dragons set. */
+  dragonFires: number;
+  /** True if a new dragon flew in. */
+  dragonCame: boolean;
 }
 
 /**
@@ -264,7 +275,10 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
   });
   const burnt = fire.state;
   // Pumps drain their floods (water.ts).
-  const pumping = drainPumps(burnt, bred.inventory);
+  const pumped = drainPumps(burnt, bred.inventory);
+  // Dragons fly, eat and set fires; a new one may come (dragons.ts).
+  const dragon = nightOfDragons({ ...burnt, hazards: pumped.hazards, animals }, rng);
+  const pumping = { ...pumped, hazards: dragon.state.hazards };
   // Rain, last, so the morning shows where it fell (rain.ts). It does not
   // fill a flooded or burning square.
   const rain = rainfall(
@@ -279,16 +293,16 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
     ...state,
     cube: rain.cube,
     hazards: pumping.hazards,
-    animals,
+    animals: dragon.state.animals,
     nextAnimalId,
     rng,
     features: burnt.features,
-    apples: burnt.apples,
-    regrowIn: burnt.regrowIn,
+    apples: dragon.state.apples,
+    regrowIn: dragon.state.regrowIn,
     stumps: burnt.stumps,
     planted: burnt.planted,
     grassIn: burnt.grassIn,
-    camps: burnt.camps,
+    camps: dragon.state.camps,
     inventory: pumping.inventory,
     health,
     shift: state.shift + 1,
@@ -322,6 +336,10 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
       burned: fire.burned,
       fireSpread: fire.spread,
       campUpgradesBurned: fire.campUpgradesLost,
+      dragonAte: dragon.animalsEaten,
+      dragonApples: dragon.applesEaten,
+      dragonFires: dragon.fires.length,
+      dragonCame: dragon.came,
     },
   };
 }
@@ -561,7 +579,8 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
       tap.kind !== 'mined' &&
       tap.kind !== 'harvested' &&
       tap.kind !== 'pump' &&
-      tap.kind !== 'fire'
+      tap.kind !== 'fire' &&
+      tap.kind !== 'dragon'
     ) {
       return refused(state, tap.kind, tap);
     }
