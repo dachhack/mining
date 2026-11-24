@@ -574,7 +574,24 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
     ],
     pays: 75,
   },
-  // Tier 2: bulk stone, ore and ingots.
+  // Clay in volume, for bricks, pottery and roads (owner, after the 0.11.0
+  // build: "We need some high volume clay contracts for bricks and pottery
+  // and roads"). A base camp mines clay, layers 1 to 3.
+  {
+    id: 't1-pottery',
+    tier: 1,
+    name: 'Clay for pottery',
+    asks: [{ item: 'clay', count: 40 }],
+    pays: 40,
+  },
+  {
+    id: 't1-bricks',
+    tier: 1,
+    name: 'Clay for bricks',
+    asks: [{ item: 'clay', count: 80 }],
+    pays: 70,
+  },
+  // Tier 2: bulk stone, ore, ingots and clay.
   {
     id: 't2-stone',
     tier: 2,
@@ -612,6 +629,20 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
       { item: 'copperIngot', count: 20 },
     ],
     pays: 450,
+  },
+  {
+    id: 't2-road',
+    tier: 2,
+    name: 'Clay for a road',
+    asks: [{ item: 'clay', count: 200 }],
+    pays: 200,
+  },
+  {
+    id: 't2-town',
+    tier: 2,
+    name: 'Bricks for a town',
+    asks: [{ item: 'clay', count: 400 }],
+    pays: 380,
   },
   // Tier 3: crystal, rare ore and relics.
   { id: 't3-crystal', tier: 3, name: 'Crystal', asks: [{ item: 'crystal', count: 10 }], pays: 700 },

@@ -369,7 +369,7 @@ const FRONTIER_RUNS: {
     policy: 'careful',
     maxShifts: 100,
     description:
-      "The careful policy for a whole run of 100 shifts (docs/plans/progression-phases.md): it opens and closes the market after each market day's night, buys an iron and a steel drill, saplings, wood and a camp kit, smelts and makes a pickaxe and lanterns, brings three camps to level 4, flattens a patch 3 deep and places a deep camp, plants saplings, keeps a pen and makes hay, holds several contracts at once and delivers 17, sells its surplus, and the run ends finished, scored in coins",
+      "The careful policy for a whole run of 100 shifts (docs/plans/progression-phases.md): it opens and closes the market after each market day's night, buys an iron and a steel drill, saplings, wood and a camp kit, smelts and makes a pickaxe and lanterns, brings three camps to level 4, flattens a patch 3 deep and places a deep camp, plants saplings, keeps a pen and makes hay, holds several contracts at once and delivers 18, eight of them clay, sells its surplus, and the run ends finished, scored in coins",
   },
   {
     name: 'idle-seed-2-lost',
