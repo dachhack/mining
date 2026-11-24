@@ -137,8 +137,8 @@ export interface Pumping {
  * FRONTIER_PUMP.drainPerShift squares of its flood: the flooded squares
  * joined to its own through face neighbours, the farthest from it first (in
  * steps through the flood; then row by row), its own square last. Draining
- * the farthest first keeps what is left joined to the pump. A pump whose
- * square is dry goes back to the store.
+ * the farthest first keeps what is left joined to the pump. Then every pump
+ * whose square is dry goes back to the store.
  */
 export function drainPumps(state: FrontierState, inventory: Map<string, number>): Pumping {
   const { hazards } = state;
@@ -182,12 +182,19 @@ export function drainPumps(state: FrontierState, inventory: Map<string, number>)
       flooded[i] = false;
       drained += 1;
     }
-    if (flooded[own] === true) {
-      pumps.push(pump);
-    } else {
-      store = gained(store, { item: FRONTIER_PUMP.item, count: 1 });
-      pumpsBack += 1;
-    }
+    pumps.push(pump);
   }
-  return { hazards: { ...hazards, flooded, pumps }, inventory: store, drained, pumpsBack };
+  // A pump whose square is dry now (its own flood is done, or another pump
+  // in the same flood drained it) goes back to the store.
+  const working = pumps.filter((p) => flooded[p.x + width * p.y] === true);
+  for (let k = working.length; k < pumps.length; k += 1) {
+    store = gained(store, { item: FRONTIER_PUMP.item, count: 1 });
+    pumpsBack += 1;
+  }
+  return {
+    hazards: { ...hazards, flooded, pumps: working },
+    inventory: store,
+    drained,
+    pumpsBack,
+  };
 }

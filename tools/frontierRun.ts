@@ -332,8 +332,17 @@ export function unpumpedFlood(state: FrontierState): { x: number; y: number } | 
   return null;
 }
 
-/** Set a pump from the store on a lit flood no pump drains (hazards PR 2), or `null`. */
+/**
+ * Deal with the hazards: put out a lit fire (hazards PR 3), the first row by
+ * row; else set a pump from the store on a lit flood no pump drains (PR 2).
+ * `null` if there is nothing to do.
+ */
 export function hazardStep(state: FrontierState): FrontierStep | null {
+  const width = state.cube.size.x;
+  const fire = state.hazards.fires.findIndex(
+    (burning, i) => burning && sightAt(state, i % width, Math.floor(i / width)) === 'shown',
+  );
+  if (fire >= 0) return `tap ${fire % width},${Math.floor(fire / width)}`;
   if ((state.inventory.get(FRONTIER_PUMP.item) ?? 0) === 0) return null;
   const flood = unpumpedFlood(state);
   return flood === null ? null : `tap ${flood.x},${flood.y}`;

@@ -17,7 +17,7 @@ import type { RngState } from '../rng';
  * not loaded into a new shape. Separate from the old game's STATE_VERSION
  * while the two rule sets live side by side.
  */
-export const FRONTIER_STATE_VERSION = 14; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`; 12: `marketOpen`; 13: `contracts` (several held) for `contract`; 14: `hazards` (flooded squares, pumps)
+export const FRONTIER_STATE_VERSION = 15; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`; 12: `marketOpen`; 13: `contracts` (several held) for `contract`; 14: `hazards` (flooded squares, pumps); 15: `hazards.fires`
 
 /** What grows on a square: nothing, grass, a tree or an apple tree. */
 export const NO_FEATURE = 0;
@@ -150,6 +150,8 @@ export interface FrontierHazards {
   flooded: boolean[];
   /** Pumps set on flooded squares, in the order they were set (water.ts). */
   pumps: FrontierPump[];
+  /** True where a square is burning (fire.ts; section 3), row by row. */
+  fires: boolean[];
 }
 
 /** A pump set on a flooded square. */
@@ -160,5 +162,9 @@ export interface FrontierPump {
 
 /** No hazard marks, for a world of `squares` squares. */
 export function noHazards(squares: number): FrontierHazards {
-  return { flooded: new Array<boolean>(squares).fill(false), pumps: [] };
+  return {
+    flooded: new Array<boolean>(squares).fill(false),
+    pumps: [],
+    fires: new Array<boolean>(squares).fill(false),
+  };
 }

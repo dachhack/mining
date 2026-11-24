@@ -13,6 +13,7 @@ import {
   FRONTIER_NEW_CAMP_COST,
   FRONTIER_PEN,
   FRONTIER_PICKAXE,
+  FRONTIER_GAS,
   FRONTIER_PUMP,
   FRONTIER_RAIN,
   FRONTIER_WATER,
@@ -82,6 +83,10 @@ export function frontierHelpText(): string {
     `  joined to it at that depth or deeper (up to ${FRONTIER_WATER.maxSquares}). A flooded square (~) cannot be mined or built on.`,
     `  Buy a pump at the market; "tap X,Y" on the water sets it (P). It drains ${FRONTIER_PUMP.drainPerShift} squares a night, farthest`,
     '  first, then comes back to your store. A tap on a pump picks it up.',
+    `  Gas: opening a gas pocket at depth ${FRONTIER_GAS.fromDepth} or more explodes ${Math.round(FRONTIER_GAS.explodeChance * 100)}% of the time: it blows the top block off`,
+    `  the squares within ${FRONTIER_GAS.blastRadius} (where the level rule allows; nothing gained) and sets fire (*) to what can burn within ${FRONTIER_GAS.fireRadius}:`,
+    '  grass, trees, stumps, saplings and camps. A tap puts a fire out. A fire left at End shift spreads to what can',
+    '  burn beside it, then burns its square out: plants never grow back there; a camp loses one upgrade.',
     '- "rest N" rests at camp N: full health, then the shift ends. "close" closes the mine: the run ends.',
     `- "smelter N" builds a smelter at camp N (level ${FRONTIER_SMELTER.minLevel} or more; ${cost(FRONTIER_SMELTER.cost)}; one a camp, lost with it).`,
     `  With a smelter anywhere, "make R" makes recipe R: ${FRONTIER_RECIPES.filter(

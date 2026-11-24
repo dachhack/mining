@@ -748,3 +748,20 @@ export const FRONTIER_PUMP = {
   item: 'pump' as ItemId,
   drainPerShift: 2,
 };
+
+/**
+ * Gas (hazards plan, section 3): "Pockets of gas can explode starting at
+ * level 4. This blows away blocks and starts fires on combustible squares."
+ * A tap that opens one of the cube's gas pockets, leaving its square at depth
+ * `fromDepth` or more, explodes with a chance of `explodeChance` (question
+ * 185); otherwise the gas vents harmlessly. A blast takes the top block off
+ * every other square within `blastRadius` (the 3 x 3 round it) where the level rule
+ * allows it, giving nothing, and sets fire to every combustible square within
+ * `fireRadius`.
+ */
+export const FRONTIER_GAS = {
+  fromDepth: 4,
+  explodeChance: 0.5,
+  blastRadius: 1,
+  fireRadius: 3,
+};

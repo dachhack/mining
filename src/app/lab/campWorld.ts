@@ -411,6 +411,7 @@ export function campWorldOf(state: FrontierState): CampWorld {
  *   which tool);
  * - 'flooded': the square is flooded and no pump is held (hazards PR 2);
  * - 'pump': a pump was set on the flooded square, or picked up (`pump` says which);
+ * - 'fire': the fire on the square was put out (hazards PR 3);
  * - 'noTaps': the shift has no taps left (A4);
  * - 'over': the run has ended (A4).
  */
@@ -424,6 +425,7 @@ export type CampTapKind =
   | 'refused'
   | 'flooded'
   | 'pump'
+  | 'fire'
   | 'noTaps'
   | 'over';
 
@@ -442,6 +444,11 @@ export interface CampTap {
   pump: 'set' | 'taken' | null;
   /** For 'mined': the squares its water flooded (hazards PR 2), nearest first. */
   flooded: { x: number; y: number }[];
+  /** For 'mined': what gas it let out did (hazards PR 3): 'exploded', 'vented' or `null`. */
+  gas: 'exploded' | 'vented' | null;
+  /** For 'mined': the squares a blast dug, and the squares it set on fire. */
+  blown: { x: number; y: number }[];
+  fires: { x: number; y: number }[];
 }
 
 /**
@@ -461,6 +468,9 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
     harvest: null,
     pump: null,
     flooded: [],
+    gas: null,
+    blown: [],
+    fires: [],
   });
   if (tap === null) {
     return answer(outcome.refusal === 'over' ? 'over' : 'noTaps');
@@ -483,6 +493,9 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
   if (tap.kind === 'pump') {
     return { ...answer('pump'), world: after, pump: tap.pump };
   }
+  if (tap.kind === 'fire') {
+    return { ...answer('fire'), world: after };
+  }
   if (tap.kind === 'harvested') {
     const gain = tap.gain[0] ?? { item: 'grass', count: 0 }; // a harvest always gives one stack
     const extra = tap.gain[1] ?? null; // a sapling with a felled tree
@@ -502,6 +515,9 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
     world: after,
     tap: { world: after.lab, result },
     flooded: tap.flooded,
+    gas: tap.gas,
+    blown: tap.blown,
+    fires: tap.fires,
   };
 }
 

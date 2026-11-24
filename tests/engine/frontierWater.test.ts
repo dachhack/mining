@@ -155,7 +155,7 @@ describe('the pump (hazards plan, section 2)', () => {
     // Flood five squares by hand, and set the pump on the first.
     const wet = new Array<boolean>(SIDE * SIDE).fill(false);
     for (let x = PX - 2; x <= PX + 2; x += 1) wet[x + SIDE * PY] = true;
-    const w = { ...marks, hazards: { flooded: wet, pumps: [] } };
+    const w = { ...marks, hazards: { ...marks.hazards, flooded: wet, pumps: [] } };
     const set = tap(w, PX - 2, PY);
     const one = frontierAct(set, { kind: 'endShift' }).state;
     expect(flooded(one)).toHaveLength(3);
@@ -182,5 +182,22 @@ describe('the pump (hazards plan, section 2)', () => {
     const out = frontierAct(w, { kind: 'tap', x: PX, y: PY });
     expect(out.refusal).toBe('flooded');
     expect(out.state.tapsLeft).toBe(w.tapsLeft);
+  });
+
+  it('goes back to the store when another pump in the same flood drains its square', () => {
+    const marks = pitWorld(3, [], [], { pump: 2 });
+    const wet = new Array<boolean>(SIDE * SIDE).fill(false);
+    for (let x = PX - 2; x <= PX + 2; x += 1) wet[x + SIDE * PY] = true;
+    const w = { ...marks, hazards: { ...marks.hazards, flooded: wet, pumps: [] } };
+    // The first pump on the west end drains the east end; the second, in the
+    // middle, then drains the farthest it can reach: the first pump's square.
+    const two = tap(tap(w, PX - 2, PY), PX, PY);
+    const night = frontierAct(two, { kind: 'endShift' }).state;
+    for (const pump of night.hazards.pumps) {
+      expect(night.hazards.flooded[pump.x + SIDE * pump.y]).toBe(true);
+    }
+    const held = night.inventory.get(FRONTIER_PUMP.item) ?? 0;
+    expect(held + night.hazards.pumps.length).toBe(2);
+    expect(held).toBe(1);
   });
 });

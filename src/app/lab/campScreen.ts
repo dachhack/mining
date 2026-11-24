@@ -140,7 +140,7 @@ import type { Recipe } from './recipes';
 import { emptyHistory, noteAction, undoCount, undoLast } from './undoHistory';
 import type { UndoHistory } from './undoHistory';
 import { shadowEdges } from './shadows';
-import { drawPump, drawWater } from './hazardArt';
+import { drawFire, drawPump, drawWater } from './hazardArt';
 import { showNight } from './night';
 import type { Night } from './night';
 
@@ -203,7 +203,11 @@ function shiftText(report: ShiftReport, turn: CampTurn, rested: boolean): string
     report.drained > 0
       ? ` Pumps drained ${report.drained} flooded ${report.drained === 1 ? 'square' : 'squares'}${report.pumpsBack > 0 ? `; ${report.pumpsBack === 1 ? 'a pump is' : `${report.pumpsBack} pumps are`} back in your store` : ''}.`
       : '';
-  const market = `${born}${rain}${pumped}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
+  const burnt =
+    report.burned > 0
+      ? ` Fire 🔥 burned out ${report.burned} ${report.burned === 1 ? 'square' : 'squares'}${report.campUpgradesBurned > 0 ? `, and a camp lost ${report.campUpgradesBurned === 1 ? 'an upgrade' : `${report.campUpgradesBurned} upgrades`}` : ''}${report.fireSpread > 0 ? `; it spread to ${report.fireSpread} more: put them out` : ''}.`
+      : '';
+  const market = `${born}${rain}${pumped}${burnt}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
   if (turn.status === 'finished') {
     return `${start}. That was the last shift: the run is over.`;
   }
@@ -716,6 +720,15 @@ export function mountCampLab(
         drawCampMarker(ctx, camp, c, selected);
       }
     }
+    // Fires on a camp's ground go over its marker, so a burning camp shows (hazards PR 3).
+    const across = world.lab.state.size.x;
+    world.hazards.fires.forEach((burning, i) => {
+      const fx = i % across;
+      const fy = Math.floor(i / across);
+      if (!burning || campAt(world, fx, fy) === null || sightOf(fx, fy) !== 'shown') return;
+      const { px, py } = toPx(fx, fy);
+      drawFire(ctx, squareBox(px, py, c), fx, fy, now);
+    });
     drawEffects(ctx, now, c);
     writeCanvasData(c);
   }
@@ -819,6 +832,8 @@ export function mountCampLab(
           drawWater(ctx, box, x, y);
           if (world.hazards.pumps.some((p) => p.x === x && p.y === y)) drawPump(ctx, box);
         }
+        // A fire (hazards PR 3), drawn still: the ground is drawn once and kept.
+        if (world.hazards.fires[i] === true) drawFire(ctx, box, x, y, 0);
         if (sight === 'greyed') {
           drawGreyed(ctx, px, py, c);
         }
@@ -867,6 +882,11 @@ export function mountCampLab(
     });
     canvas.dataset['flooded'] = flooded.join(' ');
     canvas.dataset['pumps'] = world.hazards.pumps.map((p) => `${p.x},${p.y}`).join(' ');
+    const fires: string[] = [];
+    world.hazards.fires.forEach((burning, i) => {
+      if (burning) fires.push(`${i % width},${Math.floor(i / width)}`);
+    });
+    canvas.dataset['fires'] = fires.join(' ');
   }
 
   /** True if square (x, y) is on the map, not in fog, and has a tree or an apple tree: part of a forest. */
@@ -2766,6 +2786,18 @@ export function mountCampLab(
       );
       return;
     }
+    if (result.kind === 'fire') {
+      remember({ kind: 'tap', x, y });
+      setWorld(result.world);
+      const left = result.world.hazards.fires.filter((f) => f).length;
+      setHint(
+        left === 0
+          ? 'Fire put out 🔥. That was the last one.'
+          : `Fire put out 🔥. ${left} still ${left === 1 ? 'burns' : 'burn'}: tap each one, or it spreads tonight.`,
+        left > 0,
+      );
+      return;
+    }
     if (result.kind === 'pump') {
       remember({ kind: 'tap', x, y });
       setWorld(result.world);
@@ -2825,7 +2857,15 @@ export function mountCampLab(
     effects = effects.filter((e) => !(e.x === x && e.y === y));
     remember({ kind: 'tap', x, y });
     setWorld(result.world);
-    if (result.flooded.length > 0) {
+    if (result.gas === 'exploded') {
+      const n = result.fires.length;
+      setHint(
+        `Gas 💥! The blast blew away ${result.blown.length} ${result.blown.length === 1 ? 'block' : 'blocks'}${n > 0 ? ` and set ${n} ${n === 1 ? 'fire' : 'fires'} 🔥: tap each fire to put it out before night, or it spreads` : ''}.`,
+        true,
+      );
+    } else if (result.gas === 'vented') {
+      setHint('You hit a gas pocket, but it vented without exploding.', false);
+    } else if (result.flooded.length > 0) {
       const n = result.flooded.length;
       setHint(
         `You hit water 💧: ${n} ${n === 1 ? 'square is' : 'squares are'} flooded. A pump from the market 🏪 drains it.`,

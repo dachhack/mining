@@ -58,6 +58,12 @@
 //   night, at most FRONTIER_PUMP.drainPerShift a pump; a pump always stands
 //   on a flooded square, and pumps set plus pumps held change only by a
 //   trade.
+// - GAS AND FIRE: on a mining tap, squares other than the one mined change
+//   depth only if gas exploded, only within FRONTIER_GAS.blastRadius, by 1,
+//   and the level rule holds everywhere after; a fire starts only by a blast
+//   (within FRONTIER_GAS.fireRadius) or at night beside a fire, and only on
+//   something that can burn; a tap puts out exactly the fire it is on; at
+//   night every fire burning before goes out, leaving nothing growing.
 
 import { BLOCKS } from '../src/data';
 import {
@@ -65,6 +71,7 @@ import {
   FRONTIER_CAMP_PLACE,
   FRONTIER_CONTRACTS,
   FRONTIER_DEEP_CAMP,
+  FRONTIER_GAS,
   FRONTIER_TOOLS,
   FRONTIER_LANTERN,
   FRONTIER_MARKET,
@@ -241,6 +248,82 @@ export function checkStep(
       x.hazards.pumps.length + (x.inventory.get(FRONTIER_PUMP.item) ?? 0);
     if (pumps(after) !== pumps(before) && verb !== 'buy')
       say(`pumps went from ${pumps(before)} to ${pumps(after)} by "${verb}"`);
+  }
+
+  // Gas and fire (hazards PR 3).
+  {
+    const w = after.cube.size.x;
+    const h = after.cube.size.y;
+    const tapped = verb === 'tap' ? (step.split(' ')[1] ?? '').split(',').map(Number) : [];
+    const [tx, ty] = tapped;
+    const exploded = outcome.tap?.gas === 'exploded';
+    if (verb === 'tap' && after.mined > before.mined && after.cube !== before.cube) {
+      let blownSeen = false;
+      for (let y = 0; y < h && (exploded || !blownSeen); y += 1) {
+        for (let x = 0; x < w; x += 1) {
+          if (x === tx && y === ty) continue;
+          const d0 = depthAt(before.cube, x, y);
+          const d1 = depthAt(after.cube, x, y);
+          if (d0 === d1) continue;
+          blownSeen = true;
+          const near =
+            Math.abs(x - (tx ?? -99)) <= FRONTIER_GAS.blastRadius &&
+            Math.abs(y - (ty ?? -99)) <= FRONTIER_GAS.blastRadius;
+          if (!exploded || !near || d1 !== d0 + 1) say(`${x},${y} went from depth ${d0} to ${d1}`);
+        }
+      }
+      if (blownSeen) {
+        for (let y = 0; y < h; y += 1) {
+          for (let x = 0; x < w; x += 1) {
+            const d = depthAt(after.cube, x, y);
+            if (x + 1 < w && Math.abs(d - depthAt(after.cube, x + 1, y)) > 1)
+              say(`after the blast ${x},${y} breaks the level rule`);
+            if (y + 1 < h && Math.abs(d - depthAt(after.cube, x, y + 1)) > 1)
+              say(`after the blast ${x},${y} breaks the level rule`);
+          }
+        }
+      }
+    }
+    const canBurn = (x: number, y: number): boolean => {
+      const i = x + w * y;
+      return (
+        (before.features[i] ?? NO_FEATURE) !== NO_FEATURE ||
+        (before.stumps[i] ?? NO_FEATURE) !== NO_FEATURE ||
+        campAt(before.camps, x, y) !== null
+      );
+    };
+    const burningBefore = (x: number, y: number): boolean =>
+      before.hazards.fires[x + w * y] === true;
+    after.hazards.fires.forEach((burning, i) => {
+      const x = i % w;
+      const y = Math.floor(i / w);
+      const was = before.hazards.fires[i] === true;
+      if (burning && !was) {
+        if (!canBurn(x, y)) say(`a fire started on ${x},${y}, where nothing can burn`);
+        if (endsShift) {
+          const beside = SQUARE_STEPS.some(
+            (st) =>
+              isSquare(after.cube, x + st.dx, y + st.dy) && burningBefore(x + st.dx, y + st.dy),
+          );
+          if (!beside) say(`a fire started on ${x},${y} at night with no fire beside it`);
+        } else {
+          const near =
+            Math.abs(x - (tx ?? -99)) <= FRONTIER_GAS.fireRadius &&
+            Math.abs(y - (ty ?? -99)) <= FRONTIER_GAS.fireRadius;
+          if (!exploded || !near) say(`a fire started on ${x},${y} by "${step}"`);
+        }
+      }
+      if (was && burning && endsShift) say(`the fire on ${x},${y} burned on through the night`);
+      if (was && endsShift) {
+        if (
+          (after.features[i] ?? NO_FEATURE) !== NO_FEATURE ||
+          (after.stumps[i] ?? NO_FEATURE) !== NO_FEATURE
+        )
+          say(`${x},${y} burned out but something grows there`);
+      }
+      if (was && !burning && !endsShift && !(outcome.tap?.kind === 'fire' && x === tx && y === ty))
+        say(`the fire on ${x},${y} went out by "${step}"`);
+    });
   }
 
   // Shifts and health.

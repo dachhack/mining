@@ -1,6 +1,6 @@
 # Hazards: the plan
 
-Status: **agreed** (owner, 2026-11-24, in conversation; decision note 0064). Owner's answers: water and gas both from depth 4 (question 181); one APK build when all the hazards are in (question 192). PR 1 (rain) and PR 2 (water and the pump) are built (engine 0.13.0).
+Status: **agreed** (owner, 2026-11-24, in conversation; decision note 0064). Owner's answers: water and gas both from depth 4 (question 181); one APK build when all the hazards are in (question 192). PR 1 (rain), PR 2 (water and the pump) and PR 3 (gas and fire) are built (engine 0.13.0).
 
 The owner's direction:
 
@@ -48,7 +48,7 @@ This changes the design doc's Hazards row (section 2: "None for now") and sectio
 
 - **Where:** the cube's gas pockets, from depth 4 (the middle band already has them).
 - **Hitting gas:** when a tap's new top cell is in a gas pocket, it explodes with a chance of `FRONTIER_GAS.explodeChance` (1 in 2); otherwise it vents and nothing happens (question 185). The pocket's cells are then empty either way.
-- **The blast:** every square within `blastRadius` (1: the 3×3) loses its top block, giving nothing ("blown away"), where the level rule allows it, the centre first and then outwards. Camps' ground is not dug.
+- **The blast:** every other square within `blastRadius` (1: the 3×3 round the mined square) loses its top block, giving nothing ("blown away"), where the level rule allows it, row by row. Camps' ground, flooded squares and squares with plants or stumps are not dug.
 - **Fires:** every combustible square within `fireRadius` (3) of the blast catches fire.
 - **Putting out a fire:** tap it (1 tap). No tool is needed. A tap on a burning square puts the fire out and does nothing else.
 - **A fire left burning** at End shift: it spreads to each combustible face neighbour, then burns its own square out: a tree or apple tree is gone with no stump (nothing grows back), grass is gone, a sapling is gone. A burning **camp** loses one upgrade, in the same order as a raid (section 5), and its fire goes out (question 186). A fire in the fog burns and spreads unseen.

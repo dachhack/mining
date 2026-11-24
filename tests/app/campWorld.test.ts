@@ -576,7 +576,7 @@ describe('water and the pump on the screen (hazards PR 2)', () => {
     const y = camp.y;
     const width = base.lab.state.size.x;
     const flooded = base.hazards.flooded.map((_, i) => i === x + width * y);
-    const wet: CampWorld = { ...base, hazards: { flooded, pumps: [] } };
+    const wet: CampWorld = { ...base, hazards: { ...base.hazards, flooded, pumps: [] } };
     expect(campTap(wet, x, y).kind).toBe('flooded');
     const counts = new Map(wet.lab.counts);
     counts.set('pump', 1);

@@ -128,6 +128,7 @@ A run is a sequence of **shifts** (owner: "Keep shifts").
 | Nothing growing, and the level rule and the camps allow it | The top block's yield (section 3.5) |
 | Flooded (hazards plan section 2), with a pump in the store | Sets the pump there |
 | A pump | Picks it up again |
+| A fire (section 4.6) | Puts it out |
 
 ### 4.2 End shift [Default]
 
@@ -144,9 +145,10 @@ In this order:
    - 1 more wood every 4th shift for each camp after the first.
 7. **Pens breed** (section 7b), once the upkeep is paid: the crew eats first.
 8. **Hunger:** each item of upkeep that cannot be paid costs 1 health (section 5).
-9. **Pumps** drain [Default] 2 squares of their flood each (section 4.5).
-10. **Rain** (hazards plan section 1; owner, 2026-11-24): on [Default] 1 night in 5 it rains (`FRONTIER_RAIN`). Each **low spot** (a dug square that no face neighbour is deeper than, and that at least one is shallower than) is filled with a [Default] 1 in 2 chance: one block of clay (1 in 3) or dirt goes back on top, so it is 1 shallower. What was on top is buried, not lost. A camp's ground and flooded squares are never filled. The level rule still holds after it. Dug does not go down.
-11. The next shift starts with a full set of taps.
+9. **Fires** spread and burn out their squares (section 4.6).
+10. **Pumps** drain [Default] 2 squares of their flood each (section 4.5).
+11. **Rain** (hazards plan section 1; owner, 2026-11-24): on [Default] 1 night in 5 it rains (`FRONTIER_RAIN`). Each **low spot** (a dug square that no face neighbour is deeper than, and that at least one is shallower than) is filled with a [Default] 1 in 2 chance: one block of clay (1 in 3) or dirt goes back on top, so it is 1 shallower. What was on top is buried, not lost. A camp's ground, flooded squares and burning squares are never filled. The level rule still holds after it. Dug does not go down.
+12. The next shift starts with a full set of taps.
 
 ### 4.3 Mining and the level rule [Decided; numbers Default]
 
@@ -167,6 +169,16 @@ The owner (2026-11-24): "You can hit water starting at level 3. It fills the are
 - **Hitting water:** the cube's middle band (depth 4 and down) holds water pockets. A mine that opens one, leaving its square at depth 4 or more, floods that square and the dug squares joined to it through face neighbours at the same depth or deeper, up to [Default] 12, nearest first (`FRONTIER_WATER`). A camp's ground is never flooded. A pocket opened higher up collapses to rubble, as before.
 - **A flooded square** cannot be mined, a camp cannot stand on it, and rain does not fill it. The water does not spread later.
 - **The pump** (`FRONTIER_PUMP`): [Default] 30 coins at the market, from the start. A tap on a flooded square sets one from the store there (1 tap); a tap on it picks it up (1 tap). At each End shift a pump drains [Default] 2 squares of its flood (the flooded squares joined to its own), the farthest from it first so what is left stays joined to it, its own square last. Then it comes back to the store (question 184).
+
+### 4.6 Gas and fire [Decided: depth 4; numbers Default]
+
+The owner (2026-11-24): "Pockets of gas can explode starting at level 4. This blows away blocks and starts fires on combustable squares. You need to put out each fire with a click." Plan: `docs/plans/hazards.md`, section 3.
+
+- **Hitting gas:** a mine that opens one of the cube's gas pockets, leaving its square at depth 4 or more, explodes with a [Default] 1 in 2 chance (question 185; `FRONTIER_GAS`); otherwise the gas vents. A pocket opened higher up collapses, as before.
+- **The blast** takes the top block off every other square in the 3×3 round the mined square, row by row, where the level rule allows it then (question 193), giving nothing. Camps' ground, flooded squares, and squares with plants or stumps are not dug. A blast that opens water floods as a mine would.
+- **Fires** start on everything that can burn within [Default] 3 squares: grass, trees, apple trees, stumps, saplings and camps' ground.
+- **Putting a fire out:** a tap on it, 1 tap, before anything else on the square.
+- **A fire left burning** at End shift spreads to what can burn beside it, then burns its own square out: plants and stumps are gone for good (nothing grows back there); a camp loses one upgrade a night (the lantern, the pen and its animals, the smelter, then a level; a deep camp keeps its level). A fire in the fog burns unseen.
 
 ## 5. The crew
 
