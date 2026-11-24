@@ -3,7 +3,15 @@
 // opening in turn, and the phases of a run.
 import { describe, expect, it } from 'vitest';
 import { FRONTIER_BOARD, FRONTIER_CONTRACTS, FRONTIER_MARKET } from '../../src/data/frontier';
-import { contractBoard, frontierAct, isMarketDay, openTiers, runPhase } from '../../src/engine';
+import {
+  contractBoard,
+  contractLimit,
+  frontierAct,
+  heldContracts,
+  isMarketDay,
+  openTiers,
+  runPhase,
+} from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
 import { world } from './frontierHelpers';
 
@@ -68,48 +76,77 @@ describe('the contract board (plan section 5)', () => {
   });
 });
 
-describe('taking, delivering and dropping a contract', () => {
+describe('taking, delivering and dropping contracts', () => {
   it('takes one from the board at the market for no tap, delivers it later for 1 tap and its coins, and counts it done', () => {
     const w = at(3);
     const offer = contractBoard(w)[0];
     if (offer === undefined) throw new Error('no contract on the board');
     const taken = frontierAct(w, { kind: 'takeContract', id: offer.id });
     expect(taken.done).toBe(true);
-    expect(taken.state.contract).toEqual({ id: offer.id, takenOn: 30 });
+    expect(taken.state.contracts).toEqual([{ id: offer.id, takenOn: 30 }]);
     expect(taken.state.tapsLeft).toBe(w.tapsLeft);
     // Delivering is a day's action: not while the market is open.
-    expect(frontierAct(taken.state, { kind: 'deliver' }).refusal).toBe('market');
+    expect(frontierAct(taken.state, { kind: 'deliver', id: offer.id }).refusal).toBe('market');
     const day = frontierAct(taken.state, { kind: 'closeMarket' }).state;
-    expect(frontierAct(day, { kind: 'deliver' }).refusal).toBe('cost');
+    expect(frontierAct(day, { kind: 'deliver', id: offer.id }).refusal).toBe('cost');
     // Holding everything, on any day: it is delivered.
     const holding = new Map(offer.asks.map((a) => [a.item, a.count + 1] as [string, number]));
     const later = { ...day, shift: 31, inventory: holding };
-    const out = frontierAct(later, { kind: 'deliver' });
+    const out = frontierAct(later, { kind: 'deliver', id: offer.id });
     expect(out.done).toBe(true);
-    expect(out.state.contract).toBeNull();
+    expect(out.state.contracts).toEqual([]);
     expect(out.state.inventory.get('coin')).toBe(offer.pays);
     for (const a of offer.asks) expect(out.state.inventory.get(a.item)).toBe(1);
     expect(out.state.contractsDone).toEqual([1, 0, 0]);
     expect(out.state.status).toBe('active'); // a contract never ends the run
   });
 
-  it('holds one at a time, takes only on a market day and only from the board, and drops for nothing', () => {
+  it('holds as many as the best camp’s level (owner), each once, and delivers or drops each by name', () => {
+    const w = at(3, {}, [1, 1, 0]); // nine on the board
+    expect(contractLimit(w)).toBe(3);
+    const offers = contractBoard(w);
+    let s = w;
+    for (const offer of offers.slice(0, 3)) {
+      const out = frontierAct(s, { kind: 'takeContract', id: offer.id });
+      expect(out.done, offer.id).toBe(true);
+      s = out.state;
+    }
+    expect(s.contracts.map((c) => c.id)).toEqual(offers.slice(0, 3).map((o) => o.id));
+    expect(heldContracts(s).map((c) => c.id)).toEqual(offers.slice(0, 3).map((o) => o.id));
+    // A fourth is refused at level 3; a level-4 camp allows it.
+    const fourth = offers[3]?.id ?? '';
+    expect(frontierAct(s, { kind: 'takeContract', id: fourth }).refusal).toBe('holding');
+    const level4 = { ...s, camps: s.camps.map((c) => ({ ...c, level: 4 })) };
+    expect(frontierAct(level4, { kind: 'takeContract', id: fourth }).done).toBe(true);
+    // The same one twice: refused.
+    const one = at(3);
+    const first = contractBoard(one)[0]?.id ?? '';
+    const once = frontierAct(one, { kind: 'takeContract', id: first }).state;
+    expect(frontierAct(once, { kind: 'takeContract', id: first }).refusal).toBe('unknown');
+    // A level-1 camp holds one.
+    expect(contractLimit(at(1))).toBe(1);
+    // Dropping one leaves the others.
+    const day = { ...s, marketOpen: false };
+    const second = offers[1]?.id ?? '';
+    const dropped = frontierAct(day, { kind: 'dropContract', id: second });
+    expect(dropped.done).toBe(true);
+    expect(dropped.state.contracts.map((c) => c.id)).not.toContain(second);
+    expect(dropped.state.contracts).toHaveLength(2);
+    expect(dropped.state.contractsDone).toEqual([1, 1, 0]);
+  });
+
+  it('takes only while the market is open and only from the board, and refuses one not held', () => {
     const w = at(3);
-    const [first, second] = contractBoard(w);
-    if (first === undefined || second === undefined) throw new Error('board too short');
-    const taken = frontierAct(w, { kind: 'takeContract', id: first.id }).state;
-    expect(frontierAct(taken, { kind: 'takeContract', id: second.id }).refusal).toBe('holding');
+    const [first] = contractBoard(w);
+    if (first === undefined) throw new Error('board empty');
     const closed = { ...w, marketOpen: false };
     expect(frontierAct(closed, { kind: 'takeContract', id: first.id }).refusal).toBe('closed');
     const offTheBoard = FRONTIER_CONTRACTS.find((c) => !contractBoard(w).includes(c));
     expect(frontierAct(w, { kind: 'takeContract', id: offTheBoard?.id ?? 'x' }).refusal).toBe(
       'unknown',
     );
-    expect(frontierAct(closed, { kind: 'dropContract' }).refusal).toBe('none');
-    const dropped = frontierAct({ ...taken, marketOpen: false }, { kind: 'dropContract' });
-    expect(dropped.done).toBe(true);
-    expect(dropped.state.contract).toBeNull();
-    expect(dropped.state.contractsDone).toEqual([0, 0, 0]);
+    expect(frontierAct(closed, { kind: 'dropContract', id: first.id }).refusal).toBe('none');
+    expect(frontierAct(closed, { kind: 'deliver', id: first.id }).refusal).toBe('none');
   });
 });
 

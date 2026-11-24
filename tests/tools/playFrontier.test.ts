@@ -204,10 +204,10 @@ describe('planting in the play interface (progression PR 3)', () => {
 });
 
 describe('contracts and phases in the play interface (progression PR 5)', () => {
-  it('reads "take ID", "deliver" and "drop", and shows the phase and its goal', () => {
+  it('reads "take ID", "deliver ID" and "drop ID", and shows the phase and its goal', () => {
     expect(stepOf('take t1-coal', [])).toBe('takeContract t1-coal');
-    expect(stepOf('deliver', [])).toBe('deliver');
-    expect(stepOf('drop', [])).toBe('dropContract');
+    expect(stepOf('deliver t1-coal', [])).toBe('deliver t1-coal');
+    expect(stepOf('drop t1-coal', [])).toBe('dropContract t1-coal');
     expect(frontierView(newFrontierSession(SEED))).toContain(
       'Phase 1 of 5: Camps and the landscape.',
     );
@@ -227,8 +227,8 @@ describe('contracts and phases in the play interface (progression PR 5)', () => 
     const id = /take (t1-[a-z-]+)/.exec(view)?.[1] ?? '';
     const taken = act(session, `takeContract ${id}`);
     expect(taken.refused).toBeNull();
-    expect(frontierView(taken.session)).toContain('Contract: ');
+    expect(frontierView(taken.session)).toContain(`Contract ${id}: `);
     const day = act(taken.session, 'closeMarket').session;
-    expect(act(day, 'deliver').refused).toBe('You do not hold enough for that.');
+    expect(act(day, `deliver ${id}`).refused).toBe('You do not hold enough for that.');
   });
 });

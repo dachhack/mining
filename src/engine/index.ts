@@ -67,8 +67,10 @@ import type { GameState } from './state';
  * 0.10.0: after the progression playtest build: the market opens only after
  *        a market day's night and closes to start the day; saplings come
  *        only from the market (decision note 0063).
+ * 0.11.0: after the market-scene build: as many contracts held at once as
+ *        the best camp's level.
  */
-export const ENGINE_VERSION = '0.10.0';
+export const ENGINE_VERSION = '0.11.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
@@ -517,7 +519,9 @@ export {
   deliverRefusal,
   dropContract,
   dropRefusal,
-  heldContract,
+  anyDeliverable,
+  contractLimit,
+  heldContracts,
   openTiers,
   runPhase,
   takeContract,

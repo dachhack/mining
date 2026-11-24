@@ -36,8 +36,9 @@
 //   FRONTIER_PEN.capacity; animals put in or taken out move between the
 //   pen and the store one at a time; a breeding count runs only while the
 //   pen may breed.
-// - CONTRACTS: one is taken only on a market day, from that day's board,
-//   while none is held; delivering pays its coins and takes its items, and
+// - CONTRACTS: one is taken only while the market is open, from that day's
+//   board, while fewer are held than the best camp's level and not that
+//   one already; delivering pays its coins and takes its items, and
 //   counts one more done for its tier; the counts done never fall.
 // - FARMING: a planted sapling is a waiting stump on unmined dirt; cut grass
 //   waits only on a square with nothing growing on it; a planting takes one
@@ -274,12 +275,19 @@ export function checkStep(
   // Contracts (progression plan section 5).
   if (verb === 'takeContract') {
     const id = step.split(' ')[1] ?? '';
-    if (before.contract !== null) say('took a contract while holding one');
+    const limit = before.camps.reduce((b, c) => Math.max(b, c.level), 1);
+    if (before.contracts.length >= limit)
+      say(
+        `took a contract holding ${before.contracts.length}, with the best camp at level ${limit}`,
+      );
+    if (before.contracts.some((c) => c.id === id)) say(`took ${id}, which was held already`);
     if (!contractBoard(before).some((c) => c.id === id))
       say(`took ${id}, which is not on the board`);
   }
   if (verb === 'deliver') {
-    const held = FRONTIER_CONTRACTS.find((c) => c.id === before.contract?.id);
+    const id = step.split(' ')[1] ?? '';
+    const isHeld = before.contracts.some((c) => c.id === id);
+    const held = isHeld ? FRONTIER_CONTRACTS.find((c) => c.id === id) : undefined;
     if (held === undefined) {
       say('delivered with no contract held');
     } else {

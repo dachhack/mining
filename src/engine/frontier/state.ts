@@ -17,7 +17,7 @@ import type { RngState } from '../rng';
  * not loaded into a new shape. Separate from the old game's STATE_VERSION
  * while the two rule sets live side by side.
  */
-export const FRONTIER_STATE_VERSION = 12; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`; 12: `marketOpen`
+export const FRONTIER_STATE_VERSION = 13; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`; 12: `marketOpen`; 13: `contracts` (several held) for `contract`
 
 /** What grows on a square: nothing, grass, a tree or an apple tree. */
 export const NO_FEATURE = 0;
@@ -103,8 +103,11 @@ export interface FrontierState {
   planted: boolean[];
   /** How many trees have been felled in the run (a count only: saplings come from the market). */
   treesFelled: number;
-  /** The contract held (contracts.ts): its id and the shift it was taken on; `null` if none. */
-  contract: FrontierHeldContract | null;
+  /**
+   * The contracts held (contracts.ts), oldest first: each one's id and the
+   * shift it was taken on. At most the best camp's level of them.
+   */
+  contracts: FrontierHeldContract[];
   /** How many contracts of each tier have been delivered: [tier 1, tier 2, tier 3]. */
   contractsDone: number[];
   /**

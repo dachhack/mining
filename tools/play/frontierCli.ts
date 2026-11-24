@@ -46,8 +46,9 @@ import {
   makeRefusal,
   marketEvery,
   contractBoard,
+  contractLimit,
   deliverRefusal,
-  heldContract,
+  heldContracts,
   runPhase,
   takeRefusal,
   penRefusal,
@@ -169,8 +170,9 @@ function refusalText(refusal: string | null): string {
     notYet:
       'The market does not sell that yet: tools from a level-3 camp, a camp kit, wood and apples after a tier-1 contract.',
     placeDeep: `A deep camp cannot go there now (see "look"): it needs the kit, wood and stone, and lit, level ground at depth ${FRONTIER_DEEP_CAMP.minDepth} or more.`,
-    holding: 'You hold a contract already: deliver it or "drop" it first.',
-    none: 'You hold no contract.',
+    holding:
+      "You hold as many contracts as your best camp's level allows: deliver or drop one first.",
+    none: 'You hold no such contract.',
     hasPen: 'That camp has a pen already.',
     campLevel: "That camp's level is too low for it.",
     noPen: 'That camp has no pen: build one first ("pen N").',
@@ -346,7 +348,7 @@ function undo(session: FrontierSession): StepResult {
  * The step a typed choice stands for, or `null` if it is not one. Accepts
  * "tap 3,4" (or "t 3 4"), "place 3,4", "upgrade 2", "demolish 1", "end",
  * "rest 1" (or "rest" with one camp), "sell wood 3", "buy animal 1",
- * "plant 3,4 sapling", "take t1-coal", "deliver", "drop", "deep 3,4",
+ * "plant 3,4 sapling", "take t1-coal", "deliver t1-coal", "drop t1-coal", "deep 3,4",
  * "close", "undo", or the number of a listed choice.
  */
 export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | null {
@@ -399,8 +401,10 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
   if (take !== null) {
     return `takeContract ${take[1] ?? ''}`;
   }
-  if (text === 'deliver') return 'deliver';
-  if (text === 'drop' || text === 'drop contract') return 'dropContract';
+  const contractVerb = /^(deliver|drop) ([a-z0-9-]+)$/.exec(text);
+  if (contractVerb !== null) {
+    return `${contractVerb[1] === 'drop' ? 'dropContract' : 'deliver'} ${contractVerb[2] ?? ''}`;
+  }
   const make = /^make ([a-z-]+)$/.exec(text);
   if (make !== null) {
     return `make ${make[1] ?? ''}`;
@@ -463,8 +467,10 @@ export function listedSteps(session: FrontierSession): FrontierStep[] {
     for (const offer of contractBoard(state)) {
       if (takeRefusal(state, offer.id) === null) steps.push(`takeContract ${offer.id}`);
     }
-    if (deliverRefusal(state) === null) steps.push('deliver');
-    if (state.contract !== null) steps.push('dropContract');
+    for (const c of state.contracts) {
+      if (deliverRefusal(state, c.id) === null) steps.push(`deliver ${c.id}`);
+      steps.push(`dropContract ${c.id}`);
+    }
     if (canAfford(state.inventory, FRONTIER_DEEP_CAMP.cost)) {
       // The deepest places for a deep camp, deepest first (ties row by row).
       const deeps: { step: FrontierStep; depth: number }[] = [];
@@ -655,11 +661,12 @@ function goalLines(state: FrontierState): string[] {
   const phase = runPhase(state);
   const goal = FRONTIER_PHASES[phase - 1] ?? { title: '', next: '' };
   const lines = [`Phase ${phase} of 5: ${goal.title}. Next: ${goal.next}`];
-  const held = heldContract(state);
-  if (held !== null) {
-    const ready = deliverRefusal(state) === null ? ' READY: "deliver".' : '';
+  const held = heldContracts(state);
+  lines.push(`Contracts held: ${held.length} of ${contractLimit(state)} (your best camp's level).`);
+  for (const c of held) {
+    const ready = deliverRefusal(state, c.id) === null ? ` READY: "deliver ${c.id}".` : '';
     lines.push(
-      `Contract: ${held.name} (tier ${held.tier}): ${stacksText(held.asks)} for ${held.pays} coins.${ready} "drop" gives it up.`,
+      `  Contract ${c.id}: ${c.name} (tier ${c.tier}): ${stacksText(c.asks)} for ${c.pays} coins.${ready} "drop ${c.id}" gives it up.`,
     );
   }
   const done = state.contractsDone;

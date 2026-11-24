@@ -41,8 +41,9 @@ import type { HigherNeighbour, SquareDirection } from '../../engine';
 import {
   SQUARE_STEPS,
   contractBoard,
-  deliverRefusal,
-  heldContract,
+  anyDeliverable,
+  contractLimit,
+  heldContracts,
   loadFrontier,
   mostLots,
   runPhase,
@@ -217,7 +218,9 @@ function placeRefusalText(refusal: PlaceRefusal): string {
 
 /** A contract action, as a step (progression PR 5). */
 type ContractStep =
-  { kind: 'takeContract'; id: string } | { kind: 'deliver' } | { kind: 'dropContract' };
+  | { kind: 'takeContract'; id: string }
+  | { kind: 'deliver'; id: string }
+  | { kind: 'dropContract'; id: string };
 
 /** Something drawn over the map for a short while. */
 interface Effect {
@@ -1492,7 +1495,7 @@ export function mountCampLab(
     // The goals card (🎯): the phase, its goal, the contract held. It glows
     // when the contract can be delivered. The market itself opens only
     // after a market day's night (it has no button).
-    const deliverable = deliverRefusal(toFrontier(world)) === null;
+    const deliverable = anyDeliverable(toFrontier(world));
     const market = button(
       deliverable ? 'lab2-book-button lab2-market-open' : 'lab2-book-button',
       '🎯',
@@ -1824,10 +1827,11 @@ export function mountCampLab(
     };
     // The contract board (progression PR 5): taken only here, at the market.
     const state = toFrontier(world);
-    const held = heldContract(state);
-    const board = contractBoard(state).filter((c) => c.id !== held?.id);
+    // Those held are not offered again; up to the best camp's level are held at once.
+    const held = state.contracts.map((c) => c.id);
+    const board = contractBoard(state).filter((c) => !held.includes(c.id));
     if (board.length > 0) {
-      section(held === null ? 'Contract board' : `Contract board · you hold ${held.name}`);
+      section(`Contract board · you hold ${held.length} of ${contractLimit(state)}`);
       for (const offer of board) list.append(contractRow(offer, 'offer'));
     }
     section('Sell');
@@ -1866,13 +1870,16 @@ export function mountCampLab(
     const next = element('p', 'lab2-market-when', goal?.next ?? '');
     next.dataset['testid'] = 'lab2-goal';
     list.append(next);
-    const held = heldContract(state);
-    section('Your contract');
-    if (held === null) {
-      list.append(element('p', 'lab2-market-when', 'None. Take one from the board at the market.'));
-    } else {
-      list.append(contractRow(held, 'held'));
+    // Up to the best camp's level of contracts at once (owner).
+    const held = heldContracts(state);
+    const limit = contractLimit(state);
+    section(`Your contracts · ${held.length} of ${limit}`);
+    if (held.length === 0) {
+      list.append(
+        element('p', 'lab2-market-when', 'None. Take them from the board at the market.'),
+      );
     }
+    for (const contract of held) list.append(contractRow(contract, 'held'));
     const done = world.turn.contractsDone;
     if (done.some((n) => n > 0)) {
       list.append(
@@ -1917,8 +1924,8 @@ export function mountCampLab(
       as === 'offer'
         ? [{ label: 'Take', action: { kind: 'takeContract', id: contract.id } }]
         : [
-            { label: 'Drop', action: { kind: 'dropContract' } },
-            { label: 'Deliver', action: { kind: 'deliver' } },
+            { label: 'Drop', action: { kind: 'dropContract', id: contract.id } },
+            { label: 'Deliver', action: { kind: 'deliver', id: contract.id } },
           ];
     for (const { label, action } of actions) {
       const b = button(label === 'Drop' ? 'lab2-recipe-pin' : 'lab2-recipe-make', label);
@@ -1937,7 +1944,7 @@ export function mountCampLab(
     if (next === world) return; // the button is off whenever this would happen
     remember(action);
     const notes = {
-      takeContract: `Taken: ${contract.name}. Deliver it on any shift once you hold everything.`,
+      takeContract: `Taken: ${contract.name}. Deliver it from 🎯 on any shift once you hold everything.`,
       deliver: `Delivered: ${contract.name}, for ${contract.pays} coins.`,
       dropContract: `Dropped: ${contract.name}.`,
     };

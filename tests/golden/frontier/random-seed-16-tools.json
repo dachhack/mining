@@ -1,10 +1,10 @@
 {
   "description": "The random policy on another seed, for 42 shifts: it upgrades its camp to level 2, builds a smelter and a pen, moves animals in and out, makes hay, and buys hay at the market",
   "recordedWith": "random",
-  "engineVersion": "0.10.0",
+  "engineVersion": "0.11.0",
   "seed": 16,
   "stepCount": 1971,
-  "expectedHash": "d932a55c32393f19",
+  "expectedHash": "be0ea85ee2b9defe",
   "steps": [
     "tap 11,9",
     "tap 8,17",

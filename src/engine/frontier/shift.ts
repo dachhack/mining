@@ -82,8 +82,8 @@ export type FrontierAction =
   | { kind: 'closeMarket' }
   // Take contract `id` from today's board, deliver the one held, or drop it (contracts.ts).
   | { kind: 'takeContract'; id: string }
-  | { kind: 'deliver' }
-  | { kind: 'dropContract' }
+  | { kind: 'deliver'; id: string }
+  | { kind: 'dropContract'; id: string }
   // Build a pen at camp `id`, or put an animal in or take one out (pens.ts).
   | { kind: 'buildPen'; id: number }
   | { kind: 'penIn'; id: number }
@@ -479,12 +479,12 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
     return why === null ? spent(takeContract(state, action.id)) : refused(state, why);
   }
   if (action.kind === 'deliver') {
-    const why = deliverRefusal(state);
-    return why === null ? spent(deliverContract(state)) : refused(state, why);
+    const why = deliverRefusal(state, action.id);
+    return why === null ? spent(deliverContract(state, action.id)) : refused(state, why);
   }
   if (action.kind === 'dropContract') {
-    const why = dropRefusal(state);
-    return why === null ? spent(dropContract(state)) : refused(state, why);
+    const why = dropRefusal(state, action.id);
+    return why === null ? spent(dropContract(state, action.id)) : refused(state, why);
   }
   if (action.kind === 'buildPen' || action.kind === 'penIn' || action.kind === 'penOut') {
     const why = penRefusal(state, action.kind, action.id);

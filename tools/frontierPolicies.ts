@@ -144,11 +144,13 @@ function randomPolicy(rng: RngState): FrontierPolicy {
         if (tradeRefusal(state, 'buy', lot.item, 1) === null) options.push(`buy ${lot.item} 1`);
       }
     }
-    // A contract: take one from the board, deliver the one held, or drop it.
+    // A contract: take one from the board, or deliver one held.
     for (const offer of contractBoard(state)) {
       if (takeRefusal(state, offer.id) === null) options.push(`takeContract ${offer.id}`);
     }
-    if (deliverRefusal(state) === null) options.push('deliver');
+    for (const held of state.contracts) {
+      if (deliverRefusal(state, held.id) === null) options.push(`deliver ${held.id}`);
+    }
     // A sapling it holds, on a few squares tried at random.
     for (const item of ['sapling', 'appleSapling']) {
       if ((state.inventory.get(item) ?? 0) < 1) continue;
