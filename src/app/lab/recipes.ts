@@ -8,12 +8,12 @@
 // says for level N. No DOM code here, so the unit tests run it in Node.
 
 import type { ItemStack } from '../../data';
-import { FRONTIER_RECIPES } from '../../data/frontier';
+import { FRONTIER_DEEP_CAMP, FRONTIER_RECIPES } from '../../data/frontier';
 import { LAB_NEW_CAMP_COST } from '../../data/labCamps';
 import { MAX_CAMP_LEVEL, upgradeCostFrom } from './campWorld';
 
 export interface Recipe {
-  /** A short name for code and tests: 'new-camp', 'upgrade-2', 'upgrade-3'. */
+  /** A short name for code and tests: 'new-camp', 'deep-camp', 'upgrade-2', 'upgrade-3'. */
   id: string;
   /** What the book calls it. */
   name: string;
@@ -22,6 +22,13 @@ export interface Recipe {
   /** What it costs. */
   cost: ItemStack[];
   /**
+   * True for the deep camp (FRONTIER_DEEP_CAMP): a camp of its own, not an
+   * upgrade, placed with the camp tool switched to it (owner, after the
+   * market-scene build: "The deep camp isn't an upgrade. It's a stand alone
+   * camp but it still takes advanced resources to build").
+   */
+  deep: boolean;
+  /**
    * What it makes, for a recipe made in the book with its Make button
    * (smelting: docs/plans/smelting-and-crafting.md); `null` for a camp or an
    * upgrade, which are built on the map.
@@ -29,10 +36,29 @@ export interface Recipe {
   makes: ItemStack | null;
 }
 
-/** Every recipe in the book, in order: a new camp, then each upgrade, level 2 first, then what a smelter makes. */
+/**
+ * Every recipe in the book, in order: a new camp, the deep camp, then each
+ * upgrade, level 2 first, then what is made in the book.
+ */
 export function labRecipes(): Recipe[] {
   const recipes: Recipe[] = [
-    { id: 'new-camp', name: 'New camp', level: 1, cost: LAB_NEW_CAMP_COST, makes: null },
+    {
+      id: 'new-camp',
+      name: 'New camp',
+      level: 1,
+      cost: LAB_NEW_CAMP_COST,
+      deep: false,
+      makes: null,
+    },
+    // The deep camp: a camp of its own, beside the new camp, at its own cost.
+    {
+      id: 'deep-camp',
+      name: 'Deep camp',
+      level: 0,
+      cost: FRONTIER_DEEP_CAMP.cost,
+      deep: true,
+      makes: null,
+    },
   ];
   for (let level = 2; level <= MAX_CAMP_LEVEL; level += 1) {
     const cost = upgradeCostFrom(level - 1);
@@ -42,6 +68,7 @@ export function labRecipes(): Recipe[] {
         name: `Upgrade camp to level ${level}`,
         level,
         cost,
+        deep: false,
         makes: null,
       });
     }
@@ -53,6 +80,7 @@ export function labRecipes(): Recipe[] {
       name: recipe.name,
       level: 0,
       cost: recipe.inputs,
+      deep: false,
       makes: recipe.output,
     });
   }

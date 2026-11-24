@@ -1576,8 +1576,9 @@ export function mountCampLab(
     // A camp or an upgrade: a tent; a pickaxe or a lantern: itself;
     // smelting: a flame.
     const item = recipe.makes?.item;
-    const face =
-      item === undefined
+    const face = recipe.deep
+      ? '⛏'
+      : item === undefined
         ? '⛺'
         : item === FRONTIER_PICKAXE.item
           ? '⛏️'
@@ -1593,6 +1594,10 @@ export function mountCampLab(
     const icon = element('span', 'lab2-recipe-icon', face);
     if (recipe.level > 1) {
       icon.append(element('span', 'lab2-recipe-level', String(recipe.level)));
+    }
+    if (recipe.deep) {
+      // As its tag on the map: D.
+      icon.append(element('span', 'lab2-recipe-level', 'D'));
     }
     icon.title = recipe.name;
     return icon;
@@ -1636,6 +1641,12 @@ export function mountCampLab(
   function buildFrom(recipe: Recipe): void {
     if (recipe.makes !== null) {
       openBook(); // made in the book, with its Make button
+      return;
+    }
+    if (recipe.deep) {
+      // The camp tool, switched to the deep camp.
+      placingDeep = true;
+      setMode({ kind: 'placing', target: null });
       return;
     }
     if (recipe.level === 1) {
@@ -1750,7 +1761,9 @@ export function mountCampLab(
         element('span', 'lab2-recipe-name', name),
         costRow(recipe.cost, `lab2-recipe-${recipe.id}`),
       );
-      const does = whatItDoes(makes);
+      const does = recipe.deep
+        ? `A camp of its own at depth ${FRONTIER_DEEP_CAMP.minDepth}+: ring ${FRONTIER_DEEP_CAMP.radius}, mines as level ${FRONTIER_DEEP_CAMP.level}, never upgraded. The kit comes from the market after a tier-1 contract.`
+        : whatItDoes(makes);
       if (does !== null) {
         const line = element('span', 'lab2-recipe-does', does);
         line.dataset['testid'] = `lab2-recipe-does-${recipe.id}`;
