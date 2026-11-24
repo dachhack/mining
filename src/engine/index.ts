@@ -543,6 +543,8 @@ export {
   takeRefusal,
 } from './frontier/contracts';
 export type { ContractRefusal } from './frontier/contracts';
+// What the whole world still holds, for the contract board (owner, on the hazards build).
+export { groundStock, worldCanFill, worldStock } from './frontier/stock';
 // Animal pens (PR 4).
 export { breedPens, penAct, penRefusal } from './frontier/pens';
 // Marauders and camp defenses (hazards PR 5).

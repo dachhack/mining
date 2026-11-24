@@ -31,6 +31,7 @@ import type { FrontierContractDef } from '../../data/frontier';
 import { createRng, nextInt } from '../rng';
 import { canAfford, pay } from './camps';
 import { bestCampLevel, marketIsOpen } from './market';
+import { worldCanFill, worldStock } from './stock';
 import { gained } from './surface';
 import type { FrontierState } from './state';
 
@@ -48,7 +49,11 @@ export function openTiers(state: FrontierState): number[] {
 /**
  * The board on the shift being played: for each open tier, lowest first,
  * up to FRONTIER_BOARD.perTier of its contracts in an order drawn from the
- * seed and the shift. Empty unless the market is open.
+ * seed and the shift. Empty unless the market is open. Only contracts the
+ * world can fill are offered (stock.ts; owner, on the hazards build: "Let's
+ * inventory the entire board so that the contracts offered are not
+ * unfillable"): what the ground, the store and smelting hold covers every
+ * ask.
  */
 export function contractBoard(state: FrontierState): FrontierContractDef[] {
   if (!marketIsOpen(state)) return [];
@@ -58,8 +63,9 @@ export function contractBoard(state: FrontierState): FrontierContractDef[] {
     (Math.imul(state.seed, 0x9e3779b1) ^ Math.imul(state.shift, 0x85ebca6b)) >>> 0,
   );
   const board: FrontierContractDef[] = [];
+  const stock = worldStock(state);
   for (const tier of openTiers(state)) {
-    const pool = FRONTIER_CONTRACTS.filter((c) => c.tier === tier);
+    const pool = FRONTIER_CONTRACTS.filter((c) => c.tier === tier && worldCanFill(stock, c.asks));
     // Draw without putting back: a few steps of a shuffle.
     const left = [...pool];
     for (let k = 0; k < FRONTIER_BOARD.perTier && left.length > 0; k += 1) {
