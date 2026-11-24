@@ -188,7 +188,7 @@ The owner (2026-11-24): "Pockets of gas can explode starting at level 4. This bl
 The owner (2026-11-24): "Wandering dragons can eat your sheep and apples and set fire to things. They don't go away until you get a sword and drive them away." Plan: `docs/plans/hazards.md`, section 4.
 
 - **When:** from [Default] shift 20, at End shift, a dragon flies in at the map's edge on [Default] 1 night in 12, while fewer than [Default] 1 are on the map (`FRONTIER_DRAGON`).
-- **Each night** each dragon flies [Default] 4 squares, over anything; eats one animal on or beside its square (or, on a camp's ground, one from its pen) and every apple on the apple trees on or beside it (they come back as if picked); and on [Default] 1 night in 3 sets fire to one thing that can burn on or beside it. "Beside" is the 8 squares round it.
+- **Each night** each dragon flies [Default] 4 squares in a straight line, in one of 8 directions, over anything and bouncing off the map's edge (owner, on the hazards build: "Dragon doesn't seem to move"); eats one animal on or beside its square (or, on a camp's ground, one from its pen) and every apple on the apple trees on or beside it (they come back as if picked); and on [Default] 1 night in 3 sets fire to one thing that can burn on or beside it. "Beside" is the 8 squares round it.
 - **The sword** (question 187): made at a camp with a smelter from 3 iron ingots and 2 wood, or [Default] 60 coins at the market from a level-3 camp. A tap on a dragon with a sword drives it off the map (1 tap); the sword is kept. Without one, a tap on a dragon does nothing.
 
 ### 4.8 Marauders and defenses [Decided; numbers Default]

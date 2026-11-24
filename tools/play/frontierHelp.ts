@@ -93,7 +93,7 @@ export function frontierHelpText(): string {
     '  burn beside it, then burns its square out (grass and trees grow back later; a camp loses one upgrade).',
     '  A fire no camp lights burns out without spreading.',
     `  Dragons (D): from shift ${FRONTIER_DRAGON.fromShift}, about 1 night in ${Math.round(1 / FRONTIER_DRAGON.chance)} one flies in at the edge (at most ${FRONTIER_DRAGON.most}). Each night it flies`,
-    `  ${FRONTIER_DRAGON.steps} squares, eats an animal beside it (or one from the pen of the camp it is on) and the apples round it,`,
+    `  ${FRONTIER_DRAGON.steps} squares in a straight line (any of 8 ways, bouncing off the edge), eats an animal beside it (or one from the pen of the camp it is on) and the apples round it,`,
     '  and sometimes sets a fire. It stays until "tap X,Y" on it with a sword drives it off ("make sword" at a smelter,',
     '  or buy one at the market from a level-3 camp). The sword is kept.',
     `  Marauders: from shift ${FRONTIER_RAID.fromShift}, about ${Math.round(FRONTIER_RAID.chance * 100)}% of nights they raid one camp at random. Their strength is`,

@@ -784,8 +784,8 @@ export const FRONTIER_GAS = {
  * and apples and set fire to things. They don't go away until you get a
  * sword and drive them away." From shift `fromShift`, at End shift, a dragon
  * flies in at the map's edge with a chance of `chance`, while fewer than
- * `most` are on the map. Each night each dragon flies `steps` squares (over
- * anything), eats one animal on or beside its square (or, on a camp's
+ * `most` are on the map. Each night each dragon flies `steps` squares in a
+ * straight line in one of 8 directions (over anything, bouncing off the edge), eats one animal on or beside its square (or, on a camp's
  * ground, one from its pen) and every apple on the apple trees on or beside
  * its square, and with a chance of `fireChance` sets fire to one thing that
  * can burn on or beside its square. A tap on it with a sword in the store

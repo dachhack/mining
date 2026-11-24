@@ -129,6 +129,7 @@ import { LAB_LOOK } from './labLook';
 import { topBlocksOf } from './labWorld';
 import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from './surface';
 import type { Animal } from './surface';
+import type { FrontierDragon } from '../../engine';
 import {
   clayTexture,
   drawAnimal,
@@ -440,6 +441,8 @@ export function mountCampLab(
    * when a shift ends).
    */
   const lastStep = new Map<number, { x: number; y: number; at: number; facing: number }>();
+  /** Where each dragon flew from in the last night, and when the morning began (hazards PR 4). */
+  const lastFlight = new Map<number, { x: number; y: number; at: number }>();
 
   // ----- The page -----
   const page = element('main', 'lab lab2');
@@ -760,10 +763,20 @@ export function mountCampLab(
     }
 
     drawAnimals(ctx, c);
-    // Dragons (hazards PR 4), on lit squares only.
+    // Dragons (hazards PR 4), on lit squares only. In the morning one glides
+    // from where it was to where it flew in the night, so it is seen to move.
     for (const dragon of world.hazards.dragons) {
       if (sightOf(dragon.x, dragon.y) !== 'shown') continue;
-      const { px, py } = toPx(dragon.x, dragon.y);
+      const flight = lastFlight.get(dragon.id);
+      let fx = dragon.x;
+      let fy = dragon.y;
+      if (flight !== undefined) {
+        const t = Math.min(1, Math.max(0, (now - flight.at) / CAMP_LOOK.dragonFlightMs));
+        const eased = t * t * (3 - 2 * t);
+        fx = flight.x + (dragon.x - flight.x) * eased;
+        fy = flight.y + (dragon.y - flight.y) * eased;
+      }
+      const { px, py } = toPx(fx, fy);
       drawDragon(ctx, px + c / 2, py + c / 2, c);
     }
     if (mode.kind === 'placing' && mode.target !== null) {
@@ -1026,6 +1039,16 @@ export function mountCampLab(
   }
 
   /** Note each animal that moved between `before` and the world now, for `drawAnimals`. */
+  /** Note each dragon that flew in the night, so it glides there in the morning. */
+  function noteFlights(before: FrontierDragon[]): void {
+    for (const dragon of world.hazards.dragons) {
+      const was = before.find((d) => d.id === dragon.id);
+      if (was !== undefined && (was.x !== dragon.x || was.y !== dragon.y)) {
+        lastFlight.set(dragon.id, { x: was.x, y: was.y, at: performance.now() });
+      }
+    }
+  }
+
   function noteSteps(before: Animal[]): void {
     for (const animal of world.surface.animals) {
       const was = before.find((a) => a.id === animal.id);
@@ -1420,7 +1443,9 @@ export function mountCampLab(
     draw(now);
     // While the camp tool has a target, keep drawing: its square pulses. So
     // too while an animal is still sliding to where End shift moved it.
-    const sliding = [...lastStep.values()].some((step) => now - step.at < CAMP_LOOK.animalSlideMs);
+    const sliding =
+      [...lastStep.values()].some((step) => now - step.at < CAMP_LOOK.animalSlideMs) ||
+      [...lastFlight.values()].some((f) => now - f.at < CAMP_LOOK.dragonFlightMs);
     return effects.length > 0 || sliding || (mode.kind === 'placing' && mode.target !== null);
   });
 
@@ -2720,6 +2745,7 @@ export function mountCampLab(
    */
   function finishShift(restAt: number | null): void {
     const before = world.surface.animals;
+    const dragonsBefore = world.hazards.dragons;
     const rest = restAt !== null;
     const result = restAt !== null ? restCrew(world, restAt) : endShift(world);
     if (result.report === null) {
@@ -2749,6 +2775,7 @@ export function mountCampLab(
       onDone: () => {
         night = null;
         noteSteps(before);
+        noteFlights(dragonsBefore);
         cues.start();
         // A market day: the market opens now, after the night, before the day.
         openMarket();
@@ -3094,6 +3121,7 @@ export function mountCampLab(
     history = emptyHistory(world);
     showUndo();
     lastStep.clear();
+    lastFlight.clear();
     effects = [];
     mode = { kind: 'idle' };
     preview = new Set();

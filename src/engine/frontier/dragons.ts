@@ -4,9 +4,11 @@
 // things. They don't go away until you get a sword and drive them away."
 //
 // At End shift (`nightOfDragons`), after the fires and pumps, before rain:
-// 1. each dragon flies FRONTIER_DRAGON.steps squares, one face step at a time
-//    in a direction drawn from the state's generator, over anything (trees,
-//    pits, water, camps); a step off the map is not taken;
+// 1. each dragon flies FRONTIER_DRAGON.steps squares in a straight line, in
+//    one of the 8 directions drawn from the state's generator, over anything
+//    (trees, pits, water, camps), bouncing off the map's edge (owner, on the
+//    hazards build: "Dragon doesn't seem to move": random single steps
+//    mostly went back and forth);
 // 2. it eats one animal on or beside its square (the lowest id first); if
 //    there is none and it is on a camp's ground, one animal from that camp's
 //    pen; and every apple on the apple trees on or beside its square (they
@@ -31,12 +33,16 @@ import { isCombustible, withFires } from './fire';
 import { APPLE_TREE } from './state';
 import type { FrontierDragon, FrontierState } from './state';
 
-/** The four face steps a dragon can take. */
-const STEPS = [
+/** The 8 directions a dragon can fly: the 4 sides and the 4 corners. */
+const DIRECTIONS = [
   [0, -1],
+  [1, -1],
   [1, 0],
+  [1, 1],
   [0, 1],
+  [-1, 1],
   [-1, 0],
+  [-1, -1],
 ] as const;
 
 /** The dragon on square (x, y), or `null`. */
@@ -78,16 +84,17 @@ export function nightOfDragons(state: FrontierState, rng: RngState): DragonNight
   const fires: { x: number; y: number }[] = [];
   const moved: FrontierDragon[] = [];
   for (const dragon of state.hazards.dragons) {
-    // 1. It flies.
+    // 1. It flies in a straight line, bouncing off the edge.
     let { x, y } = dragon;
+    // `: number`: the table's entries are -1, 0 or 1; a bounce flips the sign.
+    const heading = DIRECTIONS[nextInt(rng, DIRECTIONS.length)] ?? [1, 0];
+    let dx: number = heading[0];
+    let dy: number = heading[1];
     for (let k = 0; k < FRONTIER_DRAGON.steps; k += 1) {
-      const [dx, dy] = STEPS[nextInt(rng, STEPS.length)] ?? [0, 0];
-      const nx = x + dx;
-      const ny = y + dy;
-      if (nx >= 0 && ny >= 0 && nx < width && ny < height) {
-        x = nx;
-        y = ny;
-      }
+      if (x + dx < 0 || x + dx >= width) dx = -dx;
+      if (y + dy < 0 || y + dy >= height) dy = -dy;
+      x += dx;
+      y += dy;
     }
     moved.push({ ...dragon, x, y });
     // 2. It eats: one animal, roaming or else penned; and apples.

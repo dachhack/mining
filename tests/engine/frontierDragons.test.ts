@@ -20,15 +20,32 @@ const near = (a: { x: number; y: number }, b: { x: number; y: number }): boolean
   Math.abs(a.x - b.x) <= 1 && Math.abs(a.y - b.y) <= 1;
 
 describe('a dragon at night (hazards plan, section 4)', () => {
-  it('flies at most FRONTIER_DRAGON.steps squares, and stays on the map', () => {
+  it('flies FRONTIER_DRAGON.steps squares in a straight line, so it is seen to move', () => {
+    // Owner, on the hazards build: "Dragon doesn't seem to move."
+    const lands = new Set<string>();
     for (let seed = 1; seed <= 100; seed += 1) {
-      const w = withDragon(world(), 0, 0);
+      const w = withDragon(world(), MID, MID);
       const night = nightOfDragons(w, createRng(seed));
       const d = night.state.hazards.dragons[0];
       if (d === undefined) throw new Error('the dragon is still there');
-      expect(d.x + d.y).toBeLessThanOrEqual(FRONTIER_DRAGON.steps);
+      const dx = d.x - MID;
+      const dy = d.y - MID;
+      // Away from the edge it always lands its full flight away, in a straight line.
+      expect(Math.max(Math.abs(dx), Math.abs(dy))).toBe(FRONTIER_DRAGON.steps);
+      expect(dx === 0 || dy === 0 || Math.abs(dx) === Math.abs(dy)).toBe(true);
+      lands.add(`${dx},${dy}`);
+    }
+    expect(lands.size).toBe(8); // all 8 directions come up
+  });
+
+  it('bounces off the edge of the map', () => {
+    for (let seed = 1; seed <= 100; seed += 1) {
+      const night = nightOfDragons(withDragon(world(), 0, 0), createRng(seed));
+      const d = night.state.hazards.dragons[0];
+      if (d === undefined) throw new Error('the dragon is still there');
       expect(d.x).toBeGreaterThanOrEqual(0);
       expect(d.y).toBeGreaterThanOrEqual(0);
+      expect(Math.max(d.x, d.y)).toBeLessThanOrEqual(FRONTIER_DRAGON.steps);
     }
   });
 
@@ -59,9 +76,10 @@ describe('a dragon at night (hazards plan, section 4)', () => {
     if (camp === undefined) throw new Error('the test world has a camp');
     let ateFromPen = false;
     for (let seed = 1; seed <= 200 && !ateFromPen; seed += 1) {
+      // A flight's length west of the camp: flying east, it lands on it.
       const w = withDragon(
         { ...base, camps: [{ ...camp, level: 2, pen: true, penned: 3, breedIn: 2 }] },
-        MID,
+        MID - FRONTIER_DRAGON.steps,
         MID,
       );
       const night = nightOfDragons(w, createRng(seed));
@@ -81,16 +99,25 @@ describe('a dragon at night (hazards plan, section 4)', () => {
         features.push({ x, y, feature: APPLE_TREE, apples: 3 });
       }
     }
-    const w = withDragon(world({ features }), MID, MID - 5);
-    const night = nightOfDragons(w, createRng(7));
-    const d = night.state.hazards.dragons[0];
-    if (d === undefined) throw new Error('the dragon is still there');
-    for (const f of features) {
-      const i = f.x + SIDE * f.y;
-      expect(night.state.apples[i]).toBe(near(f, d) ? 0 : 3);
-      if (near(f, d)) expect(night.state.regrowIn[i]).toBeGreaterThan(0);
+    let ate = 0;
+    for (let seed = 1; seed <= 20; seed += 1) {
+      const w = withDragon(world({ features }), MID, MID - 5);
+      const night = nightOfDragons(w, createRng(seed));
+      const d = night.state.hazards.dragons[0];
+      if (d === undefined) throw new Error('the dragon is still there');
+      let expected = 0;
+      for (const f of features) {
+        const i = f.x + SIDE * f.y;
+        expect(night.state.apples[i]).toBe(near(f, d) ? 0 : 3);
+        if (near(f, d)) {
+          expect(night.state.regrowIn[i]).toBeGreaterThan(0);
+          expected += 3;
+        }
+      }
+      expect(night.applesEaten).toBe(expected);
+      ate += night.applesEaten;
     }
-    expect(night.applesEaten).toBe(27);
+    expect(ate).toBeGreaterThan(0);
   });
 
   it('sometimes sets fire to something that can burn beside it, never further', () => {

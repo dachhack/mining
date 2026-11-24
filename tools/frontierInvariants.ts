@@ -362,7 +362,8 @@ export function checkStep(
         if (before.shift < FRONTIER_DRAGON.fromShift)
           say(`dragon ${d.id} came on shift ${before.shift}`);
       } else {
-        const moved = Math.abs(d.x - was.x) + Math.abs(d.y - was.y);
+        // Straight flights in 8 directions: at most `steps` squares each way.
+        const moved = Math.max(Math.abs(d.x - was.x), Math.abs(d.y - was.y));
         if (moved > 0 && !endsShift) say(`dragon ${d.id} moved by "${step}"`);
         if (moved > FRONTIER_DRAGON.steps) say(`dragon ${d.id} flew ${moved} squares`);
       }
