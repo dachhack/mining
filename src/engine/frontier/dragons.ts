@@ -21,8 +21,11 @@
 //    of the map's edge with a chance of FRONTIER_DRAGON.chance. It does
 //    nothing until the next night.
 // In the day it keeps flying (owner: "Let's make the dragon fly every time
-// you mine"): each mining tap moves each dragon FRONTIER_DRAGON.stepsPerMine
-// squares along its heading, bouncing off the edge (`dragonsFlyOnMine`).
+// you mine. Or every 3-7 mines. So it stays put for a bit."): each mining tap
+// counts down its `restMines`; when it runs out the dragon flies
+// FRONTIER_DRAGON.stepsPerMine squares along its heading, bouncing off the
+// edge, and rests again for a count drawn from FRONTIER_DRAGON.restMines
+// (`dragonsFlyOnMine`).
 // "Beside" is the 8 squares round it. A tap on a dragon with a sword in the
 // store drives it off the map (tap.ts); without one it does nothing.
 //
@@ -68,15 +71,29 @@ export function flyDragon(
   return { ...dragon, x, y, dx, dy };
 }
 
-/** `state` with every dragon flown on by a mining tap (FRONTIER_DRAGON.stepsPerMine squares). */
+/** A new rest, in mining taps: a whole number in FRONTIER_DRAGON.restMines, drawn with `rng`. */
+export function drawRest(rng: RngState): number {
+  const [low, high] = FRONTIER_DRAGON.restMines;
+  return low + nextInt(rng, high - low + 1);
+}
+
+/**
+ * `state` after a mining tap: each dragon's rest counts down; one whose rest
+ * runs out flies FRONTIER_DRAGON.stepsPerMine squares along its heading and
+ * rests again for a new count (drawn on a copy of the state's generator,
+ * kept in the new state).
+ */
 export function dragonsFlyOnMine(state: FrontierState): FrontierState {
   if (state.hazards.dragons.length === 0) return state;
   const width = state.cube.size.x;
   const height = state.cube.size.y;
-  const dragons = state.hazards.dragons.map((d) =>
-    flyDragon(d, FRONTIER_DRAGON.stepsPerMine, width, height),
-  );
-  return { ...state, hazards: { ...state.hazards, dragons } };
+  const rng = { ...state.rng };
+  const dragons = state.hazards.dragons.map((d) => {
+    if (d.restMines > 1) return { ...d, restMines: d.restMines - 1 };
+    const flown = flyDragon(d, FRONTIER_DRAGON.stepsPerMine, width, height);
+    return { ...flown, restMines: drawRest(rng) };
+  });
+  return { ...state, rng, hazards: { ...state.hazards, dragons } };
 }
 
 /** The dragon on square (x, y), or `null`. */
@@ -200,7 +217,10 @@ export function nightOfDragons(state: FrontierState, rng: RngState): DragonNight
     // It comes in heading across the map, away from the edge it came in at.
     const dx = at.x === 0 ? 1 : at.x === width - 1 ? -1 : 0;
     const dy = at.y === 0 ? 1 : at.y === height - 1 ? -1 : 0;
-    dragons = [...dragons, { id: nextDragonId, x: at.x, y: at.y, dx, dy }];
+    dragons = [
+      ...dragons,
+      { id: nextDragonId, x: at.x, y: at.y, dx, dy, restMines: drawRest(rng) },
+    ];
     nextDragonId += 1;
     came = true;
   }

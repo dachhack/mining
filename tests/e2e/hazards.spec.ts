@@ -55,7 +55,7 @@ test('a dragon needs a sword; with one, a tap drives it off (hazards PR 4)', asy
   const start = createFrontier(110);
   const camp = start.camps[0] ?? { x: 0, y: 0 };
   const at = { x: camp.x + 3, y: camp.y };
-  const dragons = [{ id: 1, x: at.x, y: at.y, dx: 1, dy: 0 }];
+  const dragons = [{ id: 1, x: at.x, y: at.y, dx: 1, dy: 0, restMines: 5 }];
   const state: FrontierState = {
     ...start,
     hazards: { ...start.hazards, dragons, nextDragonId: 2 },

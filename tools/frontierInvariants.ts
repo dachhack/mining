@@ -371,6 +371,11 @@ export function checkStep(
         if (moved > most) say(`dragon ${d.id} flew ${moved} squares by "${step}"`);
         if (Math.abs(d.dx) > 1 || Math.abs(d.dy) > 1 || (d.dx === 0 && d.dy === 0))
           say(`dragon ${d.id} has heading ${d.dx},${d.dy}`);
+        const [restLow, restHigh] = FRONTIER_DRAGON.restMines;
+        if (d.restMines < 1 || d.restMines > restHigh || !Number.isInteger(d.restMines))
+          say(`dragon ${d.id} rests ${d.restMines} mines`);
+        if (moved > 0 && mined && d.restMines < restLow)
+          say(`dragon ${d.id} flew and rests only ${d.restMines}`);
       }
     }
     for (const d of before.hazards.dragons) {

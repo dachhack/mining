@@ -796,8 +796,14 @@ export const FRONTIER_DRAGON = {
   chance: 1 / 12,
   most: 1,
   steps: 4,
-  /** Squares each dragon flies along its heading on each mining tap (owner: "fly every time you mine"). */
+  /**
+   * In the day a dragon rests for `restMines` mining taps (a whole number
+   * from the first to the second, drawn from the run's generator), then flies
+   * `stepsPerMine` squares along its heading (owner: "Let's make the dragon
+   * fly every time you mine. Or every 3-7 mines. So it stays put for a bit.").
+   */
   stepsPerMine: 1,
+  restMines: [3, 7] as [number, number],
   fireChance: 1 / 3,
   sword: 'sword' as ItemId,
 };

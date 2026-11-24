@@ -15,7 +15,11 @@ import { AT, MID, SIDE, world } from './frontierHelpers';
 function withDragon(state: FrontierState, x: number, y: number): FrontierState {
   return {
     ...state,
-    hazards: { ...state.hazards, dragons: [{ id: 1, x, y, dx: 1, dy: 0 }], nextDragonId: 2 },
+    hazards: {
+      ...state.hazards,
+      dragons: [{ id: 1, x, y, dx: 1, dy: 0, restMines: 1 }],
+      nextDragonId: 2,
+    },
   };
 }
 
@@ -206,6 +210,31 @@ describe('the sword (hazards plan, section 4)', () => {
 });
 
 describe('a dragon in the day (owner: "Let\'s make the dragon fly every time you mine")', () => {
+  it('rests for 3 to 7 mines, then flies a square along its heading, and rests again', () => {
+    expect(FRONTIER_DRAGON.restMines).toEqual([3, 7]);
+    const start = withDragon(world(), 3, 3);
+    const resting = {
+      ...start,
+      hazards: {
+        ...start.hazards,
+        dragons: start.hazards.dragons.map((d) => ({ ...d, restMines: 3 })),
+      },
+    };
+    // Three dirt squares in the camp's ring to mine, one after another.
+    let s = resting;
+    const spots = [AT, { x: AT.x, y: AT.y + 1 }, { x: AT.x, y: AT.y - 1 }];
+    const xs: number[] = [];
+    for (const spot of spots) {
+      s = frontierAct(s, { kind: 'tap', x: spot.x, y: spot.y }).state;
+      xs.push(s.hazards.dragons[0]?.x ?? -1);
+    }
+    // It stays put for the first two mines and flies on the third.
+    expect(xs).toEqual([3, 3, 3 + FRONTIER_DRAGON.stepsPerMine]);
+    const rest = s.hazards.dragons[0]?.restMines ?? 0;
+    expect(rest).toBeGreaterThanOrEqual(3);
+    expect(rest).toBeLessThanOrEqual(7);
+  });
+
   it('flies a square along its heading each time a block is mined, and not otherwise', () => {
     const w = {
       ...withDragon(world({ features: [{ x: AT.x, y: AT.y + 1, feature: GRASS }] }), 3, 3),
@@ -244,6 +273,8 @@ describe('a dragon in the day (owner: "Let\'s make the dragon fly every time you
       if (d.y === 0) expect(d.dy).toBe(1);
       if (d.y === SIDE - 1) expect(d.dy).toBe(-1);
       expect(d.dx !== 0 || d.dy !== 0).toBe(true);
+      expect(d.restMines).toBeGreaterThanOrEqual(3);
+      expect(d.restMines).toBeLessThanOrEqual(7);
     }
   });
 });
