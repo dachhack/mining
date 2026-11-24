@@ -63,7 +63,8 @@
 //   and the level rule holds everywhere after; a fire starts only by a blast
 //   (within FRONTIER_GAS.fireRadius) or at night beside a fire or a dragon,
 //   and only on something that can burn; a tap puts out exactly the fire it is on; at
-//   night every fire burning before goes out, leaving nothing growing.
+//   night every fire burning before goes out, leaving nothing growing (a
+//   stump may wait to grow back).
 // - DRAGONS: never more than FRONTIER_DRAGON.most, always on the map; one
 //   comes only at night, at the edge, from FRONTIER_DRAGON.fromShift; they
 //   move only at night, at most FRONTIER_DRAGON.steps squares; one leaves
@@ -333,13 +334,8 @@ export function checkStep(
       );
       if (was && burning && endsShift && !dragonBy)
         say(`the fire on ${x},${y} burned on through the night`);
-      if (was && endsShift) {
-        if (
-          (after.features[i] ?? NO_FEATURE) !== NO_FEATURE ||
-          (after.stumps[i] ?? NO_FEATURE) !== NO_FEATURE
-        )
-          say(`${x},${y} burned out but something grows there`);
-      }
+      if (was && endsShift && (after.features[i] ?? NO_FEATURE) !== NO_FEATURE)
+        say(`${x},${y} burned out but something grows there`);
       if (was && !burning && !endsShift && !(outcome.tap?.kind === 'fire' && x === tx && y === ty))
         say(`the fire on ${x},${y} went out by "${step}"`);
     });

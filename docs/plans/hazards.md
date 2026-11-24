@@ -51,7 +51,7 @@ This changes the design doc's Hazards row (section 2: "None for now") and sectio
 - **The blast:** every other square within `blastRadius` (1: the 3×3 round the mined square) loses its top block, giving nothing ("blown away"), where the level rule allows it, row by row. Camps' ground, flooded squares and squares with plants or stumps are not dug.
 - **Fires:** every combustible square within `fireRadius` (3) of the blast catches fire.
 - **Putting out a fire:** tap it (1 tap). No tool is needed. A tap on a burning square puts the fire out and does nothing else.
-- **A fire left burning** at End shift: it spreads to each combustible face neighbour, then burns its own square out: a tree or apple tree is gone with no stump (nothing grows back), grass is gone, a sapling is gone. A burning **camp** loses one upgrade, in the same order as a raid (section 5), and its fire goes out (question 186). A fire in the fog burns and spreads unseen.
+- **A fire left burning** at End shift: it spreads to each combustible face neighbour, then burns its own square out: grass grows back as cut grass does, a tree leaves a stump that grows back as a felled tree's does, a sapling becomes a stump. A burning **camp** loses one upgrade, in the same order as a raid (section 5), and its fire goes out (question 186). A fire on a square no camp lights burns out without spreading (question 195).
 - **Screen:** a flash for the blast, flames on burning squares, "N fires" on the counter, and fires in the night report.
 
 ## 4. Dragons and the sword (PR 4)

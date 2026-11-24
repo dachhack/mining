@@ -4,7 +4,7 @@
 // fire with a click."
 import { describe, expect, it } from 'vitest';
 import type { Vec3 } from '../../src/data';
-import { FRONTIER_GAS } from '../../src/data/frontier';
+import { FRONTIER_GAS, FRONTIER_SHIFT } from '../../src/data/frontier';
 import { frontierAct, previewTap } from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
 import { burnFires, stripCamp, withFires } from '../../src/engine/frontier/fire';
@@ -141,7 +141,7 @@ describe('fire (hazards plan, section 3)', () => {
     expect(out.state.inventory.get('grass') ?? 0).toBe(w.inventory.get('grass') ?? 0);
   });
 
-  it('left burning, spreads to what can burn beside it, then burns its square out for good', () => {
+  it('left burning, spreads to what can burn beside it, then burns its square out', () => {
     // A row of grass; the middle one burns.
     const row = [MID + 3, MID + 4, MID + 5].map((x) => ({ x, y: MID, feature: GRASS as Feature }));
     const w = withFires(world({ features: row }), [{ x: MID + 4, y: MID }]);
@@ -150,9 +150,29 @@ describe('fire (hazards plan, section 3)', () => {
     expect(night.spread).toBe(2);
     expect(burning(night.state)).toEqual([`${MID + 3},${MID}`, `${MID + 5},${MID}`]);
     expect(night.state.features[MID + 4 + SIDE * MID]).toBe(NO_FEATURE);
-    // Nothing grows back where it burned: no stump, no waiting grass.
-    expect(night.state.stumps[MID + 4 + SIDE * MID]).toBe(NO_FEATURE);
-    expect(night.state.grassIn[MID + 4 + SIDE * MID]).toBe(-1);
+    // Burnt grass grows back as cut grass does.
+    expect(night.state.grassIn[MID + 4 + SIDE * MID]).toBe(FRONTIER_SHIFT.grassRegrowShifts);
+  });
+
+  it('burns a tree to a stump that grows back as a felled tree does', () => {
+    const w = withFires(world({ features: [{ x: MID + 4, y: MID, feature: TREE }] }), [
+      { x: MID + 4, y: MID },
+    ]);
+    const night = burnFires(w);
+    const i = MID + 4 + SIDE * MID;
+    expect(night.state.features[i]).toBe(NO_FEATURE);
+    expect(night.state.stumps[i]).toBe(TREE);
+    expect(night.state.regrowIn[i]).toBe(FRONTIER_SHIFT.treeRegrowShifts);
+  });
+
+  it('does not spread from a square no camp lights: nobody can put it out there', () => {
+    // A row of grass at the map's edge, far outside the camp's ring.
+    const row = [0, 1, 2].map((x) => ({ x, y: 0, feature: GRASS as Feature }));
+    const w = withFires(world({ features: row }), [{ x: 1, y: 0 }]);
+    const night = burnFires(w);
+    expect(night.burned).toBe(1);
+    expect(night.spread).toBe(0);
+    expect(burning(night.state)).toEqual([]);
   });
 
   it('at End shift: the report says what burned', () => {

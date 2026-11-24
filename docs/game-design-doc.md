@@ -181,7 +181,7 @@ The owner (2026-11-24): "Pockets of gas can explode starting at level 4. This bl
 - **The blast** takes the top block off every other square in the 3×3 round the mined square, row by row, where the level rule allows it then (question 193), giving nothing. Camps' ground, flooded squares, and squares with plants or stumps are not dug. A blast that opens water floods as a mine would.
 - **Fires** start on everything that can burn within [Default] 3 squares: grass, trees, apple trees, stumps, saplings and camps' ground.
 - **Putting a fire out:** a tap on it, 1 tap, before anything else on the square.
-- **A fire left burning** at End shift spreads to what can burn beside it, then burns its own square out: plants and stumps are gone for good (nothing grows back there); a camp loses one upgrade a night (the lantern, the pen and its animals, the smelter, then a level; a deep camp keeps its level). A fire in the fog burns unseen.
+- **A fire left burning** at End shift spreads to what can burn beside it, then burns its own square out: grass grows back as cut grass does; a tree or apple tree leaves a stump that grows back as a felled tree's does; a stump or sapling starts its wait again; a camp loses one upgrade a night (the lantern, the pen and its animals, the smelter, then a level; a deep camp keeps its level). A fire on a square no camp lights cannot be put out, so it burns out without spreading (question 195).
 
 ### 4.7 Dragons and the sword [Decided; numbers Default]
 

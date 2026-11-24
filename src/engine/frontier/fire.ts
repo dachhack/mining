@@ -11,16 +11,23 @@
 //   else happens to the square.
 // - A fire left burning at End shift (`burnFires`) first spreads to each
 //   combustible face neighbour that is not burning, then burns its own
-//   square out: grass, trees and apple trees are gone, and nothing grows back
-//   there (no stump); a stump or sapling is gone; a camp loses one upgrade
+//   square out: grass is gone and grows back as cut grass does
+//   (FRONTIER_SHIFT.grassRegrowShifts, if grass grows beside it); a tree or
+//   apple tree is gone and leaves a stump that grows back as a felled tree's
+//   does (FRONTIER_SHIFT.treeRegrowShifts); a stump or sapling starts its
+//   wait again (a sapling becomes a stump); a camp loses one upgrade
 //   (`stripCamp`). Its fire then goes out. The fires it spread burn the next
 //   night if nobody puts them out.
-// - A fire in the fog burns and spreads unseen.
+// - A fire on a square no camp lights (in the fog, or greyed) cannot be put
+//   out, so it does not spread: it burns its square out and goes out
+//   (question 195; the simulator showed unseen fires burning through whole
+//   forests).
 //
 // The numbers are in src/data/frontier.ts.
 
-import { campAt } from './camps';
-import { NO_FEATURE } from './state';
+import { FRONTIER_SHIFT } from '../../data/frontier';
+import { campAt, sightAt } from './camps';
+import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from './state';
 import type { Feature, FrontierCamp, FrontierState } from './state';
 
 /** The four face neighbours of a square, in a fixed order. */
@@ -134,6 +141,8 @@ export function burnFires(state: FrontierState): Burning {
       if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
       const j = nx + width * ny;
       if (fires[j] === true || next[j]) continue;
+      // A fire the player cannot see or reach does not spread.
+      if (sightAt(state, x, y) !== 'shown') continue;
       if (!isCombustible(state, nx, ny)) continue;
       next[j] = true;
       spread += 1;
@@ -150,12 +159,18 @@ export function burnFires(state: FrontierState): Burning {
   let campUpgradesLost = 0;
   const campsHit = new Set<number>();
   for (const i of burningNow) {
+    const feature = features[i] ?? NO_FEATURE;
+    if (feature === GRASS) {
+      grassIn[i] = FRONTIER_SHIFT.grassRegrowShifts; // grows back as cut grass does
+    } else if (feature === TREE || feature === APPLE_TREE) {
+      stumps[i] = feature; // a stump, as a felled tree leaves
+      regrowIn[i] = FRONTIER_SHIFT.treeRegrowShifts;
+    } else if ((stumps[i] ?? NO_FEATURE) !== NO_FEATURE) {
+      regrowIn[i] = FRONTIER_SHIFT.treeRegrowShifts; // the stump's wait starts again
+    }
     features[i] = NO_FEATURE;
     apples[i] = 0;
-    stumps[i] = NO_FEATURE;
-    regrowIn[i] = -1;
     planted[i] = false;
-    grassIn[i] = -1;
     const camp = campAt(camps, i % width, Math.floor(i / width));
     // A camp loses one upgrade a night, however many of its squares burn.
     if (camp !== null && !campsHit.has(camp.id)) {
