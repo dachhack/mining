@@ -69,8 +69,9 @@ import type { GameState } from './state';
  *        only from the market (decision note 0063).
  * 0.11.0: after the market-scene build: as many contracts held at once as
  *        the best camp's level.
+ * 0.12.0: after the 0.11.0 build: clay contracts in volume (tiers 1 and 2).
  */
-export const ENGINE_VERSION = '0.11.0';
+export const ENGINE_VERSION = '0.12.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {

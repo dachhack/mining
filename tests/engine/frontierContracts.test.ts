@@ -76,6 +76,21 @@ describe('the contract board (plan section 5)', () => {
   });
 });
 
+describe('clay contracts (owner: bricks, pottery and roads)', () => {
+  it('ask for clay in volume at tiers 1 and 2, and pay more than the market', () => {
+    const clay = FRONTIER_CONTRACTS.filter(
+      (c) => c.asks.length === 1 && c.asks[0]?.item === 'clay',
+    );
+    expect(clay.map((c) => c.tier).sort()).toEqual([1, 1, 2, 2]);
+    expect(Math.max(...clay.map((c) => c.asks[0]?.count ?? 0))).toBeGreaterThanOrEqual(400);
+    const lot = FRONTIER_MARKET.sellPrices.find((l) => l.item === 'clay');
+    for (const c of clay) {
+      const fetch = ((c.asks[0]?.count ?? 0) / (lot?.count ?? 1)) * (lot?.coins ?? 0);
+      expect(c.pays, c.id).toBeGreaterThan(fetch);
+    }
+  });
+});
+
 describe('taking, delivering and dropping contracts', () => {
   it('takes one from the board at the market for no tap, delivers it later for 1 tap and its coins, and counts it done', () => {
     const w = at(3);
