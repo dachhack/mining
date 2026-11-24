@@ -28,28 +28,54 @@ export interface GroundSize {
   y: number;
 }
 
+/**
+ * How far, in screen pixels, the map may be dragged past each of its edges.
+ * The HUD, Close mine, End shift and Undo float over the map's corners (40
+ * px tall, 8 px in); with this much slack, any edge square can be dragged
+ * out from under them and tapped (owner, after the market-scene build: "I
+ * can't mine the corners because of the floating buttons"). Pixels, not
+ * squares, so it is the same on screen at every zoom.
+ */
+export const LAB_EDGE_MARGIN_PX = 64;
+
 /** How many squares the window shows down. */
 export function rowsOf(camera: LabCamera, view: ViewSize): number {
   return view.width > 0 ? (camera.cells * view.height) / view.width : camera.cells;
 }
 
-/** Keep one coordinate inside the map; if the window is bigger than the map, centre the map in it. */
-function clampAxis(value: number, mapSquares: number, windowSquares: number): number {
-  if (windowSquares >= mapSquares) {
+/**
+ * Keep one coordinate so the window stays over the map, give or take
+ * `margin` squares past either edge; if the window is bigger than the map
+ * and both margins, centre the map in it.
+ */
+function clampAxis(
+  value: number,
+  mapSquares: number,
+  windowSquares: number,
+  margin: number,
+): number {
+  const lowest = -margin;
+  const highest = mapSquares - windowSquares + margin;
+  if (lowest > highest) {
     return (mapSquares - windowSquares) / 2;
   }
-  return Math.min(Math.max(value, 0), mapSquares - windowSquares);
+  return Math.min(Math.max(value, lowest), highest);
 }
 
-/** `camera` with its zoom inside the range and the window over the map. */
+/**
+ * `camera` with its zoom inside the range and the window over the map,
+ * allowing LAB_EDGE_MARGIN_PX past each edge.
+ */
 export function clampLabCamera(camera: LabCamera, ground: GroundSize, view: ViewSize): LabCamera {
   const most = ground.x;
   const fewest = Math.min(PREVIEW_MAP.minCells, most);
   const cells = Math.min(Math.max(camera.cells, fewest), most);
   const zoomed = { x: camera.x, y: camera.y, cells };
+  // LAB_EDGE_MARGIN_PX in squares at this zoom.
+  const margin = view.width > 0 ? (LAB_EDGE_MARGIN_PX * cells) / view.width : 0;
   return {
-    x: clampAxis(camera.x, ground.x, cells),
-    y: clampAxis(camera.y, ground.y, rowsOf(zoomed, view)),
+    x: clampAxis(camera.x, ground.x, cells, margin),
+    y: clampAxis(camera.y, ground.y, rowsOf(zoomed, view), margin),
     cells,
   };
 }
