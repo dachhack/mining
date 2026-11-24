@@ -487,6 +487,8 @@ export {
   inCircle,
   inFootprint,
   isLevelPatch,
+  foundationDepth,
+  layFoundation,
   holdsToolFor,
   levelNeededFor,
   frontierMineCheck,

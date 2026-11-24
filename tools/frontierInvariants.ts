@@ -213,10 +213,21 @@ export function checkStep(
           const j = nx + w * ny;
           if ((was[j] ?? 0) > d) deeper = true;
           if ((was[j] ?? 0) < d) shallower = true;
-          if (Math.abs(n - (now[j] ?? 0)) > 1)
+          // Steep sides (a deep camp's foundation) may stay; no gap may grow past 1.
+          const gap = Math.abs(n - (now[j] ?? 0));
+          // A deep camp's foundation may leave steep sides where it dug.
+          if (gap > 1 && gap > Math.abs(d - (was[j] ?? 0)) && verb !== 'placeDeep')
             say(`after the night ${x},${y} breaks the level rule`);
         }
         if (n === d) continue;
+        // A deep camp's foundation digs its 3 x 3 level (owner, on the hazards build).
+        const foundation =
+          verb === 'placeDeep' &&
+          after.camps.some((c) => c.deep && Math.abs(c.x - x) <= 1 && Math.abs(c.y - y) <= 1);
+        if (foundation) {
+          if (n < d) say(`the foundation raised ${x},${y}`);
+          continue;
+        }
         if (!endsShift) say(`${x},${y} went from depth ${d} to ${n} without a mining tap`);
         else if (n !== d - 1) say(`rain took ${x},${y} from depth ${d} to ${n}`);
         else if (deeper || !shallower) say(`rain filled ${x},${y}, which was not a low spot`);
@@ -288,11 +299,18 @@ export function checkStep(
       if (blownSeen) {
         for (let y = 0; y < h; y += 1) {
           for (let x = 0; x < w; x += 1) {
+            // A gap past 1 (a deep camp's foundation) may stay; none may grow.
             const d = depthAt(after.cube, x, y);
-            if (x + 1 < w && Math.abs(d - depthAt(after.cube, x + 1, y)) > 1)
-              say(`after the blast ${x},${y} breaks the level rule`);
-            if (y + 1 < h && Math.abs(d - depthAt(after.cube, x, y + 1)) > 1)
-              say(`after the blast ${x},${y} breaks the level rule`);
+            const d0 = depthAt(before.cube, x, y);
+            for (const [nx, ny] of [
+              [x + 1, y],
+              [x, y + 1],
+            ] as const) {
+              if (nx >= w || ny >= h) continue;
+              const gap = Math.abs(d - depthAt(after.cube, nx, ny));
+              if (gap > 1 && gap > Math.abs(d0 - depthAt(before.cube, nx, ny)))
+                say(`after the blast ${x},${y} breaks the level rule`);
+            }
           }
         }
       }

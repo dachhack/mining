@@ -84,6 +84,7 @@ import {
   contractRefusal,
   penCamp,
   penRefusal,
+  foundationDepthOf,
   buildCampDefense,
   defenseRefusal,
   raidStrengthOf,
@@ -257,7 +258,9 @@ function placeRefusalText(refusal: PlaceRefusal): string {
   if (refusal === 'notLevel') return NOT_LEVEL_TEXT;
   if (refusal === 'flooded') return 'The ground is flooded 💧: a pump must drain it first.';
   if (refusal === 'tooShallow')
-    return `A deep camp stands only at depth ${FRONTIER_DEEP_CAMP.minDepth} or more: dig the patch deeper first.`;
+    return `A deep camp's foundation levels the patch to its deepest square, which must be at depth ${FRONTIER_DEEP_CAMP.minDepth} or more: dig deeper first.`;
+  if (refusal === 'animal')
+    return 'An animal stands where the foundation would dig: catch it first.';
   if (refusal === 'tooDeep')
     return `Camps stand only in the top ${FRONTIER_CAMP_PLACE.maxDepth + 1} levels: this ground is dug too deep.`;
   return 'Not enough to build it yet: mine more first.';
@@ -2320,7 +2323,7 @@ export function mountCampLab(
     const missing = missingText(placeCost);
     if (target === null) {
       body.textContent = placingDeep
-        ? `Level ground at depth ${FRONTIER_DEEP_CAMP.minDepth}+. Ring ${FRONTIER_DEEP_CAMP.radius}; mines as level ${FRONTIER_DEEP_CAMP.level}.`
+        ? `Any lit 3 × 3 that levels at depth ${FRONTIER_DEEP_CAMP.minDepth}+: its concrete foundation digs the patch level. Ring ${FRONTIER_DEEP_CAMP.radius}; mines as level ${FRONTIER_DEEP_CAMP.level}.`
         : PLACE_HINT;
     } else if (refusal !== null && refusal !== 'cost') {
       body.textContent = placeRefusalText(refusal);
@@ -2332,7 +2335,9 @@ export function mountCampLab(
         body.textContent = `${missing} · ${lights}`;
         body.classList.add('lab2-panel-warn');
       } else {
-        body.textContent = `At ${target.x}, ${target.y} · level ground · ${lights}`;
+        body.textContent = placingDeep
+          ? `At ${target.x}, ${target.y} · foundation at depth ${foundationDepthOf(world, target.x, target.y)} · ${lights}`
+          : `At ${target.x}, ${target.y} · level ground · ${lights}`;
       }
     }
 

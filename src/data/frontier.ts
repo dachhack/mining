@@ -759,7 +759,9 @@ export const FRONTIER_WATER = {
  */
 export const FRONTIER_PUMP = {
   item: 'pump' as ItemId,
-  drainPerShift: 2,
+  // A whole flood in one night (owner, on the hazards build: "Pump takes too
+  // long"): as many as a flood can hold (FRONTIER_WATER.maxSquares).
+  drainPerShift: 12,
 };
 
 /**

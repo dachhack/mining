@@ -30,10 +30,12 @@ import {
   FRONTIER_SHIFT,
   FRONTIER_TOOLS,
 } from '../../data/frontier';
+import { collapseSpaceUnder } from '../breach';
 import { depthAt } from '../heightmap';
+import { cloneState, setBlock, setGas, setLava, setWater } from '../state';
 import type { GameState } from '../state';
 import { APPLE_TREE, NO_FEATURE, TREE } from './state';
-import type { FrontierCamp, FrontierHazards, FrontierState } from './state';
+import type { FrontierAnimal, FrontierCamp, FrontierHazards, FrontierState } from './state';
 
 /**
  * What the camp rules read and change. `FrontierState` has all of these
@@ -55,6 +57,11 @@ export interface CampGround {
    * flooded square. A ground made without them (a hand-made test) has none.
    */
   hazards?: FrontierHazards;
+  /**
+   * The animals: a deep camp's foundation is not dug where one stands. A
+   * ground made without them (a hand-made test) has none.
+   */
+  animals?: FrontierAnimal[];
 }
 
 /** What one square looks like to the player. */
@@ -315,10 +322,11 @@ export function pay(inventory: Map<string, number>, cost: ItemStack[]): Map<stri
  * - 'tooShallow': a deep camp, on ground shallower than
  *   FRONTIER_DEEP_CAMP.minDepth (question 178);
  * - 'flooded': some square of it is flooded (water.ts);
+ * - 'animal': a deep camp's foundation would dig a square an animal stands on;
  * - 'cost': the inventory does not cover the cost.
  */
 export type PlaceRefusal =
-  'notShown' | 'occupied' | 'notLevel' | 'tooDeep' | 'tooShallow' | 'flooded' | 'cost';
+  'notShown' | 'occupied' | 'notLevel' | 'tooDeep' | 'tooShallow' | 'flooded' | 'animal' | 'cost';
 
 /**
  * Why a new camp cannot be centred on (x, y), or `null` if it can. With
@@ -342,23 +350,78 @@ export function placeRefusal(
   if (footprint.some((s) => campAt(ground.camps, s.x, s.y) !== null)) {
     return 'occupied';
   }
-  if (!isLevelPatch(ground.cube, x, y)) {
+  // A deep camp comes with a concrete foundation that levels its 3 x 3
+  // (owner, on the hazards build): no flat ground needed (`layFoundation`).
+  if (!deep && !isLevelPatch(ground.cube, x, y)) {
     return 'notLevel';
   }
   if (!deep && depthAt(ground.cube, x, y) > FRONTIER_CAMP_PLACE.maxDepth) {
     return 'tooDeep';
   }
-  if (deep && depthAt(ground.cube, x, y) < FRONTIER_DEEP_CAMP.minDepth) {
+  if (deep && foundationDepth(ground.cube, x, y) < FRONTIER_DEEP_CAMP.minDepth) {
     return 'tooShallow';
   }
   const flooded = ground.hazards?.flooded;
   if (flooded !== undefined && footprint.some((s) => flooded[s.x + width * s.y] === true)) {
     return 'flooded';
   }
+  if (deep) {
+    const level = foundationDepth(ground.cube, x, y);
+    const dug = footprint.filter((s) => depthAt(ground.cube, s.x, s.y) < level);
+    if (dug.some((s) => (ground.animals ?? []).some((a) => a.x === s.x && a.y === s.y))) {
+      return 'animal';
+    }
+  }
   if (!canAfford(ground.inventory, deep ? FRONTIER_DEEP_CAMP.cost : FRONTIER_NEW_CAMP_COST)) {
     return 'cost';
   }
   return null;
+}
+
+/**
+ * The depth a deep camp's concrete foundation levels its 3 x 3 centred on
+ * (x, y) to: the deepest of its nine squares (owner, on the hazards build:
+ * "The deep mine should come with a concrete foundation that levels any spot
+ * you place it into 3by3"). The others are dug down to it. Squares off the
+ * map count as depth 0 (placeRefusal refuses them anyway).
+ */
+export function foundationDepth(cube: GameState, x: number, y: number): number {
+  let deepest = 0;
+  for (const s of footprintOf(x, y)) {
+    if (s.x < 0 || s.y < 0 || s.x >= cube.size.x || s.y >= cube.size.y) continue;
+    deepest = Math.max(deepest, depthAt(cube, s.x, s.y));
+  }
+  return deepest;
+}
+
+/**
+ * `cube` with the 3 x 3 centred on (x, y) dug down to `foundationDepth`: a
+ * copy; `cube` is unchanged. The blocks dug give nothing (the builders take
+ * them). A space opened under a dug block collapses to rubble, as under a
+ * mine, and any water, lava or gas it held is gone. Also the squares that
+ * were dug.
+ */
+export function layFoundation(
+  cube: GameState,
+  x: number,
+  y: number,
+): { cube: GameState; dug: { x: number; y: number }[] } {
+  const level = foundationDepth(cube, x, y);
+  const next = cloneState(cube);
+  const dug: { x: number; y: number }[] = [];
+  for (const s of footprintOf(x, y)) {
+    if (depthAt(next, s.x, s.y) >= level) continue;
+    dug.push(s);
+    while (depthAt(next, s.x, s.y) < level) {
+      const top = { x: s.x, y: s.y, z: depthAt(next, s.x, s.y) };
+      setBlock(next, top, BLOCKS.air.code);
+      collapseSpaceUnder(next, top, []);
+      setWater(next, top, 0);
+      setLava(next, top, 0, false);
+      setGas(next, top, 0);
+    }
+  }
+  return { cube: next, dug };
 }
 
 /**
@@ -530,10 +593,25 @@ export function placeFrontierCamp(
   if (change.camps === state.camps) {
     return state; // refused
   }
+  // A deep camp's concrete foundation levels its 3 x 3 (`layFoundation`).
+  const foundation = deep ? layFoundation(state.cube, x, y) : { cube: state.cube, dug: [] };
   const features = [...state.features];
   const apples = [...state.apples];
   const regrowIn = [...state.regrowIn];
   const stumps = [...state.stumps];
+  const planted = [...state.planted];
+  const grassIn = [...state.grassIn];
+  const fires = [...state.hazards.fires];
+  for (const s of foundation.dug) {
+    // Dug out: nothing grows back there (as under a mine).
+    const i = s.x + state.cube.size.x * s.y;
+    stumps[i] = NO_FEATURE;
+    regrowIn[i] = -1;
+    planted[i] = false;
+    grassIn[i] = -1;
+    features[i] = NO_FEATURE;
+    fires[i] = false;
+  }
   for (const s of footprintOf(x, y)) {
     const i = s.x + state.cube.size.x * s.y;
     const feature = features[i] ?? NO_FEATURE;
@@ -547,7 +625,18 @@ export function placeFrontierCamp(
     features[i] = NO_FEATURE;
     apples[i] = 0;
   }
-  return { ...state, ...change, features, apples, regrowIn, stumps };
+  return {
+    ...state,
+    ...change,
+    cube: foundation.cube,
+    features,
+    apples,
+    regrowIn,
+    stumps,
+    planted,
+    grassIn,
+    hazards: { ...state.hazards, fires },
+  };
 }
 
 /** `upgradeCamp` on a whole state. A refused upgrade returns the very same state. */

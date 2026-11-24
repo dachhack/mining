@@ -44,6 +44,7 @@ import {
   penRefusal as enginePenRefusal,
   defenseRefusal as engineDefenseRefusal,
   raidStrength as engineRaidStrength,
+  foundationDepth as engineFoundationDepth,
   plantRefusal as enginePlantRefusal,
   nextMarketShift as engineNextMarketShift,
   tradeRefusal as engineTradeRefusal,
@@ -178,6 +179,7 @@ function ground(world: CampWorld): CampGround {
     nextCampId: world.nextCampId,
     inventory: world.lab.counts,
     hazards: world.hazards,
+    animals: world.surface.animals,
   };
 }
 
@@ -616,6 +618,11 @@ export function penCamp(world: CampWorld, kind: PenAction, id: number): CampWorl
 /** Why camp `id` cannot build its next defenses now ('noTaps', 'over', or the engine's reason), or `null` if it can. */
 export function defenseRefusal(world: CampWorld, id: number): string | null {
   return turnRefusal(world) ?? engineDefenseRefusal(toFrontier(world), id);
+}
+
+/** The depth a deep camp's concrete foundation would level the 3 x 3 on (x, y) to. */
+export function foundationDepthOf(world: CampWorld, x: number, y: number): number {
+  return engineFoundationDepth(world.lab.state, x, y);
 }
 
 /** How strong marauders would come now: from the deepest square dug (hazards PR 5). */

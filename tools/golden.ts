@@ -380,6 +380,14 @@ const FRONTIER_RUNS: {
       'The random policy on seed 1 for 25 shifts: it leaves a fire burning overnight, which burns its square out (hazards PR 4: the other runs put every fire out)',
   },
   {
+    name: 'careful-seed-1-defended',
+    seed: 1,
+    policy: 'careful',
+    maxShifts: 25,
+    description:
+      'The careful policy on seed 1 for 25 shifts: it builds defenses, and a camp turns marauders away (the full run no longer does)',
+  },
+  {
     name: 'careful-seed-4-finished',
     seed: 4,
     policy: 'careful',

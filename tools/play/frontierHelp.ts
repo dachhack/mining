@@ -133,7 +133,7 @@ export function frontierHelpText(): string {
     '  At the market, "fill ID" fills a contract on the board at once if your store holds everything it asks for (it',
     '  needs no free place), and "deliver ID" delivers one held; neither costs a tap there.',
     '  The view names your phase and goal.',
-    `- "deep X,Y" places a deep camp on level ground at depth ${FRONTIER_DEEP_CAMP.minDepth} or more (${cost(FRONTIER_DEEP_CAMP.cost)}; the market sells the kit after a tier-1 contract).`,
+    `- "deep X,Y" places a deep camp on any lit 3 x 3 whose deepest square is at depth ${FRONTIER_DEEP_CAMP.minDepth} or more: its concrete foundation digs the other squares down to it (${cost(FRONTIER_DEEP_CAMP.cost)}; the market sells the kit after a tier-1 contract).`,
     `  Its ring is ${FRONTIER_DEEP_CAMP.radius}; it mines as a level ${FRONTIER_DEEP_CAMP.level} camp and is never upgraded.`,
     '- "undo" takes back your last action in this shift and gives the tap back. Catching an',
     '  animal and picking an apple cannot be undone, and nothing before the shift began can.',

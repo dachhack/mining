@@ -178,7 +178,7 @@ function refusalText(refusal: string | null): string {
     market: 'The market is open: trade, then "leave" to start the day.',
     notYet:
       'The market does not sell that yet: tools from a level-3 camp, a camp kit, wood and apples after a tier-1 contract.',
-    placeDeep: `A deep camp cannot go there now (see "look"): it needs the kit, wood and stone, and lit, level ground at depth ${FRONTIER_DEEP_CAMP.minDepth} or more.`,
+    placeDeep: `A deep camp cannot go there now (see "look"): it needs the kit, wood and stone, and a lit 3 x 3 whose deepest square is at depth ${FRONTIER_DEEP_CAMP.minDepth} or more (its foundation digs the rest level).`,
     holding:
       "You hold as many contracts as your best camp's level allows: deliver or drop one first.",
     none: 'You hold no such contract.',
