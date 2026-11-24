@@ -70,8 +70,10 @@ import type { GameState } from './state';
  * 0.11.0: after the market-scene build: as many contracts held at once as
  *        the best camp's level.
  * 0.12.0: after the 0.11.0 build: clay contracts in volume (tiers 1 and 2).
+ * 0.13.0: hazards (docs/plans/hazards.md, decision note 0064): rain first;
+ *        the plan's later PRs share it until the build with all of them.
  */
-export const ENGINE_VERSION = '0.12.0';
+export const ENGINE_VERSION = '0.13.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
@@ -456,7 +458,14 @@ export {
 export { shiftsUntilRegrowth } from './surface/regrowth';
 // The new game's world (plan A1), beside the old game until phase C.
 export { createFrontier, startSquare as frontierStartSquare } from './frontier/generation';
-export { APPLE_TREE, FRONTIER_STATE_VERSION, GRASS, NO_FEATURE, TREE } from './frontier/state';
+export {
+  APPLE_TREE,
+  FRONTIER_STATE_VERSION,
+  GRASS,
+  NO_FEATURE,
+  TREE,
+  noHazards,
+} from './frontier/state';
 // Camps and fog (plan A2).
 export {
   CAMP_HALF_SIZE,
@@ -531,6 +540,16 @@ export {
 export type { ContractRefusal } from './frontier/contracts';
 // Animal pens (PR 4).
 export { breedPens, penAct, penRefusal } from './frontier/pens';
+// Marauders and camp defenses (hazards PR 5).
+export {
+  buildDefense,
+  deepestDug,
+  defenseRefusal,
+  nextDefense,
+  nightOfRaids,
+  raidStrength,
+} from './frontier/raids';
+export type { DefenseRefusal, Raid } from './frontier/raids';
 export type { PenAction, PenRefusal } from './frontier/pens';
 export type { PlantRefusal } from './frontier/farming';
 // The run's end and the market (docs/plans/progression-phases.md, PR 1).
@@ -566,7 +585,10 @@ export type {
   Feature,
   FrontierAnimal,
   FrontierCamp,
+  FrontierDragon,
+  FrontierHazards,
   FrontierHeldContract,
+  FrontierPump,
   FrontierState,
 } from './frontier/state';
 // The cube seen from above (design doc v0.2 section 3.1; issue #84): a

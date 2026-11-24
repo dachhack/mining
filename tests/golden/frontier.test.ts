@@ -7,8 +7,9 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ENGINE_VERSION, createFrontier, hashFrontier } from '../../src/engine';
-import { applyFrontierStep, replayFrontier } from '../../tools/frontierRun';
+import { ENGINE_VERSION, createFrontier, frontierAct, hashFrontier } from '../../src/engine';
+import type { FrontierState } from '../../src/engine';
+import { actionOf, applyFrontierStep, replayFrontier } from '../../tools/frontierRun';
 import type { FrontierGolden } from '../../tools/frontierRun';
 
 const DIR = path.join(import.meta.dirname, 'frontier');
@@ -41,8 +42,9 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
     });
   }
 
-  it('between them, they place camps, upgrade one, build a smelter, smelt, make a pickaxe, make or buy the drills, mine with them, hang a lantern, reach level 4, catch animals, take plants, mine clay, rest, sell and buy at the market, plant saplings, make hay, keep a pen that breeds, take and deliver contracts, place a deep camp, finish a run, and lose a crew', () => {
+  it('between them, they place camps, upgrade one, build a smelter, smelt, make a pickaxe, make or buy the drills, mine with them, hang a lantern, reach level 4, catch animals, take plants, mine clay, rest, sell and buy at the market, plant saplings, make hay, keep a pen that breeds, take and deliver contracts, place a deep camp, see rain fill a pit, hit water and pump it out, set off gas and put out its fires, let a fire burn, meet a dragon and drive one off, build defenses, be raided and turn raiders away, finish a run, and lose a crew', () => {
     const seen = new Set<string>();
+    const fireCount = (x: FrontierState): number => x.hazards.fires.filter((f) => f).length;
     for (const name of files) {
       const golden = load(name);
       let state = createFrontier(golden.seed);
@@ -59,9 +61,32 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
           if ((verb === 'endShift' || verb === 'rest') && penned(next) > penned(state))
             seen.add('born');
           if (step === 'make hay') seen.add('hay');
+          // Rain filled a square: the cube changed at the night (hazards PR 1).
+          if ((verb === 'endShift' || verb === 'rest') && next.cube !== state.cube)
+            seen.add('rain');
+          const ends = verb === 'endShift' || verb === 'rest';
+          // Raids (hazards PR 5): only the engine's report says one came.
+          const raid = ends ? frontierAct(state, actionOf(step)).report?.raid : null;
+          if (raid !== null && raid !== undefined)
+            seen.add(raid.turnedAway ? 'turnedAway' : 'raided');
+          if (ends && fireCount(state) > 0) seen.add('burned');
+          if (ends && next.hazards.dragons.length > state.hazards.dragons.length)
+            seen.add('dragonCame');
+          const pumps = (x: typeof state): number => x.hazards.pumps.length;
+          if ((verb === 'endShift' || verb === 'rest') && pumps(next) < pumps(state))
+            seen.add('pumpBack');
           if (verb === 'upgrade' && next.camps.some((c) => c.level === 4)) seen.add('level4');
+        } else if (next.hazards.pumps.length > state.hazards.pumps.length) {
+          seen.add('pumpSet');
+        } else if (next.hazards.dragons.length < state.hazards.dragons.length) {
+          seen.add('dragonDriven');
+        } else if (fireCount(next) < fireCount(state)) {
+          seen.add('fireOut');
         } else if (next.mined > state.mined) {
           seen.add('mine');
+          const wet = (x: typeof state): number => x.hazards.flooded.filter((f) => f).length;
+          if (wet(next) > wet(state)) seen.add('flood');
+          if (fireCount(next) > fireCount(state)) seen.add('blast');
           if ((state.inventory.get('ironPickaxe') ?? 0) > 0) seen.add('mineWithPickaxe');
           if ((state.inventory.get('drill') ?? 0) > 0) seen.add('mineWithDrill');
           const clayBefore = state.inventory.get('clay') ?? 0;
@@ -78,6 +103,18 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
     }
     expect([...seen]).toEqual(
       expect.arrayContaining([
+        'rain',
+        'flood',
+        'pumpSet',
+        'pumpBack',
+        'blast',
+        'fireOut',
+        'burned',
+        'dragonCame',
+        'dragonDriven',
+        'buildDefense',
+        'raided',
+        'turnedAway',
         'born',
         'buildPen',
         'deliver',

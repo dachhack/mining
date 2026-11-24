@@ -49,6 +49,30 @@
 //   number of lots at its price, and changes nothing else in the store; a
 //   run is 'finished' only by the End shift or rest of its last shift, and
 //   no shift past the last is ever played.
+// - RAIN: a square's depth changes without a mining tap only at End shift
+//   or rest, by 1 block, at a low spot that is not a camp's ground or
+//   flooded; the level rule holds everywhere after the night.
+// - WATER: a flooded square is never mined, never a camp's ground; squares
+//   become flooded only by a mining tap, at FRONTIER_WATER.fromDepth or
+//   deeper, at most FRONTIER_WATER.maxSquares at once; they dry only at the
+//   night, at most FRONTIER_PUMP.drainPerShift a pump; a pump always stands
+//   on a flooded square, and pumps set plus pumps held change only by a
+//   trade.
+// - GAS AND FIRE: on a mining tap, squares other than the one mined change
+//   depth only if gas exploded, only within FRONTIER_GAS.blastRadius, by 1,
+//   and the level rule holds everywhere after; a fire starts only by a blast
+//   (within FRONTIER_GAS.fireRadius) or at night beside a fire or a dragon,
+//   and only on something that can burn; a tap puts out exactly the fire it is on; at
+//   night every fire burning before goes out, leaving nothing growing (a
+//   stump may wait to grow back).
+// - DRAGONS: never more than FRONTIER_DRAGON.most, always on the map; one
+//   comes only at night, at the edge, from FRONTIER_DRAGON.fromShift; they
+//   move only at night, at most FRONTIER_DRAGON.steps squares; one leaves
+//   only by a tap on it with a sword held, and the sword stays.
+// - RAIDS AND DEFENSES: a camp's defenses stay between 0 and
+//   FRONTIER_DEFENSE.length, go up only by buildDefense, 1 level, and never
+//   come down; a camp loses a level only at night (fire or a raid); the
+//   night never takes coins.
 
 import { BLOCKS } from '../src/data';
 import {
@@ -56,14 +80,19 @@ import {
   FRONTIER_CAMP_PLACE,
   FRONTIER_CONTRACTS,
   FRONTIER_DEEP_CAMP,
+  FRONTIER_DEFENSE,
+  FRONTIER_DRAGON,
+  FRONTIER_GAS,
   FRONTIER_TOOLS,
   FRONTIER_LANTERN,
   FRONTIER_MARKET,
   FRONTIER_PEN,
+  FRONTIER_PUMP,
   FRONTIER_RUN,
   FRONTIER_SHIFT,
   FRONTIER_SMELTER,
   FRONTIER_SURFACE,
+  FRONTIER_WATER,
 } from '../src/data/frontier';
 import {
   SQUARE_STEPS,
@@ -152,6 +181,220 @@ export function checkStep(
       }
     }
   }
+
+  // Rain (hazards plan, section 1): at End shift a square may be filled by
+  // 1 block, only if it was a low spot (worked out here: dug, no neighbour
+  // deeper, some neighbour shallower) and not a camp's ground; the level rule
+  // still holds everywhere. Other steps never fill a square.
+  if (after.cube !== before.cube && !(after.mined > before.mined)) {
+    const w = before.cube.size.x;
+    const h = before.cube.size.y;
+    const was: number[] = [];
+    const now: number[] = [];
+    for (let y = 0; y < h; y += 1) {
+      for (let x = 0; x < w; x += 1) {
+        was.push(depthAt(before.cube, x, y));
+        now.push(depthAt(after.cube, x, y));
+      }
+    }
+    for (let y = 0; y < h; y += 1) {
+      for (let x = 0; x < w; x += 1) {
+        const i = x + w * y;
+        const d = was[i] ?? 0;
+        const n = now[i] ?? 0;
+        let deeper = false;
+        let shallower = false;
+        for (const st of SQUARE_STEPS) {
+          const nx = x + st.dx;
+          const ny = y + st.dy;
+          if (!isSquare(after.cube, nx, ny)) continue;
+          const j = nx + w * ny;
+          if ((was[j] ?? 0) > d) deeper = true;
+          if ((was[j] ?? 0) < d) shallower = true;
+          if (Math.abs(n - (now[j] ?? 0)) > 1)
+            say(`after the night ${x},${y} breaks the level rule`);
+        }
+        if (n === d) continue;
+        if (!endsShift) say(`${x},${y} went from depth ${d} to ${n} without a mining tap`);
+        else if (n !== d - 1) say(`rain took ${x},${y} from depth ${d} to ${n}`);
+        else if (deeper || !shallower) say(`rain filled ${x},${y}, which was not a low spot`);
+        else if (campAt(after.camps, x, y) !== null) say(`rain filled ${x},${y}, a camp's ground`);
+        else if (after.hazards.flooded[i] === true) say(`rain filled flooded ${x},${y}`);
+      }
+    }
+  }
+
+  // Water and pumps (hazards PR 2).
+  {
+    const w = after.cube.size.x;
+    let wetted = 0;
+    let dried = 0;
+    after.hazards.flooded.forEach((wet, i) => {
+      const was = before.hazards.flooded[i] === true;
+      const x = i % w;
+      const y = Math.floor(i / w);
+      if (wet && campAt(after.camps, x, y) !== null) say(`camp ground ${x},${y} is flooded`);
+      if (wet && !was) {
+        wetted += 1;
+        if (depthAt(after.cube, x, y) < FRONTIER_WATER.fromDepth)
+          say(`${x},${y} flooded at depth ${depthAt(after.cube, x, y)}`);
+      }
+      if (!wet && was) dried += 1;
+      if (was && verb === 'tap' && after.mined > before.mined) {
+        const [mx, my] = (step.split(' ')[1] ?? '').split(',').map(Number);
+        if (mx === x && my === y) say(`flooded ${x},${y} was mined`);
+      }
+    });
+    if (wetted > 0 && !(verb === 'tap' && after.mined > before.mined))
+      say(`${wetted} squares flooded by "${verb}"`);
+    if (wetted > FRONTIER_WATER.maxSquares) say(`${wetted} squares flooded at once`);
+    if (dried > 0 && !endsShift) say(`${dried} squares dried by "${verb}"`);
+    if (dried > before.hazards.pumps.length * FRONTIER_PUMP.drainPerShift)
+      say(`${dried} squares dried by ${before.hazards.pumps.length} pumps`);
+    for (const pump of after.hazards.pumps) {
+      if (after.hazards.flooded[pump.x + w * pump.y] !== true)
+        say(`a pump stands on dry ${pump.x},${pump.y}`);
+    }
+    const pumps = (x: FrontierState): number =>
+      x.hazards.pumps.length + (x.inventory.get(FRONTIER_PUMP.item) ?? 0);
+    if (pumps(after) !== pumps(before) && verb !== 'buy')
+      say(`pumps went from ${pumps(before)} to ${pumps(after)} by "${verb}"`);
+  }
+
+  // Gas and fire (hazards PR 3).
+  {
+    const w = after.cube.size.x;
+    const h = after.cube.size.y;
+    const tapped = verb === 'tap' ? (step.split(' ')[1] ?? '').split(',').map(Number) : [];
+    const [tx, ty] = tapped;
+    const exploded = outcome.tap?.gas === 'exploded';
+    if (verb === 'tap' && after.mined > before.mined && after.cube !== before.cube) {
+      let blownSeen = false;
+      for (let y = 0; y < h && (exploded || !blownSeen); y += 1) {
+        for (let x = 0; x < w; x += 1) {
+          if (x === tx && y === ty) continue;
+          const d0 = depthAt(before.cube, x, y);
+          const d1 = depthAt(after.cube, x, y);
+          if (d0 === d1) continue;
+          blownSeen = true;
+          const near =
+            Math.abs(x - (tx ?? -99)) <= FRONTIER_GAS.blastRadius &&
+            Math.abs(y - (ty ?? -99)) <= FRONTIER_GAS.blastRadius;
+          if (!exploded || !near || d1 !== d0 + 1) say(`${x},${y} went from depth ${d0} to ${d1}`);
+        }
+      }
+      if (blownSeen) {
+        for (let y = 0; y < h; y += 1) {
+          for (let x = 0; x < w; x += 1) {
+            const d = depthAt(after.cube, x, y);
+            if (x + 1 < w && Math.abs(d - depthAt(after.cube, x + 1, y)) > 1)
+              say(`after the blast ${x},${y} breaks the level rule`);
+            if (y + 1 < h && Math.abs(d - depthAt(after.cube, x, y + 1)) > 1)
+              say(`after the blast ${x},${y} breaks the level rule`);
+          }
+        }
+      }
+    }
+    // What can burn: before the step, or after it (at night a tree can grow
+    // back on its stump and catch fire in the same End shift).
+    const burnable = (st: FrontierState, x: number, y: number): boolean => {
+      const i = x + w * y;
+      return (
+        (st.features[i] ?? NO_FEATURE) !== NO_FEATURE ||
+        (st.stumps[i] ?? NO_FEATURE) !== NO_FEATURE ||
+        campAt(st.camps, x, y) !== null
+      );
+    };
+    const canBurn = (x: number, y: number): boolean =>
+      burnable(before, x, y) || (endsShift && burnable(after, x, y));
+    const burningBefore = (x: number, y: number): boolean =>
+      before.hazards.fires[x + w * y] === true;
+    after.hazards.fires.forEach((burning, i) => {
+      const x = i % w;
+      const y = Math.floor(i / w);
+      const was = before.hazards.fires[i] === true;
+      if (burning && !was) {
+        if (!canBurn(x, y)) say(`a fire started on ${x},${y}, where nothing can burn`);
+        if (endsShift) {
+          const beside = SQUARE_STEPS.some(
+            (st) =>
+              isSquare(after.cube, x + st.dx, y + st.dy) && burningBefore(x + st.dx, y + st.dy),
+          );
+          const dragonNear = after.hazards.dragons.some(
+            (d) => Math.abs(d.x - x) <= 1 && Math.abs(d.y - y) <= 1,
+          );
+          if (!beside && !dragonNear)
+            say(`a fire started on ${x},${y} at night with no fire or dragon beside it`);
+        } else {
+          const near =
+            Math.abs(x - (tx ?? -99)) <= FRONTIER_GAS.fireRadius &&
+            Math.abs(y - (ty ?? -99)) <= FRONTIER_GAS.fireRadius;
+          if (!exploded || !near) say(`a fire started on ${x},${y} by "${step}"`);
+        }
+      }
+      // A camp's ground can burn again: a dragon beside it may set it alight once more.
+      const dragonBy = after.hazards.dragons.some(
+        (d) => Math.abs(d.x - x) <= 1 && Math.abs(d.y - y) <= 1,
+      );
+      if (was && burning && endsShift && !dragonBy)
+        say(`the fire on ${x},${y} burned on through the night`);
+      if (was && endsShift && (after.features[i] ?? NO_FEATURE) !== NO_FEATURE)
+        say(`${x},${y} burned out but something grows there`);
+      if (was && !burning && !endsShift && !(outcome.tap?.kind === 'fire' && x === tx && y === ty))
+        say(`the fire on ${x},${y} went out by "${step}"`);
+    });
+  }
+
+  // Dragons (hazards PR 4).
+  {
+    const dw = after.cube.size.x;
+    const dh = after.cube.size.y;
+    if (after.hazards.dragons.length > FRONTIER_DRAGON.most)
+      say(`${after.hazards.dragons.length} dragons on the map`);
+    for (const d of after.hazards.dragons) {
+      if (d.x < 0 || d.y < 0 || d.x >= dw || d.y >= dh) say(`dragon ${d.id} is off the map`);
+      const was = before.hazards.dragons.find((b) => b.id === d.id);
+      if (was === undefined) {
+        const edge = d.x === 0 || d.y === 0 || d.x === dw - 1 || d.y === dh - 1;
+        if (!endsShift) say(`dragon ${d.id} came by "${step}"`);
+        if (!edge) say(`dragon ${d.id} came in at ${d.x},${d.y}, not the edge`);
+        if (before.shift < FRONTIER_DRAGON.fromShift)
+          say(`dragon ${d.id} came on shift ${before.shift}`);
+      } else {
+        const moved = Math.abs(d.x - was.x) + Math.abs(d.y - was.y);
+        if (moved > 0 && !endsShift) say(`dragon ${d.id} moved by "${step}"`);
+        if (moved > FRONTIER_DRAGON.steps) say(`dragon ${d.id} flew ${moved} squares`);
+      }
+    }
+    for (const d of before.hazards.dragons) {
+      if (after.hazards.dragons.some((a) => a.id === d.id)) continue;
+      const [tx, ty] = verb === 'tap' ? (step.split(' ')[1] ?? '').split(',').map(Number) : [];
+      const sword = (before.inventory.get(FRONTIER_DRAGON.sword) ?? 0) > 0;
+      if (!(outcome.tap?.kind === 'dragon' && tx === d.x && ty === d.y && sword))
+        say(`dragon ${d.id} left by "${step}"`);
+      if ((after.inventory.get(FRONTIER_DRAGON.sword) ?? 0) < 1) say('the sword was used up');
+    }
+  }
+
+  // Raids and defenses (hazards PR 5).
+  for (const camp of after.camps) {
+    if (camp.defense < 0 || camp.defense > FRONTIER_DEFENSE.length)
+      say(`camp ${camp.id} has defenses ${camp.defense}`);
+    const was = before.camps.find((c) => c.id === camp.id);
+    if (was === undefined) {
+      if (camp.defense !== 0) say(`new camp ${camp.id} has defenses ${camp.defense}`);
+      continue;
+    }
+    if (camp.defense < was.defense) say(`camp ${camp.id}'s defenses came down`);
+    if (
+      camp.defense > was.defense &&
+      !(verb === 'buildDefense' && camp.defense === was.defense + 1)
+    )
+      say(`camp ${camp.id}'s defenses went up by "${step}"`);
+    if (camp.level < was.level && !endsShift) say(`camp ${camp.id} lost a level by "${step}"`);
+  }
+  if (endsShift && (after.inventory.get('coin') ?? 0) < (before.inventory.get('coin') ?? 0))
+    say('the night took coins');
 
   // Shifts and health.
   if (endsShift && after.shift !== before.shift + 1)

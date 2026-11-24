@@ -22,12 +22,16 @@ import { BLOCKS, blockDefByCode, ITEMS } from '../../data';
 import type { ItemId, ItemStack } from '../../data';
 import {
   FRONTIER_DEEP_CAMP,
+  FRONTIER_DEFENSE,
+  FRONTIER_DEFENSE_MIN_LEVEL,
+  FRONTIER_DRAGON,
   FRONTIER_DRILL,
   FRONTIER_LANTERN,
   FRONTIER_MARKET,
   FRONTIER_PEN,
   FRONTIER_PHASES,
   FRONTIER_PICKAXE,
+  FRONTIER_PUMP,
   FRONTIER_RUN,
   FRONTIER_SAPLINGS,
   FRONTIER_SHIFT,
@@ -80,6 +84,9 @@ import {
   contractRefusal,
   penCamp,
   penRefusal,
+  buildCampDefense,
+  defenseRefusal,
+  raidStrengthOf,
   closeCampMarket,
   plantCamp,
   plantRefusal,
@@ -139,6 +146,7 @@ import type { Recipe } from './recipes';
 import { emptyHistory, noteAction, undoCount, undoLast } from './undoHistory';
 import type { UndoHistory } from './undoHistory';
 import { shadowEdges } from './shadows';
+import { drawDragon, drawFire, drawPump, drawWater } from './hazardArt';
 import { showNight } from './night';
 import type { Night } from './night';
 
@@ -190,7 +198,37 @@ function shiftText(report: ShiftReport, turn: CampTurn, rested: boolean): string
     report.born > 0
       ? ` ${report.born === 1 ? 'An animal was' : `${report.born} animals were`} born in a pen.`
       : '';
-  const market = `${born}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
+  // Hazards (docs/plans/hazards.md): what the night brought.
+  const rain =
+    report.rainFilled > 0
+      ? ` Rain 🌧 washed soil into ${report.rainFilled} low ${report.rainFilled === 1 ? 'square' : 'squares'}.`
+      : report.rained
+        ? ' It rained 🌧.'
+        : '';
+  const pumped =
+    report.drained > 0
+      ? ` Pumps drained ${report.drained} flooded ${report.drained === 1 ? 'square' : 'squares'}${report.pumpsBack > 0 ? `; ${report.pumpsBack === 1 ? 'a pump is' : `${report.pumpsBack} pumps are`} back in your store` : ''}.`
+      : '';
+  const burnt =
+    report.burned > 0
+      ? ` Fire 🔥 burned out ${report.burned} ${report.burned === 1 ? 'square' : 'squares'}${report.campUpgradesBurned > 0 ? `, and a camp lost ${report.campUpgradesBurned === 1 ? 'an upgrade' : `${report.campUpgradesBurned} upgrades`}` : ''}${report.fireSpread > 0 ? `; it spread to ${report.fireSpread} more: put them out` : ''}.`
+      : '';
+  const dragon = [
+    report.dragonCame ? ' A dragon 🐉 flew in.' : '',
+    report.dragonAte > 0
+      ? ` A dragon ate ${report.dragonAte === 1 ? 'an animal' : `${report.dragonAte} animals`}.`
+      : '',
+    report.dragonApples > 0 ? ` A dragon ate ${report.dragonApples} apples.` : '',
+    report.dragonFires > 0 ? ' A dragon set a fire 🔥.' : '',
+  ].join('');
+  const raid = report.raid;
+  const raided =
+    raid === null
+      ? ''
+      : raid.turnedAway
+        ? ` Marauders 🏴 came for camp ${raid.campId}, but its defenses turned them away.`
+        : ` Marauders 🏴 raided camp ${raid.campId}${raid.stolen.length > 0 ? `, stole ${raid.stolen.map((st) => `${st.count} ${itemName(st.item).toLowerCase()}`).join(', ')}` : ''}${raid.upgradesLost > 0 ? `, and tore down ${raid.upgradesLost === 1 ? 'an upgrade' : `${raid.upgradesLost} upgrades`}` : ''}. Build defenses 🛡 at your camps.`;
+  const market = `${born}${rain}${pumped}${burnt}${dragon}${raided}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
   if (turn.status === 'finished') {
     return `${start}. That was the last shift: the run is over.`;
   }
@@ -209,6 +247,7 @@ function placeRefusalText(refusal: PlaceRefusal): string {
   if (refusal === 'notShown') return 'The 3 × 3 must be lit, inside a camp’s ring.';
   if (refusal === 'occupied') return 'It overlaps another camp.';
   if (refusal === 'notLevel') return NOT_LEVEL_TEXT;
+  if (refusal === 'flooded') return 'The ground is flooded 💧: a pump must drain it first.';
   if (refusal === 'tooShallow')
     return `A deep camp stands only at depth ${FRONTIER_DEEP_CAMP.minDepth} or more: dig the patch deeper first.`;
   if (refusal === 'tooDeep')
@@ -260,6 +299,16 @@ function effectMs(kind: Effect['kind']): number {
 }
 
 /** The display name of an item. */
+/** What the market asks for a sword (hazards PR 4). */
+function swordCoins(): number {
+  return FRONTIER_MARKET.buyPrices.find((l) => l.item === FRONTIER_DRAGON.sword)?.coins ?? 0;
+}
+
+/** What the market asks for a pump (hazards PR 2). */
+function pumpCoins(): number {
+  return FRONTIER_MARKET.buyPrices.find((l) => l.item === FRONTIER_PUMP.item)?.coins ?? 0;
+}
+
 function itemName(item: string): string {
   const lab = LAB_ITEMS[item];
   if (lab !== undefined) {
@@ -685,6 +734,12 @@ export function mountCampLab(
     }
 
     drawAnimals(ctx, c);
+    // Dragons (hazards PR 4), on lit squares only.
+    for (const dragon of world.hazards.dragons) {
+      if (sightOf(dragon.x, dragon.y) !== 'shown') continue;
+      const { px, py } = toPx(dragon.x, dragon.y);
+      drawDragon(ctx, px + c / 2, py + c / 2, c);
+    }
     if (mode.kind === 'placing' && mode.target !== null) {
       drawPlacePreview(ctx, mode.target, c, now);
     }
@@ -697,6 +752,15 @@ export function mountCampLab(
         drawCampMarker(ctx, camp, c, selected);
       }
     }
+    // Fires on a camp's ground go over its marker, so a burning camp shows (hazards PR 3).
+    const across = world.lab.state.size.x;
+    world.hazards.fires.forEach((burning, i) => {
+      const fx = i % across;
+      const fy = Math.floor(i / across);
+      if (!burning || campAt(world, fx, fy) === null || sightOf(fx, fy) !== 'shown') return;
+      const { px, py } = toPx(fx, fy);
+      drawFire(ctx, squareBox(px, py, c), fx, fy, now);
+    });
     drawEffects(ctx, now, c);
     writeCanvasData(c);
   }
@@ -795,6 +859,13 @@ export function mountCampLab(
           clay,
         );
         drawFeature(ctx, i, box, x, y, { px, py, c });
+        // Hazards (docs/plans/hazards.md): water, and a pump on it.
+        if (world.hazards.flooded[i] === true) {
+          drawWater(ctx, box, x, y);
+          if (world.hazards.pumps.some((p) => p.x === x && p.y === y)) drawPump(ctx, box);
+        }
+        // A fire (hazards PR 3), drawn still: the ground is drawn once and kept.
+        if (world.hazards.fires[i] === true) drawFire(ctx, box, x, y, 0);
         if (sight === 'greyed') {
           drawGreyed(ctx, px, py, c);
         }
@@ -836,6 +907,19 @@ export function mountCampLab(
       if (stump !== NO_FEATURE) stumps.push(`${i % width},${Math.floor(i / width)}`);
     });
     canvas.dataset['stumps'] = stumps.join(' ');
+    // ...and the hazards: flooded squares and pumps (hazards PR 2).
+    const flooded: string[] = [];
+    world.hazards.flooded.forEach((wet, i) => {
+      if (wet) flooded.push(`${i % width},${Math.floor(i / width)}`);
+    });
+    canvas.dataset['flooded'] = flooded.join(' ');
+    canvas.dataset['pumps'] = world.hazards.pumps.map((p) => `${p.x},${p.y}`).join(' ');
+    const fires: string[] = [];
+    world.hazards.fires.forEach((burning, i) => {
+      if (burning) fires.push(`${i % width},${Math.floor(i / width)}`);
+    });
+    canvas.dataset['fires'] = fires.join(' ');
+    canvas.dataset['dragons'] = world.hazards.dragons.map((d) => `${d.x},${d.y}`).join(' ');
   }
 
   /** True if square (x, y) is on the map, not in fog, and has a tree or an apple tree: part of a forest. */
@@ -1234,6 +1318,7 @@ export function mountCampLab(
         penned: 0,
         breedIn: 0,
         deep: false,
+        defense: 0,
       },
       c,
       false,
@@ -1382,6 +1467,8 @@ export function mountCampLab(
       'sapling',
       'appleSapling',
       'hay',
+      FRONTIER_PUMP.item,
+      FRONTIER_DRAGON.sword,
     ]) {
       const count = counts.get(item) ?? 0;
       if (count > 0) all.push({ item, count, icon: () => labItemIcon(item, 'lab-chip-icon') });
@@ -2321,6 +2408,32 @@ export function mountCampLab(
       tray.append(row);
     }
 
+    // Defenses (hazards PR 5): built a level at a time, against marauders,
+    // from level 2 as the smelter and pen (a base camp's panel has no room).
+    if (camp.level >= FRONTIER_DEFENSE_MIN_LEVEL) {
+      const row = element('div', 'lab2-actions');
+      const next = FRONTIER_DEFENSE[camp.defense];
+      const have =
+        camp.defense === 0 ? 'No defenses' : (FRONTIER_DEFENSE[camp.defense - 1]?.name ?? '');
+      const line = element(
+        'span',
+        'lab2-panel-line',
+        `🛡 ${have} · ${camp.defense}/${FRONTIER_DEFENSE.length}`,
+      );
+      line.title = `Marauders now come ${raidStrengthOf(world)} strong: a camp with that many levels of defenses turns them away.`;
+      line.dataset['testid'] = 'lab2-camp-defense';
+      row.append(line);
+      if (next !== undefined) {
+        row.append(costRow(next.cost, 'lab2-defense-cost'));
+        const build = button('lab2-button', `🛡 ${next.name}`);
+        build.dataset['testid'] = 'lab2-build-defense';
+        build.disabled = defenseRefusal(world, camp.id) !== null;
+        build.addEventListener('click', () => confirmDefense(camp.id));
+        row.append(build);
+      }
+      tray.append(row);
+    }
+
     // The lantern (PR 3): hung here from the store, or here already.
     if (camp.lantern) {
       const has = element(
@@ -2427,6 +2540,20 @@ export function mountCampLab(
       fromRadius: campRing(before),
       toRadius: campRing({ ...before, level: before.level + 1 }),
     });
+  }
+
+  function confirmDefense(id: number): void {
+    const next = buildCampDefense(world, id);
+    if (next === world) {
+      return; // the button is off whenever this would happen
+    }
+    remember({ kind: 'buildDefense', id });
+    setWorld(next);
+    const level = next.camps.find((c) => c.id === id)?.defense ?? 0;
+    setHint(
+      `Camp ${id} has a ${FRONTIER_DEFENSE[level - 1]?.name.toLowerCase() ?? 'defense'} 🛡: it turns away marauders up to ${level} strong.`,
+      false,
+    );
   }
 
   function confirmLantern(id: number): void {
@@ -2619,6 +2746,7 @@ export function mountCampLab(
     if (step.kind === 'sell' || step.kind === 'buy') return `the ${step.kind} of ${step.item}`;
     if (step.kind === 'plant') return `planting at ${step.x}, ${step.y}`;
     if (step.kind === 'buildPen') return `the pen at camp ${step.id}`;
+    if (step.kind === 'buildDefense') return `the defenses at camp ${step.id}`;
     if (step.kind === 'takeContract') return 'taking the contract';
     if (step.kind === 'deliver') return 'the delivery';
     if (step.kind === 'dropContract') return 'dropping the contract';
@@ -2726,6 +2854,50 @@ export function mountCampLab(
       });
       return;
     }
+    // Water (hazards PR 2): a flooded square, and the pump.
+    if (result.kind === 'flooded') {
+      setHint(
+        `Flooded 💧: buy a pump at the market 🏪 (${pumpCoins()} coins), then tap the water to set it.`,
+        true,
+      );
+      return;
+    }
+    if (result.kind === 'needsSword') {
+      setHint(
+        `A dragon 🐉! It eats animals and apples and sets fires until a sword ⚔ drives it off: make one at a smelter (3 iron ingots, 2 wood) or buy one at the market 🏪 (${swordCoins()} coins, from a level-3 camp).`,
+        true,
+      );
+      return;
+    }
+    if (result.kind === 'dragon') {
+      remember({ kind: 'tap', x, y });
+      setWorld(result.world);
+      setHint('You drove the dragon off with your sword ⚔.', false);
+      return;
+    }
+    if (result.kind === 'fire') {
+      remember({ kind: 'tap', x, y });
+      setWorld(result.world);
+      const left = result.world.hazards.fires.filter((f) => f).length;
+      setHint(
+        left === 0
+          ? 'Fire put out 🔥. That was the last one.'
+          : `Fire put out 🔥. ${left} still ${left === 1 ? 'burns' : 'burn'}: tap each one, or it spreads tonight.`,
+        left > 0,
+      );
+      return;
+    }
+    if (result.kind === 'pump') {
+      remember({ kind: 'tap', x, y });
+      setWorld(result.world);
+      setHint(
+        result.pump === 'set'
+          ? `Pump set: it drains ${FRONTIER_PUMP.drainPerShift} flooded squares a night, then comes back to your store.`
+          : 'Pump picked up: the water stays until a pump drains it.',
+        false,
+      );
+      return;
+    }
     if (result.kind === 'refused') {
       const refusal = result.tap?.result.refusal;
       setHint(refusal === 'bottom' ? BOTTOM_HINT : STEEP_HINT, true);
@@ -2774,7 +2946,23 @@ export function mountCampLab(
     effects = effects.filter((e) => !(e.x === x && e.y === y));
     remember({ kind: 'tap', x, y });
     setWorld(result.world);
-    setHint(HINT, false);
+    if (result.gas === 'exploded') {
+      const n = result.fires.length;
+      setHint(
+        `Gas 💥! The blast blew away ${result.blown.length} ${result.blown.length === 1 ? 'block' : 'blocks'}${n > 0 ? ` and set ${n} ${n === 1 ? 'fire' : 'fires'} 🔥: tap each fire to put it out before night, or it spreads` : ''}.`,
+        true,
+      );
+    } else if (result.gas === 'vented') {
+      setHint('You hit a gas pocket, but it vented without exploding.', false);
+    } else if (result.flooded.length > 0) {
+      const n = result.flooded.length;
+      setHint(
+        `You hit water 💧: ${n} ${n === 1 ? 'square is' : 'squares are'} flooded. A pump from the market 🏪 drains it.`,
+        true,
+      );
+    } else {
+      setHint(HINT, false);
+    }
     addEffect({
       kind: 'mined',
       x,

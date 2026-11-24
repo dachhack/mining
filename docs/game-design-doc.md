@@ -37,7 +37,7 @@ v0.2 is in the git history, as v0.1 is.
 | Genre | Resource gathering and management; roguelike |
 | Pacing | **Turn-based, in shifts of [Default] 100 taps.** Every tap that does something costs 1 (owner, questions 145 and 146: "Fixed number of taps"). End shift moves the world on (section 4) |
 | Player | No avatar. A tap on a lit square takes what is on it (an animal, grass, an apple, a tree) or mines its top block. An abstract **crew** with a health bar does the work (section 5) |
-| Hazards | **None for now** (owner: "Lab 2 becomes the game"). The old ones come back one at a time, fuel and depth bands first; wall slumps and supports are retired (question 153, section 10) |
+| Hazards | **Coming back** (owner, 2026-11-24; plan `docs/plans/hazards.md`, decision note 0064): rain fills low spots, water and gas from depth 4 (a pump drains water; gas blasts and starts fires, put out with a tap), dragons (a sword drives them off), marauders (camp defenses turn them away). Until each is built, none is in play. Wall slumps and supports stay retired (question 153, section 10) |
 | Harm | **Hunger only** (owner, question 148): each item of upkeep that cannot be paid costs the crew 1 health (section 5) |
 | Base | **Camps** (Lab 2's): placed on a level 3×3 of lit ground **in the top three levels** (depth 0 to 2; owner, 2026-11-23), upgraded to see further and dig harder rock, demolished once other camps cover them. A base camp mines only dirt and clay; ore, crystal and relics need tools (section 6). The recipe book shows what each costs |
 | Win condition | **A run lasts 100 shifts** (owner, 2026-11-23: "100 shifts or crew lost"), or ends sooner when the crew is lost or the player closes the mine (question 152). The coins held at the end are the score [Default; question 170]; contracts in three tiers pay most of them (section 8) |
@@ -126,6 +126,10 @@ A run is a sequence of **shifts** (owner: "Keep shifts").
 | An apple tree with apples | 1 apple a tap |
 | A tree, or an apple tree with no apples | 2 wood |
 | Nothing growing, and the level rule and the camps allow it | The top block's yield (section 3.5) |
+| Flooded (hazards plan section 2), with a pump in the store | Sets the pump there |
+| A pump | Picks it up again |
+| A fire (section 4.6) | Puts it out |
+| A dragon (section 4.7), with a sword in the store | Drives it off |
 
 ### 4.2 End shift [Default]
 
@@ -142,7 +146,12 @@ In this order:
    - 1 more wood every 4th shift for each camp after the first.
 7. **Pens breed** (section 7b), once the upkeep is paid: the crew eats first.
 8. **Hunger:** each item of upkeep that cannot be paid costs 1 health (section 5).
-9. The next shift starts with a full set of taps.
+9. **Fires** spread and burn out their squares (section 4.6).
+10. **Pumps** drain [Default] 2 squares of their flood each (section 4.5).
+11. **Dragons** fly, eat and set fires; a new one may come (section 4.7).
+12. **Marauders** may raid a camp (section 4.8).
+13. **Rain** (hazards plan section 1; owner, 2026-11-24): on [Default] 1 night in 5 it rains (`FRONTIER_RAIN`). Each **low spot** (a dug square that no face neighbour is deeper than, and that at least one is shallower than) is filled with a [Default] 1 in 2 chance: one block of clay (1 in 3) or dirt goes back on top, so it is 1 shallower. What was on top is buried, not lost. A camp's ground, flooded squares and burning squares are never filled. The level rule still holds after it. Dug does not go down.
+14. The next shift starts with a full set of taps.
 
 ### 4.3 Mining and the level rule [Decided; numbers Default]
 
@@ -155,6 +164,42 @@ In this order:
 ### 4.4 Undo
 
 Undo takes back the player's own actions within the current shift, newest first, and gives each one's tap back (question 151). Catching an animal and picking an apple cannot be undone (owner, question 141: "animal and apple harvest cannot be undone"). End shift, rest and closing the mine cannot be undone, and nothing before them can.
+
+### 4.5 Water and the pump [Decided: depth 4; numbers Default]
+
+The owner (2026-11-24): "You can hit water starting at level 3. It fills the area and you need to purchase a pump to remove it by clicking it and waiting." Water starts at depth 4 (question 181). Plan: `docs/plans/hazards.md`, section 2.
+
+- **Hitting water:** the cube's middle band (depth 4 and down) holds water pockets. A mine that opens one, leaving its square at depth 4 or more, floods that square and the dug squares joined to it through face neighbours at the same depth or deeper, up to [Default] 12, nearest first (`FRONTIER_WATER`). A camp's ground is never flooded. A pocket opened higher up collapses to rubble, as before.
+- **A flooded square** cannot be mined, a camp cannot stand on it, and rain does not fill it. The water does not spread later.
+- **The pump** (`FRONTIER_PUMP`): [Default] 30 coins at the market, from the start. A tap on a flooded square sets one from the store there (1 tap); a tap on it picks it up (1 tap). At each End shift a pump drains [Default] 2 squares of its flood (the flooded squares joined to its own), the farthest from it first so what is left stays joined to it, its own square last. Then it comes back to the store (question 184).
+
+### 4.6 Gas and fire [Decided: depth 4; numbers Default]
+
+The owner (2026-11-24): "Pockets of gas can explode starting at level 4. This blows away blocks and starts fires on combustable squares. You need to put out each fire with a click." Plan: `docs/plans/hazards.md`, section 3.
+
+- **Hitting gas:** a mine that opens one of the cube's gas pockets, leaving its square at depth 4 or more, explodes with a [Default] 1 in 2 chance (question 185; `FRONTIER_GAS`); otherwise the gas vents. A pocket opened higher up collapses, as before.
+- **The blast** takes the top block off every other square in the 3×3 round the mined square, row by row, where the level rule allows it then (question 193), giving nothing. Camps' ground, flooded squares, and squares with plants or stumps are not dug. A blast that opens water floods as a mine would.
+- **Fires** start on everything that can burn within [Default] 3 squares: grass, trees, apple trees, stumps, saplings and camps' ground.
+- **Putting a fire out:** a tap on it, 1 tap, before anything else on the square.
+- **A fire left burning** at End shift spreads to what can burn beside it, then burns its own square out: grass grows back as cut grass does; a tree or apple tree leaves a stump that grows back as a felled tree's does; a stump or sapling starts its wait again; a camp loses one upgrade a night (the lantern, the pen and its animals, the smelter, then a level; a deep camp keeps its level). A fire on a square no camp lights cannot be put out, so it burns out without spreading (question 195).
+
+### 4.7 Dragons and the sword [Decided; numbers Default]
+
+The owner (2026-11-24): "Wandering dragons can eat your sheep and apples and set fire to things. They don't go away until you get a sword and drive them away." Plan: `docs/plans/hazards.md`, section 4.
+
+- **When:** from [Default] shift 20, at End shift, a dragon flies in at the map's edge on [Default] 1 night in 12, while fewer than [Default] 1 are on the map (`FRONTIER_DRAGON`).
+- **Each night** each dragon flies [Default] 4 squares, over anything; eats one animal on or beside its square (or, on a camp's ground, one from its pen) and every apple on the apple trees on or beside it (they come back as if picked); and on [Default] 1 night in 3 sets fire to one thing that can burn on or beside it. "Beside" is the 8 squares round it.
+- **The sword** (question 187): made at a camp with a smelter from 3 iron ingots and 2 wood, or [Default] 60 coins at the market from a level-3 camp. A tap on a dragon with a sword drives it off the map (1 tap); the sword is kept. Without one, a tap on a dragon does nothing.
+
+### 4.8 Marauders and defenses [Decided; numbers Default]
+
+The owner (2026-11-24): "Marauders can come and steal things from your camps and remove their upgrades and put them back to basic. If the camp has defenses though, they can be turned away. The strength of the marauders depends on how far you have dug. The damage they do depends on what level of defense your targeted camp has." Plan: `docs/plans/hazards.md`, section 5.
+
+- **Defenses** (`FRONTIER_DEFENSE`; question 189): three levels, built one at a time from a camp's panel for 1 tap each, at a camp of level 2 or more (question 194), deep camps too: [Default] a palisade (15 wood), a stone wall (20 stone, 10 wood), a gatehouse (10 iron ingots, 20 stone). A raid never takes them down (question 191).
+- **When:** from [Default] shift 15, at End shift, on [Default] 1 night in 10, marauders raid one camp drawn at random (question 188; `FRONTIER_RAID`).
+- **Strength:** from the deepest square on the map: [Default] 1, then 2 from depth 4, 3 from depth 8, 4 from depth 16.
+- **Turned away** if the camp's defense level is at least their strength.
+- **Otherwise** each point of shortfall (strength minus defense) steals [Default] 10% of each goods stack in the store, rounded down, never coins or tools (question 190; `FRONTIER_RAID.neverStolen`), and tears down [Default] 2 of the camp's upgrades: the lantern, the pen and its animals, the smelter, then levels down to 1. A deep camp keeps its level.
 
 ## 5. The crew
 
@@ -265,7 +310,8 @@ Payouts are **credits**, spent between runs. Unlocks add options; they never rai
 | Wall slumps, cracks and supports | **Retired** (question 153: the level rule leaves no steep walls; decision note 0053) |
 | Smelting, and crafting with ingots | **Built** (engine 0.8.0; owner, questions 159 and 161 to 164): a smelter at a camp, ingots from raw ore and coal, an iron pickaxe, a copper lantern, an iron drill and camp level 4. The plan: `docs/plans/smelting-and-crafting.md`. The simulator's numbers: decision note 0060; tuning questions 165 and 166 answered (the lantern takes coal; the drill is unchanged) |
 | Fuel and coal-fuelled digging; the deeper bands' ore | Later: it was first back (question 153) until smelting took its place (question 159) |
-| Water, lava, gas; unstable ore and explosives; tells and scanning; pumps, vents, sealant; the drill | Dropped for now; they come back one at a time, in an order the owner chooses then |
+| Water and gas; pumps | **Coming back** in the frontier's own form: `docs/plans/hazards.md` |
+| Lava; unstable ore and explosives; tells and scanning; vents, sealant | Dropped for now; they come back one at a time, in an order the owner chooses then |
 | AP and per-block mining costs | Replaced by taps, every tap costing 1 |
 | The old camps (camp kit, mining discount, decommission) and field crafting | Replaced by Lab 2's camps and the recipe book |
 

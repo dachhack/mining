@@ -34,6 +34,7 @@ function revealedWorld(): FrontierState {
     penned: 0,
     breedIn: 0,
     deep: false,
+    defense: 0,
   };
   const camps = [
     { ...first, level: 3 },
@@ -48,6 +49,7 @@ function revealedWorld(): FrontierState {
       penned: 0,
       breedIn: 0,
       deep: false,
+      defense: 0,
     },
     {
       id: 3,
@@ -60,6 +62,7 @@ function revealedWorld(): FrontierState {
       penned: 0,
       breedIn: 0,
       deep: false,
+      defense: 0,
     },
     {
       id: 4,
@@ -72,6 +75,7 @@ function revealedWorld(): FrontierState {
       penned: 0,
       breedIn: 0,
       deep: false,
+      defense: 0,
     },
     {
       id: 5,
@@ -84,6 +88,7 @@ function revealedWorld(): FrontierState {
       penned: 0,
       breedIn: 0,
       deep: false,
+      defense: 0,
     },
   ];
   const seen = seenWith(new Array<boolean>(size.x * size.y).fill(true), camps, size.x, size.y);

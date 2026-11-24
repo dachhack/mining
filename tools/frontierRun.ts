@@ -5,12 +5,15 @@
 
 import {
   FRONTIER_DEEP_CAMP,
+  FRONTIER_DRAGON,
   FRONTIER_DRILL,
   FRONTIER_LANTERN,
   FRONTIER_MARKET,
   FRONTIER_NEW_CAMP_COST,
   FRONTIER_PEN,
   FRONTIER_PICKAXE,
+  FRONTIER_PUMP,
+  FRONTIER_RAID,
   FRONTIER_STEEL_DRILL,
 } from '../src/data/frontier';
 import {
@@ -37,6 +40,10 @@ import {
   previewTap,
   newlyCovered,
   placeRefusal,
+  sightAt,
+  defenseRefusal,
+  nextDefense,
+  raidStrength,
   penRefusal,
   plantRefusal,
   smelterRefusal,
@@ -122,7 +129,8 @@ export function actionOf(step: FrontierStep): FrontierAction {
       verb === 'hangLantern' ||
       verb === 'buildPen' ||
       verb === 'penIn' ||
-      verb === 'penOut') &&
+      verb === 'penOut' ||
+      verb === 'buildDefense') &&
     arg !== undefined
   ) {
     return { kind: verb, id: Number(arg) };
@@ -237,6 +245,22 @@ const GATHERER_SELLS_ALL = ['crystal', 'rareOre', 'relic'];
  */
 export function marketStep(state: FrontierState): FrontierStep | null {
   if (!marketIsOpen(state)) return null;
+  // A sword while a dragon is on the map (hazards PR 4).
+  if (
+    state.hazards.dragons.length > 0 &&
+    (state.inventory.get(FRONTIER_DRAGON.sword) ?? 0) === 0 &&
+    tradeRefusal(state, 'buy', FRONTIER_DRAGON.sword, 1) === null
+  ) {
+    return `buy ${FRONTIER_DRAGON.sword} 1`;
+  }
+  // A pump for a lit flood no pump drains (hazards PR 2).
+  if (
+    unpumpedFlood(state) !== null &&
+    (state.inventory.get(FRONTIER_PUMP.item) ?? 0) === 0 &&
+    tradeRefusal(state, 'buy', FRONTIER_PUMP.item, 1) === null
+  ) {
+    return `buy ${FRONTIER_PUMP.item} 1`;
+  }
   for (const tool of [FRONTIER_DRILL.item, FRONTIER_STEEL_DRILL.item]) {
     const held = (state.inventory.get(tool) ?? 0) > 0;
     if (!held && tradeRefusal(state, 'buy', tool, 1) === null) return `buy ${tool} 1`;
@@ -279,6 +303,99 @@ export function marketStep(state: FrontierState): FrontierStep | null {
   );
   const stone = mostLots(spare, 'sell', 'stone');
   return stone > 0 ? `sell stone ${stone}` : null;
+}
+
+/**
+ * A lit flooded square in a flood that no pump drains (hazards PR 2), the
+ * first row by row, or `null`. A flood is the flooded squares joined to one
+ * another; it counts as drained if a pump stands on any of them.
+ */
+export function unpumpedFlood(state: FrontierState): { x: number; y: number } | null {
+  const width = state.cube.size.x;
+  const height = state.cube.size.y;
+  const { flooded, pumps } = state.hazards;
+  if (!flooded.includes(true)) return null;
+  // Every square of a flood with a pump on it.
+  const drained = new Set<number>();
+  for (const pump of pumps) {
+    const queue = [pump.x + width * pump.y];
+    drained.add(queue[0] ?? 0);
+    for (let k = 0; k < queue.length; k += 1) {
+      const i = queue[k] ?? 0;
+      for (const [dx, dy] of [
+        [0, -1],
+        [1, 0],
+        [0, 1],
+        [-1, 0],
+      ] as const) {
+        const nx = (i % width) + dx;
+        const ny = Math.floor(i / width) + dy;
+        const j = nx + width * ny;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        if (flooded[j] !== true || drained.has(j)) continue;
+        drained.add(j);
+        queue.push(j);
+      }
+    }
+  }
+  for (let i = 0; i < flooded.length; i += 1) {
+    const x = i % width;
+    const y = Math.floor(i / width);
+    if (flooded[i] === true && !drained.has(i) && sightAt(state, x, y) === 'shown') return { x, y };
+  }
+  return null;
+}
+
+/**
+ * Deal with the hazards: drive off a lit dragon with a sword, or make a sword
+ * while a dragon is on the map (hazards PR 4); put out a lit fire (PR 3), the
+ * first row by row; else set a pump from the store on a lit flood no pump
+ * drains (PR 2). `null` if there is nothing to do.
+ */
+export function hazardStep(state: FrontierState): FrontierStep | null {
+  const width = state.cube.size.x;
+  const sword = (state.inventory.get(FRONTIER_DRAGON.sword) ?? 0) > 0;
+  const dragons = state.hazards.dragons;
+  const litDragon = dragons.find((d) => sightAt(state, d.x, d.y) === 'shown');
+  if (litDragon !== undefined && sword) return `tap ${litDragon.x},${litDragon.y}`;
+  if (dragons.length > 0 && !sword && makeRefusal(state, 'sword') === null) return 'make sword';
+  const fire = state.hazards.fires.findIndex(
+    (burning, i) => burning && sightAt(state, i % width, Math.floor(i / width)) === 'shown',
+  );
+  if (fire >= 0) return `tap ${fire % width},${Math.floor(fire / width)}`;
+  if ((state.inventory.get(FRONTIER_PUMP.item) ?? 0) > 0) {
+    const flood = unpumpedFlood(state);
+    if (flood !== null) return `tap ${flood.x},${flood.y}`;
+  }
+  return defendStep(state);
+}
+
+/** The gatherer builds defenses only while it keeps this much wood after paying (hazards PR 5). */
+const GATHERER_DEFENSE_WOOD_KEPT = 40;
+
+/** ...and only from this many shifts before marauders can first come. */
+const GATHERER_DEFENSE_LEAD = 3;
+
+/**
+ * Build defenses (hazards PR 5) at the camp with the fewest, while it has
+ * fewer levels than marauders would come strong now, keeping
+ * GATHERER_DEFENSE_WOOD_KEPT wood, from GATHERER_DEFENSE_LEAD shifts before
+ * raids can start; `null` if none is wanted or affordable.
+ */
+function defendStep(state: FrontierState): FrontierStep | null {
+  if (state.shift < FRONTIER_RAID.fromShift - GATHERER_DEFENSE_LEAD) return null;
+  const camps = [...state.camps].sort((a, b) => a.defense - b.defense || a.id - b.id);
+  // The strength is worked out only once a camp could build (it reads every square).
+  let strength: number | null = null;
+  for (const camp of camps) {
+    const next = nextDefense(state, camp.id);
+    if (next === null || defenseRefusal(state, camp.id) !== null) continue;
+    const wood = next.cost.find((st) => st.item === 'wood')?.count ?? 0;
+    if ((state.inventory.get('wood') ?? 0) - wood < GATHERER_DEFENSE_WOOD_KEPT) continue;
+    strength ??= raidStrength(state); // `??=` sets it only while it is still null
+    if (camp.defense < strength) return `buildDefense ${camp.id}`;
+  }
+  return null;
 }
 
 /** The gatherer keeps this much hay: the level-3 upgrade's 10, and some for breeding. */
@@ -477,6 +594,7 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
     return marketStep(state) ?? (take?.startsWith('takeContract') === true ? take : 'closeMarket');
   }
   const craft =
+    hazardStep(state) ??
     contractStep(state) ??
     deepStep(state) ??
     craftStep(state) ??
@@ -513,7 +631,9 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
   const squares: { x: number; y: number; d: number }[] = [];
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      if ((lit[x + width * y] ?? 0) > 0) {
+      // A square under a dragon is left alone: a tap there meets the dragon (hazards PR 4).
+      const dragon = state.hazards.dragons.some((dr) => dr.x === x && dr.y === y);
+      if ((lit[x + width * y] ?? 0) > 0 && !dragon) {
         squares.push({ x, y, d: (x - newest.x) ** 2 + (y - newest.y) ** 2 });
       }
     }

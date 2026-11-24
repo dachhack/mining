@@ -109,6 +109,7 @@ describe('placing a camp (plan A2)', () => {
       penned: 0,
       breedIn: 0,
       deep: false,
+      defense: 0,
     });
     expect(after.nextCampId).toBe(3);
     for (const stack of FRONTIER_NEW_CAMP_COST) {

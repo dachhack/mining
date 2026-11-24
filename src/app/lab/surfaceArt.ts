@@ -6,6 +6,7 @@
 // clay tiles come from a tiny seeded generator, so every phone draws the same
 // ground.
 
+import { drawPump, drawWater } from './hazardArt';
 import { LAB_LOOK } from './labLook';
 import type { SquareBox } from './labDraw';
 
@@ -623,6 +624,35 @@ export function labItemIcon(item: string, className: string): HTMLCanvasElement 
     ctx.beginPath();
     ctx.arc(s / 2, s * 0.2, s * 0.08, Math.PI, 0);
     ctx.stroke();
+  } else if (item === 'sword') {
+    // The sword (hazards PR 4): a steel blade with a brass guard, corner to corner.
+    ctx.fillStyle = '#2a2420';
+    ctx.fillRect(0, 0, s, s);
+    ctx.strokeStyle = '#d9dee6';
+    ctx.lineWidth = s * 0.1;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.3, s * 0.7);
+    ctx.lineTo(s * 0.82, s * 0.18);
+    ctx.stroke();
+    ctx.strokeStyle = '#c8a045';
+    ctx.lineWidth = s * 0.08;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.2, s * 0.56);
+    ctx.lineTo(s * 0.44, s * 0.8);
+    ctx.stroke();
+    ctx.strokeStyle = '#6b4a2a';
+    ctx.lineWidth = s * 0.09;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.3, s * 0.7);
+    ctx.lineTo(s * 0.16, s * 0.84);
+    ctx.stroke();
+  } else if (item === 'pump') {
+    // The pump (hazards PR 2), as the map draws it, standing in water.
+    ctx.fillStyle = '#2a2420';
+    ctx.fillRect(0, 0, s, s);
+    drawWater(ctx, { left: 0, top: s * 0.55, inner: s * 0.45 }, 0, 0);
+    drawWater(ctx, { left: s * 0.45, top: s * 0.55, inner: s * 0.55 }, 1, 0);
+    drawPump(ctx, { left: 0, top: 0, inner: s });
   } else {
     return null;
   }

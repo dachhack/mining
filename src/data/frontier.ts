@@ -339,6 +339,17 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
     output: { item: 'drill', count: 1 },
     needsSmelter: true,
   },
+  // A sword drives a dragon off (hazards plan, section 4; question 187).
+  {
+    id: 'sword',
+    name: 'Sword',
+    inputs: [
+      { item: 'ironIngot', count: 3 },
+      { item: 'wood', count: 2 },
+    ],
+    output: { item: 'sword', count: 1 },
+    needsSmelter: true,
+  },
   // Hay from grass (progression plan section 6.3): no smelter.
   {
     id: 'hay',
@@ -485,7 +496,7 @@ export const FRONTIER_MARKET = {
   ] as FrontierLot[],
   /**
    * What the player can buy, and what it costs (question 171). From the
-   * start: an animal, clay, saplings and hay. From a level-3 camp: the tools (plan section
+   * start: an animal, clay, saplings, hay and a pump. From a level-3 camp: the tools (plan section
    * 4), dearer than making them at a smelter.
    */
   buyPrices: [
@@ -494,10 +505,14 @@ export const FRONTIER_MARKET = {
     { item: 'sapling', count: 1, coins: 3 },
     { item: 'appleSapling', count: 1, coins: 6 },
     { item: 'hay', count: 1, coins: 1 },
+    // The pump drains a flood (hazards plan, section 2): from the start.
+    { item: 'pump', count: 1, coins: 30 },
     { item: 'drill', count: 1, coins: 80, fromLevel: 3 },
     { item: 'steelDrill', count: 1, coins: 250, fromLevel: 3 },
     { item: 'ironPickaxe', count: 1, coins: 60, fromLevel: 3 },
     { item: 'copperLantern', count: 1, coins: 40, fromLevel: 3 },
+    // The sword drives a dragon off (hazards plan, section 4).
+    { item: 'sword', count: 1, coins: 60, fromLevel: 3 },
     // From the first tier-1 contract (phase 4): the deep camp's kit, and
     // wood and food in bulk, so farming becomes a choice.
     { item: 'campKit', count: 1, coins: 150, afterTier1: true },
@@ -703,3 +718,157 @@ export const FRONTIER_PHASES: { title: string; next: string }[] = [
     next: 'Deliver tier-3 contracts (crystal, rare ore, relics: a steel drill mines them) and end rich.',
   },
 ];
+
+// ----- Hazards (docs/plans/hazards.md; owner, 2026-11-24) -----
+
+/**
+ * Rain (hazards plan, section 1): "Rain overnight washes clay and soil into
+ * low areas and covers them." At End shift it rains with a chance of
+ * `chance`. Each low spot (a dug square no face neighbour is deeper than, and
+ * at least one is shallower than) is then filled with a chance of
+ * `fillChance`: one block goes back on top of it, clay with a chance of
+ * `clayChance`, else dirt.
+ */
+export const FRONTIER_RAIN = {
+  chance: 0.2,
+  fillChance: 0.5,
+  clayChance: 1 / 3,
+  fillBlock: 'dirt' as BlockId,
+  clayBlock: 'clay' as BlockId,
+};
+
+/**
+ * Water (hazards plan, section 2): "You can hit water starting at level 3"
+ * (depth 4: owner, question 181). A tap that opens one of the cube's water
+ * pockets, leaving its square at depth `fromDepth` or more, floods that
+ * square and the dug squares joined to it at the same depth or deeper, up to
+ * `maxSquares`, nearest first. A pocket opened higher up just collapses, as
+ * before.
+ */
+export const FRONTIER_WATER = {
+  fromDepth: 4,
+  maxSquares: 12,
+};
+
+/**
+ * The pump (hazards plan, section 2): "you need to purchase a pump to remove
+ * it by clicking it and waiting". Bought at the market (FRONTIER_MARKET). A
+ * tap on a flooded square sets one from the store there; at each End shift
+ * it drains `drainPerShift` squares of its flood, the farthest first, its own
+ * square last; then it comes back to the store (question 184).
+ */
+export const FRONTIER_PUMP = {
+  item: 'pump' as ItemId,
+  drainPerShift: 2,
+};
+
+/**
+ * Gas (hazards plan, section 3): "Pockets of gas can explode starting at
+ * level 4. This blows away blocks and starts fires on combustible squares."
+ * A tap that opens one of the cube's gas pockets, leaving its square at depth
+ * `fromDepth` or more, explodes with a chance of `explodeChance` (question
+ * 185); otherwise the gas vents harmlessly. A blast takes the top block off
+ * every other square within `blastRadius` (the 3 x 3 round it) where the level rule
+ * allows it, giving nothing, and sets fire to every combustible square within
+ * `fireRadius`.
+ */
+export const FRONTIER_GAS = {
+  fromDepth: 4,
+  explodeChance: 0.5,
+  blastRadius: 1,
+  fireRadius: 3,
+};
+
+/**
+ * Dragons (hazards plan, section 4): "Wandering dragons can eat your sheep
+ * and apples and set fire to things. They don't go away until you get a
+ * sword and drive them away." From shift `fromShift`, at End shift, a dragon
+ * flies in at the map's edge with a chance of `chance`, while fewer than
+ * `most` are on the map. Each night each dragon flies `steps` squares (over
+ * anything), eats one animal on or beside its square (or, on a camp's
+ * ground, one from its pen) and every apple on the apple trees on or beside
+ * its square, and with a chance of `fireChance` sets fire to one thing that
+ * can burn on or beside its square. A tap on it with a sword in the store
+ * (`sword`) drives it off the map; the sword is kept.
+ */
+export const FRONTIER_DRAGON = {
+  fromShift: 20,
+  chance: 1 / 12,
+  most: 1,
+  steps: 4,
+  fireChance: 1 / 3,
+  sword: 'sword' as ItemId,
+};
+
+/** A level of a camp's defenses (hazards plan, section 5): its name and what it costs. */
+export interface FrontierDefenseLevel {
+  name: string;
+  cost: ItemStack[];
+}
+
+/**
+ * Camp defenses (hazards plan, section 5; question 189): "If the camp has
+ * defenses though, they can be turned away." A camp's defense level goes up
+ * one level at a time from its panel, for the next level's cost and 1 tap,
+ * at a camp of level FRONTIER_DEFENSE_MIN_LEVEL or more (as the smelter and
+ * the pen: a base camp's panel has no room for another row; question 194),
+ * deep camps too. A raid never takes them down (question 191).
+ */
+export const FRONTIER_DEFENSE_MIN_LEVEL = 2;
+
+export const FRONTIER_DEFENSE: FrontierDefenseLevel[] = [
+  { name: 'Palisade', cost: [{ item: 'wood', count: 15 }] },
+  {
+    name: 'Stone wall',
+    cost: [
+      { item: 'stone', count: 20 },
+      { item: 'wood', count: 10 },
+    ],
+  },
+  {
+    name: 'Gatehouse',
+    cost: [
+      { item: 'ironIngot', count: 10 },
+      { item: 'stone', count: 20 },
+    ],
+  },
+];
+
+/**
+ * Marauders (hazards plan, section 5): "Marauders can come and steal things
+ * from your camps and remove their upgrades and put them back to basic ...
+ * The strength of the marauders depends on how far you have dug. The damage
+ * they do depends on what level of defense your targeted camp has." From
+ * shift `fromShift`, at End shift, with a chance of `chance`, they raid one
+ * camp drawn at random (question 188). Their strength is the `strength` of
+ * the last entry of `strengthFromDepth` whose `depth` the deepest square on
+ * the map has reached. A camp whose defense level is at least that turns
+ * them away. Otherwise the shortfall (strength minus defense) sets the
+ * damage: `stealShare` of each goods stack in the store for each point of
+ * shortfall, rounded down, never coins (question 190) or tools (`neverStolen`); and
+ * `upgradesPerShortfall` of the camp's upgrades for each point, in the order
+ * fire takes them (lantern, pen and its animals, smelter, then levels).
+ */
+export const FRONTIER_RAID = {
+  fromShift: 15,
+  chance: 0.1,
+  strengthFromDepth: [
+    { depth: 0, strength: 1 },
+    { depth: 4, strength: 2 },
+    { depth: 8, strength: 3 },
+    { depth: 16, strength: 4 },
+  ],
+  stealShare: 0.1,
+  upgradesPerShortfall: 2,
+  /** What they never take: coins (question 190) and tools. */
+  neverStolen: [
+    'coin',
+    'pump',
+    'sword',
+    'drill',
+    'steelDrill',
+    'ironPickaxe',
+    'copperLantern',
+    'campKit',
+  ] as ItemId[],
+};

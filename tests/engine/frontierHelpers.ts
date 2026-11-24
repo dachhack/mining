@@ -6,7 +6,7 @@ import {
   FRONTIER_SHIFT,
 } from '../../src/data/frontier';
 import { campRadius, seenWith } from '../../src/engine/frontier/camps';
-import { FRONTIER_STATE_VERSION, NO_FEATURE } from '../../src/engine/frontier/state';
+import { FRONTIER_STATE_VERSION, NO_FEATURE, noHazards } from '../../src/engine/frontier/state';
 import type { Feature, FrontierAnimal, FrontierState } from '../../src/engine/frontier/state';
 import { buildState } from './helpers';
 
@@ -69,6 +69,7 @@ export function world(options: WorldOptions = {}): FrontierState {
       penned: 0,
       breedIn: 0,
       deep: false,
+      defense: 0,
     },
   ];
   const animals = options.animals ?? [];
@@ -94,6 +95,7 @@ export function world(options: WorldOptions = {}): FrontierState {
     contracts: [],
     contractsDone: [0, 0, 0],
     marketOpen: false,
+    hazards: noHazards(SIDE * SIDE),
     shift: 1,
     tapsLeft: FRONTIER_SHIFT.taps,
     health: FRONTIER_SHIFT.startHealth,
