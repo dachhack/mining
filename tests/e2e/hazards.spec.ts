@@ -93,3 +93,39 @@ test('a level-2 camp builds its defenses from its panel (hazards PR 5)', async (
   // The next level needs stone, which the store does not hold.
   await expect(page.getByTestId('lab2-build-defense')).toBeDisabled();
 });
+
+test('a rainy night shows rain falling, and its news one line at a time (hazards PR 1)', async ({
+  page,
+}) => {
+  // Owner, on the hazards build: "We need a rain scene for when it rains."
+  // Find a seed and shift whose night rains: End shift from shift 1 until one does.
+  const state: FrontierState = {
+    ...createFrontier(110),
+    inventory: new Map([
+      ['wood', 50],
+      ['apple', 50],
+    ]),
+  };
+  await openGame(page, state);
+  const night = page.getByTestId('lab2-night');
+  let rained = false;
+  for (let k = 0; k < 30 && !rained; k += 1) {
+    await page.getByTestId('lab2-end-shift').click();
+    await expect(night).toBeVisible();
+    rained = (await night.getAttribute('data-rain')) === 'true';
+    if (rained) {
+      await expect(page.getByTestId('lab2-night-rain')).toBeVisible();
+      await expect(night).toContainText('Rain 🌧');
+    } else {
+      await expect(page.getByTestId('lab2-night-rain')).toHaveCount(0);
+    }
+    // Each sentence of the news is a line of its own.
+    expect(await page.getByTestId('lab2-night-summary').locator('p').count()).toBeGreaterThan(0);
+    await night.click();
+    await expect(night).toHaveCount(0);
+    // A market day's market opens after the night: close it to go on.
+    const close = page.getByTestId('lab2-market-close');
+    if ((await close.count()) > 0 && (await close.isVisible())) await close.click();
+  }
+  expect(rained).toBe(true);
+});

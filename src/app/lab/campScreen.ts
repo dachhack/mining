@@ -2706,6 +2706,7 @@ export function mountCampLab(
     night = showNight(root, {
       shift: result.report.shift,
       summary: text,
+      rain: result.report.rained,
       page,
       reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
       onDone: () => {

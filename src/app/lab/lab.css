@@ -1084,6 +1084,8 @@ body[data-screen='lab2'] {
 }
 
 .lab2-night-sky {
+  position: relative;
+  z-index: 1; /* over the rain */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1133,9 +1135,76 @@ body[data-screen='lab2'] {
 
 .lab2-night-summary {
   margin: 8px 0 0;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   line-height: 1.35;
   color: #c7c2b3;
+}
+
+/* One sentence a line, so the night can be read (owner, on the hazards build). */
+.lab2-night-line {
+  margin: 0 0 4px;
+}
+
+/* "Tap to continue": shown once the moon has turned; the night waits for it. */
+.lab2-night-continue {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  color: #8f8da0;
+  opacity: 0;
+  transition: opacity 400ms ease-in;
+}
+
+.lab2-night.lab2-night-wait .lab2-night-continue,
+.lab2-night.lab2-night-still .lab2-night-continue {
+  opacity: 1;
+}
+
+/* Rain on a rainy night (owner: "We need a rain scene for when it rains"):
+   pale streaks falling slant across the whole sky, behind the words. */
+.lab2-night-rain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 600ms ease-in;
+  background-image:
+    repeating-linear-gradient(
+      105deg,
+      transparent 0 14px,
+      rgba(170, 195, 230, 0.32) 14px 15px,
+      transparent 15px 31px
+    ),
+    repeating-linear-gradient(
+      105deg,
+      transparent 0 22px,
+      rgba(170, 195, 230, 0.2) 22px 23px,
+      transparent 23px 47px
+    );
+  background-size:
+    100% 90px,
+    100% 140px;
+  animation: lab2-rain-fall 0.45s linear infinite;
+}
+
+.lab2-night.lab2-night-dark .lab2-night-rain {
+  opacity: 1;
+}
+
+@keyframes lab2-rain-fall {
+  from {
+    background-position:
+      0 0,
+      0 0;
+  }
+  to {
+    background-position:
+      -24px 90px,
+      -37px 140px;
+  }
+}
+
+.lab2-night.lab2-night-still .lab2-night-rain {
+  animation: none;
 }
 
 /* prefers-reduced-motion: no movement, only a quick fade at the end. */
@@ -1240,4 +1309,10 @@ body[data-screen='lab2'] {
   margin: 0;
   font-size: 0.85rem;
   color: #f0c58a;
+}
+
+/* On a rainy night the moon is behind cloud: dimmer and soft. */
+.lab2-night[data-rain='true'] .lab2-night-moon {
+  opacity: 0.5;
+  filter: blur(1.5px);
 }
