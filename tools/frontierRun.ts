@@ -371,7 +371,7 @@ export function hazardStep(state: FrontierState): FrontierStep | null {
 }
 
 /** The gatherer builds defenses only while it keeps this much wood after paying (hazards PR 5). */
-const GATHERER_DEFENSE_WOOD_KEPT = 20;
+const GATHERER_DEFENSE_WOOD_KEPT = 40;
 
 /** ...and only from this many shifts before marauders can first come. */
 const GATHERER_DEFENSE_LEAD = 3;
@@ -631,7 +631,9 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
   const squares: { x: number; y: number; d: number }[] = [];
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      if ((lit[x + width * y] ?? 0) > 0) {
+      // A square under a dragon is left alone: a tap there meets the dragon (hazards PR 4).
+      const dragon = state.hazards.dragons.some((dr) => dr.x === x && dr.y === y);
+      if ((lit[x + width * y] ?? 0) > 0 && !dragon) {
         squares.push({ x, y, d: (x - newest.x) ** 2 + (y - newest.y) ** 2 });
       }
     }
