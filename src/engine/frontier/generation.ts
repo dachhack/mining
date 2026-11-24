@@ -4,16 +4,18 @@
 // checks 50 seeds). The numbers are in src/data/frontier.ts.
 
 import { BLOCKS, CONTRACT_IDS, DEFAULT_LOADOUT_ID } from '../../data';
+import type { BlockId } from '../../data';
 import {
   FRONTIER_NEW_CAMP_COST,
   FRONTIER_SHIFT,
   FRONTIER_SURFACE,
   FRONTIER_START_REACH,
+  FRONTIER_TREASURE,
 } from '../../data/frontier';
 import { createRun } from '../index';
 import { createRng, nextFloat } from '../rng';
 import type { RngState } from '../rng';
-import { blockAt } from '../state';
+import { blockAt, gasAt, lavaAt, setBlock, waterAt } from '../state';
 import type { GameState } from '../state';
 import { CAMP_HALF_SIZE, campRadius, footprintOf, inCircle, inFootprint, seenWith } from './camps';
 import { APPLE_TREE, FRONTIER_STATE_VERSION, GRASS, NO_FEATURE, TREE, noHazards } from './state';
@@ -55,7 +57,40 @@ function frontierCube(seed: number): GameState {
       cube.blocks[i] = becomes;
     }
   }
+  placeTreasure(cube, seed);
   return cube;
+}
+
+/**
+ * The treasure's own generator is seeded from the world's seed mixed with
+ * this fixed number, so it does not change the cube's or the surface's.
+ */
+const TREASURE_SEED_MIX = 0x7e1c5a3d;
+
+/**
+ * Put FRONTIER_TREASURE's relics and keystones into `cube` (question 197):
+ * each in a solid cell of stone, hard rock or dirt at its depth or deeper,
+ * holding no water, lava or gas, drawn from the seed. A cell drawn that does
+ * not qualify is drawn again (up to a bound, so a strange cube cannot loop).
+ */
+function placeTreasure(cube: GameState, seed: number): void {
+  const rng = createRng((seed ^ TREASURE_SEED_MIX) >>> 0);
+  const plain = new Set((['stone', 'hardRock', 'dirt'] as BlockId[]).map((id) => BLOCKS[id].code));
+  const place = (code: number, count: number, fromDepth: number): void => {
+    let placed = 0;
+    for (let tries = 0; placed < count && tries < count * 200; tries += 1) {
+      const x = Math.floor(nextFloat(rng) * cube.size.x);
+      const y = Math.floor(nextFloat(rng) * cube.size.y);
+      const z = fromDepth + Math.floor(nextFloat(rng) * (cube.size.z - fromDepth));
+      const pos = { x, y, z };
+      if (!plain.has(blockAt(cube, pos))) continue;
+      if (waterAt(cube, pos) > 0 || gasAt(cube, pos) > 0 || lavaAt(cube, pos) > 0) continue;
+      setBlock(cube, pos, code);
+      placed += 1;
+    }
+  };
+  place(BLOCKS.relic.code, FRONTIER_TREASURE.relics, FRONTIER_TREASURE.relicFromDepth);
+  place(BLOCKS.keystone.code, FRONTIER_TREASURE.keystones, FRONTIER_TREASURE.keystoneFromDepth);
 }
 
 /** What the surface generator gives: the plants, apples, clay cells, animals and the generator after them. */

@@ -882,3 +882,19 @@ export const FRONTIER_RAID = {
     'campKit',
   ] as ItemId[],
 };
+
+/**
+ * Relics and keystones (owner, after the 0.14.0 build, question 197: "Add
+ * relics and key stones"). The old game never placed them (its generation
+ * left them for a later milestone), so the tier-3 contracts that ask for
+ * them could never be filled. Each world gets `relics` relics at depth
+ * `relicFromDepth` or more and `keystones` keystones at depth
+ * `keystoneFromDepth` or more, in solid rock away from pockets, placed with
+ * a generator of their own drawn from the seed. The steel drill mines them.
+ */
+export const FRONTIER_TREASURE = {
+  relics: 8,
+  relicFromDepth: 12,
+  keystones: 2,
+  keystoneFromDepth: 20,
+};
