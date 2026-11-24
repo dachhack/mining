@@ -1391,6 +1391,21 @@ export function mountCampLab(
     return effects.length > 0 || sliding || (mode.kind === 'placing' && mode.target !== null);
   });
 
+  // Draw again whenever the map's box changes size (owner, on the hazards
+  // build: "I clicked on a block outside of the circle and the screen
+  // stretched out"). The canvas takes its pixel size only when it is drawn;
+  // if the tray or a panel grows or shrinks after the last draw, the browser
+  // would stretch the old picture to the new box until something drew again.
+  if (typeof ResizeObserver !== 'undefined') {
+    let drawnBox = '';
+    new ResizeObserver(() => {
+      const box = `${canvas.clientWidth}x${canvas.clientHeight}`;
+      if (box === drawnBox) return;
+      drawnBox = box;
+      draw();
+    }).observe(canvas);
+  }
+
   function addEffect(effect: Omit<Effect, 'start'>): void {
     effects.push({ ...effect, start: performance.now() });
     cues.start();
