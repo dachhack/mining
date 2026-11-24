@@ -295,14 +295,18 @@ export function checkStep(
         }
       }
     }
-    const canBurn = (x: number, y: number): boolean => {
+    // What can burn: before the step, or after it (at night a tree can grow
+    // back on its stump and catch fire in the same End shift).
+    const burnable = (st: FrontierState, x: number, y: number): boolean => {
       const i = x + w * y;
       return (
-        (before.features[i] ?? NO_FEATURE) !== NO_FEATURE ||
-        (before.stumps[i] ?? NO_FEATURE) !== NO_FEATURE ||
-        campAt(before.camps, x, y) !== null
+        (st.features[i] ?? NO_FEATURE) !== NO_FEATURE ||
+        (st.stumps[i] ?? NO_FEATURE) !== NO_FEATURE ||
+        campAt(st.camps, x, y) !== null
       );
     };
+    const canBurn = (x: number, y: number): boolean =>
+      burnable(before, x, y) || (endsShift && burnable(after, x, y));
     const burningBefore = (x: number, y: number): boolean =>
       before.hazards.fires[x + w * y] === true;
     after.hazards.fires.forEach((burning, i) => {

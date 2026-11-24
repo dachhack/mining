@@ -199,7 +199,7 @@ The owner (2026-11-24): "Marauders can come and steal things from your camps and
 - **When:** from [Default] shift 15, at End shift, on [Default] 1 night in 10, marauders raid one camp drawn at random (question 188; `FRONTIER_RAID`).
 - **Strength:** from the deepest square on the map: [Default] 1, then 2 from depth 4, 3 from depth 8, 4 from depth 16.
 - **Turned away** if the camp's defense level is at least their strength.
-- **Otherwise** each point of shortfall (strength minus defense) steals [Default] 10% of each goods stack in the store, rounded down, never coins (question 190), and tears down [Default] 2 of the camp's upgrades: the lantern, the pen and its animals, the smelter, then levels down to 1. A deep camp keeps its level.
+- **Otherwise** each point of shortfall (strength minus defense) steals [Default] 10% of each goods stack in the store, rounded down, never coins or tools (question 190; `FRONTIER_RAID.neverStolen`), and tears down [Default] 2 of the camp's upgrades: the lantern, the pen and its animals, the smelter, then levels down to 1. A deep camp keeps its level.
 
 ## 5. The crew
 

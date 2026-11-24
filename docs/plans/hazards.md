@@ -69,7 +69,7 @@ This changes the design doc's Hazards row (section 2: "None for now") and sectio
 - **Defenses** are a camp upgrade in the camp's panel, 3 levels (`FRONTIER_DEFENSE`): a palisade (level 1: 15 wood), a stone wall (level 2: 20 stone, 10 wood), a gatehouse (level 3: 10 iron ingots, 20 stone). Each costs 1 tap, at a camp of level 2 or more (as the smelter and the pen; question 194), deep camps too (question 189).
 - **Turned away** if the camp's defense level is at least the raiders' strength. Nothing is lost.
 - **Otherwise** the shortfall (strength minus defense, 1 to 4) sets the damage:
-  - **Stolen:** shortfall × 10% of each goods stack in the store, rounded down. Coins are not stolen (question 190).
+  - **Stolen:** shortfall × 10% of each goods stack in the store, rounded down. Coins and tools (pumps, swords, drills, the pickaxe, lanterns, camp kits) are not stolen (question 190).
   - **Upgrades removed:** shortfall × 2 of the camp's upgrades, in this order: the lantern, the pen (its animals are taken), the smelter, then camp levels, one at a time, down to level 1. At a shortfall of 4 or with few upgrades, the camp is back to basic. A deep camp keeps its level; it loses only its fittings. Defenses are not removed (question 191).
 - **Screen:** a defense row in the camp's panel (question 180 already says the panel is tall), and the raid in the night report.
 

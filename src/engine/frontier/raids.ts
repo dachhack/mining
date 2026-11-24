@@ -18,7 +18,7 @@
 //   at least their strength they are turned away and nothing is lost.
 //   Otherwise the shortfall (strength minus defense) sets the damage:
 //   FRONTIER_RAID.stealShare of each goods stack in the store for each point,
-//   rounded down (never coins), and FRONTIER_RAID.upgradesPerShortfall of the
+//   rounded down (never coins or tools: FRONTIER_RAID.neverStolen), and FRONTIER_RAID.upgradesPerShortfall of the
 //   camp's upgrades for each point, in the order fire takes them (fire.ts,
 //   `stripCamp`): the lantern, the pen and its animals, the smelter, then
 //   camp levels down to 1.
@@ -27,12 +27,7 @@
 // src/data/frontier.ts.
 
 import type { ItemStack } from '../../data';
-import {
-  FRONTIER_DEFENSE,
-  FRONTIER_DEFENSE_MIN_LEVEL,
-  FRONTIER_MARKET,
-  FRONTIER_RAID,
-} from '../../data/frontier';
+import { FRONTIER_DEFENSE, FRONTIER_DEFENSE_MIN_LEVEL, FRONTIER_RAID } from '../../data/frontier';
 import { depthAt } from '../heightmap';
 import { nextFloat, nextInt } from '../rng';
 import type { RngState } from '../rng';
@@ -145,13 +140,13 @@ export function nightOfRaids(
   if (shortfall <= 0) {
     return { state, raid: { ...base, turnedAway: true } };
   }
-  // What they steal: a share of each goods stack, never coins.
+  // What they steal: a share of each goods stack, never coins or tools.
   const share = Math.min(1, shortfall * FRONTIER_RAID.stealShare);
   const stolen: ItemStack[] = [];
   for (const [item, count] of [...state.inventory.entries()].sort((a, b) =>
     a[0] < b[0] ? -1 : 1,
   )) {
-    if (item === FRONTIER_MARKET.coin) continue;
+    if ((FRONTIER_RAID.neverStolen as string[]).includes(item)) continue;
     const take = Math.floor(count * share);
     // `as ItemStack['item']`: every key of the store is an item id.
     if (take > 0) stolen.push({ item: item as ItemStack['item'], count: take });

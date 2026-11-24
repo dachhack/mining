@@ -81,7 +81,7 @@ describe('marauders (hazards plan, section 5)', () => {
 
   it('otherwise steal a share of each stack (never coins) and tear down upgrades', () => {
     const w = campWith(
-      { ...world({ inventory: { wood: 50, stone: 9, coin: 500 } }), shift: 30 },
+      { ...world({ inventory: { wood: 50, stone: 9, coin: 500, pump: 30 } }), shift: 30 },
       { level: 3, smelter: true, lantern: true, pen: true, penned: 2 },
     );
     const out = nightOfRaids(w, raidRng());
@@ -94,6 +94,8 @@ describe('marauders (hazards plan, section 5)', () => {
     expect(out.state.inventory.get('wood')).toBe(45);
     expect(out.state.inventory.get('stone')).toBe(9);
     expect(out.state.inventory.get('coin')).toBe(500);
+    // Nor tools: a pump stays, however many are held.
+    expect(out.state.inventory.get('pump')).toBe(30);
     // Two upgrades for a shortfall of 1: the lantern, then the pen and its animals.
     expect(raid.upgradesLost).toBe(FRONTIER_RAID.upgradesPerShortfall);
     expect(out.state.camps[0]).toMatchObject({

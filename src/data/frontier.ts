@@ -845,7 +845,7 @@ export const FRONTIER_DEFENSE: FrontierDefenseLevel[] = [
  * the map has reached. A camp whose defense level is at least that turns
  * them away. Otherwise the shortfall (strength minus defense) sets the
  * damage: `stealShare` of each goods stack in the store for each point of
- * shortfall, rounded down, never coins (question 190); and
+ * shortfall, rounded down, never coins (question 190) or tools (`neverStolen`); and
  * `upgradesPerShortfall` of the camp's upgrades for each point, in the order
  * fire takes them (lantern, pen and its animals, smelter, then levels).
  */
@@ -860,4 +860,15 @@ export const FRONTIER_RAID = {
   ],
   stealShare: 0.1,
   upgradesPerShortfall: 2,
+  /** What they never take: coins (question 190) and tools. */
+  neverStolen: [
+    'coin',
+    'pump',
+    'sword',
+    'drill',
+    'steelDrill',
+    'ironPickaxe',
+    'copperLantern',
+    'campKit',
+  ] as ItemId[],
 };

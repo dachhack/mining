@@ -99,7 +99,7 @@ export function frontierHelpText(): string {
     `  Marauders: from shift ${FRONTIER_RAID.fromShift}, about ${Math.round(FRONTIER_RAID.chance * 100)}% of nights they raid one camp at random. Their strength is`,
     `  ${FRONTIER_RAID.strengthFromDepth.map((st) => `${st.strength} from depth ${st.depth}`).join(', ')} (your deepest square). A camp with that many`,
     '  levels of defenses turns them away. Otherwise each point short steals ' +
-      `${Math.round(FRONTIER_RAID.stealShare * 100)}% of each stack (never coins)`,
+      `${Math.round(FRONTIER_RAID.stealShare * 100)}% of each stack (never coins or tools)`,
     `  and tears down ${FRONTIER_RAID.upgradesPerShortfall} upgrades (lantern, pen and its animals, smelter, then levels). "defend N" builds camp N's`,
     `  next defenses (1 tap; camp level ${FRONTIER_DEFENSE_MIN_LEVEL} or more): ${FRONTIER_DEFENSE.map((d) => `${d.name} (${cost(d.cost)})`).join(', ')}.`,
     '- "rest N" rests at camp N: full health, then the shift ends. "close" closes the mine: the run ends.',
