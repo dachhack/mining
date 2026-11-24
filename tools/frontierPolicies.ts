@@ -37,6 +37,7 @@ import {
   createRng,
   deliverRefusal,
   takeRefusal,
+  fillRefusal,
   marketIsOpen,
   tradeRefusal,
   previewTap,
@@ -77,7 +78,7 @@ export function makeFrontierPolicy(name: FrontierPolicyName, seed: number): Fron
 }
 
 /** The steps that can be taken while the market is open (market.ts). */
-const MARKET_VERBS = ['sell', 'buy', 'takeContract', 'closeMarket'];
+const MARKET_VERBS = ['sell', 'buy', 'takeContract', 'fillContract', 'deliver', 'closeMarket'];
 
 /**
  * `policy`, closing the market when it is open and the policy's step is
@@ -144,9 +145,10 @@ function randomPolicy(rng: RngState): FrontierPolicy {
         if (tradeRefusal(state, 'buy', lot.item, 1) === null) options.push(`buy ${lot.item} 1`);
       }
     }
-    // A contract: take one from the board, or deliver one held.
+    // A contract: take or fill one from the board, or deliver one held.
     for (const offer of contractBoard(state)) {
       if (takeRefusal(state, offer.id) === null) options.push(`takeContract ${offer.id}`);
+      if (fillRefusal(state, offer.id) === null) options.push(`fillContract ${offer.id}`);
     }
     for (const held of state.contracts) {
       if (deliverRefusal(state, held.id) === null) options.push(`deliver ${held.id}`);

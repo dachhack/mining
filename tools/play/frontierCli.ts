@@ -54,6 +54,7 @@ import {
   heldContracts,
   runPhase,
   takeRefusal,
+  fillRefusal,
   penRefusal,
   newlyCovered,
   nextMarketShift,
@@ -393,7 +394,7 @@ function undo(session: FrontierSession): StepResult {
  * The step a typed choice stands for, or `null` if it is not one. Accepts
  * "tap 3,4" (or "t 3 4"), "place 3,4", "upgrade 2", "demolish 1", "end",
  * "rest 1" (or "rest" with one camp), "sell wood 3", "buy animal 1",
- * "plant 3,4 sapling", "take t1-coal", "deliver t1-coal", "drop t1-coal", "deep 3,4",
+ * "plant 3,4 sapling", "take t1-coal", "fill t1-coal", "deliver t1-coal", "drop t1-coal", "deep 3,4",
  * "close", "undo", or the number of a listed choice.
  */
 export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | null {
@@ -446,6 +447,10 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
     const lot = lots.find((l) => l.item.toLowerCase() === tradeStep[2]);
     return lot === undefined ? null : `${tradeStep[1] ?? ''} ${lot.item} ${tradeStep[3] ?? ''}`;
   }
+  const fill = /^fill ([a-z0-9-]+)$/.exec(text);
+  if (fill !== null) {
+    return `fillContract ${fill[1] ?? ''}`;
+  }
   const take = /^take ([a-z0-9-]+)$/.exec(text);
   if (take !== null) {
     return `takeContract ${take[1] ?? ''}`;
@@ -496,7 +501,11 @@ export function listedSteps(session: FrontierSession): FrontierStep[] {
   // While the market is open, only its choices: the board, and leaving.
   if (state.marketOpen) {
     for (const offer of contractBoard(state)) {
+      if (fillRefusal(state, offer.id) === null) steps.push(`fillContract ${offer.id}`);
       if (takeRefusal(state, offer.id) === null) steps.push(`takeContract ${offer.id}`);
+    }
+    for (const c of state.contracts) {
+      if (deliverRefusal(state, c.id) === null) steps.push(`deliver ${c.id}`);
     }
     return [...steps, 'closeMarket', 'close'];
   }
@@ -744,12 +753,13 @@ function marketLines(state: FrontierState): string[] {
     ];
   }
   return [
-    'Market: OPEN, before the day. "sell ITEM N" or "buy ITEM N" trades N lots, "take ID" a contract; no taps. "leave" starts the day.',
+    'Market: OPEN, before the day. "sell ITEM N" or "buy ITEM N" trades N lots, "take ID" a contract, "fill ID" fills one at once',
+    '  from your store, "deliver ID" delivers one held; no taps. "leave" starts the day.',
     `  Sell (coins a lot): ${lotsText(FRONTIER_MARKET.sellPrices)}.`,
     `  Buy (coins a lot): ${lotsText(FRONTIER_MARKET.buyPrices)}.`,
     ...contractBoard(state).map(
       (c) =>
-        `  Contract "take ${c.id}" (tier ${c.tier}, ${c.name}): ${stacksText(c.asks)} for ${c.pays} coins.`,
+        `  Contract "${fillRefusal(state, c.id) === null ? 'fill' : 'take'} ${c.id}" (tier ${c.tier}, ${c.name}): ${stacksText(c.asks)} for ${c.pays} coins.`,
     ),
   ];
 }

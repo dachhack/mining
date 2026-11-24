@@ -38,7 +38,8 @@
 //   pen may breed.
 // - CONTRACTS: one is taken only while the market is open, from that day's
 //   board, while fewer are held than the best camp's level and not that
-//   one already; delivering pays its coins and takes its items, and
+//   one already; filling one (only while the market is open, from the
+//   board) and delivering pay its coins and take its items, and
 //   counts one more done for its tier; the counts done never fall.
 // - FARMING: a planted sapling is a waiting stump on unmined dirt; cut grass
 //   waits only on a square with nothing growing on it; a planting takes one
@@ -504,7 +505,12 @@ export function checkStep(
         `after End shift the market is ${after.marketOpen ? 'open' : 'closed'} on shift ${after.shift}`,
       );
   }
-  if (before.marketOpen && !['sell', 'buy', 'takeContract', 'closeMarket', 'close'].includes(verb))
+  if (
+    before.marketOpen &&
+    !['sell', 'buy', 'takeContract', 'fillContract', 'deliver', 'closeMarket', 'close'].includes(
+      verb,
+    )
+  )
     say(`"${verb}" was done while the market was open`);
   if (!endsShift && !before.marketOpen && after.marketOpen)
     say('the market opened without a night');
@@ -527,9 +533,16 @@ export function checkStep(
     if (!contractBoard(before).some((c) => c.id === id))
       say(`took ${id}, which is not on the board`);
   }
-  if (verb === 'deliver') {
+  if (verb === 'fillContract') {
+    // Filled at once from the board, while the market is open; never held after.
     const id = step.split(' ')[1] ?? '';
-    const isHeld = before.contracts.some((c) => c.id === id);
+    if (!before.marketOpen) say(`filled ${id} with the market closed`);
+    if (!contractBoard(before).some((c) => c.id === id)) say(`filled ${id}, not on the board`);
+    if (after.contracts.some((c) => c.id === id)) say(`filled ${id}, and it is still held`);
+  }
+  if (verb === 'deliver' || verb === 'fillContract') {
+    const id = step.split(' ')[1] ?? '';
+    const isHeld = verb === 'fillContract' || before.contracts.some((c) => c.id === id);
     const held = isHeld ? FRONTIER_CONTRACTS.find((c) => c.id === id) : undefined;
     if (held === undefined) {
       say('delivered with no contract held');

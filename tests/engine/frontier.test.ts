@@ -20,8 +20,8 @@ function code(world: FrontierState, x: number, y: number, z: number): number {
 }
 
 describe('the frontier world (plan A1)', () => {
-  it('is version 0.13.0 of the engine: hazards', () => {
-    expect(ENGINE_VERSION).toBe('0.13.0');
+  it('is version 0.14.0 of the engine: contracts filled at the market', () => {
+    expect(ENGINE_VERSION).toBe('0.14.0');
   });
 
   it('is the same world every time for the same seed', () => {

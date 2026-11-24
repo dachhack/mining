@@ -10,6 +10,12 @@
 //   FRONTIER_BOARD.tier1Level; tier 2 once a tier-1 contract is done; tier 3
 //   once a tier-2 contract is done.
 // - Up to `contractLimit` (the best camp's level) are held at once.
+// - Filling one from the board (`fillContract`; owner, on the hazards build:
+//   "Should be able to immediately fill contracts if you have the
+//   materials"): while the market is open, a contract on today's board
+//   whose asks the store holds is delivered at once, without being held, so
+//   it needs no free place. No tap: the market comes before the day. Held
+//   contracts can be delivered while the market is open too, also for no tap.
 // - Taking one (while the market is open, holding fewer than the limit; no tap), delivering it (any shift,
 //   holding everything it asks for: the items leave the store and its
 //   coins arrive), and dropping it (any shift, nothing back) cost 1 tap
@@ -124,6 +130,31 @@ export function anyDeliverable(state: FrontierState): boolean {
 /** Take contract `id` from today's board. If `takeRefusal` says no, the very same state comes back. */
 export function takeContract(state: FrontierState, id: string): FrontierState {
   if (takeRefusal(state, id) !== null) return state;
+  return { ...state, contracts: [...state.contracts, { id, takenOn: state.shift }] };
+}
+
+/**
+ * Why contract `id` cannot be filled from today's board now, or `null` if it can:
+ * 'closed' (the market is not open), 'unknown' (not on today's board, or
+ * held already: deliver that one instead), 'cost' (the store does not hold
+ * everything it asks for).
+ */
+export function fillRefusal(state: FrontierState, id: string): ContractRefusal | null {
+  if (!marketIsOpen(state)) return 'closed';
+  const offered = contractBoard(state).find((c) => c.id === id);
+  if (offered === undefined || state.contracts.some((c) => c.id === id)) return 'unknown';
+  return canAfford(state.inventory, offered.asks) ? null : 'cost';
+}
+
+/** Fill contract `id` from today's board at once. If `fillRefusal` says no, the very same state comes back. */
+export function fillContract(state: FrontierState, id: string): FrontierState {
+  if (fillRefusal(state, id) !== null) return state;
+  // Taken and delivered in one go: it is never held.
+  return deliverContract(takeAnyway(state, id), id);
+}
+
+/** `state` holding contract `id` too, whatever the limit (only for filling it at once). */
+function takeAnyway(state: FrontierState, id: string): FrontierState {
   return { ...state, contracts: [...state.contracts, { id, takenOn: state.shift }] };
 }
 

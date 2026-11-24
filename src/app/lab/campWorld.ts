@@ -38,6 +38,7 @@ import {
   frontierStartSquare,
   marketIsOpen,
   deliverRefusal as engineDeliverRefusal,
+  fillRefusal as engineFillRefusal,
   dropRefusal as engineDropRefusal,
   takeRefusal as engineTakeRefusal,
   penRefusal as enginePenRefusal,
@@ -671,6 +672,7 @@ export function contractRefusal(
   world: CampWorld,
   action:
     | { kind: 'takeContract'; id: string }
+    | { kind: 'fillContract'; id: string }
     | { kind: 'deliver'; id: string }
     | { kind: 'dropContract'; id: string },
 ): string | null {
@@ -678,6 +680,7 @@ export function contractRefusal(
   if (turn !== null) return turn;
   const state = toFrontier(world);
   if (action.kind === 'takeContract') return engineTakeRefusal(state, action.id);
+  if (action.kind === 'fillContract') return engineFillRefusal(state, action.id);
   return action.kind === 'deliver'
     ? engineDeliverRefusal(state, action.id)
     : engineDropRefusal(state, action.id);
@@ -688,6 +691,7 @@ export function contractCamp(
   world: CampWorld,
   action:
     | { kind: 'takeContract'; id: string }
+    | { kind: 'fillContract'; id: string }
     | { kind: 'deliver'; id: string }
     | { kind: 'dropContract'; id: string },
 ): CampWorld {
@@ -808,6 +812,7 @@ export type CampStep =
   | { kind: 'closeMarket' }
   // Take, deliver or drop a contract (progression PR 5).
   | { kind: 'takeContract'; id: string }
+  | { kind: 'fillContract'; id: string }
   | { kind: 'deliver'; id: string }
   | { kind: 'dropContract'; id: string }
   // A pen at a camp, and an animal into it or out of it (progression PR 4).
@@ -861,7 +866,12 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   if (step.kind === 'closeMarket') {
     return closeCampMarket(world);
   }
-  if (step.kind === 'takeContract' || step.kind === 'deliver' || step.kind === 'dropContract') {
+  if (
+    step.kind === 'takeContract' ||
+    step.kind === 'fillContract' ||
+    step.kind === 'deliver' ||
+    step.kind === 'dropContract'
+  ) {
     return contractCamp(world, step);
   }
   if (step.kind === 'buildPen' || step.kind === 'penIn' || step.kind === 'penOut') {

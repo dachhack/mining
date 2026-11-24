@@ -27,6 +27,7 @@ import {
   openTiers,
   deliverRefusal,
   takeRefusal,
+  fillRefusal,
   createFrontier,
   depthAt,
   frontierAct,
@@ -116,7 +117,10 @@ export function actionOf(step: FrontierStep): FrontierAction {
     return { kind: verb };
   }
   if (
-    (verb === 'takeContract' || verb === 'deliver' || verb === 'dropContract') &&
+    (verb === 'takeContract' ||
+      verb === 'fillContract' ||
+      verb === 'deliver' ||
+      verb === 'dropContract') &&
     arg !== undefined
   ) {
     return { kind: verb, id: arg };
@@ -474,6 +478,11 @@ export function contractStep(state: FrontierState): FrontierStep | null {
     const stale = state.shift - held.takenOn >= GATHERER_CONTRACT_PATIENCE;
     if (stale && !marketIsOpen(state)) return `dropContract ${held.id}`;
   }
+  // Fill at once what the store already holds (owner, on the hazards build).
+  for (const offer of contractBoard(state)) {
+    if (fillRefusal(state, offer.id) === null && keepsUpgrade(state, offer.id))
+      return `fillContract ${offer.id}`;
+  }
   let best: { id: string; share: number; tier: number } | null = null;
   for (const offer of contractBoard(state)) {
     if (takeRefusal(state, offer.id) !== null) continue;
@@ -591,7 +600,11 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
   // contract, then close it and start the day.
   if (marketIsOpen(state)) {
     const take = contractStep(state);
-    return marketStep(state) ?? (take?.startsWith('takeContract') === true ? take : 'closeMarket');
+    // At the market a contract can be taken, filled at once, or delivered.
+    const atMarket =
+      take !== null &&
+      ['takeContract', 'fillContract', 'deliver'].includes(take.split(' ')[0] ?? '');
+    return marketStep(state) ?? (atMarket ? take : 'closeMarket');
   }
   const craft =
     hazardStep(state) ??

@@ -100,8 +100,8 @@ describe('taking, delivering and dropping contracts', () => {
     expect(taken.done).toBe(true);
     expect(taken.state.contracts).toEqual([{ id: offer.id, takenOn: 30 }]);
     expect(taken.state.tapsLeft).toBe(w.tapsLeft);
-    // Delivering is a day's action: not while the market is open.
-    expect(frontierAct(taken.state, { kind: 'deliver', id: offer.id }).refusal).toBe('market');
+    // At the market it can be delivered too, but only with everything it asks for.
+    expect(frontierAct(taken.state, { kind: 'deliver', id: offer.id }).refusal).toBe('cost');
     const day = frontierAct(taken.state, { kind: 'closeMarket' }).state;
     expect(frontierAct(day, { kind: 'deliver', id: offer.id }).refusal).toBe('cost');
     // Holding everything, on any day: it is delivered.
@@ -172,5 +172,61 @@ describe('the phases of a run (plan section 1)', () => {
     expect(runPhase(at(3))).toBe(3);
     expect(runPhase(at(3, {}, [1, 0, 0]))).toBe(4);
     expect(runPhase(at(4, {}, [2, 1, 0]))).toBe(5);
+  });
+});
+
+describe('filling a contract at once (owner, on the hazards build)', () => {
+  // "Should be able to immediately fill contracts if you have the materials."
+  /** The first tier-1 contract on the board at level 3, and a store holding all it asks for. */
+  function offerAndRich(): { state: FrontierState; id: string; pays: number } {
+    const probe = at(3);
+    const offer = contractBoard(probe)[0];
+    if (offer === undefined) throw new Error('the board offers a contract');
+    const inventory: Record<string, number> = {};
+    for (const a of offer.asks) inventory[a.item] = a.count + 5;
+    return { state: at(3, inventory), id: offer.id, pays: offer.pays };
+  }
+
+  it('delivers a contract from the board at once, for no tap, without holding it', () => {
+    const { state, id, pays } = offerAndRich();
+    const out = frontierAct(state, { kind: 'fillContract', id });
+    expect(out.done).toBe(true);
+    expect(out.state.tapsLeft).toBe(state.tapsLeft);
+    expect(out.state.contracts).toEqual([]);
+    expect(out.state.contractsDone[0]).toBe(1);
+    expect(out.state.inventory.get(FRONTIER_MARKET.coin)).toBe(pays);
+    const def = FRONTIER_CONTRACTS.find((c) => c.id === id);
+    for (const a of def?.asks ?? []) expect(out.state.inventory.get(a.item)).toBe(5);
+  });
+
+  it('needs no free place: it works while holding as many as the limit allows', () => {
+    const { state, id } = offerAndRich();
+    // Held: as many others as the limit allows (any contracts but this one).
+    const others = FRONTIER_CONTRACTS.filter((c) => c.id !== id)
+      .slice(0, contractLimit(state))
+      .map((c) => ({ id: c.id, takenOn: 1 }));
+    const full = { ...state, contracts: others };
+    expect(frontierAct(full, { kind: 'takeContract', id }).refusal).toBe('holding');
+    expect(frontierAct(full, { kind: 'fillContract', id }).done).toBe(true);
+  });
+
+  it('is refused without everything it asks for, with the market closed, or off the board', () => {
+    const { state, id } = offerAndRich();
+    expect(frontierAct(at(3), { kind: 'fillContract', id }).refusal).toBe('cost');
+    expect(frontierAct({ ...state, marketOpen: false }, { kind: 'fillContract', id }).refusal).toBe(
+      'closed',
+    );
+    expect(frontierAct(state, { kind: 'fillContract', id: 'no-such' }).refusal).toBe('unknown');
+  });
+
+  it('lets a contract held be delivered at the market too, for no tap', () => {
+    const { state, id } = offerAndRich();
+    const holding = { ...state, contracts: [{ id, takenOn: 1 }] };
+    const out = frontierAct(holding, { kind: 'deliver', id });
+    expect(out.done).toBe(true);
+    expect(out.state.tapsLeft).toBe(holding.tapsLeft);
+    expect(out.state.contracts).toEqual([]);
+    // A held one is delivered, not filled again from the board.
+    expect(frontierAct(holding, { kind: 'fillContract', id }).refusal).toBe('unknown');
   });
 });

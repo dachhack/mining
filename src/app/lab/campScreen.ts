@@ -265,6 +265,7 @@ function placeRefusalText(refusal: PlaceRefusal): string {
 /** A contract action, as a step (progression PR 5). */
 type ContractStep =
   | { kind: 'takeContract'; id: string }
+  | { kind: 'fillContract'; id: string }
   | { kind: 'deliver'; id: string }
   | { kind: 'dropContract'; id: string };
 
@@ -1946,6 +1947,12 @@ export function mountCampLab(
     // Those held are not offered again; up to the best camp's level are held at once.
     const held = state.contracts.map((c) => c.id);
     const board = contractBoard(state).filter((c) => !held.includes(c.id));
+    // Contracts held can be delivered here too (owner, on the hazards build).
+    const heldDefs = heldContracts(state);
+    if (heldDefs.length > 0) {
+      section('Your contracts');
+      for (const contract of heldDefs) list.append(contractRow(contract, 'marketHeld'));
+    }
     if (board.length > 0) {
       section(`Contract board · you hold ${held.length} of ${contractLimit(state)}`);
       for (const offer of board) list.append(contractRow(offer, 'offer'));
@@ -2021,9 +2028,15 @@ export function mountCampLab(
 
   /**
    * A contract: its name, tier and pay, what it asks for (have/need), and
-   * Take for one on the board, or Deliver and Drop for the one held.
+   * its buttons: for one on the board, Fill when the store holds everything
+   * it asks for (owner, on the hazards build: "Should be able to immediately
+   * fill contracts if you have the materials"), else Take; for one held,
+   * Deliver and Drop, or at the market Deliver only.
    */
-  function contractRow(contract: FrontierContractDef, as: 'held' | 'offer'): HTMLElement {
+  function contractRow(
+    contract: FrontierContractDef,
+    as: 'held' | 'offer' | 'marketHeld',
+  ): HTMLElement {
     const row = element('div', 'lab2-recipe');
     row.dataset['testid'] = `lab2-contract-${as}-${contract.id}`;
     const text = element('div', 'lab2-recipe-text');
@@ -2036,13 +2049,18 @@ export function mountCampLab(
       costRow(contract.asks, `lab2-contract-${contract.id}`),
     );
     const buttons = element('div', 'lab2-recipe-buttons lab2-market-buttons');
+    const fill: ContractStep = { kind: 'fillContract', id: contract.id };
     const actions: { label: string; action: ContractStep }[] =
       as === 'offer'
-        ? [{ label: 'Take', action: { kind: 'takeContract', id: contract.id } }]
-        : [
-            { label: 'Drop', action: { kind: 'dropContract', id: contract.id } },
-            { label: 'Deliver', action: { kind: 'deliver', id: contract.id } },
-          ];
+        ? contractRefusal(world, fill) === null
+          ? [{ label: 'Fill', action: fill }]
+          : [{ label: 'Take', action: { kind: 'takeContract', id: contract.id } }]
+        : as === 'marketHeld'
+          ? [{ label: 'Deliver', action: { kind: 'deliver', id: contract.id } }]
+          : [
+              { label: 'Drop', action: { kind: 'dropContract', id: contract.id } },
+              { label: 'Deliver', action: { kind: 'deliver', id: contract.id } },
+            ];
     for (const { label, action } of actions) {
       const b = button(label === 'Drop' ? 'lab2-recipe-pin' : 'lab2-recipe-make', label);
       b.dataset['testid'] = `lab2-contract-${label.toLowerCase()}-${contract.id}`;
@@ -2061,6 +2079,7 @@ export function mountCampLab(
     remember(action);
     const notes = {
       takeContract: `Taken: ${contract.name}. Deliver it from 🎯 on any shift once you hold everything.`,
+      fillContract: `Filled: ${contract.name}, for ${contract.pays} coins.`,
       deliver: `Delivered: ${contract.name}, for ${contract.pays} coins.`,
       dropContract: `Dropped: ${contract.name}.`,
     };
@@ -2778,6 +2797,7 @@ export function mountCampLab(
     if (step.kind === 'buildPen') return `the pen at camp ${step.id}`;
     if (step.kind === 'buildDefense') return `the defenses at camp ${step.id}`;
     if (step.kind === 'takeContract') return 'taking the contract';
+    if (step.kind === 'fillContract') return 'filling the contract';
     if (step.kind === 'deliver') return 'the delivery';
     if (step.kind === 'dropContract') return 'dropping the contract';
     if (step.kind === 'penIn' || step.kind === 'penOut')

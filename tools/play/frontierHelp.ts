@@ -128,6 +128,8 @@ export function frontierHelpText(): string {
     `- Contracts: while the market is open the board offers ${FRONTIER_BOARD.perTier} of each open tier ("take ID"). Tier 1 opens with a level ${FRONTIER_BOARD.tier1Level} camp,`,
     "  tier 2 after a tier-1 contract is delivered, tier 3 after a tier-2. Hold as many as your best camp's level;",
     '  "deliver ID" on any shift once you hold everything it asks for pays its coins; "drop ID" gives it up (1 tap each).',
+    '  At the market, "fill ID" fills a contract on the board at once if your store holds everything it asks for (it',
+    '  needs no free place), and "deliver ID" delivers one held; neither costs a tap there.',
     '  The view names your phase and goal.',
     `- "deep X,Y" places a deep camp on level ground at depth ${FRONTIER_DEEP_CAMP.minDepth} or more (${cost(FRONTIER_DEEP_CAMP.cost)}; the market sells the kit after a tier-1 contract).`,
     `  Its ring is ${FRONTIER_DEEP_CAMP.radius}; it mines as a level ${FRONTIER_DEEP_CAMP.level} camp and is never upgraded.`,
