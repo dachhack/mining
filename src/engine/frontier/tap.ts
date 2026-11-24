@@ -20,6 +20,7 @@
 //    (doubled while the store holds an iron pickaxe: FRONTIER_PICKAXE). If
 //    the mine opened a water pocket deep enough, the water floods (water.ts);
 //    if it opened a gas pocket deep enough, the gas may explode (gas.ts).
+//    Every dragon then flies on along its heading (dragons.ts).
 //
 // The level rule is checked before the hardness gate, so a block too steep to
 // mine says so rather than promising that an upgrade would let it be mined
@@ -41,7 +42,7 @@ import { gained, harvestAt } from './surface';
 import { isFlooded, pumpIndexAt, takeWaterOpened, withFlood } from './water';
 import { isBurning, putOut } from './fire';
 import { gasOpened } from './gas';
-import { dragonAt, driveOff } from './dragons';
+import { dragonAt, dragonsFlyOnMine, driveOff } from './dragons';
 import type { GasOutcome } from './gas';
 import type { HarvestKind } from './surface';
 import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from './state';
@@ -218,7 +219,8 @@ export function frontierTap(state: FrontierState, x: number, y: number): Frontie
   const blast = gasOpened({ ...after, stumps, regrowIn, planted, grassIn }, x, y, wasDepth);
   return {
     ...nothing('mined'),
-    state: blast.state,
+    // Each mine moves the dragons on along their headings (dragons.ts).
+    state: dragonsFlyOnMine(blast.state),
     gain,
     block: mined.block,
     flooded,

@@ -68,7 +68,8 @@
 //   stump may wait to grow back).
 // - DRAGONS: never more than FRONTIER_DRAGON.most, always on the map; one
 //   comes only at night, at the edge, from FRONTIER_DRAGON.fromShift; they
-//   move only at night, at most FRONTIER_DRAGON.steps squares; one leaves
+//   move at night (at most FRONTIER_DRAGON.steps squares) and on a mining tap
+//   (at most FRONTIER_DRAGON.stepsPerMine), never otherwise; one leaves
 //   only by a tap on it with a sword held, and the sword stays.
 // - RAIDS AND DEFENSES: a camp's defenses stay between 0 and
 //   FRONTIER_DEFENSE.length, go up only by buildDefense, 1 level, and never
@@ -364,8 +365,12 @@ export function checkStep(
       } else {
         // Straight flights in 8 directions: at most `steps` squares each way.
         const moved = Math.max(Math.abs(d.x - was.x), Math.abs(d.y - was.y));
-        if (moved > 0 && !endsShift) say(`dragon ${d.id} moved by "${step}"`);
-        if (moved > FRONTIER_DRAGON.steps) say(`dragon ${d.id} flew ${moved} squares`);
+        // At night a flight; on a mining tap a step along its heading; else still.
+        const mined = verb === 'tap' && after.mined > before.mined;
+        const most = endsShift ? FRONTIER_DRAGON.steps : mined ? FRONTIER_DRAGON.stepsPerMine : 0;
+        if (moved > most) say(`dragon ${d.id} flew ${moved} squares by "${step}"`);
+        if (Math.abs(d.dx) > 1 || Math.abs(d.dy) > 1 || (d.dx === 0 && d.dy === 0))
+          say(`dragon ${d.id} has heading ${d.dx},${d.dy}`);
       }
     }
     for (const d of before.hazards.dragons) {

@@ -442,7 +442,7 @@ export function mountCampLab(
    */
   const lastStep = new Map<number, { x: number; y: number; at: number; facing: number }>();
   /** Where each dragon flew from in the last night, and when the morning began (hazards PR 4). */
-  const lastFlight = new Map<number, { x: number; y: number; at: number }>();
+  const lastFlight = new Map<number, { x: number; y: number; at: number; ms: number }>();
 
   // ----- The page -----
   const page = element('main', 'lab lab2');
@@ -771,7 +771,7 @@ export function mountCampLab(
       let fx = dragon.x;
       let fy = dragon.y;
       if (flight !== undefined) {
-        const t = Math.min(1, Math.max(0, (now - flight.at) / CAMP_LOOK.dragonFlightMs));
+        const t = Math.min(1, Math.max(0, (now - flight.at) / flight.ms));
         const eased = t * t * (3 - 2 * t);
         fx = flight.x + (dragon.x - flight.x) * eased;
         fy = flight.y + (dragon.y - flight.y) * eased;
@@ -1040,13 +1040,14 @@ export function mountCampLab(
 
   /** Note each animal that moved between `before` and the world now, for `drawAnimals`. */
   /** Note each dragon that flew in the night, so it glides there in the morning. */
-  function noteFlights(before: FrontierDragon[]): void {
+  function noteFlights(before: FrontierDragon[], ms = CAMP_LOOK.dragonFlightMs): void {
     for (const dragon of world.hazards.dragons) {
       const was = before.find((d) => d.id === dragon.id);
       if (was !== undefined && (was.x !== dragon.x || was.y !== dragon.y)) {
-        lastFlight.set(dragon.id, { x: was.x, y: was.y, at: performance.now() });
+        lastFlight.set(dragon.id, { x: was.x, y: was.y, at: performance.now(), ms });
       }
     }
+    if (lastFlight.size > 0) cues.start();
   }
 
   function noteSteps(before: Animal[]): void {
@@ -1445,7 +1446,7 @@ export function mountCampLab(
     // too while an animal is still sliding to where End shift moved it.
     const sliding =
       [...lastStep.values()].some((step) => now - step.at < CAMP_LOOK.animalSlideMs) ||
-      [...lastFlight.values()].some((f) => now - f.at < CAMP_LOOK.dragonFlightMs);
+      [...lastFlight.values()].some((f) => now - f.at < f.ms);
     return effects.length > 0 || sliding || (mode.kind === 'placing' && mode.target !== null);
   });
 
@@ -3040,7 +3041,10 @@ export function mountCampLab(
     // Mined.
     effects = effects.filter((e) => !(e.x === x && e.y === y));
     remember({ kind: 'tap', x, y });
+    const dragonsBeforeTap = world.hazards.dragons;
     setWorld(result.world);
+    // The dragons flew on a square: they glide there (hazards PR 4).
+    noteFlights(dragonsBeforeTap, CAMP_LOOK.dragonStepMs);
     if (result.gas === 'exploded') {
       const n = result.fires.length;
       setHint(

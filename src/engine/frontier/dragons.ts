@@ -4,11 +4,11 @@
 // things. They don't go away until you get a sword and drive them away."
 //
 // At End shift (`nightOfDragons`), after the fires and pumps, before rain:
-// 1. each dragon flies FRONTIER_DRAGON.steps squares in a straight line, in
-//    one of the 8 directions drawn from the state's generator, over anything
-//    (trees, pits, water, camps), bouncing off the map's edge (owner, on the
-//    hazards build: "Dragon doesn't seem to move": random single steps
-//    mostly went back and forth);
+// 1. each dragon takes a new heading, one of the 8 directions drawn from the
+//    state's generator, and flies FRONTIER_DRAGON.steps squares along it in
+//    a straight line, over anything (trees, pits, water, camps), bouncing off
+//    the map's edge (owner, on the hazards build: "Dragon doesn't seem to
+//    move": random single steps mostly went back and forth);
 // 2. it eats one animal on or beside its square (the lowest id first); if
 //    there is none and it is on a camp's ground, one animal from that camp's
 //    pen; and every apple on the apple trees on or beside its square (they
@@ -20,6 +20,9 @@
 //    FRONTIER_DRAGON.most are on the map, a new dragon flies in at a square
 //    of the map's edge with a chance of FRONTIER_DRAGON.chance. It does
 //    nothing until the next night.
+// In the day it keeps flying (owner: "Let's make the dragon fly every time
+// you mine"): each mining tap moves each dragon FRONTIER_DRAGON.stepsPerMine
+// squares along its heading, bouncing off the edge (`dragonsFlyOnMine`).
 // "Beside" is the 8 squares round it. A tap on a dragon with a sword in the
 // store drives it off the map (tap.ts); without one it does nothing.
 //
@@ -44,6 +47,37 @@ const DIRECTIONS = [
   [-1, 0],
   [-1, -1],
 ] as const;
+
+/**
+ * `dragon` after flying `steps` squares along its heading, bouncing off the
+ * edge of a `width` x `height` map (the heading flips on the side it hits).
+ */
+export function flyDragon(
+  dragon: FrontierDragon,
+  steps: number,
+  width: number,
+  height: number,
+): FrontierDragon {
+  let { x, y, dx, dy } = dragon;
+  for (let k = 0; k < steps; k += 1) {
+    if (x + dx < 0 || x + dx >= width) dx = -dx;
+    if (y + dy < 0 || y + dy >= height) dy = -dy;
+    x += dx;
+    y += dy;
+  }
+  return { ...dragon, x, y, dx, dy };
+}
+
+/** `state` with every dragon flown on by a mining tap (FRONTIER_DRAGON.stepsPerMine squares). */
+export function dragonsFlyOnMine(state: FrontierState): FrontierState {
+  if (state.hazards.dragons.length === 0) return state;
+  const width = state.cube.size.x;
+  const height = state.cube.size.y;
+  const dragons = state.hazards.dragons.map((d) =>
+    flyDragon(d, FRONTIER_DRAGON.stepsPerMine, width, height),
+  );
+  return { ...state, hazards: { ...state.hazards, dragons } };
+}
 
 /** The dragon on square (x, y), or `null`. */
 export function dragonAt(state: FrontierState, x: number, y: number): FrontierDragon | null {
@@ -84,19 +118,16 @@ export function nightOfDragons(state: FrontierState, rng: RngState): DragonNight
   const fires: { x: number; y: number }[] = [];
   const moved: FrontierDragon[] = [];
   for (const dragon of state.hazards.dragons) {
-    // 1. It flies in a straight line, bouncing off the edge.
-    let { x, y } = dragon;
-    // `: number`: the table's entries are -1, 0 or 1; a bounce flips the sign.
+    // 1. A new heading, and a straight flight along it, bouncing off the edge.
     const heading = DIRECTIONS[nextInt(rng, DIRECTIONS.length)] ?? [1, 0];
-    let dx: number = heading[0];
-    let dy: number = heading[1];
-    for (let k = 0; k < FRONTIER_DRAGON.steps; k += 1) {
-      if (x + dx < 0 || x + dx >= width) dx = -dx;
-      if (y + dy < 0 || y + dy >= height) dy = -dy;
-      x += dx;
-      y += dy;
-    }
-    moved.push({ ...dragon, x, y });
+    const flown = flyDragon(
+      { ...dragon, dx: heading[0], dy: heading[1] },
+      FRONTIER_DRAGON.steps,
+      width,
+      height,
+    );
+    const { x, y } = flown;
+    moved.push(flown);
     // 2. It eats: one animal, roaming or else penned; and apples.
     const prey = next.animals.filter((a) => near(a.x, a.y, x, y)).sort((a, b) => a.id - b.id)[0];
     if (prey !== undefined) {
@@ -166,7 +197,10 @@ export function nightOfDragons(state: FrontierState, rng: RngState): DragonNight
       const j = k - 2 * width;
       at = { x: j % 2 === 0 ? 0 : width - 1, y: 1 + Math.floor(j / 2) };
     }
-    dragons = [...dragons, { id: nextDragonId, x: at.x, y: at.y }];
+    // It comes in heading across the map, away from the edge it came in at.
+    const dx = at.x === 0 ? 1 : at.x === width - 1 ? -1 : 0;
+    const dy = at.y === 0 ? 1 : at.y === height - 1 ? -1 : 0;
+    dragons = [...dragons, { id: nextDragonId, x: at.x, y: at.y, dx, dy }];
     nextDragonId += 1;
     came = true;
   }

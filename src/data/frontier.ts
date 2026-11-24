@@ -796,6 +796,8 @@ export const FRONTIER_DRAGON = {
   chance: 1 / 12,
   most: 1,
   steps: 4,
+  /** Squares each dragon flies along its heading on each mining tap (owner: "fly every time you mine"). */
+  stepsPerMine: 1,
   fireChance: 1 / 3,
   sword: 'sword' as ItemId,
 };

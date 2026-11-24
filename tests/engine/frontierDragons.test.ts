@@ -9,11 +9,14 @@ import { nightOfDragons } from '../../src/engine/frontier/dragons';
 import { APPLE_TREE, GRASS } from '../../src/engine/frontier/state';
 import type { Feature, FrontierAnimal } from '../../src/engine/frontier/state';
 import { createRng } from '../../src/engine/rng';
-import { MID, SIDE, world } from './frontierHelpers';
+import { AT, MID, SIDE, world } from './frontierHelpers';
 
 /** `state` with a dragon on (x, y). */
 function withDragon(state: FrontierState, x: number, y: number): FrontierState {
-  return { ...state, hazards: { ...state.hazards, dragons: [{ id: 1, x, y }], nextDragonId: 2 } };
+  return {
+    ...state,
+    hazards: { ...state.hazards, dragons: [{ id: 1, x, y, dx: 1, dy: 0 }], nextDragonId: 2 },
+  };
 }
 
 const near = (a: { x: number; y: number }, b: { x: number; y: number }): boolean =>
@@ -199,5 +202,48 @@ describe('the sword (hazards plan, section 4)', () => {
     ]);
     const lot = FRONTIER_MARKET.buyPrices.find((l) => l.item === 'sword');
     expect(lot).toMatchObject({ coins: 60, fromLevel: 3 });
+  });
+});
+
+describe('a dragon in the day (owner: "Let\'s make the dragon fly every time you mine")', () => {
+  it('flies a square along its heading each time a block is mined, and not otherwise', () => {
+    const w = {
+      ...withDragon(world({ features: [{ x: AT.x, y: AT.y + 1, feature: GRASS }] }), 3, 3),
+    };
+    const mined = frontierAct(w, { kind: 'tap', x: AT.x, y: AT.y });
+    expect(mined.tap?.kind).toBe('mined');
+    expect(mined.state.hazards.dragons[0]).toMatchObject({
+      x: 3 + FRONTIER_DRAGON.stepsPerMine,
+      y: 3,
+    });
+    // Cutting grass is not mining: the dragon stays.
+    const cut = frontierAct(mined.state, { kind: 'tap', x: AT.x, y: AT.y + 1 });
+    expect(cut.tap?.kind).toBe('harvested');
+    expect(cut.state.hazards.dragons[0]).toMatchObject({
+      x: 3 + FRONTIER_DRAGON.stepsPerMine,
+      y: 3,
+    });
+  });
+
+  it('bounces off the edge: its heading turns back', () => {
+    const w = withDragon(world(), SIDE - 1, 3);
+    const mined = frontierAct(w, { kind: 'tap', x: AT.x, y: AT.y });
+    expect(mined.state.hazards.dragons[0]).toMatchObject({ x: SIDE - 2, y: 3, dx: -1, dy: 0 });
+  });
+
+  it('comes in at the edge heading across the map', () => {
+    for (let seed = 1; seed <= 300; seed += 1) {
+      const night = nightOfDragons(
+        { ...world(), shift: FRONTIER_DRAGON.fromShift },
+        createRng(seed),
+      );
+      const d = night.state.hazards.dragons[0];
+      if (!night.came || d === undefined) continue;
+      if (d.x === 0) expect(d.dx).toBe(1);
+      if (d.x === SIDE - 1) expect(d.dx).toBe(-1);
+      if (d.y === 0) expect(d.dy).toBe(1);
+      if (d.y === SIDE - 1) expect(d.dy).toBe(-1);
+      expect(d.dx !== 0 || d.dy !== 0).toBe(true);
+    }
   });
 });
