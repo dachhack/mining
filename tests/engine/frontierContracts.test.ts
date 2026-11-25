@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { BLOCKS } from '../../src/data';
 import {
   FRONTIER_BOARD,
+  FRONTIER_COAL,
   FRONTIER_CONTRACTS,
   FRONTIER_MARKET,
   FRONTIER_TREASURE,
@@ -304,6 +305,22 @@ describe('the board offers only what the world can fill (owner, on the hazards b
     for (const r of relics) expect(r.z).toBeGreaterThanOrEqual(FRONTIER_TREASURE.relicFromDepth);
     for (const k of keys) expect(k.z).toBeGreaterThanOrEqual(FRONTIER_TREASURE.keystoneFromDepth);
     expect(createFrontier(3).cube.blocks).toEqual(cube.blocks);
+  });
+
+  it('every world holds about three times the coal the old game gave it (owner: "add more coal")', () => {
+    for (let seed = 1; seed <= 10; seed += 1) {
+      const cube = createFrontier(seed).cube;
+      const coal = groundStock(cube).get('coal') ?? 0;
+      expect(coal, `seed ${seed}`).toBeGreaterThanOrEqual(
+        FRONTIER_COAL.extraSeams * FRONTIER_COAL.minSize,
+      );
+      // Never at the surface (question 140), and not below FRONTIER_COAL.toDepth from the seams.
+      for (let y = 0; y < cube.size.y; y += 1) {
+        for (let x = 0; x < cube.size.x; x += 1) {
+          expect(blockAt(cube, { x, y, z: 0 })).not.toBe(BLOCKS.coalSeam.code);
+        }
+      }
+    }
   });
 
   it('never offers a contract the world cannot fill, on real worlds and many market days', () => {

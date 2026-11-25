@@ -383,9 +383,9 @@ const FRONTIER_RUNS: {
     name: 'careful-seed-1-defended',
     seed: 1,
     policy: 'careful',
-    maxShifts: 25,
+    maxShifts: 30,
     description:
-      'The careful policy on seed 1 for 25 shifts: it builds defenses, and a camp turns marauders away (the full run no longer does)',
+      'The careful policy on seed 1 for 30 shifts: it builds defenses, and a camp turns marauders away (the full run no longer does)',
   },
   {
     name: 'careful-seed-4-finished',
