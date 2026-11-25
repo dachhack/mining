@@ -8,8 +8,9 @@
 // 1. every mushroom coming counts down a night; one that reaches 0 comes up
 //    if its square is still ground never dug with no camp or building on
 //    it, and is lost otherwise;
-// 2. on a night it rained, every square with a tree or an apple tree (not a
-//    maple), no mushroom on it and none coming, gets one coming with a
+// 2. on a night it rained, every square with a plain tree (not a maple, nor
+//    an apple tree: owner, after the 0.18.0 build: "Let's omit apple trees
+//    from mushroom generation"), no mushroom on it and none coming, gets one coming with a
 //    chance of FRONTIER_MUSHROOM.chance plus FRONTIER_MUSHROOM.perTreeBeside
 //    for each of the 8 squares round it with a tree of any kind (at most
 //    FRONTIER_MUSHROOM.most), in a whole number of nights drawn from
@@ -26,7 +27,7 @@ import type { RngState } from '../rng';
 import { blockAt } from '../state';
 import { buildingAt } from './buildings';
 import { campAt } from './camps';
-import { APPLE_TREE, TREE, isTree } from './state';
+import { TREE, isTree } from './state';
 import type { FrontierState } from './state';
 
 /** True if a mushroom stands on square (x, y). */
@@ -90,13 +91,13 @@ export function nightOfMushrooms(
       came += 1;
     }
   });
-  // 2. The rain sets new ones coming under the trees (not the maples).
+  // 2. The rain sets new ones coming under the plain trees.
   let coming = 0;
   if (rained) {
     const [low, high] = FRONTIER_MUSHROOM.nights;
     for (let i = 0; i < state.features.length; i += 1) {
       const f = state.features[i];
-      if (f !== TREE && f !== APPLE_TREE) continue;
+      if (f !== TREE) continue; // plain trees only: not maples or apple trees
       if (mushrooms[i] === true || (mushroomIn[i] ?? -1) >= 0) continue;
       const x = i % width;
       const y = Math.floor(i / width);

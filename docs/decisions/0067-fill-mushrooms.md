@@ -29,3 +29,7 @@ market and mushrooms sell for gold."
 Gatherer simulator, 40 runs of 100 shifts: crews lost 1 (2 before these
 changes); every run picked a mushroom, the first at about shift 12; 5,292
 coins on average (5,383 before).
+
+After the 0.18.0 build the owner said: "Let's omit apple trees from mushroom
+generation". Mushrooms now come only under plain trees. Apple trees and
+maples still count as trees beside one, raising its chance. Engine 0.19.0.

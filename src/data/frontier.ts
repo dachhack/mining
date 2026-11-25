@@ -856,8 +856,9 @@ export const FRONTIER_RAIN = {
  * Mushrooms (owner, after the 0.17.0 build: "If a (non-maple) tree is
  * standing when rain happens, 3-7 days later a mushroom has a chance of
  * emerging. The chance increases for every adjacent space where there is
- * another tree."). On a night it rains, each square with a tree or an apple
- * tree (not a maple), and no mushroom on it or coming, gets one coming with a
+ * another tree."; then, after the 0.18.0 build: "Let's omit apple trees from
+ * mushroom generation"). On a night it rains, each square with a plain tree
+ * (not a maple or an apple tree), and no mushroom on it or coming, gets one coming with a
  * chance of `chance` plus `perTreeBeside` for each of the 8 squares round it
  * with a tree of any kind, at most `most`. It comes up a whole number of
  * nights drawn from `nights` later, at the End shift, if its square is still
