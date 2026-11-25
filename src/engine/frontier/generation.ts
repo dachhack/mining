@@ -435,6 +435,7 @@ export function createFrontier(seed: number): FrontierState {
     contractsDone: [0, 0, 0],
     marketOpen: false,
     hazards: noHazards(cube.size.x * cube.size.y),
+    sawHouses: [],
     shift: 1,
     tapsLeft: FRONTIER_SHIFT.taps,
     health: FRONTIER_SHIFT.startHealth,

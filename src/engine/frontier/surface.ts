@@ -4,7 +4,8 @@
 // - an animal standing on the square is caught (1 animal);
 // - grass is cut (grass);
 // - an apple tree with apples gives one apple a tap;
-// - a tree, or an apple tree with no apples left, is felled (wood).
+// - a tree, or an apple tree with no apples left, is felled (wood: more with
+//   an axe or near a saw house, sawHouse.ts).
 //
 // Only then can the block under the square be mined. Animals moving, and
 // apples, felled trees and cut grass growing back, happen at the end of a
@@ -13,6 +14,7 @@
 
 import type { ItemStack } from '../../data';
 import { FRONTIER_SHIFT, FRONTIER_SURFACE } from '../../data/frontier';
+import { woodFromTree } from './sawHouse';
 import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from './state';
 import type { FrontierAnimal, FrontierState } from './state';
 
@@ -107,7 +109,8 @@ export function harvestAt(state: FrontierState, x: number, y: number): FrontierH
     const treesFelled = state.treesFelled + 1;
     return take(
       { ...state, features, stumps, regrowIn, treesFelled },
-      { item: 'wood', count: FRONTIER_SURFACE.woodPerTree },
+      // More with an axe, and near a saw house (sawHouse.ts).
+      { item: 'wood', count: woodFromTree(state, x, y) },
       'felled',
     );
   }

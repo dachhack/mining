@@ -69,6 +69,7 @@ import {
   makeRefusal,
   smelterRefusal,
 } from './smelting';
+import { buildSawHouse, sawHouseRefusal } from './sawHouse';
 import { frontierTap } from './tap';
 import type { FrontierTap } from './tap';
 import { APPLE_TREE, GRASS, NO_FEATURE } from './state';
@@ -108,6 +109,8 @@ export type FrontierAction =
   | { kind: 'buildDefense'; id: number }
   // Plant a sapling or an apple sapling from the store on square (x, y) (farming.ts).
   | { kind: 'plant'; x: number; y: number; item: string }
+  // Build a saw house on square (x, y) (sawHouse.ts).
+  | { kind: 'buildSawHouse'; x: number; y: number }
   | { kind: 'buy'; item: string; lots: number }
   | { kind: 'close' };
 
@@ -595,6 +598,10 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
     const why = defenseRefusal(state, action.id);
     return why === null ? spent(buildDefense(state, action.id)) : refused(state, why);
   }
+  if (action.kind === 'buildSawHouse') {
+    const why = sawHouseRefusal(state, action.x, action.y);
+    return why === null ? spent(buildSawHouse(state, action.x, action.y)) : refused(state, why);
+  }
   if (action.kind === 'plant') {
     const why = plantRefusal(state, action.x, action.y, action.item);
     return why === null
@@ -625,6 +632,8 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
       ? placeFrontierCamp(state, action.x, action.y, action.kind === 'placeDeep')
       : action.kind === 'upgrade'
         ? upgradeFrontierCamp(state, action.id)
-        : demolishFrontierCamp(state, action.id);
+        : action.kind === 'demolish'
+          ? demolishFrontierCamp(state, action.id)
+          : state;
   return next === state ? refused(state, action.kind) : spent(next);
 }

@@ -4,6 +4,7 @@
 // --frontier` use it. Everything goes through the engine's public surface.
 
 import {
+  FRONTIER_AXE,
   FRONTIER_DEEP_CAMP,
   FRONTIER_DRAGON,
   FRONTIER_DRILL,
@@ -14,6 +15,7 @@ import {
   FRONTIER_PICKAXE,
   FRONTIER_PUMP,
   FRONTIER_RAID,
+  FRONTIER_SAW_HOUSE,
   FRONTIER_STEEL_DRILL,
 } from '../src/data/frontier';
 import {
@@ -47,12 +49,16 @@ import {
   raidStrength,
   penRefusal,
   plantRefusal,
+  sawHouseReach,
+  sawHouseReaches,
+  sawHouseRefusal,
+  inCircle,
   smelterRefusal,
   upgradeCostFrom,
   upgradeRefusal,
 } from '../src/engine';
 import type { FrontierAction, FrontierState } from '../src/engine';
-import { APPLE_TREE, NO_FEATURE } from '../src/engine/frontier/state';
+import { APPLE_TREE, NO_FEATURE, TREE } from '../src/engine/frontier/state';
 
 /**
  * One step of the new game, as a short text: "tap X,Y", "place X,Y",
@@ -64,8 +70,8 @@ import { APPLE_TREE, NO_FEATURE } from '../src/engine/frontier/state';
  * an apple sapling on square X,Y), "buildPen ID", "penIn ID" or "penOut ID"
  * (a pen at camp ID, an animal into it or out of it), "takeContract ID"
  * (a contract from today's board), "deliver ID", "dropContract ID", or
- * "placeDeep X,Y" (a deep camp), or "closeMarket" (the market closes and
- * the day starts).
+ * "placeDeep X,Y" (a deep camp), "buildSawHouse X,Y" (a saw house), or
+ * "closeMarket" (the market closes and the day starts).
  */
 export type FrontierStep = string;
 
@@ -142,7 +148,10 @@ export function actionOf(step: FrontierStep): FrontierAction {
   if (verb === 'make' && arg !== undefined) {
     return { kind: 'make', recipe: arg };
   }
-  if ((verb === 'tap' || verb === 'place' || verb === 'placeDeep') && arg !== undefined) {
+  if (
+    (verb === 'tap' || verb === 'place' || verb === 'placeDeep' || verb === 'buildSawHouse') &&
+    arg !== undefined
+  ) {
     return { kind: verb, ...squareOf(arg) };
   }
   throw new Error(`"${step}" is not a step of the new game`);
@@ -229,6 +238,9 @@ const GATHERER_GRASS_KEPT = 60;
 /** On a market day that sells wood, the gatherer buys it up to this much. */
 const GATHERER_WOOD_STOCK = 40;
 
+/** The gatherer buys an axe only while it would still hold this many coins after. */
+const GATHERER_AXE_COINS_KEPT = 20;
+
 /** The gatherer keeps this much stone back and sells the rest on a market day. */
 const GATHERER_STONE_KEPT = 100;
 
@@ -268,6 +280,16 @@ export function marketStep(state: FrontierState): FrontierStep | null {
   for (const tool of [FRONTIER_DRILL.item, FRONTIER_STEEL_DRILL.item]) {
     const held = (state.inventory.get(tool) ?? 0) > 0;
     if (!held && tradeRefusal(state, 'buy', tool, 1) === null) return `buy ${tool} 1`;
+  }
+  // An axe (more wood a tree), keeping GATHERER_AXE_COINS_KEPT coins back.
+  const axeLot = FRONTIER_MARKET.buyPrices.find((l) => l.item === FRONTIER_AXE.item);
+  if (
+    axeLot !== undefined &&
+    (state.inventory.get(FRONTIER_AXE.item) ?? 0) === 0 &&
+    coinsHeld(state) >= axeLot.coins + GATHERER_AXE_COINS_KEPT &&
+    tradeRefusal(state, 'buy', FRONTIER_AXE.item, 1) === null
+  ) {
+    return `buy ${FRONTIER_AXE.item} 1`;
   }
   // Wood for upkeep once the market sells it (phase 4): up to
   // GATHERER_WOOD_STOCK, as the coins allow. Leaving apple trees standing
@@ -572,14 +594,54 @@ export function plantStep(state: FrontierState): FrontierStep | null {
   return best === null ? null : `plant ${best.x},${best.y} sapling`;
 }
 
+/** The gatherer builds a saw house only where it reaches this many trees, and keeps this much wood after. */
+const GATHERER_SAW_TREES = 6;
+const GATHERER_SAW_WOOD_KEPT = 40;
+
+/**
+ * Build a saw house (owner, after the 0.17.0 build) where it reaches the
+ * most trees and stumps, if no saw house reaches the newest camp's square
+ * yet, it reaches at least GATHERER_SAW_TREES, and the store keeps
+ * GATHERER_SAW_WOOD_KEPT wood after paying. Ties go to the square met
+ * first, row by row. `null` otherwise.
+ */
+export function sawHouseStep(state: FrontierState): FrontierStep | null {
+  const newest = state.camps[state.camps.length - 1];
+  if (newest === undefined || sawHouseReaches(state, newest.x, newest.y)) return null;
+  const woodCost = FRONTIER_SAW_HOUSE.cost.find((c) => c.item === 'wood')?.count ?? 0;
+  if ((state.inventory.get('wood') ?? 0) - woodCost < GATHERER_SAW_WOOD_KEPT) return null;
+  if (!canAfford(state.inventory, FRONTIER_SAW_HOUSE.cost)) return null;
+  const width = state.cube.size.x;
+  const height = state.cube.size.y;
+  const reach = sawHouseReach();
+  const trees: { x: number; y: number }[] = [];
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const i = x + width * y;
+      const f = state.features[i];
+      const stump = state.stumps[i] ?? NO_FEATURE;
+      if (f === TREE || f === APPLE_TREE || stump !== NO_FEATURE) trees.push({ x, y });
+    }
+  }
+  let best: { x: number; y: number; n: number } | null = null;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (sawHouseRefusal(state, x, y) !== null) continue;
+      const n = trees.filter((t) => inCircle(x, y, reach, t.x, t.y)).length;
+      if (best === null || n > best.n) best = { x, y, n };
+    }
+  }
+  return best !== null && best.n >= GATHERER_SAW_TREES ? `buildSawHouse ${best.x},${best.y}` : null;
+}
+
 /**
  * The gatherer: a plain policy for recording golden runs. In order:
  * 0. with no taps left, end the shift, or rest if the crew's health is at
  *    GATHERER_REST_AT or below (plan A4);
  * 1. take and deliver contracts (`contractStep`), smelt and craft what it
  *    can (`craftStep`), keep a pen and make hay
- *    (`farmStep`), trade on a market day (`marketStep`), and plant the
- *    saplings it holds (`plantStep`);
+ *    (`farmStep`), trade on a market day (`marketStep`), plant the
+ *    saplings it holds (`plantStep`), and build a saw house (`sawHouseStep`);
  * 2. upgrade the lowest camp it can pay for;
  * 3. with fewer than 3 camps, place one where it lights the most new
  *    ground, if it can pay;
@@ -613,7 +675,8 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
     craftStep(state) ??
     farmStep(state) ??
     marketStep(state) ??
-    plantStep(state);
+    plantStep(state) ??
+    sawHouseStep(state);
   if (craft !== null) return craft;
   const byLevel = [...state.camps].sort((a, b) => a.level - b.level || a.id - b.id);
   for (const camp of byLevel) {

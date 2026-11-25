@@ -33,6 +33,7 @@ import {
   FRONTIER_STEEL_DRILL,
   FRONTIER_LANTERN,
   FRONTIER_PICKAXE,
+  FRONTIER_AXE,
   FRONTIER_SHIFT,
 } from '../src/data/frontier';
 import { ENGINE_VERSION, createFrontier, depthAt, frontierAct, hashFrontier } from '../src/engine';
@@ -87,6 +88,8 @@ export const FIRST_NAMES = [
   'smelter',
   'ingot',
   'pickaxe',
+  'axe',
+  'sawHouse',
   'drill',
   'steelDrill',
   'lantern',
@@ -110,6 +113,8 @@ function reached(state: FrontierState): Set<FirstName> {
   const held = (item: string): boolean => (state.inventory.get(item) ?? 0) > 0;
   if (held('ironIngot') || held('copperIngot')) got.add('ingot');
   if (held(FRONTIER_PICKAXE.item)) got.add('pickaxe');
+  if (held(FRONTIER_AXE.item)) got.add('axe');
+  if (state.sawHouses.length > 0) got.add('sawHouse');
   if (held(FRONTIER_DRILL.item)) got.add('drill');
   if (held(FRONTIER_STEEL_DRILL.item)) got.add('steelDrill');
   if (held(FRONTIER_LANTERN.item)) got.add('lantern');

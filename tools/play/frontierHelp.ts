@@ -2,7 +2,10 @@
 // player needs them. The numbers come from src/data/frontier.ts, so the text
 // stays true when they are tuned.
 
+import { campRadius } from '../../src/engine';
 import {
+  FRONTIER_AXE,
+  FRONTIER_SAW_HOUSE,
   FRONTIER_CAMP_LEVELS,
   FRONTIER_BOARD,
   FRONTIER_CAMP_PLACE,
@@ -55,7 +58,7 @@ export function frontierHelpText(): string {
     '  npm run play:old -- --help                     the old game (until it is removed)',
     '',
     'Choices: "tap X,Y", "place X,Y", "upgrade N", "demolish N", "smelter N", "make R", "lantern N",',
-    '"sell ITEM N", "buy ITEM N", "plant X,Y sapling", "plant X,Y appleSapling", "end", "rest N", "close",',
+    '"sell ITEM N", "buy ITEM N", "plant X,Y sapling", "plant X,Y appleSapling", "saw X,Y", "end", "rest N", "close",',
     '"undo", "look X,Y", or the number of a',
     'listed choice. Separate several with ";".',
     '',
@@ -123,6 +126,8 @@ export function frontierHelpText(): string {
     '  Saplings and apple saplings come only from the market.',
     `  "plant X,Y sapling" plants one on lit surface dirt or a stump (1 tap): a tree in ${FRONTIER_SAPLINGS.saplingGrowShifts} shifts,`,
     `  an apple tree in ${FRONTIER_SAPLINGS.appleSaplingGrowShifts}. Mining its square digs it out.`,
+    `- An axe in your store fells a tree for ${FRONTIER_AXE.woodPerTree} wood, not ${FRONTIER_SURFACE.woodPerTree}. "saw X,Y" builds a saw house on lit, bare, undug ground`,
+    `  (${cost(FRONTIER_SAW_HOUSE.cost)}; 1 tap): trees within ${campRadius(FRONTIER_SAW_HOUSE.radiusOfLevel)} squares of it give ${FRONTIER_SAW_HOUSE.bonus} more wood. Its square is never mined.`,
     `- "pen N" builds an animal pen at camp N (level ${FRONTIER_PEN.minLevel} or more; ${cost(FRONTIER_PEN.cost)}; one a camp; lost with it, its animals back to the store).`,
     `  "penin N" / "penout N" moves an animal from the store into it or back (up to ${FRONTIER_PEN.capacity}). Penned animals are never eaten.`,
     `  A pen with 2 or more and room breeds one every ${FRONTIER_PEN.breedEveryShifts} shifts, eating ${FRONTIER_PEN.hayPerBirth} hay; "make hay" turns 3 grass into 1 hay.`,

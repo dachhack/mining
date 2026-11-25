@@ -6,6 +6,7 @@
 // here changes the game.
 
 import {
+  FRONTIER_AXE,
   FRONTIER_DEEP_CAMP,
   FRONTIER_DRAGON,
   FRONTIER_DRILL,
@@ -17,6 +18,7 @@ import {
   FRONTIER_SAPLINGS,
   FRONTIER_SHIFT,
   FRONTIER_STEEL_DRILL,
+  FRONTIER_SURFACE,
 } from '../../data/frontier';
 
 /** Grass eaten as one food (FRONTIER_FOODS). */
@@ -64,6 +66,8 @@ export function itemInfo(item: string): string | null {
       return 'Mines iron and copper ore on any camp’s ground, while you have one.';
     case FRONTIER_STEEL_DRILL.item:
       return 'Mines iron, copper, crystal, rare ore, relics and keystones, while you have one.';
+    case FRONTIER_AXE.item:
+      return `A felled tree gives ${FRONTIER_AXE.woodPerTree} wood, not ${FRONTIER_SURFACE.woodPerTree}, while you have one.`;
     case FRONTIER_PICKAXE.item:
       return `Every mining tap gives ${FRONTIER_PICKAXE.yieldTimes}×, while you have one.`;
     case FRONTIER_LANTERN.item:

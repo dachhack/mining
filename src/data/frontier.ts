@@ -339,6 +339,17 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
     output: { item: 'drill', count: 1 },
     needsSmelter: true,
   },
+  // The axe fells a tree for more wood (owner, after the 0.17.0 build).
+  {
+    id: 'axe',
+    name: 'Axe',
+    inputs: [
+      { item: 'ironIngot', count: 2 },
+      { item: 'wood', count: 2 },
+    ],
+    output: { item: 'axe', count: 1 },
+    needsSmelter: true,
+  },
   // A sword drives a dragon off (hazards plan, section 4; question 187).
   {
     id: 'sword',
@@ -387,6 +398,36 @@ export const FRONTIER_PEN = {
 export const FRONTIER_PICKAXE = {
   item: 'ironPickaxe' as ItemId,
   yieldTimes: 2,
+};
+
+/**
+ * The axe (owner, after the 0.17.0 build: "Let's add an axe that gets you 3
+ * wood from trees instead of 2"): while the store holds `item`, felling a
+ * tree or an emptied apple tree gives `woodPerTree` wood, not
+ * FRONTIER_SURFACE.woodPerTree. It does not wear out, and a second one adds
+ * nothing. Made at a smelter (FRONTIER_RECIPES) or bought at the market.
+ */
+export const FRONTIER_AXE = {
+  item: 'axe' as ItemId,
+  woodPerTree: 3,
+};
+
+/**
+ * The saw house (owner, after the 0.17.0 build: "you can build a one-square
+ * building saw house that increases the harvest of all trees within a camp
+ * level 1 radius by 1"). Built for `cost` and 1 tap on one lit square of
+ * unmined ground with nothing on it. Every tree felled within the circle of
+ * a level-`radiusOfLevel` camp's radius round it gives `bonus` more wood. A
+ * tree in reach of two saw houses gets the bonus once. Its square is never
+ * mined while it stands. The cost and the once-only bonus are [Default]s.
+ */
+export const FRONTIER_SAW_HOUSE = {
+  cost: [
+    { item: 'wood', count: 15 },
+    { item: 'stone', count: 10 },
+  ] as ItemStack[],
+  radiusOfLevel: 1,
+  bonus: 1,
 };
 
 /** A tool that mines blocks no camp level mines: while the store holds `item`, a lit square's `mines` blocks can be mined. */
@@ -513,6 +554,8 @@ export const FRONTIER_MARKET = {
     { item: 'copperLantern', count: 1, coins: 40, fromLevel: 3 },
     // The sword drives a dragon off (hazards plan, section 4).
     { item: 'sword', count: 1, coins: 60, fromLevel: 3 },
+    // The axe: more wood from each tree, from the start.
+    { item: 'axe', count: 1, coins: 25 },
     // From the first tier-1 contract (phase 4): the deep camp's kit, and
     // wood and food in bulk, so farming becomes a choice.
     { item: 'campKit', count: 1, coins: 150, afterTier1: true },
@@ -880,6 +923,7 @@ export const FRONTIER_RAID = {
     'drill',
     'steelDrill',
     'ironPickaxe',
+    'axe',
     'copperLantern',
     'campKit',
   ] as ItemId[],

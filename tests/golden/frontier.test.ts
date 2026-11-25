@@ -9,6 +9,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ENGINE_VERSION, createFrontier, frontierAct, hashFrontier } from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
+import { FRONTIER_AXE, FRONTIER_SURFACE } from '../../src/data/frontier';
 import { actionOf, applyFrontierStep, replayFrontier } from '../../tools/frontierRun';
 import type { FrontierGolden } from '../../tools/frontierRun';
 
@@ -42,7 +43,7 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
     });
   }
 
-  it('between them, they place camps, upgrade one, build a smelter, smelt, make a pickaxe, make or buy the drills, mine with them, hang a lantern, reach level 4, catch animals, take plants, mine clay, rest, sell and buy at the market, plant saplings, make hay, keep a pen that breeds, take and deliver contracts, place a deep camp, see rain fill a pit, hit water and pump it out, set off gas and put out its fires, let a fire burn, meet a dragon and drive one off, build defenses, be raided and turn raiders away, finish a run, and lose a crew', () => {
+  it('between them, they place camps, upgrade one, build a smelter, smelt, make a pickaxe, make or buy the drills, mine with them, hang a lantern, reach level 4, catch animals, take plants, mine clay, rest, sell and buy at the market, plant saplings, make hay, keep a pen that breeds, take and deliver contracts, place a deep camp, buy an axe, build a saw house and fell trees for more wood, see rain fill a pit, hit water and pump it out, set off gas and put out its fires, let a fire burn, meet a dragon and drive one off, build defenses, be raided and turn raiders away, finish a run, and lose a crew', () => {
     const seen = new Set<string>();
     const fireCount = (x: FrontierState): number => x.hazards.fires.filter((f) => f).length;
     for (const name of files) {
@@ -51,6 +52,11 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
       for (const step of golden.steps) {
         const next = applyFrontierStep(state, step);
         const verb = step.split(' ')[0] ?? '';
+        // A tree felled for more than its plain wood: with an axe or by a saw house.
+        const wood = (x: typeof state): number => x.inventory.get('wood') ?? 0;
+        if (verb === 'tap' && wood(next) - wood(state) > FRONTIER_SURFACE.woodPerTree)
+          seen.add('moreWood');
+        if (step === `buy ${FRONTIER_AXE.item} 1`) seen.add('axe');
         if (verb !== 'tap') {
           seen.add(verb);
           if (step === 'make iron-pickaxe') seen.add('pickaxe');
@@ -143,6 +149,9 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
         'rest',
         'sell',
         'upgrade',
+        'axe',
+        'buildSawHouse',
+        'moreWood',
       ]),
     );
   });

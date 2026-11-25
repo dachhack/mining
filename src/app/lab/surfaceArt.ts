@@ -646,6 +646,29 @@ export function labItemIcon(item: string, className: string): HTMLCanvasElement 
     ctx.moveTo(s * 0.3, s * 0.7);
     ctx.lineTo(s * 0.16, s * 0.84);
     ctx.stroke();
+  } else if (item === 'axe') {
+    // The axe (owner, after the 0.17.0 build): a wooden handle on the
+    // diagonal and an iron blade on its top end.
+    ctx.fillStyle = '#2a2420';
+    ctx.fillRect(0, 0, s, s);
+    ctx.strokeStyle = '#8a5a32';
+    ctx.lineCap = 'round';
+    ctx.lineWidth = s * 0.1;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.24, s * 0.84);
+    ctx.lineTo(s * 0.68, s * 0.2);
+    ctx.stroke();
+    ctx.fillStyle = '#aeb5bd';
+    ctx.strokeStyle = '#7d848c';
+    ctx.lineWidth = s * 0.04;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.6, s * 0.18);
+    ctx.lineTo(s * 0.88, s * 0.22);
+    ctx.quadraticCurveTo(s * 0.92, s * 0.42, s * 0.84, s * 0.54);
+    ctx.lineTo(s * 0.56, s * 0.36);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
   } else if (item === 'pump') {
     // The pump (hazards PR 2), as the map draws it, standing in water.
     ctx.fillStyle = '#2a2420';

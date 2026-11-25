@@ -394,7 +394,7 @@ function undo(session: FrontierSession): StepResult {
  * The step a typed choice stands for, or `null` if it is not one. Accepts
  * "tap 3,4" (or "t 3 4"), "place 3,4", "upgrade 2", "demolish 1", "end",
  * "rest 1" (or "rest" with one camp), "sell wood 3", "buy animal 1",
- * "plant 3,4 sapling", "take t1-coal", "fill t1-coal", "deliver t1-coal", "drop t1-coal", "deep 3,4",
+ * "plant 3,4 sapling", "saw 3,4", "take t1-coal", "fill t1-coal", "deliver t1-coal", "drop t1-coal", "deep 3,4",
  * "close", "undo", or the number of a listed choice.
  */
 export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | null {
@@ -433,6 +433,10 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
   const lantern = /^(lantern|hang|hang lantern|hanglantern) (\d+)$/.exec(text);
   if (lantern !== null) {
     return `hangLantern ${lantern[2] ?? ''}`;
+  }
+  const saw = /^(saw|sawhouse|buildsawhouse) (\d+)[ ,]+(\d+)$/.exec(text);
+  if (saw !== null) {
+    return `buildSawHouse ${saw[2] ?? ''},${saw[3] ?? ''}`;
   }
   const plantStep = /^plant (\d+)[ ,]+(\d+) ([a-z]+)$/.exec(text);
   if (plantStep !== null) {

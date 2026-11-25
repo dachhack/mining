@@ -57,6 +57,8 @@ export interface CampGround {
    * flooded square. A ground made without them (a hand-made test) has none.
    */
   hazards?: FrontierHazards;
+  /** The saw houses (sawHouse.ts): a camp cannot stand on one. A ground made without them has none. */
+  sawHouses?: { x: number; y: number }[];
   /**
    * The animals: a deep camp's foundation is not dug where one stands. A
    * ground made without them (a hand-made test) has none.
@@ -315,7 +317,7 @@ export function pay(inventory: Map<string, number>, cost: ItemStack[]): Map<stri
 /**
  * Why a camp cannot be centred on a square:
  * - 'notShown': some square of its 3 x 3 footprint is off the map or not lit by a camp;
- * - 'occupied': its footprint overlaps another camp's;
+ * - 'occupied': its footprint overlaps another camp's, or a saw house;
  * - 'notLevel': the nine squares are not all at the same depth;
  * - 'tooDeep': they are deeper than FRONTIER_CAMP_PLACE.maxDepth (owner:
  *   camps only in the top three levels);
@@ -348,6 +350,10 @@ export function placeRefusal(
     }
   }
   if (footprint.some((s) => campAt(ground.camps, s.x, s.y) !== null)) {
+    return 'occupied';
+  }
+  const saws = ground.sawHouses ?? [];
+  if (footprint.some((s) => saws.some((h) => h.x === s.x && h.y === s.y))) {
     return 'occupied';
   }
   // A deep camp comes with a concrete foundation that levels its 3 x 3

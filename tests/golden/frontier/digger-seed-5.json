@@ -1,10 +1,10 @@
 {
   "description": "The digger: a pit next to the first camp, as deep as a base camp digs (dirt and clay, not stone), gathering only for upkeep",
   "recordedWith": "digger",
-  "engineVersion": "0.17.0",
+  "engineVersion": "0.18.0",
   "seed": 5,
   "stepCount": 428,
-  "expectedHash": "92ec05c9d3102925",
+  "expectedHash": "c7489af1510f2cdb",
   "steps": [
     "tap 19,14",
     "tap 20,14",
