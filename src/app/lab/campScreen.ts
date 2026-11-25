@@ -156,6 +156,7 @@ import {
   drawPump,
   drawWater,
 } from './hazardArt';
+import { itemInfo } from './itemInfo';
 import { showNight } from './night';
 import type { Night } from './night';
 
@@ -445,6 +446,8 @@ export function mountCampLab(
    */
   const lastStep = new Map<number, { x: number; y: number; at: number; facing: number }>();
   /** Where each dragon flew from in the last night, and when the morning began (hazards PR 4). */
+  /** The market rows whose info chip is open, by "side:item" (kept while the card is drawn again). */
+  const openInfo = new Set<string>();
   const lastFlight = new Map<number, { x: number; y: number; at: number; ms: number }>();
 
   // ----- The page -----
@@ -2144,7 +2147,15 @@ export function mountCampLab(
     // What the trade gives up, with the item's icon: the goods to sell, or the coins to buy with.
     const gives = side === 'sell' ? lot.item : FRONTIER_MARKET.coin;
     const held = world.lab.counts.get(gives) ?? 0;
-    const have = element('span', 'lab2-recipe-does', `Have ${countText(held, gives)}`);
+    // To buy: what you own of it already, and the coins you have.
+    const owned = world.lab.counts.get(lot.item) ?? 0;
+    const have = element(
+      'span',
+      'lab2-recipe-does',
+      side === 'buy'
+        ? `Own ${owned} · Have ${countText(held, gives)}`
+        : `Have ${countText(held, gives)}`,
+    );
     have.dataset['testid'] = `lab2-${side}-have-${lot.item}`;
     // The lab's own icon for the item, else the icon of the block that yields it.
     const block = resourceEntries(new Map([[lot.item, 1]]))[0]?.iconBlock;
@@ -2156,7 +2167,31 @@ export function mountCampLab(
       'lab2-recipe-name',
       side === 'sell' ? `${goods} → ${coins}` : `${coins} → ${goods}`,
     );
+    // What it does, behind an info chip (owner: "Maybe do it in an info chip to save space").
+    const info = itemInfo(lot.item);
+    if (info !== null) {
+      const key = `${side}:${lot.item}`;
+      const chip = button('lab2-info-chip', 'ⓘ');
+      chip.dataset['testid'] = `lab2-${side}-info-${lot.item}`;
+      chip.setAttribute('aria-label', `What ${itemName(lot.item).toLowerCase()} does`);
+      chip.setAttribute('aria-expanded', String(openInfo.has(key)));
+      chip.addEventListener('click', () => {
+        if (openInfo.has(key)) openInfo.delete(key);
+        else openInfo.add(key);
+        const list = bookCard.querySelector('.lab2-book-list');
+        const scroll = list === null ? 0 : list.scrollTop;
+        showMarketCard();
+        const fresh = bookCard.querySelector('.lab2-book-list');
+        if (fresh !== null) fresh.scrollTop = scroll;
+      });
+      name.append(chip);
+    }
     text.append(name, have);
+    if (info !== null && openInfo.has(`${side}:${lot.item}`)) {
+      const line = element('span', 'lab2-item-info', info);
+      line.dataset['testid'] = `lab2-${side}-info-text-${lot.item}`;
+      text.append(line);
+    }
     const buttons = element('div', 'lab2-recipe-buttons lab2-market-buttons');
     if (side === 'sell') {
       const most = mostLots(toFrontier(world), side, lot.item);
