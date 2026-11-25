@@ -49,3 +49,14 @@ where you can produce syrup if you harvest sap."
   maple standing as they do an emptied apple tree. Gatherer, 40 runs of 100
   shifts: crews lost 2; a sugar shack in 15 runs (from about shift 60);
   5,383 coins on average.
+
+## The market leaves out what a second of adds nothing
+
+Owner, next: "If you own an item and it doesn't help to buy another one,
+remove that item from the market." A rule, not only the screen: buying such
+an item while one is held is refused ('owned'), and it is bought one at a
+time (`FRONTIER_MARKET.uselessWhenHeld`). The list: the iron pickaxe, both
+drills, the axe and the sword; the iron drill also while a steel drill is
+held, since the steel drill mines everything it does. Pumps (one a flood),
+lanterns (one a camp), camp kits (one a deep camp) and saplings stay. The
+recipe book still lets a second be made: question 200.

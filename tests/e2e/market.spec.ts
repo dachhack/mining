@@ -125,3 +125,18 @@ test('a lot not on sale yet says when it will be', async ({ page }) => {
   // What is on sale says nothing of the kind.
   await expect(page.getByTestId('lab2-buy-locked-pump')).toHaveCount(0);
 });
+
+test('an item you have and would gain nothing from buying again is not on sale', async ({
+  page,
+}) => {
+  // Owner: "If you own an item and it doesn't help to buy another one,
+  // remove that item from the market." A pump still helps (one a flood).
+  await openGame(page, worldOn(10, { coin: 100, axe: 1, pump: 1 }, true));
+  await expect(page.getByTestId('lab2-book-card')).toBeVisible();
+  await expect(page.getByTestId('lab2-buy-have-pump')).toContainText('Own 1');
+  await expect(page.getByTestId('lab2-buy-have-axe')).toHaveCount(0);
+  await expect(page.getByTestId('lab2-buy-one-axe')).toHaveCount(0);
+  // Without one, the axe is on sale.
+  await openGame(page, worldOn(10, { coin: 100 }, true));
+  await expect(page.getByTestId('lab2-buy-one-axe')).toBeVisible();
+});

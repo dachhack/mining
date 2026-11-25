@@ -571,6 +571,21 @@ export const FRONTIER_MARKET = {
     { item: 'syrup', count: 1, coins: 8 },
   ] as FrontierLot[],
   /**
+   * Items a second of which adds nothing (owner, after the 0.17.0 build: "If
+   * you own an item and it doesn't help to buy another one, remove that item
+   * from the market"): the market sells `item` only while the store holds
+   * none of the items listed for it. The iron drill is no use beside a steel
+   * drill, which mines all it does. Pumps (one a flood), lanterns (one a
+   * camp) and camp kits (one a deep camp) are not here: more of them help.
+   */
+  uselessWhenHeld: {
+    ironPickaxe: ['ironPickaxe'],
+    drill: ['drill', 'steelDrill'],
+    steelDrill: ['steelDrill'],
+    axe: ['axe'],
+    sword: ['sword'],
+  } as Record<string, ItemId[]>,
+  /**
    * What the player can buy, and what it costs (question 171). From the
    * start: an animal, clay, saplings, hay and a pump. From a level-3 camp: the tools (plan section
    * 4), dearer than making them at a smelter.

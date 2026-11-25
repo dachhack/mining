@@ -592,6 +592,7 @@ export {
   marketIsOpen,
   marketLot,
   mostLots,
+  ownsUseful,
   nextMarketShift,
   trade,
   tradeRefusal,

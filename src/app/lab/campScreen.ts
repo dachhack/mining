@@ -55,6 +55,7 @@ import {
   heldContracts,
   loadFrontier,
   mostLots,
+  ownsUseful,
   runPhase,
   saveFrontier,
 } from '../../engine';
@@ -2091,7 +2092,10 @@ export function mountCampLab(
       if ((world.lab.counts.get(lot.item) ?? 0) > 0) list.append(marketRow('sell', lot));
     }
     section('Buy');
-    for (const lot of FRONTIER_MARKET.buyPrices) list.append(marketRow('buy', lot));
+    // An item a second of which adds nothing is left out once one is held (owner).
+    for (const lot of FRONTIER_MARKET.buyPrices) {
+      if (!ownsUseful(toFrontier(world), lot.item)) list.append(marketRow('buy', lot));
+    }
     const inner = element('div', 'lab2-book-inner');
     inner.append(head, when, bookNote, list);
     bookCard.replaceChildren(inner);

@@ -81,11 +81,14 @@ export function marketLot(side: TradeSide, item: string): FrontierLot | null {
  * - 'notYet': it does, but only once the best camp is at the lot's
  *   `fromLevel` (the tools, from level 3), or once a tier-1 contract is
  *   done for a lot `afterTier1` (the camp kit, wood and apples);
- * - 'lots': `lots` is not a whole number of 1 or more;
+ * - 'lots': `lots` is not a whole number of 1 or more, or more than 1 of an
+ *   item a second of which adds nothing (FRONTIER_MARKET.uselessWhenHeld);
+ * - 'owned': buying, the store already holds an item that makes another of
+ *   it useless (FRONTIER_MARKET.uselessWhenHeld: a tool, the sword);
  * - 'cost': the store does not hold what the trade takes (the items to
  *   sell, or the coins to buy).
  */
-export type TradeRefusal = 'closed' | 'unknown' | 'notYet' | 'lots' | 'cost';
+export type TradeRefusal = 'closed' | 'unknown' | 'notYet' | 'lots' | 'owned' | 'cost';
 
 export function tradeRefusal(
   state: FrontierState,
@@ -99,9 +102,21 @@ export function tradeRefusal(
   if (bestCampLevel(state) < (lot.fromLevel ?? 1)) return 'notYet';
   if (lot.afterTier1 === true && (state.contractsDone[0] ?? 0) === 0) return 'notYet';
   if (!Number.isInteger(lots) || lots < 1) return 'lots';
+  if (side === 'buy' && ownsUseful(state, item)) return 'owned';
+  if (side === 'buy' && item in FRONTIER_MARKET.uselessWhenHeld && lots > 1) return 'lots';
   const given = tradeOf(side, lot, lots).give;
   if (!canAfford(state.inventory, [given])) return 'cost';
   return null;
+}
+
+/**
+ * True if the store holds something that makes buying `item` useless: the
+ * item itself, for a tool or the sword, or a steel drill for the iron drill
+ * (FRONTIER_MARKET.uselessWhenHeld). The market leaves such an item out.
+ */
+export function ownsUseful(state: FrontierState, item: string): boolean {
+  const makesUseless = FRONTIER_MARKET.uselessWhenHeld[item] ?? [];
+  return makesUseless.some((held) => (state.inventory.get(held) ?? 0) > 0);
 }
 
 /** What a trade of `lots` of `lot` on `side` gives up and gets. */
@@ -143,5 +158,10 @@ export function mostLots(state: FrontierState, side: TradeSide, item: string): n
   if (lot === null) return 0;
   const per = side === 'sell' ? lot.count : lot.coins;
   const held = side === 'sell' ? (state.inventory.get(item) ?? 0) : coinsHeld(state);
-  return Math.floor(held / per);
+  const most = Math.floor(held / per);
+  // One at most of an item a second of which adds nothing, and none once held.
+  if (side === 'buy' && item in FRONTIER_MARKET.uselessWhenHeld) {
+    return ownsUseful(state, item) ? 0 : Math.min(most, 1);
+  }
+  return most;
 }

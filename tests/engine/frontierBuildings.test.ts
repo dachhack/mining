@@ -15,7 +15,14 @@ import {
   FRONTIER_SUGAR_SHACK,
   FRONTIER_SURFACE,
 } from '../../src/data/frontier';
-import { frontierAct, makeRefusal, previewTap } from '../../src/engine';
+import {
+  frontierAct,
+  makeRefusal,
+  mostLots,
+  ownsUseful,
+  previewTap,
+  tradeRefusal,
+} from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
 import { campRadius, placeRefusal } from '../../src/engine/frontier/camps';
 import { plantRefusal } from '../../src/engine/frontier/farming';
@@ -260,5 +267,48 @@ describe('the sugar shack', () => {
       return l === undefined ? 0 : l.coins / l.count;
     };
     expect(lot('syrup')).toBeGreaterThan(3 * lot('sap'));
+  });
+});
+
+describe('the market leaves out what you already have enough of', () => {
+  // Owner, after the 0.17.0 build: "If you own an item and it doesn't help to
+  // buy another one, remove that item from the market."
+  const market = (inventory: Record<string, number>): FrontierState => ({
+    ...world({ inventory: { coin: 1000, ...inventory } }),
+    camps: world().camps.map((c) => ({ ...c, level: 3 })),
+    shift: 10,
+    marketOpen: true,
+  });
+
+  it('refuses a second tool or sword, and more than one at a time', () => {
+    for (const item of ['ironPickaxe', 'drill', 'steelDrill', 'axe', 'sword']) {
+      expect(tradeRefusal(market({}), 'buy', item, 1), item).toBe(null);
+      expect(tradeRefusal(market({}), 'buy', item, 2), item).toBe('lots');
+      expect(mostLots(market({}), 'buy', item), item).toBe(1);
+      const held = market({ [item]: 1 });
+      expect(ownsUseful(held, item), item).toBe(true);
+      expect(tradeRefusal(held, 'buy', item, 1), item).toBe('owned');
+      expect(mostLots(held, 'buy', item), item).toBe(0);
+    }
+  });
+
+  it('leaves out the iron drill beside a steel drill, but not the other way round', () => {
+    expect(tradeRefusal(market({ steelDrill: 1 }), 'buy', 'drill', 1)).toBe('owned');
+    expect(tradeRefusal(market({ drill: 1 }), 'buy', 'steelDrill', 1)).toBe(null);
+  });
+
+  it('still sells more pumps, lanterns, camp kits and saplings to one who holds some', () => {
+    const held = { ...market({ pump: 1, copperLantern: 1, sapling: 1 }), contractsDone: [1, 0, 0] };
+    for (const item of ['pump', 'copperLantern', 'sapling']) {
+      expect(tradeRefusal(held, 'buy', item, 2), item).toBe(null);
+    }
+    expect(
+      tradeRefusal(
+        { ...held, inventory: new Map([...held.inventory, ['campKit', 1]]) },
+        'buy',
+        'campKit',
+        1,
+      ),
+    ).toBe(null);
   });
 });
