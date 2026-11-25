@@ -162,6 +162,12 @@ export const FRONTIER_SURFACE = {
   woodPerTree: 2,
   /** An apple tree holds this many apples, 1 a tap. It regrows them FRONTIER_SHIFT.appleRegrowShifts shifts after it is picked bare. */
   applesPerTree: 3,
+  /**
+   * A maple tree (grown only from a maple sapling) holds this much sap, 1 a
+   * tap, and fills again FRONTIER_SHIFT.appleRegrowShifts shifts after it is
+   * tapped dry, as an apple tree does (owner, after the 0.17.0 build).
+   */
+  sapPerTree: 3,
   /** Roaming animals at the start, and the most there can be. */
   animals: 8,
   /** Clay: blobs of it replace dirt and stone in these layers (1 is just under the surface). */
@@ -236,6 +242,7 @@ export const FRONTIER_SHIFT = {
 export const FRONTIER_SAPLINGS = {
   saplingGrowShifts: 15,
   appleSaplingGrowShifts: 20,
+  mapleSaplingGrowShifts: 20,
 };
 
 /**
@@ -279,6 +286,8 @@ export interface FrontierRecipe {
   output: ItemStack;
   /** True if it is made only while a smelter stands somewhere. */
   needsSmelter: boolean;
+  /** True if it is made only while a sugar shack stands somewhere (FRONTIER_SUGAR_SHACK). */
+  needsSugarShack?: boolean;
 }
 
 /**
@@ -369,6 +378,15 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
     output: { item: 'hay', count: 1 },
     needsSmelter: false,
   },
+  // Syrup from maple sap, boiled at a sugar shack (owner, after the 0.17.0 build).
+  {
+    id: 'syrup',
+    name: 'Syrup',
+    inputs: [{ item: 'sap', count: 3 }],
+    output: { item: 'syrup', count: 1 },
+    needsSmelter: false,
+    needsSugarShack: true,
+  },
 ];
 
 /**
@@ -428,6 +446,20 @@ export const FRONTIER_SAW_HOUSE = {
   ] as ItemStack[],
   radiusOfLevel: 1,
   bonus: 1,
+};
+
+/**
+ * The sugar shack (owner, after the 0.17.0 build: "a one square sugar shack
+ * where you can produce syrup if you harvest sap"): a one-square building,
+ * built as the saw house is (buildings.ts), for `cost` and 1 tap. While one
+ * stands anywhere, the recipe book boils sap into syrup (FRONTIER_RECIPES,
+ * 'syrup'). The cost is a [Default].
+ */
+export const FRONTIER_SUGAR_SHACK = {
+  cost: [
+    { item: 'wood', count: 15 },
+    { item: 'clay', count: 10 },
+  ] as ItemStack[],
 };
 
 /** A tool that mines blocks no camp level mines: while the store holds `item`, a lit square's `mines` blocks can be mined. */
@@ -534,6 +566,9 @@ export const FRONTIER_MARKET = {
     { item: 'crystal', count: 1, coins: 20 },
     { item: 'rareOre', count: 1, coins: 15 },
     { item: 'relic', count: 1, coins: 40 },
+    // Maple sap and the syrup boiled from it (owner, after the 0.17.0 build).
+    { item: 'sap', count: 2, coins: 1 },
+    { item: 'syrup', count: 1, coins: 8 },
   ] as FrontierLot[],
   /**
    * What the player can buy, and what it costs (question 171). From the
@@ -545,6 +580,7 @@ export const FRONTIER_MARKET = {
     { item: 'clay', count: 1, coins: 1 },
     { item: 'sapling', count: 1, coins: 3 },
     { item: 'appleSapling', count: 1, coins: 6 },
+    { item: 'mapleSapling', count: 1, coins: 6 },
     { item: 'hay', count: 1, coins: 1 },
     // The pump drains a flood (hazards plan, section 2): from the start.
     { item: 'pump', count: 1, coins: 30 },

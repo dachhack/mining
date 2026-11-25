@@ -96,7 +96,7 @@ export function world(options: WorldOptions = {}): FrontierState {
     contractsDone: [0, 0, 0],
     marketOpen: false,
     hazards: noHazards(SIDE * SIDE),
-    sawHouses: [],
+    buildings: [],
     shift: 1,
     tapsLeft: FRONTIER_SHIFT.taps,
     health: FRONTIER_SHIFT.startHealth,

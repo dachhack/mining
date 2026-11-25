@@ -34,7 +34,7 @@ import { collapseSpaceUnder } from '../breach';
 import { depthAt } from '../heightmap';
 import { cloneState, setBlock, setGas, setLava, setWater } from '../state';
 import type { GameState } from '../state';
-import { APPLE_TREE, NO_FEATURE, TREE } from './state';
+import { NO_FEATURE, isTree } from './state';
 import type { FrontierAnimal, FrontierCamp, FrontierHazards, FrontierState } from './state';
 
 /**
@@ -57,8 +57,8 @@ export interface CampGround {
    * flooded square. A ground made without them (a hand-made test) has none.
    */
   hazards?: FrontierHazards;
-  /** The saw houses (sawHouse.ts): a camp cannot stand on one. A ground made without them has none. */
-  sawHouses?: { x: number; y: number }[];
+  /** The one-square buildings (buildings.ts): a camp cannot stand on one. A ground made without them has none. */
+  buildings?: { x: number; y: number }[];
   /**
    * The animals: a deep camp's foundation is not dug where one stands. A
    * ground made without them (a hand-made test) has none.
@@ -317,7 +317,7 @@ export function pay(inventory: Map<string, number>, cost: ItemStack[]): Map<stri
 /**
  * Why a camp cannot be centred on a square:
  * - 'notShown': some square of its 3 x 3 footprint is off the map or not lit by a camp;
- * - 'occupied': its footprint overlaps another camp's, or a saw house;
+ * - 'occupied': its footprint overlaps another camp's, or a building;
  * - 'notLevel': the nine squares are not all at the same depth;
  * - 'tooDeep': they are deeper than FRONTIER_CAMP_PLACE.maxDepth (owner:
  *   camps only in the top three levels);
@@ -352,7 +352,7 @@ export function placeRefusal(
   if (footprint.some((s) => campAt(ground.camps, s.x, s.y) !== null)) {
     return 'occupied';
   }
-  const saws = ground.sawHouses ?? [];
+  const saws = ground.buildings ?? [];
   if (footprint.some((s) => saws.some((h) => h.x === s.x && h.y === s.y))) {
     return 'occupied';
   }
@@ -621,7 +621,7 @@ export function placeFrontierCamp(
   for (const s of footprintOf(x, y)) {
     const i = s.x + state.cube.size.x * s.y;
     const feature = features[i] ?? NO_FEATURE;
-    if (feature === TREE || feature === APPLE_TREE) {
+    if (isTree(feature)) {
       // Cleared for the camp: it leaves a stump, as felling does.
       stumps[i] = feature;
       regrowIn[i] = FRONTIER_SHIFT.treeRegrowShifts;

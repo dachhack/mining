@@ -93,7 +93,6 @@ import {
   FRONTIER_RUN,
   FRONTIER_SHIFT,
   FRONTIER_SMELTER,
-  FRONTIER_SURFACE,
   FRONTIER_WATER,
 } from '../src/data/frontier';
 import {
@@ -109,7 +108,8 @@ import {
   topBlockAt,
 } from '../src/engine';
 import type { FrontierOutcome, FrontierState } from '../src/engine';
-import { APPLE_TREE, NO_FEATURE, TREE } from '../src/engine/frontier/state';
+import { NO_FEATURE, cropOf, isTree } from '../src/engine/frontier/state';
+import { fullCrop } from '../src/engine/frontier/surface';
 import type { FrontierStep } from './frontierRun';
 
 /** Every broken rule in going from `before` to `outcome.state` by `step`. Empty if none. */
@@ -637,13 +637,14 @@ export function checkStep(
     if (squares.has(key)) say(`two animals on ${key}`);
     squares.add(key);
     const f = after.features[a.x + width * a.y];
-    if (f === TREE || f === APPLE_TREE) say(`an animal on a tree at ${key}`);
+    if (isTree(f)) say(`an animal on a tree at ${key}`);
     if (depthAt(after.cube, a.x, a.y) !== 0) say(`an animal in a pit at ${key}`);
   }
   after.apples.forEach((n, i) => {
-    const appleTree = after.features[i] === APPLE_TREE;
-    if (n < 0 || n > FRONTIER_SURFACE.applesPerTree || (!appleTree && n !== 0))
-      say(`${n} apples on square ${i}`);
+    // An apple tree's apples, or a maple's sap (`cropOf`).
+    const appleTree = cropOf(after.features[i]) !== null;
+    if (n < 0 || n > fullCrop(after.features[i]) || (!appleTree && n !== 0))
+      say(`${n} apples or sap on square ${i}`);
     const waiting = (after.regrowIn[i] ?? -1) >= 0;
     if (
       after.features[i] !== NO_FEATURE &&
@@ -652,13 +653,13 @@ export function checkStep(
       say(`something grows on a camp's ground at square ${i}`);
     const stump = after.stumps[i] ?? NO_FEATURE;
     if (stump !== NO_FEATURE) {
-      if (stump !== TREE && stump !== APPLE_TREE) say(`square ${i} has a stump of ${stump}`);
+      if (!isTree(stump)) say(`square ${i} has a stump of ${stump}`);
       if (!waiting) say(`the stump on square ${i} is not waiting to grow`);
       if (after.features[i] !== NO_FEATURE) say(`something grows on the stump on square ${i}`);
       if (depthAt(after.cube, i % width, Math.floor(i / width)) !== 0)
         say(`a stump on square ${i}, whose ground was mined`);
     } else if (waiting && !(appleTree && n === 0)) {
-      say(`square ${i} waits to regrow but is neither a bare apple tree nor a stump`);
+      say(`square ${i} waits to regrow but is neither a bare apple or maple tree nor a stump`);
     }
   });
   return problems;

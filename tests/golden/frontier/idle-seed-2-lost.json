@@ -4,7 +4,7 @@
   "engineVersion": "0.18.0",
   "seed": 2,
   "stepCount": 12,
-  "expectedHash": "24cb39ae2af795ac",
+  "expectedHash": "7820fe83a17f180f",
   "steps": [
     "endShift",
     "endShift",

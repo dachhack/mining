@@ -17,14 +17,48 @@ import type { RngState } from '../rng';
  * not loaded into a new shape. Separate from the old game's STATE_VERSION
  * while the two rule sets live side by side.
  */
-export const FRONTIER_STATE_VERSION = 20; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`; 12: `marketOpen`; 13: `contracts` (several held) for `contract`; 14: `hazards` (flooded squares, pumps); 15: `hazards.fires`; 16: `hazards.dragons`, `nextDragonId`; 17: a camp's `defense`; 18: a dragon's heading (`dx`, `dy`); 19: a dragon's `restMines`; 20: `sawHouses`
+export const FRONTIER_STATE_VERSION = 21; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`; 12: `marketOpen`; 13: `contracts` (several held) for `contract`; 14: `hazards` (flooded squares, pumps); 15: `hazards.fires`; 16: `hazards.dragons`, `nextDragonId`; 17: a camp's `defense`; 18: a dragon's heading (`dx`, `dy`); 19: a dragon's `restMines`; 20: `sawHouses`; 21: `buildings` for `sawHouses`, and maple trees
 
-/** What grows on a square: nothing, grass, a tree or an apple tree. */
+/** What grows on a square: nothing, grass, a tree, an apple tree or a maple tree. */
 export const NO_FEATURE = 0;
 export const GRASS = 1;
 export const TREE = 2;
 export const APPLE_TREE = 3;
-export type Feature = typeof NO_FEATURE | typeof GRASS | typeof TREE | typeof APPLE_TREE;
+/** A maple tree (owner, after the 0.17.0 build): grown from a maple sapling; tapped for sap. */
+export const MAPLE_TREE = 4;
+export type Feature =
+  typeof NO_FEATURE | typeof GRASS | typeof TREE | typeof APPLE_TREE | typeof MAPLE_TREE;
+
+/**
+ * True if `feature` is a tree of any kind: felled for wood. (`feature is
+ * ...` tells TypeScript that, when this is true, `feature` is one of the
+ * three tree kinds.)
+ */
+export function isTree(
+  feature: number | undefined,
+): feature is typeof TREE | typeof APPLE_TREE | typeof MAPLE_TREE {
+  return feature === TREE || feature === APPLE_TREE || feature === MAPLE_TREE;
+}
+
+/**
+ * What a tree of kind `feature` holds and gives 1 a tap before it is felled:
+ * apples on an apple tree, sap in a maple; `null` for any other kind.
+ */
+export function cropOf(feature: number | undefined): 'apple' | 'sap' | null {
+  if (feature === APPLE_TREE) return 'apple';
+  if (feature === MAPLE_TREE) return 'sap';
+  return null;
+}
+
+/** The kinds of one-square building (buildings.ts). */
+export type BuildingKind = 'sawHouse' | 'sugarShack';
+
+/** A one-square building on square (x, y) (buildings.ts). */
+export interface FrontierBuilding {
+  kind: BuildingKind;
+  x: number;
+  y: number;
+}
 
 /** A roaming animal, on square (x, y). */
 export interface FrontierAnimal {
@@ -72,7 +106,10 @@ export interface FrontierState {
   cube: GameState;
   /** What grows on each square, row by row (index x + width * y). */
   features: Feature[];
-  /** Apples on each apple tree (0 elsewhere). */
+  /**
+   * What each tree that bears holds (`cropOf`): apples on an apple tree, sap
+   * in a maple tree; 0 elsewhere. (Named before maples came.)
+   */
   apples: number[];
   animals: FrontierAnimal[];
   nextAnimalId: number;
@@ -93,7 +130,7 @@ export interface FrontierState {
   regrowIn: number[];
   /**
    * Where a tree was felled, the kind of tree that will grow back there
-   * (TREE or APPLE_TREE) when its `regrowIn` runs out; NO_FEATURE elsewhere.
+   * (TREE, APPLE_TREE or MAPLE_TREE) when its `regrowIn` runs out; NO_FEATURE elsewhere.
    */
   stumps: Feature[];
   /**
@@ -120,8 +157,8 @@ export interface FrontierState {
   marketOpen: boolean;
   /** What the hazards have done to the world (docs/plans/hazards.md). */
   hazards: FrontierHazards;
-  /** The saw houses built, each on one square (sawHouse.ts), in the order built. */
-  sawHouses: { x: number; y: number }[];
+  /** The one-square buildings (saw houses, sugar shacks; buildings.ts), in the order built. */
+  buildings: FrontierBuilding[];
   /** The shift being played: 1 is the first. */
   shift: number;
   /** Taps left in this shift (src/data/frontier.ts, FRONTIER_SHIFT.taps a shift). */

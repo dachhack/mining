@@ -43,7 +43,7 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
     });
   }
 
-  it('between them, they place camps, upgrade one, build a smelter, smelt, make a pickaxe, make or buy the drills, mine with them, hang a lantern, reach level 4, catch animals, take plants, mine clay, rest, sell and buy at the market, plant saplings, make hay, keep a pen that breeds, take and deliver contracts, place a deep camp, buy an axe, build a saw house and fell trees for more wood, see rain fill a pit, hit water and pump it out, set off gas and put out its fires, let a fire burn, meet a dragon and drive one off, build defenses, be raided and turn raiders away, finish a run, and lose a crew', () => {
+  it('between them, they place camps, upgrade one, build a smelter, smelt, make a pickaxe, make or buy the drills, mine with them, hang a lantern, reach level 4, catch animals, take plants, mine clay, rest, sell and buy at the market, plant saplings, make hay, keep a pen that breeds, take and deliver contracts, place a deep camp, buy an axe, build a saw house and fell trees for more wood, grow maples, tap their sap and boil it into syrup at a sugar shack, see rain fill a pit, hit water and pump it out, set off gas and put out its fires, let a fire burn, meet a dragon and drive one off, build defenses, be raided and turn raiders away, finish a run, and lose a crew', () => {
     const seen = new Set<string>();
     const fireCount = (x: FrontierState): number => x.hazards.fires.filter((f) => f).length;
     for (const name of files) {
@@ -57,6 +57,11 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
         if (verb === 'tap' && wood(next) - wood(state) > FRONTIER_SURFACE.woodPerTree)
           seen.add('moreWood');
         if (step === `buy ${FRONTIER_AXE.item} 1`) seen.add('axe');
+        if (step.startsWith('build sawHouse')) seen.add('sawHouse');
+        if (step.startsWith('build sugarShack')) seen.add('sugarShack');
+        if (step === 'make syrup') seen.add('syrup');
+        const sap = (x: typeof state): number => x.inventory.get('sap') ?? 0;
+        if (verb === 'tap' && sap(next) > sap(state)) seen.add('sap');
         if (verb !== 'tap') {
           seen.add(verb);
           if (step === 'make iron-pickaxe') seen.add('pickaxe');
@@ -150,7 +155,10 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
         'sell',
         'upgrade',
         'axe',
-        'buildSawHouse',
+        'sawHouse',
+        'sugarShack',
+        'sap',
+        'syrup',
         'moreWood',
       ]),
     );

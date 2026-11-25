@@ -13,6 +13,7 @@
 // Each costs 1 tap, as every action that does something does; shift.ts
 // charges it. The numbers are in src/data/frontier.ts.
 
+import { hasBuilding } from './buildings';
 import type { ItemStack } from '../../data';
 import { FRONTIER_LANTERN, FRONTIER_RECIPES, FRONTIER_SMELTER } from '../../data/frontier';
 import type { FrontierRecipe } from '../../data/frontier';
@@ -64,14 +65,16 @@ export function frontierRecipe(id: string): FrontierRecipe | null {
  * Why recipe `id` cannot be made now, or `null` if it can:
  * - 'unknown': there is no such recipe;
  * - 'noSmelter': it needs a smelter, and no camp has one;
+ * - 'noSugarShack': it needs a sugar shack, and none stands (buildings.ts);
  * - 'cost': the store does not hold its inputs.
  */
-export type MakeRefusal = 'unknown' | 'noSmelter' | 'cost';
+export type MakeRefusal = 'unknown' | 'noSmelter' | 'noSugarShack' | 'cost';
 
 export function makeRefusal(state: FrontierState, id: string): MakeRefusal | null {
   const recipe = frontierRecipe(id);
   if (recipe === null) return 'unknown';
   if (recipe.needsSmelter && !hasSmelter(state)) return 'noSmelter';
+  if (recipe.needsSugarShack === true && !hasBuilding(state, 'sugarShack')) return 'noSugarShack';
   if (!canAfford(state.inventory, recipe.inputs)) return 'cost';
   return null;
 }

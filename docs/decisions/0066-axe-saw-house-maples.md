@@ -1,4 +1,4 @@
-# 0066: The axe and the saw house
+# 0066: The axe, the saw house, maples and the sugar shack
 
 Owner, after the 0.17.0 build: "Let's add an axe that gets you 3 wood from
 trees instead of 2. And you can build a one-square building saw house that
@@ -25,3 +25,27 @@ and 2; it bought an axe in 39 runs and built a saw house in 33 (from about
 shift 10); it ended with 5,085 coins on average, not 6,048, and mined 6,360
 blocks, not 6,783: the policy spends taps and coins on wood it then has
 little use for. That is the policy's choice, not a cost of the rules.
+
+## Maples and the sugar shack
+
+Owner, next: "Let's add maple tree saplings and a one square sugar shack
+where you can produce syrup if you harvest sap."
+
+- A maple is a fourth tree kind (`MAPLE_TREE`). It works like an apple tree:
+  it holds sap where an apple tree holds apples (the same `apples` list, now
+  "what a tree holds"; `cropOf` says which), fills again on the same clock,
+  and is felled for wood once dry. `isTree` replaces the "tree or apple
+  tree" checks, so maples burn, block camps and get the axe and saw-house
+  bonus like any tree.
+- The saw house and the sugar shack are both one-square buildings, so the
+  state keeps one list, `buildings` (kind and square), in place of
+  `sawHouses` (state version 21; the action is `build` with a kind). The
+  tray's tool became 🔨 Build with a choice of the two.
+- Syrup is made in the recipe book while a sugar shack stands, as smelting
+  needs a smelter (`needsSugarShack`). For now its only use is coins
+  (question 199).
+- The policies buy two maple saplings once (keeping 60 coins), build a
+  sugar shack once a maple stands, boil and sell syrup, and leave a dry
+  maple standing as they do an emptied apple tree. Gatherer, 40 runs of 100
+  shifts: crews lost 2; a sugar shack in 15 runs (from about shift 60);
+  5,383 coins on average.

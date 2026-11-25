@@ -6,8 +6,8 @@
 //    ('dragon'), without one it does nothing ('needsSword'; dragons.ts);
 // 1b. a burning square: the tap puts its fire out ('fire'; fire.ts);
 // 2. an animal there is caught, even on a camp's ground;
-// 3. a camp's own 3 x 3 is never mined ('camp'), nor a saw house's square
-//    ('sawHouse'; sawHouse.ts);
+// 3. a camp's own 3 x 3 is never mined ('camp'), nor a building's square
+//    ('building'; buildings.ts);
 // 4. grass, a tree or an apple tree is taken before the block under it;
 // 4a. a flooded square (water.ts) is never mined: a tap sets a pump from the
 //    store on it, or picks up the pump that is there ('pump'), or, with no
@@ -40,14 +40,14 @@ import type { HigherNeighbour, MineRefusal } from '../heightmap';
 import { labMine } from '../lab';
 import { campAt, frontierMineCheck, sightAt } from './camps';
 import { gained, harvestAt } from './surface';
-import { sawHouseAt, woodFromTree } from './sawHouse';
+import { buildingAt, woodFromTree } from './buildings';
 import { isFlooded, pumpIndexAt, takeWaterOpened, withFlood } from './water';
 import { isBurning, putOut } from './fire';
 import { gasOpened } from './gas';
 import { dragonAt, dragonsFlyOnMine, driveOff } from './dragons';
 import type { GasOutcome } from './gas';
 import type { HarvestKind } from './surface';
-import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from './state';
+import { GRASS, NO_FEATURE, cropOf, isTree } from './state';
 import type { FrontierState } from './state';
 
 /**
@@ -56,7 +56,7 @@ import type { FrontierState } from './state';
  * - 'harvested': something on the surface was taken (`harvest` and `gain`);
  * - 'fog' or 'greyed': the square is outside every camp's circle;
  * - 'camp': the square is a camp's ground;
- * - 'sawHouse': a saw house stands on the square (sawHouse.ts);
+ * - 'building': a saw house or a sugar shack stands on the square (buildings.ts);
  * - 'refused': the level rule refused it, or the square is off the map (`refusal`);
  * - 'tooHard': the camps covering it cannot mine its top block (`needs`
  *   or `needsTool`);
@@ -72,7 +72,7 @@ export type FrontierTapKind =
   | 'fog'
   | 'greyed'
   | 'camp'
-  | 'sawHouse'
+  | 'building'
   | 'refused'
   | 'tooHard'
   | 'flooded'
@@ -162,8 +162,8 @@ export function frontierTap(state: FrontierState, x: number, y: number): Frontie
   if (campAt(state.camps, x, y) !== null) {
     return nothing('camp');
   }
-  if (sawHouseAt(state, x, y)) {
-    return nothing('sawHouse');
+  if (buildingAt(state, x, y) !== null) {
+    return nothing('building');
   }
   if (taken !== null) {
     const gain = taken.extra === null ? [taken.gain] : [taken.gain, taken.extra];
@@ -289,16 +289,17 @@ export function previewTap(
   const animalHere = state.animals.some((a) => a.x === x && a.y === y);
   if (animalHere) return { kind: 'harvested', gain: [{ item: 'animal', count: 1 }] };
   if (campAt(state.camps, x, y) !== null) return { kind: 'camp', gain: [] };
-  if (sawHouseAt(state, x, y)) return { kind: 'sawHouse', gain: [] };
+  if (buildingAt(state, x, y) !== null) return { kind: 'building', gain: [] };
   const i = x + state.cube.size.x * y;
   const feature = state.features[i];
   if (feature === GRASS) {
     return { kind: 'harvested', gain: [{ item: 'grass', count: FRONTIER_SURFACE.grassPerTuft }] };
   }
-  if (feature === APPLE_TREE && (state.apples[i] ?? 0) > 0) {
-    return { kind: 'harvested', gain: [{ item: 'apple', count: 1 }] };
+  const crop = cropOf(feature);
+  if (crop !== null && (state.apples[i] ?? 0) > 0) {
+    return { kind: 'harvested', gain: [{ item: crop, count: 1 }] };
   }
-  if (feature === TREE || feature === APPLE_TREE) {
+  if (isTree(feature)) {
     return { kind: 'harvested', gain: [{ item: 'wood', count: woodFromTree(state, x, y) }] };
   }
   if (isFlooded(state, x, y)) {

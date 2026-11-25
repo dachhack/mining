@@ -56,6 +56,12 @@ export function itemInfo(item: string): string | null {
       return 'Treasure: worth most to a tier-3 contract.';
     case 'sapling':
       return `Plant it with 🌱 on bare dirt: a tree in ${FRONTIER_SAPLINGS.saplingGrowShifts} shifts.`;
+    case 'mapleSapling':
+      return `Plant it with 🌱 on bare dirt: a maple tree in ${FRONTIER_SAPLINGS.mapleSaplingGrowShifts} shifts, tapped for sap.`;
+    case 'sap':
+      return `From a maple tree, 1 a tap (${FRONTIER_SURFACE.sapPerTree} a tree). Boil it into syrup at a sugar shack.`;
+    case 'syrup':
+      return 'Boiled from maple sap at a sugar shack. Sells well at the market.';
     case 'appleSapling':
       return `Plant it with 🌱 on bare dirt: an apple tree in ${FRONTIER_SAPLINGS.appleSaplingGrowShifts} shifts.`;
     case FRONTIER_PUMP.item:

@@ -19,7 +19,15 @@ import type { RngState } from '../rng';
 import { blockAt, gasAt, lavaAt, setBlock, waterAt } from '../state';
 import type { GameState } from '../state';
 import { CAMP_HALF_SIZE, campRadius, footprintOf, inCircle, inFootprint, seenWith } from './camps';
-import { APPLE_TREE, FRONTIER_STATE_VERSION, GRASS, NO_FEATURE, TREE, noHazards } from './state';
+import {
+  APPLE_TREE,
+  FRONTIER_STATE_VERSION,
+  GRASS,
+  NO_FEATURE,
+  TREE,
+  isTree,
+  noHazards,
+} from './state';
 import type { Feature, FrontierAnimal, FrontierCamp, FrontierState } from './state';
 
 /**
@@ -176,7 +184,7 @@ export function walkable(
     return false;
   }
   const feature = features[squareIndex(cube, x, y)];
-  if (feature === TREE || feature === APPLE_TREE) {
+  if (isTree(feature)) {
     return false;
   }
   if (blockAt(cube, { x, y, z: 0 }) === BLOCKS.air.code) {
@@ -312,7 +320,7 @@ function surfaceGains(
         continue;
       }
       const feature = features[squareIndex(cube, sx, sy)];
-      if (feature === TREE || feature === APPLE_TREE) trees += 1;
+      if (isTree(feature)) trees += 1;
       if (feature === GRASS) tufts += 1;
     }
   }
@@ -435,7 +443,7 @@ export function createFrontier(seed: number): FrontierState {
     contractsDone: [0, 0, 0],
     marketOpen: false,
     hazards: noHazards(cube.size.x * cube.size.y),
-    sawHouses: [],
+    buildings: [],
     shift: 1,
     tapsLeft: FRONTIER_SHIFT.taps,
     health: FRONTIER_SHIFT.startHealth,

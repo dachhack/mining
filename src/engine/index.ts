@@ -472,8 +472,11 @@ export {
   APPLE_TREE,
   FRONTIER_STATE_VERSION,
   GRASS,
+  MAPLE_TREE,
   NO_FEATURE,
   TREE,
+  cropOf,
+  isTree,
   noHazards,
 } from './frontier/state';
 // Camps and fog (plan A2).
@@ -534,14 +537,17 @@ export { hashFrontier } from './frontier/hash';
 // Planting saplings (docs/plans/progression-phases.md, PR 3).
 export { isSapling, plant, plantRefusal } from './frontier/farming';
 export {
-  buildSawHouse,
-  sawHouseAt,
+  BUILDING_COSTS,
+  build,
+  buildRefusal,
+  buildingAt,
+  hasBuilding,
+  isBuildingKind,
   sawHouseReach,
   sawHouseReaches,
-  sawHouseRefusal,
   woodFromTree,
-} from './frontier/sawHouse';
-export type { SawHouseRefusal } from './frontier/sawHouse';
+} from './frontier/buildings';
+export type { BuildRefusal } from './frontier/buildings';
 // Contracts and the phases of a run (PR 5).
 export {
   contractBoard,
@@ -612,6 +618,8 @@ export type {
   FrontierCamp,
   FrontierDragon,
   FrontierHazards,
+  FrontierBuilding,
+  BuildingKind,
   FrontierHeldContract,
   FrontierPump,
   FrontierState,

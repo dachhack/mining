@@ -60,7 +60,7 @@ import { buildDefense, defenseRefusal, nightOfRaids } from './raids';
 import type { Raid } from './raids';
 import { breedPens, penAct, penRefusal } from './pens';
 import { isMarketDay, trade, tradeRefusal } from './market';
-import { animalAt } from './surface';
+import { animalAt, fullCrop } from './surface';
 import {
   buildSmelter,
   hangLantern,
@@ -69,10 +69,10 @@ import {
   makeRefusal,
   smelterRefusal,
 } from './smelting';
-import { buildSawHouse, sawHouseRefusal } from './sawHouse';
+import { build, buildRefusal } from './buildings';
 import { frontierTap } from './tap';
 import type { FrontierTap } from './tap';
-import { APPLE_TREE, GRASS, NO_FEATURE } from './state';
+import { GRASS, NO_FEATURE } from './state';
 import type { Feature, FrontierAnimal, FrontierState } from './state';
 
 /** Something the player can do. */
@@ -109,8 +109,8 @@ export type FrontierAction =
   | { kind: 'buildDefense'; id: number }
   // Plant a sapling or an apple sapling from the store on square (x, y) (farming.ts).
   | { kind: 'plant'; x: number; y: number; item: string }
-  // Build a saw house on square (x, y) (sawHouse.ts).
-  | { kind: 'buildSawHouse'; x: number; y: number }
+  // Build a one-square building, a saw house or a sugar shack, on square (x, y) (buildings.ts).
+  | { kind: 'build'; building: string; x: number; y: number }
   | { kind: 'buy'; item: string; lots: number }
   | { kind: 'close' };
 
@@ -402,7 +402,8 @@ function regrow(state: FrontierState): Regrowth {
     if (left > 1) return left - 1;
     const stump = stumps[i] ?? NO_FEATURE;
     if (stump === NO_FEATURE) {
-      apples[i] = FRONTIER_SURFACE.applesPerTree;
+      apples[i] = fullCrop(features[i]); // apples, or a maple's sap
+
       regrown += 1;
       return -1;
     }
@@ -416,7 +417,7 @@ function regrow(state: FrontierState): Regrowth {
     planted[i] = false;
     if (unmined && features[i] === NO_FEATURE) {
       features[i] = stump;
-      apples[i] = stump === APPLE_TREE ? FRONTIER_SURFACE.applesPerTree : 0;
+      apples[i] = fullCrop(stump);
       treesRegrown += 1;
     }
     return -1;
@@ -598,9 +599,11 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
     const why = defenseRefusal(state, action.id);
     return why === null ? spent(buildDefense(state, action.id)) : refused(state, why);
   }
-  if (action.kind === 'buildSawHouse') {
-    const why = sawHouseRefusal(state, action.x, action.y);
-    return why === null ? spent(buildSawHouse(state, action.x, action.y)) : refused(state, why);
+  if (action.kind === 'build') {
+    const why = buildRefusal(state, action.building, action.x, action.y);
+    return why === null
+      ? spent(build(state, action.building, action.x, action.y))
+      : refused(state, why);
   }
   if (action.kind === 'plant') {
     const why = plantRefusal(state, action.x, action.y, action.item);

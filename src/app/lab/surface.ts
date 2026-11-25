@@ -6,11 +6,11 @@
 // moves the animals and regrows the apples at the end of each shift. Lab 2
 // keeps the surface in this shape for its screen and its Undo.
 
-import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from '../../engine';
+import { APPLE_TREE, GRASS, MAPLE_TREE, NO_FEATURE, TREE, isTree } from '../../engine';
 import type { ItemStack } from '../../data';
 import type { Feature, FrontierAnimal, GameState, HarvestKind } from '../../engine';
 
-export { APPLE_TREE, GRASS, NO_FEATURE, TREE };
+export { APPLE_TREE, GRASS, MAPLE_TREE, NO_FEATURE, TREE, isTree };
 export type { Feature };
 
 /** A roaming animal on square (x, y). */

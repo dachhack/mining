@@ -3,9 +3,10 @@
 //
 // - an animal standing on the square is caught (1 animal);
 // - grass is cut (grass);
-// - an apple tree with apples gives one apple a tap;
-// - a tree, or an apple tree with no apples left, is felled (wood: more with
-//   an axe or near a saw house, sawHouse.ts).
+// - an apple tree with apples gives one apple a tap, and a maple tree with
+//   sap one sap a tap (`cropOf`);
+// - a tree, or an apple or maple tree with nothing left, is felled (wood:
+//   more with an axe or near a saw house, buildings.ts).
 //
 // Only then can the block under the square be mined. Animals moving, and
 // apples, felled trees and cut grass growing back, happen at the end of a
@@ -14,12 +15,12 @@
 
 import type { ItemStack } from '../../data';
 import { FRONTIER_SHIFT, FRONTIER_SURFACE } from '../../data/frontier';
-import { woodFromTree } from './sawHouse';
-import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from './state';
+import { woodFromTree } from './buildings';
+import { GRASS, NO_FEATURE, cropOf, isTree } from './state';
 import type { FrontierAnimal, FrontierState } from './state';
 
-/** What a harvest was: an animal 'caught', 'grass' cut, an 'apple' picked or a tree 'felled'. */
-export type HarvestKind = 'caught' | 'grass' | 'apple' | 'felled';
+/** What a harvest was: an animal 'caught', 'grass' cut, an 'apple' picked, 'sap' tapped or a tree 'felled'. */
+export type HarvestKind = 'caught' | 'grass' | 'apple' | 'sap' | 'felled';
 
 /** What `harvestAt` did: the state after it, what it gave and what it was. */
 export interface FrontierHarvest {
@@ -28,6 +29,14 @@ export interface FrontierHarvest {
   /** A sapling that came with a felled tree, or `null`. */
   extra: ItemStack | null;
   kind: HarvestKind;
+}
+
+/** What a tree of kind `feature` holds when full: apples or sap (`cropOf`); 0 for any other kind. */
+export function fullCrop(feature: number | undefined): number {
+  const crop = cropOf(feature);
+  if (crop === 'apple') return FRONTIER_SURFACE.applesPerTree;
+  if (crop === 'sap') return FRONTIER_SURFACE.sapPerTree;
+  return 0;
 }
 
 /** The animal on square (x, y), or `null`. */
@@ -88,18 +97,19 @@ export function harvestAt(state: FrontierState, x: number, y: number): FrontierH
       'grass',
     );
   }
-  const apples = state.apples[i] ?? 0;
-  if (feature === APPLE_TREE && apples > 0) {
-    // Picked bare, the tree regrows its apples some shifts later (A4).
+  const held = state.apples[i] ?? 0;
+  const crop = cropOf(feature);
+  if (crop !== null && held > 0) {
+    // Picked bare (or tapped dry), the tree fills again some shifts later (A4).
     const regrowIn =
-      apples === 1 ? replaced(state.regrowIn, i, FRONTIER_SHIFT.appleRegrowShifts) : state.regrowIn;
+      held === 1 ? replaced(state.regrowIn, i, FRONTIER_SHIFT.appleRegrowShifts) : state.regrowIn;
     return take(
-      { ...state, apples: replaced(state.apples, i, apples - 1), regrowIn },
-      { item: 'apple', count: 1 },
-      'apple',
+      { ...state, apples: replaced(state.apples, i, held - 1), regrowIn },
+      { item: crop, count: 1 },
+      crop,
     );
   }
-  if (feature === TREE || feature === APPLE_TREE) {
+  if (isTree(feature)) {
     const features = replaced(state.features, i, NO_FEATURE);
     // The stump grows the same kind of tree back some shifts later (question
     // 157). An apple tree's wait for its apples ends with it: it comes back full.
@@ -109,7 +119,7 @@ export function harvestAt(state: FrontierState, x: number, y: number): FrontierH
     const treesFelled = state.treesFelled + 1;
     return take(
       { ...state, features, stumps, regrowIn, treesFelled },
-      // More with an axe, and near a saw house (sawHouse.ts).
+      // More with an axe, and near a saw house (buildings.ts).
       { item: 'wood', count: woodFromTree(state, x, y) },
       'felled',
     );

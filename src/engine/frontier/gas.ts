@@ -13,7 +13,7 @@
 //   FRONTIER_GAS.blastRadius of the mined square, row by row, wherever the
 //   level rule allows it at that moment (the mined square itself has just
 //   gone down 1, as every mine does). It
-//   gives nothing. A camp's ground, a saw house, a flooded square, and a square with
+//   gives nothing. A camp's ground, a building, a flooded square, and a square with
 //   something growing on it or a stump are not dug. A blast that opens a
 //   water pocket floods as a mine would (water.ts).
 // - Then every combustible square (fire.ts) within FRONTIER_GAS.fireRadius
@@ -28,7 +28,7 @@ import { nextFloat } from '../rng';
 import { gasAt, setGas } from '../state';
 import type { GameState } from '../state';
 import { campAt } from './camps';
-import { sawHouseAt } from './sawHouse';
+import { buildingAt } from './buildings';
 import { isCombustible, withFires } from './fire';
 import { NO_FEATURE } from './state';
 import type { FrontierState } from './state';
@@ -89,7 +89,7 @@ function explode(state: FrontierState, x: number, y: number): Blast {
   for (const sq of order) {
     const i = sq.x + width * sq.y;
     if (campAt(state.camps, sq.x, sq.y) !== null) continue;
-    if (sawHouseAt(state, sq.x, sq.y)) continue;
+    if (buildingAt(state, sq.x, sq.y) !== null) continue;
     if (hazards.flooded[i] === true) continue;
     if ((state.features[i] ?? NO_FEATURE) !== NO_FEATURE) continue;
     if ((state.stumps[i] ?? NO_FEATURE) !== NO_FEATURE) continue;

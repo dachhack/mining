@@ -43,7 +43,7 @@ import {
   takeRefusal as engineTakeRefusal,
   penRefusal as enginePenRefusal,
   defenseRefusal as engineDefenseRefusal,
-  sawHouseRefusal as engineSawHouseRefusal,
+  buildRefusal as engineBuildRefusal,
   raidStrength as engineRaidStrength,
   foundationDepth as engineFoundationDepth,
   plantRefusal as enginePlantRefusal,
@@ -66,6 +66,7 @@ import {
 import type {
   CampGround,
   FrontierAction,
+  FrontierBuilding,
   FrontierCamp,
   FrontierHazards,
   FrontierHeldContract,
@@ -102,8 +103,8 @@ export interface CampWorld {
   turn: CampTurn;
   /** The hazards' marks: flooded squares, pumps (docs/plans/hazards.md). The engine's own record. */
   hazards: FrontierHazards;
-  /** The saw houses built, each on one square (the engine's sawHouse.ts). */
-  sawHouses: { x: number; y: number }[];
+  /** The one-square buildings: saw houses and sugar shacks (the engine's buildings.ts). */
+  buildings: FrontierBuilding[];
 }
 
 /** Where the run stands (plan A4). */
@@ -182,7 +183,7 @@ function ground(world: CampWorld): CampGround {
     nextCampId: world.nextCampId,
     inventory: world.lab.counts,
     hazards: world.hazards,
-    sawHouses: world.sawHouses,
+    buildings: world.buildings,
     animals: world.surface.animals,
   };
 }
@@ -216,7 +217,7 @@ export function toFrontier(world: CampWorld): FrontierState {
     contractsDone: world.turn.contractsDone,
     marketOpen: world.turn.marketOpen,
     hazards: world.hazards,
-    sawHouses: world.sawHouses,
+    buildings: world.buildings,
   };
 }
 
@@ -259,7 +260,7 @@ export function fromFrontier(world: CampWorld, state: FrontierState): CampWorld 
       marketOpen: state.marketOpen,
     },
     hazards: state.hazards,
-    sawHouses: state.sawHouses,
+    buildings: state.buildings,
   };
 }
 
@@ -357,7 +358,7 @@ export function campWorldFromLab(
     surface,
     turn: firstTurn(),
     hazards: noHazards(width * height),
-    sawHouses: [],
+    buildings: [],
   };
 }
 
@@ -402,7 +403,7 @@ export function campWorldOf(state: FrontierState): CampWorld {
     seen: [],
     nextCampId: 1,
     hazards: state.hazards,
-    sawHouses: state.sawHouses,
+    buildings: state.buildings,
     surface: bareSurface(state.cube),
     turn: firstTurn(),
   };
@@ -419,7 +420,7 @@ export function campWorldOf(state: FrontierState): CampWorld {
  * - 'fog': the square is fog, so nothing happened;
  * - 'greyed': the square is outside every camp's circle now, so nothing happened;
  * - 'camp': the square holds a camp, which is never mined;
- * - 'sawHouse': the square holds a saw house, which is never mined;
+ * - 'building': the square holds a saw house or a sugar shack, which is never mined;
  * - 'refused': the level rule refused it (`tap.result.refusal` says why);
  * - 'tooHard': the level rule allows it, but the camps covering the square
  *   cannot mine its top block (`needs` says which level can, `needsTool`
@@ -438,7 +439,7 @@ export type CampTapKind =
   | 'fog'
   | 'greyed'
   | 'camp'
-  | 'sawHouse'
+  | 'building'
   | 'tooHard'
   | 'refused'
   | 'flooded'
@@ -507,7 +508,7 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
     return { ...answer('refused'), tap: { world: world.lab, result } };
   }
   if (!outcome.done) {
-    return answer(tap.kind); // 'fog', 'greyed', 'camp', 'sawHouse', 'tooHard' or 'flooded': nothing changes
+    return answer(tap.kind); // 'fog', 'greyed', 'camp', 'building', 'tooHard' or 'flooded': nothing changes
   }
   const after = fromFrontier(world, outcome.state);
   if (tap.kind === 'pump') {
@@ -727,16 +728,26 @@ export function plantCamp(world: CampWorld, x: number, y: number, item: string):
   return act(world, { kind: 'plant', x, y, item }).world;
 }
 
-// ----- The saw house (owner, after the 0.17.0 build) -----
+// ----- One-square buildings: the saw house and the sugar shack (owner, after the 0.17.0 build) -----
 
-/** Why a saw house cannot be built on (x, y) now ('noTaps', 'over', or the engine's reason), or `null` if it can. */
-export function sawHouseRefusal(world: CampWorld, x: number, y: number): string | null {
-  return turnRefusal(world) ?? engineSawHouseRefusal(toFrontier(world), x, y);
+/** Why a `building` cannot be built on (x, y) now ('noTaps', 'over', or the engine's reason), or `null` if it can. */
+export function buildRefusal(
+  world: CampWorld,
+  building: string,
+  x: number,
+  y: number,
+): string | null {
+  return turnRefusal(world) ?? engineBuildRefusal(toFrontier(world), building, x, y);
 }
 
-/** Build a saw house on (x, y), for 1 tap; the very same world if it cannot. */
-export function buildCampSawHouse(world: CampWorld, x: number, y: number): CampWorld {
-  return act(world, { kind: 'buildSawHouse', x, y }).world;
+/** Build a `building` on (x, y), for 1 tap; the very same world if it cannot. */
+export function buildCampBuilding(
+  world: CampWorld,
+  building: string,
+  x: number,
+  y: number,
+): CampWorld {
+  return act(world, { kind: 'build', building, x, y }).world;
 }
 
 /** Why camp `id` cannot be demolished now, or `null` if it can. */
@@ -852,8 +863,8 @@ export type CampStep =
   | { kind: 'plant'; x: number; y: number; item: string }
   // Build a camp's next defenses (hazards PR 5).
   | { kind: 'buildDefense'; id: number }
-  // Build a saw house (owner, after the 0.17.0 build).
-  | { kind: 'buildSawHouse'; x: number; y: number }
+  // Build a saw house or a sugar shack (owner, after the 0.17.0 build).
+  | { kind: 'build'; building: string; x: number; y: number }
   // End the shift, rest at a camp, or close the mine (A4).
   | { kind: 'endShift' }
   | { kind: 'rest'; id: number }
@@ -911,8 +922,8 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   if (step.kind === 'buildDefense') {
     return buildCampDefense(world, step.id);
   }
-  if (step.kind === 'buildSawHouse') {
-    return buildCampSawHouse(world, step.x, step.y);
+  if (step.kind === 'build') {
+    return buildCampBuilding(world, step.building, step.x, step.y);
   }
   return demolishCamp(world, step.id);
 }

@@ -41,7 +41,11 @@ export type ItemId =
   // Drives a dragon off (docs/plans/hazards.md, section 4).
   | 'sword'
   // Fells a tree for more wood (owner, after the 0.17.0 build).
-  | 'axe';
+  | 'axe'
+  // Maple trees, their sap and the syrup boiled from it (owner, after the 0.17.0 build).
+  | 'mapleSapling'
+  | 'sap'
+  | 'syrup';
 
 // Fuel is a gauge, not an item, so it is not here. The torch and the safety
 // lamp are gone with light (design doc v0.2, section 7). Items have no weight:
@@ -85,6 +89,9 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   hay: { name: 'Hay' },
   sword: { name: 'Sword' },
   axe: { name: 'Axe' },
+  mapleSapling: { name: 'Maple saplings' },
+  sap: { name: 'Sap' },
+  syrup: { name: 'Syrup' },
   appleSapling: { name: 'Apple saplings' },
   copperLantern: { name: 'Copper lantern' },
 };
