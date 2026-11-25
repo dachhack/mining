@@ -2157,6 +2157,14 @@ export function mountCampLab(
         : `Have ${countText(held, gives)}`,
     );
     have.dataset['testid'] = `lab2-${side}-have-${lot.item}`;
+    // A lot not on sale yet says when it will be (owner: "I have 5 coins but I
+    // can't buy the apples": the button was off with no reason given).
+    const locked =
+      side === 'buy' && tradeRefusal(world, side, lot.item, 1) === 'notYet'
+        ? lot.afterTier1 === true
+          ? 'Unlocks after your first tier-1 contract'
+          : `Unlocks with a level-${lot.fromLevel ?? 1} camp`
+        : null;
     // The lab's own icon for the item, else the icon of the block that yields it.
     const block = resourceEntries(new Map([[lot.item, 1]]))[0]?.iconBlock;
     const icon =
@@ -2187,6 +2195,11 @@ export function mountCampLab(
       name.append(chip);
     }
     text.append(name, have);
+    if (locked !== null) {
+      const why = element('span', 'lab2-market-locked', `🔒 ${locked}`);
+      why.dataset['testid'] = `lab2-buy-locked-${lot.item}`;
+      text.append(why);
+    }
     if (info !== null && openInfo.has(`${side}:${lot.item}`)) {
       const line = element('span', 'lab2-item-info', info);
       line.dataset['testid'] = `lab2-${side}-info-text-${lot.item}`;

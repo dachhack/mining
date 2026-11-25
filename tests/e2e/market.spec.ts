@@ -110,3 +110,18 @@ test('the market shows what you own of each thing to buy, and an info chip says 
   await page.getByTestId('lab2-buy-info-pump').click();
   await expect(page.getByTestId('lab2-buy-info-text-pump')).toHaveCount(0);
 });
+
+test('a lot not on sale yet says when it will be', async ({ page }) => {
+  // Owner: "I have 5 coins but I can't buy the apples." Apples are sold
+  // after the first tier-1 contract; the drill with a level-3 camp.
+  await openGame(page, worldOn(10, { coin: 100 }, true));
+  await expect(page.getByTestId('lab2-buy-locked-apple')).toContainText(
+    'Unlocks after your first tier-1 contract',
+  );
+  await expect(page.getByTestId('lab2-buy-locked-drill')).toContainText(
+    'Unlocks with a level-3 camp',
+  );
+  await expect(page.getByTestId('lab2-buy-one-apple')).toBeDisabled();
+  // What is on sale says nothing of the kind.
+  await expect(page.getByTestId('lab2-buy-locked-pump')).toHaveCount(0);
+});
