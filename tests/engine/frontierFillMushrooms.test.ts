@@ -20,7 +20,7 @@ import {
 import type { FrontierState } from '../../src/engine';
 import { depthAt, topBlockAt } from '../../src/engine/heightmap';
 import { worldCanFill, worldStock } from '../../src/engine/frontier/stock';
-import { MAPLE_TREE, TREE } from '../../src/engine/frontier/state';
+import { APPLE_TREE, MAPLE_TREE, TREE } from '../../src/engine/frontier/state';
 import { MID, SIDE, world } from './frontierHelpers';
 
 const at = (x: number, y: number): number => x + SIDE * y;
@@ -114,7 +114,7 @@ describe('mushrooms', () => {
     expect(mushroomChance(forest, T.x, T.y)).toBeLessThanOrEqual(FRONTIER_MUSHROOM.most);
   });
 
-  it('are set coming only by rain, only under trees and apple trees, in 3 to 7 nights', () => {
+  it('are set coming only by rain, only under plain trees, in 3 to 7 nights', () => {
     const forest = world({ everywhere: TREE });
     const dry = nightOfMushrooms(forest, false, { s: 5 });
     expect(dry.coming).toBe(0);
@@ -127,6 +127,10 @@ describe('mushrooms', () => {
     // Never under a maple.
     const maples = world({ everywhere: MAPLE_TREE });
     expect(nightOfMushrooms(maples, true, { s: 5 }).coming).toBe(0);
+    // Nor under an apple tree (owner, after the 0.18.0 build: "Let's omit
+    // apple trees from mushroom generation").
+    const orchard = world({ everywhere: APPLE_TREE });
+    expect(nightOfMushrooms(orchard, true, { s: 5 }).coming).toBe(0);
   });
 
   it('come up when their nights are counted, and a tap picks one before the tree', () => {

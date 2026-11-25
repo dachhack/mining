@@ -282,7 +282,7 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 
 Owner, after the 0.17.0 build: "If a (non-maple) tree is standing when rain happens, 3-7 days later a mushroom has a chance of emerging. The chance increases for every adjacent space where there is another tree. Contracts for mushrooms in the market and mushrooms sell for gold."
 
-- **When:** on a night it rains, every tree or apple tree (not a maple) with no mushroom on it or coming gets one coming with a chance of [Default] 2%, plus [Default] 3% for each of the 8 squares round it with a tree of any kind, at most [Default] 30% (`FRONTIER_MUSHROOM`).
+- **When:** on a night it rains, every plain tree (not a maple, nor an apple tree: owner, after the 0.18.0 build: "Let's omit apple trees from mushroom generation") with no mushroom on it or coming gets one coming with a chance of [Default] 2%, plus [Default] 3% for each of the 8 squares round it with a tree of any kind, at most [Default] 30% (`FRONTIER_MUSHROOM`).
 - **Where and when it comes up:** on the tree's square, after [Default] 3 to 7 nights (drawn), if that ground has still never been dug and no camp or building stands on it; otherwise it is lost. The night's news says how many came up.
 - **Picking:** a tap on the square picks the mushroom (1 mushroom) before anything else there; the tree is untouched. On the map it is a small red-capped mushroom at the tree's foot.
 - **Use:** sold at the market for [Default] 3 coins each; contracts ask for them: tier 1, 10 mushrooms for 60 coins; tier 2, 30 for 220. The board offers them only once the mushrooms standing, coming and held add up to what they ask.
