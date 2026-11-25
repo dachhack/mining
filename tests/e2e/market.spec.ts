@@ -92,3 +92,21 @@ test('the run is over after its last shift, scored in coins', async ({ page }) =
   await expect(page.getByTestId('lab2-hud')).toHaveAttribute('data-status', 'finished');
   await expect(page.getByTestId('lab2-end-shift')).toBeDisabled();
 });
+
+test('the market shows what you own of each thing to buy, and an info chip says what it does', async ({
+  page,
+}) => {
+  // Owner: "For the market you need to see what you already own and what it
+  // does ... Maybe do it in an info chip to save space."
+  await openGame(page, worldOn(10, { coin: 100, pump: 1 }, true));
+  await expect(page.getByTestId('lab2-book-card')).toBeVisible();
+  await expect(page.getByTestId('lab2-buy-have-pump')).toContainText('Own 1');
+  await expect(page.getByTestId('lab2-buy-have-pump')).toContainText('100 coins');
+  // Closed until tapped; a tap opens one line on what it does, another closes it.
+  await expect(page.getByTestId('lab2-buy-info-text-pump')).toHaveCount(0);
+  await page.getByTestId('lab2-buy-info-pump').click();
+  await expect(page.getByTestId('lab2-buy-info-text-pump')).toContainText('drains');
+  await expect(page.getByTestId('lab2-buy-info-pump')).toHaveAttribute('aria-expanded', 'true');
+  await page.getByTestId('lab2-buy-info-pump').click();
+  await expect(page.getByTestId('lab2-buy-info-text-pump')).toHaveCount(0);
+});

@@ -486,7 +486,7 @@ describe('what grows where, and no coal at the surface (owner, after the PR #126
     }
   });
 
-  it('Lab 2 has no coal at the surface; its cube is the game’s, apart from timber-root (dirt), clay, relics and keystones', () => {
+  it('Lab 2 has no coal at the surface; its cube is the game’s, apart from timber-root (dirt), clay, relics, keystones and extra coal', () => {
     // No coal at the surface is now the game's own rule (question 140), so
     // Lab 2 no longer swaps it; it only turns timber-root into dirt.
     const coal = BLOCKS.coalSeam.code;
@@ -500,14 +500,27 @@ describe('what grows where, and no coal at the surface (owner, after the PR #126
         const before = game.blocks[i];
         const after = lab.blocks[i];
         if (before === root) {
-          // Timber-root becomes dirt, and that dirt may then become clay.
-          expect([rootBecomes, BLOCKS.clay.code]).toContain(after);
+          // Timber-root becomes dirt, and that dirt may then become clay, or
+          // coal, a relic or a keystone placed in plain rock.
+          expect([
+            rootBecomes,
+            BLOCKS.clay.code,
+            BLOCKS.coalSeam.code,
+            BLOCKS.relic.code,
+            BLOCKS.keystone.code,
+          ]).toContain(after);
           rootsSwapped += 1;
         } else if (after === BLOCKS.clay.code) {
           // Clay replaces dirt or stone just under the surface (plan A1).
           expect([BLOCKS.dirt.code, BLOCKS.stone.code]).toContain(before);
-        } else if (after === BLOCKS.relic.code || after === BLOCKS.keystone.code) {
-          // Relics and keystones go into plain rock deep down (question 197).
+        } else if (
+          after !== before &&
+          (after === BLOCKS.relic.code ||
+            after === BLOCKS.keystone.code ||
+            after === BLOCKS.coalSeam.code)
+        ) {
+          // Relics, keystones and extra coal go into plain rock (question 197;
+          // owner: "We need to add more coal").
           expect([BLOCKS.dirt.code, BLOCKS.stone.code, BLOCKS.hardRock.code]).toContain(before);
         } else if (after !== before) {
           expect.fail(`seed ${seed}, cell ${i}: ${before} became ${after}`);

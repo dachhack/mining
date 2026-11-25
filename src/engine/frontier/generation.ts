@@ -9,6 +9,7 @@ import {
   FRONTIER_NEW_CAMP_COST,
   FRONTIER_SHIFT,
   FRONTIER_SURFACE,
+  FRONTIER_COAL,
   FRONTIER_START_REACH,
   FRONTIER_TREASURE,
 } from '../../data/frontier';
@@ -58,7 +59,67 @@ function frontierCube(seed: number): GameState {
     }
   }
   placeTreasure(cube, seed);
+  placeCoal(cube, seed);
   return cube;
+}
+
+/** The extra coal's own generator is seeded from the world's seed mixed with this. */
+const COAL_SEED_MIX = 0x3c0a1f17;
+
+/**
+ * Grow FRONTIER_COAL's extra seams of coal in `cube`: each from a cell of
+ * plain rock (dirt, stone or hard rock) between its depths, holding no water,
+ * lava or gas, spreading through face neighbours of the same kind until it
+ * has its size (or can spread no further). Drawn from the seed.
+ */
+function placeCoal(cube: GameState, seed: number): void {
+  const rng = createRng((seed ^ COAL_SEED_MIX) >>> 0);
+  const plain = new Set((['stone', 'hardRock', 'dirt'] as BlockId[]).map((id) => BLOCKS[id].code));
+  const coal = BLOCKS.coalSeam.code;
+  const { extraSeams, minSize, maxSize, fromDepth, toDepth } = FRONTIER_COAL;
+  const fits = (pos: { x: number; y: number; z: number }): boolean =>
+    pos.x >= 0 &&
+    pos.y >= 0 &&
+    pos.x < cube.size.x &&
+    pos.y < cube.size.y &&
+    pos.z >= fromDepth &&
+    pos.z <= toDepth &&
+    pos.z < cube.size.z &&
+    plain.has(blockAt(cube, pos)) &&
+    waterAt(cube, pos) === 0 &&
+    gasAt(cube, pos) === 0 &&
+    lavaAt(cube, pos) === 0;
+  const steps = [
+    [1, 0, 0],
+    [-1, 0, 0],
+    [0, 1, 0],
+    [0, -1, 0],
+    [0, 0, 1],
+    [0, 0, -1],
+  ] as const;
+  for (let seam = 0; seam < extraSeams; seam += 1) {
+    const size = minSize + Math.floor(nextFloat(rng) * (maxSize - minSize + 1));
+    let start: { x: number; y: number; z: number } | null = null;
+    for (let tries = 0; tries < 200 && start === null; tries += 1) {
+      const pos = {
+        x: Math.floor(nextFloat(rng) * cube.size.x),
+        y: Math.floor(nextFloat(rng) * cube.size.y),
+        z: fromDepth + Math.floor(nextFloat(rng) * (toDepth - fromDepth + 1)),
+      };
+      if (fits(pos)) start = pos;
+    }
+    if (start === null) continue;
+    const cells = [start];
+    setBlock(cube, start, coal);
+    for (let tries = 0; cells.length < size && tries < size * 20; tries += 1) {
+      const from = cells[Math.floor(nextFloat(rng) * cells.length)] ?? start;
+      const [dx, dy, dz] = steps[Math.floor(nextFloat(rng) * steps.length)] ?? [1, 0, 0];
+      const pos = { x: from.x + dx, y: from.y + dy, z: from.z + dz };
+      if (!fits(pos)) continue;
+      setBlock(cube, pos, coal);
+      cells.push(pos);
+    }
+  }
 }
 
 /**

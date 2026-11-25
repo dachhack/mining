@@ -900,3 +900,20 @@ export const FRONTIER_TREASURE = {
   keystones: 2,
   keystoneFromDepth: 20,
 };
+
+/**
+ * More coal (owner, after the 0.16.0 build: "We need to add more coal. It
+ * takes a lot to smelt all the ingots you need for things."). The old game's
+ * generation gives a world only 52 to 103 coal; each frontier world gets
+ * `extraSeams` more seams of coal, each `minSize` to `maxSize` blocks grown
+ * through plain rock, between depth `fromDepth` and `toDepth` (where a level-2
+ * camp mines it; never at the surface), placed with a generator of their own
+ * drawn from the seed.
+ */
+export const FRONTIER_COAL = {
+  extraSeams: 25,
+  minSize: 4,
+  maxSize: 9,
+  fromDepth: 1,
+  toDepth: 11,
+};
