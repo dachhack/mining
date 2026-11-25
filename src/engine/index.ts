@@ -80,8 +80,10 @@ import type { GameState } from './state';
  * 0.16.0: after the 0.15.0 build: tier 2's coal contract asks for 40 coal,
  *        not 80 (question 197).
  * 0.17.0: after the 0.16.0 build: about three times the coal in every world.
+ * 0.18.0: after the 0.17.0 build: the axe (3 wood a tree) and the saw house
+ *        (1 more wood from each tree in its reach); state version 20.
  */
-export const ENGINE_VERSION = '0.17.0';
+export const ENGINE_VERSION = '0.18.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
@@ -470,8 +472,11 @@ export {
   APPLE_TREE,
   FRONTIER_STATE_VERSION,
   GRASS,
+  MAPLE_TREE,
   NO_FEATURE,
   TREE,
+  cropOf,
+  isTree,
   noHazards,
 } from './frontier/state';
 // Camps and fog (plan A2).
@@ -531,6 +536,21 @@ export type { FrontierTap, FrontierTapKind } from './frontier/tap';
 export { hashFrontier } from './frontier/hash';
 // Planting saplings (docs/plans/progression-phases.md, PR 3).
 export { isSapling, plant, plantRefusal } from './frontier/farming';
+export {
+  BUILDING_COSTS,
+  build,
+  buildRefusal,
+  buildingAt,
+  hasBuilding,
+  isBuildingKind,
+  sawHouseReach,
+  sawHouseReaches,
+  woodFromTree,
+} from './frontier/buildings';
+export { fillSquare, fillSquareRefusal } from './frontier/fill';
+export type { FillSquareRefusal } from './frontier/fill';
+export { mushroomAt, mushroomChance, nightOfMushrooms } from './frontier/mushrooms';
+export type { BuildRefusal } from './frontier/buildings';
 // Contracts and the phases of a run (PR 5).
 export {
   contractBoard,
@@ -575,6 +595,7 @@ export {
   marketIsOpen,
   marketLot,
   mostLots,
+  ownsUseful,
   nextMarketShift,
   trade,
   tradeRefusal,
@@ -601,6 +622,8 @@ export type {
   FrontierCamp,
   FrontierDragon,
   FrontierHazards,
+  FrontierBuilding,
+  BuildingKind,
   FrontierHeldContract,
   FrontierPump,
   FrontierState,

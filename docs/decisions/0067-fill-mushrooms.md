@@ -1,0 +1,31 @@
+# 0067: Filling with dirt, one-is-enough recipes, early wood and apples, mushrooms
+
+Owner, after the 0.17.0 build: "Fill any square with dirt as a move. No
+resource restrictions. Height restrictions still apply. Recipe book can hide
+items where it doesn't help to have a second. Apples and wood can be in sale
+at the start. If a (non-maple) tree is standing when rain happens, 3-7 days
+later a mushroom has a chance of emerging. The chance increases for every
+adjacent space where there is another tree. Contracts for mushrooms in the
+market and mushrooms sell for gold."
+
+- **Fill** is an action of its own (`fillSquare`, fill.ts), 1 tap, from the 🔨
+  tray's 🟫 Dirt choice, which stays on until ×, as planting does. "Height restrictions" is the
+  level rule read the other way: a filled square may not stand more than 1
+  above a face neighbour, so a square beside a deeper one waits. Only dug
+  squares: the surface is the top.
+- **The recipe book** hides, and the engine refuses ('owned'), a recipe
+  whose output is on the market's one-is-enough list while one is held.
+  Pinned recipes for such items wait off the pin strip.
+- **Wood and apples** lose `afterTier1`; the camp kit keeps it.
+- **Mushrooms** live in two lists per square, `mushrooms` and `mushroomIn`
+  (state version 22), rolled after the night's rain with the state's own
+  generator, so the same seed and steps give the same mushrooms. "Gold" is
+  read as coins, the game's only money. The contract board counts the
+  mushrooms standing, coming and held as the world's stock, so a mushroom
+  contract is offered only once rain has set enough coming.
+- The random policy now also fills squares, so the golden runs cover it;
+  the gatherer picks mushrooms when it taps a tree that has one.
+
+Gatherer simulator, 40 runs of 100 shifts: crews lost 1 (2 before these
+changes); every run picked a mushroom, the first at about shift 12; 5,292
+coins on average (5,383 before).

@@ -70,7 +70,8 @@ import {
   upkeepDue,
 } from '../../src/engine';
 import type { FrontierAction, FrontierState, ShiftLog, ShiftReport } from '../../src/engine';
-import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from '../../src/engine/frontier/state';
+import { buildingAt } from '../../src/engine/frontier/buildings';
+import { APPLE_TREE, GRASS, MAPLE_TREE, NO_FEATURE, TREE } from '../../src/engine/frontier/state';
 import { actionOf, replayFrontier } from '../frontierRun';
 import type { FrontierStep } from '../frontierRun';
 import { frontierHelpText } from './frontierHelp';
@@ -178,6 +179,7 @@ function refusalText(refusal: string | null): string {
     market: 'The market is open: trade, then "leave" to start the day.',
     notYet:
       'The market does not sell that yet: tools from a level-3 camp, a camp kit, wood and apples after a tier-1 contract.',
+    owned: 'You already have one, and another would add nothing.',
     placeDeep: `A deep camp cannot go there now (see "look"): it needs the kit, wood and stone, and a lit 3 x 3 whose deepest square is at depth ${FRONTIER_DEEP_CAMP.minDepth} or more (its foundation digs the rest level).`,
     holding:
       "You hold as many contracts as your best camp's level allows: deliver or drop one first.",
@@ -394,7 +396,7 @@ function undo(session: FrontierSession): StepResult {
  * The step a typed choice stands for, or `null` if it is not one. Accepts
  * "tap 3,4" (or "t 3 4"), "place 3,4", "upgrade 2", "demolish 1", "end",
  * "rest 1" (or "rest" with one camp), "sell wood 3", "buy animal 1",
- * "plant 3,4 sapling", "take t1-coal", "fill t1-coal", "deliver t1-coal", "drop t1-coal", "deep 3,4",
+ * "plant 3,4 sapling", "saw 3,4", "shack 3,4", "dirt 3,4", "take t1-coal", "fill t1-coal", "deliver t1-coal", "drop t1-coal", "deep 3,4",
  * "close", "undo", or the number of a listed choice.
  */
 export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | null {
@@ -434,10 +436,24 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
   if (lantern !== null) {
     return `hangLantern ${lantern[2] ?? ''}`;
   }
+  const saw = /^(saw|sawhouse|buildsawhouse) (\d+)[ ,]+(\d+)$/.exec(text);
+  if (saw !== null) {
+    return `build sawHouse ${saw[2] ?? ''},${saw[3] ?? ''}`;
+  }
+  const dirt = /^(dirt|fillsquare) (\d+)[ ,]+(\d+)$/.exec(text);
+  if (dirt !== null) {
+    return `fillSquare ${dirt[2] ?? ''},${dirt[3] ?? ''}`;
+  }
+  const shack = /^(shack|sugarshack) (\d+)[ ,]+(\d+)$/.exec(text);
+  if (shack !== null) {
+    return `build sugarShack ${shack[2] ?? ''},${shack[3] ?? ''}`;
+  }
   const plantStep = /^plant (\d+)[ ,]+(\d+) ([a-z]+)$/.exec(text);
   if (plantStep !== null) {
     // "sapling" or "applesapling" (the typed text is lower case).
-    const item = ['sapling', 'appleSapling'].find((id) => id.toLowerCase() === plantStep[3]);
+    const item = ['sapling', 'appleSapling', 'mapleSapling'].find(
+      (id) => id.toLowerCase() === plantStep[3],
+    );
     return item === undefined ? null : `plant ${plantStep[1] ?? ''},${plantStep[2] ?? ''} ${item}`;
   }
   const tradeStep = /^(sell|buy) ([a-z]+) (\d+)$/.exec(text);
@@ -604,6 +620,9 @@ function squareChars(state: FrontierState, sight: string, x: number, y: number):
   else if (state.features[i] === GRASS) first = '"';
   else if (state.features[i] === TREE) first = 'T';
   else if (state.features[i] === APPLE_TREE) first = (state.apples[i] ?? 0) > 0 ? 'A' : 'a';
+  else if (state.features[i] === MAPLE_TREE) first = (state.apples[i] ?? 0) > 0 ? 'M' : 'y';
+  else if (buildingAt(state, x, y) !== null)
+    first = buildingAt(state, x, y)?.kind === 'sawHouse' ? 'H' : 'S';
   else if (state.planted[i] === true) first = 's';
   else if (depth >= state.cube.size.z) first = '_';
   else {
@@ -698,7 +717,7 @@ export function frontierView(session: FrontierSession): string {
   lines.push('', ...mapLines(state), '');
   lines.push(
     'Map: two characters a square: what is on it, then its depth. ?? fog, -- out of range now.',
-    '  m animal  " grass  T tree  A apple tree (a: no apples)  s sapling  N camp N\'s middle  + camp ground',
+    '  m animal  " grass  T tree  A apple tree (a: no apples)  M maple (y: no sap)  H saw house  S sugar shack  s sapling  N camp N\'s middle  + camp ground',
     '  . dirt  # stone  k clay  o coal  H hard rock  i iron  u copper  x crystal  R rubble  _ nothing left',
     '  ~ flooded  P pump on the water  * fire  D dragon',
   );
@@ -804,9 +823,13 @@ export function lookText(session: FrontierSession, x: number, y: number): string
   if (feature === GRASS) parts.push('grass on it');
   if (feature === TREE) parts.push('a tree on it');
   if (feature === APPLE_TREE) parts.push(`an apple tree with ${state.apples[i] ?? 0} apple(s)`);
+  if (feature === MAPLE_TREE) parts.push(`a maple tree with ${state.apples[i] ?? 0} sap`);
+  const building = buildingAt(state, x, y);
+  if (building !== null) parts.push(building.kind === 'sawHouse' ? 'a saw house' : 'a sugar shack');
   const stump = state.stumps[i] ?? NO_FEATURE;
   if (stump !== NO_FEATURE) {
-    const tree = stump === APPLE_TREE ? 'an apple tree' : 'a tree';
+    const tree =
+      stump === APPLE_TREE ? 'an apple tree' : stump === MAPLE_TREE ? 'a maple tree' : 'a tree';
     const what = state.planted[i] === true ? 'a sapling' : 'a stump';
     parts.push(`${what}: ${tree} grows in ${state.regrowIn[i] ?? 0} shift(s)`);
   }

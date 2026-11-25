@@ -16,13 +16,15 @@ import { FRONTIER_SAPLINGS, FRONTIER_SURFACE } from '../../data/frontier';
 import { blockAt } from '../state';
 import { campAt, pay, sightAt } from './camps';
 import { animalAt } from './surface';
-import { APPLE_TREE, NO_FEATURE, TREE } from './state';
+import { buildingAt } from './buildings';
+import { APPLE_TREE, MAPLE_TREE, NO_FEATURE, TREE } from './state';
 import type { Feature, FrontierState } from './state';
 
 /** What each sapling grows into, and in how many shifts. */
 const SAPLINGS: Record<string, { tree: Feature; shifts: number }> = {
   sapling: { tree: TREE, shifts: FRONTIER_SAPLINGS.saplingGrowShifts },
   appleSapling: { tree: APPLE_TREE, shifts: FRONTIER_SAPLINGS.appleSaplingGrowShifts },
+  mapleSapling: { tree: MAPLE_TREE, shifts: FRONTIER_SAPLINGS.mapleSaplingGrowShifts },
 };
 
 /** True if `item` is something that can be planted. */
@@ -38,7 +40,8 @@ export function isSapling(item: string): boolean {
  * - 'camp': it is a camp's ground;
  * - 'animal': an animal stands on it;
  * - 'ground': its top is not surface dirt (it was mined, or it is rock);
- * - 'occupied': something grows on it, or a sapling is planted there already.
+ * - 'occupied': something grows on it, a sapling is planted there already,
+ *   or a building stands there (buildings.ts).
  */
 export type PlantRefusal =
   'unknown' | 'cost' | 'notShown' | 'camp' | 'animal' | 'ground' | 'occupied';
@@ -60,7 +63,12 @@ export function plantRefusal(
   const growOn = FRONTIER_SURFACE.plantsGrowOn.map((id) => BLOCKS[id].code);
   if (!growOn.includes(blockAt(state.cube, { x, y, z: 0 }))) return 'ground';
   const i = x + width * y;
-  if ((state.features[i] ?? NO_FEATURE) !== NO_FEATURE || state.planted[i] === true) {
+  if (
+    (state.features[i] ?? NO_FEATURE) !== NO_FEATURE ||
+    state.planted[i] === true ||
+    state.mushrooms[i] === true ||
+    buildingAt(state, x, y) !== null
+  ) {
     return 'occupied';
   }
   return null;

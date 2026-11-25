@@ -72,7 +72,8 @@ describe('the smelter (owner, question 161)', () => {
 
 describe('smelting (owner, question 162: 2 raw ore + 1 coal make 2 ingots)', () => {
   it('turns raw ore and coal into ingots, for 1 tap', () => {
-    for (const recipe of FRONTIER_RECIPES) {
+    // Syrup needs a sugar shack, not a smelter (frontierBuildings.test.ts).
+    for (const recipe of FRONTIER_RECIPES.filter((r) => r.needsSugarShack !== true)) {
       const have: Record<string, number> = {};
       for (const stack of recipe.inputs) have[stack.item] = stack.count + 1;
       const w = withSmelter(have);

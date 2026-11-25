@@ -6,6 +6,7 @@
 // clay tiles come from a tiny seeded generator, so every phone draws the same
 // ground.
 
+import { drawMushroom } from './buildingArt';
 import { drawPump, drawWater } from './hazardArt';
 import { LAB_LOOK } from './labLook';
 import type { SquareBox } from './labDraw';
@@ -14,6 +15,14 @@ export const SURFACE_PAINT = {
   clay: { base: '#b8673f', dark: '#97502f', light: '#cf8458', streak: '#a95c38' },
   grass: { base: '#4f8a2c', blade: '#6fae3d', bladeDark: '#3c7022', tip: '#9fd162' },
   tree: { canopy: '#2f6b2c', canopyDark: '#1f4d1e', canopyLight: '#4b8f3c', trunk: '#5a3b22' },
+  mapleTree: {
+    canopy: '#c4462a',
+    canopyDark: '#8a2a18',
+    canopyLight: '#ec7a3c',
+    bucket: '#9aa3ab',
+    bucketDark: '#5d656c',
+    sap: '#e8c46a',
+  },
   appleTree: {
     canopy: '#4f8f36',
     canopyDark: '#356b25',
@@ -311,6 +320,48 @@ export function drawAppleTree(
     ctx.arc(ax - ar * 0.35, ay - ar * 0.35, ar * 0.35, 0, Math.PI * 2);
     ctx.fill();
   }
+}
+
+/**
+ * A maple tree (owner, after the 0.17.0 build): the forest's trunk and
+ * ground, a red-orange autumn crown, and a sap bucket on its trunk while it
+ * holds sap (`sap` > 0), filled by how much.
+ */
+export function drawMapleTree(
+  ctx: CanvasRenderingContext2D,
+  cell: CellRect,
+  box: SquareBox,
+  x: number,
+  y: number,
+  joins: ForestJoins,
+  sap: number,
+): void {
+  drawForest(ctx, cell, box, x, y, joins);
+  const p = SURFACE_PAINT.mapleTree;
+  const { cx, cy, r } = crown(ctx, box, p);
+  if (sap <= 0) return;
+  // The bucket, low on the crown's right.
+  const w = r * 0.5;
+  const h = r * 0.5;
+  const bx = cx + r * 0.2;
+  const by = cy + r * 0.25;
+  ctx.save();
+  ctx.fillStyle = p.bucket;
+  ctx.strokeStyle = p.bucketDark;
+  ctx.lineWidth = Math.max(1, r * 0.06);
+  ctx.beginPath();
+  ctx.moveTo(bx, by);
+  ctx.lineTo(bx + w, by);
+  ctx.lineTo(bx + w * 0.85, by + h);
+  ctx.lineTo(bx + w * 0.15, by + h);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // The sap in it, by how full the tree is.
+  const full = Math.min(1, sap / 3);
+  ctx.fillStyle = p.sap;
+  ctx.fillRect(bx + w * 0.2, by + h * (1 - 0.8 * full), w * 0.6, h * 0.8 * full);
+  ctx.restore();
 }
 
 // ----- Animals -----
@@ -646,6 +697,71 @@ export function labItemIcon(item: string, className: string): HTMLCanvasElement 
     ctx.moveTo(s * 0.3, s * 0.7);
     ctx.lineTo(s * 0.16, s * 0.84);
     ctx.stroke();
+  } else if (item === 'mapleSapling') {
+    // A maple sapling: the planted-sapling art, on dark ground, with a red leaf.
+    ctx.fillStyle = '#3a2a1c';
+    ctx.fillRect(0, 0, s, s);
+    drawSapling(ctx, { left: -s / 4, top: -s / 4, inner: s * 1.5 }, false);
+    ctx.fillStyle = SURFACE_PAINT.mapleTree.canopy;
+    ctx.beginPath();
+    ctx.arc(s * 0.7, s * 0.28, s * 0.12, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (item === 'sap' || item === 'syrup') {
+    // Sap: a pale drop. Syrup: a small jug of amber syrup.
+    ctx.fillStyle = '#2a2420';
+    ctx.fillRect(0, 0, s, s);
+    if (item === 'sap') {
+      ctx.fillStyle = '#e8d9a0';
+      ctx.beginPath();
+      ctx.moveTo(s * 0.5, s * 0.15);
+      ctx.quadraticCurveTo(s * 0.8, s * 0.55, s * 0.5, s * 0.82);
+      ctx.quadraticCurveTo(s * 0.2, s * 0.55, s * 0.5, s * 0.15);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = '#b5651d';
+      ctx.beginPath();
+      ctx.moveTo(s * 0.3, s * 0.38);
+      ctx.lineTo(s * 0.7, s * 0.38);
+      ctx.lineTo(s * 0.76, s * 0.84);
+      ctx.lineTo(s * 0.24, s * 0.84);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#d8d0c0';
+      ctx.fillRect(s * 0.4, s * 0.2, s * 0.2, s * 0.18);
+      ctx.strokeStyle = '#d8d0c0';
+      ctx.lineWidth = s * 0.06;
+      ctx.beginPath();
+      ctx.arc(s * 0.74, s * 0.58, s * 0.12, -Math.PI / 2, Math.PI / 2);
+      ctx.stroke();
+    }
+  } else if (item === 'mushroom') {
+    // A mushroom, as the map draws it, on dark ground.
+    ctx.fillStyle = '#2a2420';
+    ctx.fillRect(0, 0, s, s);
+    drawMushroom(ctx, { left: s * 0.22, top: -s * 0.1, inner: s * 1.1 });
+  } else if (item === 'axe') {
+    // The axe (owner, after the 0.17.0 build): a wooden handle on the
+    // diagonal and an iron blade on its top end.
+    ctx.fillStyle = '#2a2420';
+    ctx.fillRect(0, 0, s, s);
+    ctx.strokeStyle = '#8a5a32';
+    ctx.lineCap = 'round';
+    ctx.lineWidth = s * 0.1;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.24, s * 0.84);
+    ctx.lineTo(s * 0.68, s * 0.2);
+    ctx.stroke();
+    ctx.fillStyle = '#aeb5bd';
+    ctx.strokeStyle = '#7d848c';
+    ctx.lineWidth = s * 0.04;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.6, s * 0.18);
+    ctx.lineTo(s * 0.88, s * 0.22);
+    ctx.quadraticCurveTo(s * 0.92, s * 0.42, s * 0.84, s * 0.54);
+    ctx.lineTo(s * 0.56, s * 0.36);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
   } else if (item === 'pump') {
     // The pump (hazards PR 2), as the map draws it, standing in water.
     ctx.fillStyle = '#2a2420';
@@ -665,7 +781,7 @@ export function labItemIcon(item: string, className: string): HTMLCanvasElement 
  * 'appleTree' (review of PR #122).
  */
 export function featureSwatch(
-  kind: 'grass' | 'tree' | 'appleTree',
+  kind: 'grass' | 'tree' | 'appleTree' | 'mapleTree',
   className: string,
 ): HTMLCanvasElement {
   const s = LAB_LOOK.texturePx;
@@ -680,6 +796,7 @@ export function featureSwatch(
     const alone = { n: false, e: false, s: false, w: false };
     if (kind === 'grass') drawGrass(ctx, box, 3, 5);
     else if (kind === 'tree') drawForest(ctx, cell, box, 3, 5, alone);
+    else if (kind === 'mapleTree') drawMapleTree(ctx, cell, box, 3, 5, alone, 3);
     else drawAppleTree(ctx, cell, box, 3, 5, alone, 3);
   }
   return swatch;

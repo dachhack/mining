@@ -110,3 +110,36 @@ test('the market shows what you own of each thing to buy, and an info chip says 
   await page.getByTestId('lab2-buy-info-pump').click();
   await expect(page.getByTestId('lab2-buy-info-text-pump')).toHaveCount(0);
 });
+
+test('a lot not on sale yet says when it will be', async ({ page }) => {
+  // Owner: "I have 5 coins but I can't buy the apples." The camp kit is
+  // sold after the first tier-1 contract; the drill with a level-3 camp.
+  // Apples and wood are on sale from the start (owner, after the 0.17.0 build).
+  await openGame(page, worldOn(10, { coin: 100 }, true));
+  await expect(page.getByTestId('lab2-buy-locked-campKit')).toContainText(
+    'Unlocks after your first tier-1 contract',
+  );
+  await expect(page.getByTestId('lab2-buy-locked-drill')).toContainText(
+    'Unlocks with a level-3 camp',
+  );
+  await expect(page.getByTestId('lab2-buy-one-campKit')).toBeDisabled();
+  // What is on sale says nothing of the kind.
+  await expect(page.getByTestId('lab2-buy-locked-pump')).toHaveCount(0);
+  await expect(page.getByTestId('lab2-buy-locked-apple')).toHaveCount(0);
+  await expect(page.getByTestId('lab2-buy-one-apple')).toBeEnabled();
+});
+
+test('an item you have and would gain nothing from buying again is not on sale', async ({
+  page,
+}) => {
+  // Owner: "If you own an item and it doesn't help to buy another one,
+  // remove that item from the market." A pump still helps (one a flood).
+  await openGame(page, worldOn(10, { coin: 100, axe: 1, pump: 1 }, true));
+  await expect(page.getByTestId('lab2-book-card')).toBeVisible();
+  await expect(page.getByTestId('lab2-buy-have-pump')).toContainText('Own 1');
+  await expect(page.getByTestId('lab2-buy-have-axe')).toHaveCount(0);
+  await expect(page.getByTestId('lab2-buy-one-axe')).toHaveCount(0);
+  // Without one, the axe is on sale.
+  await openGame(page, worldOn(10, { coin: 100 }, true));
+  await expect(page.getByTestId('lab2-buy-one-axe')).toBeVisible();
+});

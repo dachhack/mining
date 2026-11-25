@@ -6,6 +6,7 @@
 // here changes the game.
 
 import {
+  FRONTIER_AXE,
   FRONTIER_DEEP_CAMP,
   FRONTIER_DRAGON,
   FRONTIER_DRILL,
@@ -17,6 +18,7 @@ import {
   FRONTIER_SAPLINGS,
   FRONTIER_SHIFT,
   FRONTIER_STEEL_DRILL,
+  FRONTIER_SURFACE,
 } from '../../data/frontier';
 
 /** Grass eaten as one food (FRONTIER_FOODS). */
@@ -54,6 +56,14 @@ export function itemInfo(item: string): string | null {
       return 'Treasure: worth most to a tier-3 contract.';
     case 'sapling':
       return `Plant it with 🌱 on bare dirt: a tree in ${FRONTIER_SAPLINGS.saplingGrowShifts} shifts.`;
+    case 'mapleSapling':
+      return `Plant it with 🌱 on bare dirt: a maple tree in ${FRONTIER_SAPLINGS.mapleSaplingGrowShifts} shifts, tapped for sap.`;
+    case 'sap':
+      return `From a maple tree, 1 a tap (${FRONTIER_SURFACE.sapPerTree} a tree). Boil it into syrup at a sugar shack.`;
+    case 'syrup':
+      return 'Boiled from maple sap at a sugar shack. Sells well at the market.';
+    case 'mushroom':
+      return 'Comes up under trees some nights after rain. Sells for coins; mushroom contracts ask for it.';
     case 'appleSapling':
       return `Plant it with 🌱 on bare dirt: an apple tree in ${FRONTIER_SAPLINGS.appleSaplingGrowShifts} shifts.`;
     case FRONTIER_PUMP.item:
@@ -64,6 +74,8 @@ export function itemInfo(item: string): string | null {
       return 'Mines iron and copper ore on any camp’s ground, while you have one.';
     case FRONTIER_STEEL_DRILL.item:
       return 'Mines iron, copper, crystal, rare ore, relics and keystones, while you have one.';
+    case FRONTIER_AXE.item:
+      return `A felled tree gives ${FRONTIER_AXE.woodPerTree} wood, not ${FRONTIER_SURFACE.woodPerTree}, while you have one.`;
     case FRONTIER_PICKAXE.item:
       return `Every mining tap gives ${FRONTIER_PICKAXE.yieldTimes}×, while you have one.`;
     case FRONTIER_LANTERN.item:

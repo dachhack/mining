@@ -2,7 +2,11 @@
 // player needs them. The numbers come from src/data/frontier.ts, so the text
 // stays true when they are tuned.
 
+import { campRadius } from '../../src/engine';
 import {
+  FRONTIER_AXE,
+  FRONTIER_SAW_HOUSE,
+  FRONTIER_SUGAR_SHACK,
   FRONTIER_CAMP_LEVELS,
   FRONTIER_BOARD,
   FRONTIER_CAMP_PLACE,
@@ -55,7 +59,7 @@ export function frontierHelpText(): string {
     '  npm run play:old -- --help                     the old game (until it is removed)',
     '',
     'Choices: "tap X,Y", "place X,Y", "upgrade N", "demolish N", "smelter N", "make R", "lantern N",',
-    '"sell ITEM N", "buy ITEM N", "plant X,Y sapling", "plant X,Y appleSapling", "end", "rest N", "close",',
+    '"sell ITEM N", "buy ITEM N", "plant X,Y sapling", "plant X,Y appleSapling", "saw X,Y", "end", "rest N", "close",',
     '"undo", "look X,Y", or the number of a',
     'listed choice. Separate several with ";".',
     '',
@@ -120,9 +124,14 @@ export function frontierHelpText(): string {
     '  for coins, "buy ITEM N" buys N lots, "take ID" takes a contract; none costs a tap. "leave" closes the market',
     '  and the day starts. Nothing else can be done while it is open, and it does not open again until the next market day.',
     `- Farming: cut grass grows back ${FRONTIER_SHIFT.grassRegrowShifts} shifts later if grass grows beside it (a patch cut bare stays bare).`,
-    '  Saplings and apple saplings come only from the market.',
+    '  Saplings, apple saplings and maple saplings come only from the market.',
     `  "plant X,Y sapling" plants one on lit surface dirt or a stump (1 tap): a tree in ${FRONTIER_SAPLINGS.saplingGrowShifts} shifts,`,
-    `  an apple tree in ${FRONTIER_SAPLINGS.appleSaplingGrowShifts}. Mining its square digs it out.`,
+    `  an apple tree in ${FRONTIER_SAPLINGS.appleSaplingGrowShifts}, a maple tree in ${FRONTIER_SAPLINGS.mapleSaplingGrowShifts}. Mining its square digs it out.`,
+    `  A maple holds ${FRONTIER_SURFACE.sapPerTree} sap, 1 a tap, and fills again as an apple tree does; then a tap fells it.`,
+    `- An axe in your store fells a tree for ${FRONTIER_AXE.woodPerTree} wood, not ${FRONTIER_SURFACE.woodPerTree}. "saw X,Y" builds a saw house on lit, bare, undug ground`,
+    `  (${cost(FRONTIER_SAW_HOUSE.cost)}; 1 tap): trees within ${campRadius(FRONTIER_SAW_HOUSE.radiusOfLevel)} squares of it give ${FRONTIER_SAW_HOUSE.bonus} more wood. Its square is never mined.`,
+    '- "dirt X,Y" fills a dug square with one block of dirt, from nothing (1 tap); not beside a deeper square.',
+    `  "shack X,Y" builds a sugar shack the same way (${cost(FRONTIER_SUGAR_SHACK.cost)}; 1 tap): while one stands, "make syrup" boils 3 sap into 1 syrup.`,
     `- "pen N" builds an animal pen at camp N (level ${FRONTIER_PEN.minLevel} or more; ${cost(FRONTIER_PEN.cost)}; one a camp; lost with it, its animals back to the store).`,
     `  "penin N" / "penout N" moves an animal from the store into it or back (up to ${FRONTIER_PEN.capacity}). Penned animals are never eaten.`,
     `  A pen with 2 or more and room breeds one every ${FRONTIER_PEN.breedEveryShifts} shifts, eating ${FRONTIER_PEN.hayPerBirth} hay; "make hay" turns 3 grass into 1 hay.`,

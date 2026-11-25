@@ -162,6 +162,12 @@ export const FRONTIER_SURFACE = {
   woodPerTree: 2,
   /** An apple tree holds this many apples, 1 a tap. It regrows them FRONTIER_SHIFT.appleRegrowShifts shifts after it is picked bare. */
   applesPerTree: 3,
+  /**
+   * A maple tree (grown only from a maple sapling) holds this much sap, 1 a
+   * tap, and fills again FRONTIER_SHIFT.appleRegrowShifts shifts after it is
+   * tapped dry, as an apple tree does (owner, after the 0.17.0 build).
+   */
+  sapPerTree: 3,
   /** Roaming animals at the start, and the most there can be. */
   animals: 8,
   /** Clay: blobs of it replace dirt and stone in these layers (1 is just under the surface). */
@@ -236,6 +242,7 @@ export const FRONTIER_SHIFT = {
 export const FRONTIER_SAPLINGS = {
   saplingGrowShifts: 15,
   appleSaplingGrowShifts: 20,
+  mapleSaplingGrowShifts: 20,
 };
 
 /**
@@ -279,6 +286,8 @@ export interface FrontierRecipe {
   output: ItemStack;
   /** True if it is made only while a smelter stands somewhere. */
   needsSmelter: boolean;
+  /** True if it is made only while a sugar shack stands somewhere (FRONTIER_SUGAR_SHACK). */
+  needsSugarShack?: boolean;
 }
 
 /**
@@ -339,6 +348,17 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
     output: { item: 'drill', count: 1 },
     needsSmelter: true,
   },
+  // The axe fells a tree for more wood (owner, after the 0.17.0 build).
+  {
+    id: 'axe',
+    name: 'Axe',
+    inputs: [
+      { item: 'ironIngot', count: 2 },
+      { item: 'wood', count: 2 },
+    ],
+    output: { item: 'axe', count: 1 },
+    needsSmelter: true,
+  },
   // A sword drives a dragon off (hazards plan, section 4; question 187).
   {
     id: 'sword',
@@ -357,6 +377,15 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
     inputs: [{ item: 'grass', count: 3 }],
     output: { item: 'hay', count: 1 },
     needsSmelter: false,
+  },
+  // Syrup from maple sap, boiled at a sugar shack (owner, after the 0.17.0 build).
+  {
+    id: 'syrup',
+    name: 'Syrup',
+    inputs: [{ item: 'sap', count: 3 }],
+    output: { item: 'syrup', count: 1 },
+    needsSmelter: false,
+    needsSugarShack: true,
   },
 ];
 
@@ -387,6 +416,50 @@ export const FRONTIER_PEN = {
 export const FRONTIER_PICKAXE = {
   item: 'ironPickaxe' as ItemId,
   yieldTimes: 2,
+};
+
+/**
+ * The axe (owner, after the 0.17.0 build: "Let's add an axe that gets you 3
+ * wood from trees instead of 2"): while the store holds `item`, felling a
+ * tree or an emptied apple tree gives `woodPerTree` wood, not
+ * FRONTIER_SURFACE.woodPerTree. It does not wear out, and a second one adds
+ * nothing. Made at a smelter (FRONTIER_RECIPES) or bought at the market.
+ */
+export const FRONTIER_AXE = {
+  item: 'axe' as ItemId,
+  woodPerTree: 3,
+};
+
+/**
+ * The saw house (owner, after the 0.17.0 build: "you can build a one-square
+ * building saw house that increases the harvest of all trees within a camp
+ * level 1 radius by 1"). Built for `cost` and 1 tap on one lit square of
+ * unmined ground with nothing on it. Every tree felled within the circle of
+ * a level-`radiusOfLevel` camp's radius round it gives `bonus` more wood. A
+ * tree in reach of two saw houses gets the bonus once. Its square is never
+ * mined while it stands. The cost and the once-only bonus are [Default]s.
+ */
+export const FRONTIER_SAW_HOUSE = {
+  cost: [
+    { item: 'wood', count: 15 },
+    { item: 'stone', count: 10 },
+  ] as ItemStack[],
+  radiusOfLevel: 1,
+  bonus: 1,
+};
+
+/**
+ * The sugar shack (owner, after the 0.17.0 build: "a one square sugar shack
+ * where you can produce syrup if you harvest sap"): a one-square building,
+ * built as the saw house is (buildings.ts), for `cost` and 1 tap. While one
+ * stands anywhere, the recipe book boils sap into syrup (FRONTIER_RECIPES,
+ * 'syrup'). The cost is a [Default].
+ */
+export const FRONTIER_SUGAR_SHACK = {
+  cost: [
+    { item: 'wood', count: 15 },
+    { item: 'clay', count: 10 },
+  ] as ItemStack[],
 };
 
 /** A tool that mines blocks no camp level mines: while the store holds `item`, a lit square's `mines` blocks can be mined. */
@@ -493,7 +566,27 @@ export const FRONTIER_MARKET = {
     { item: 'crystal', count: 1, coins: 20 },
     { item: 'rareOre', count: 1, coins: 15 },
     { item: 'relic', count: 1, coins: 40 },
+    // Maple sap and the syrup boiled from it (owner, after the 0.17.0 build).
+    { item: 'sap', count: 2, coins: 1 },
+    { item: 'syrup', count: 1, coins: 8 },
+    // Mushrooms (owner, after the 0.17.0 build: "mushrooms sell for gold").
+    { item: 'mushroom', count: 1, coins: 3 },
   ] as FrontierLot[],
+  /**
+   * Items a second of which adds nothing (owner, after the 0.17.0 build: "If
+   * you own an item and it doesn't help to buy another one, remove that item
+   * from the market"): the market sells `item` only while the store holds
+   * none of the items listed for it. The iron drill is no use beside a steel
+   * drill, which mines all it does. Pumps (one a flood), lanterns (one a
+   * camp) and camp kits (one a deep camp) are not here: more of them help.
+   */
+  uselessWhenHeld: {
+    ironPickaxe: ['ironPickaxe'],
+    drill: ['drill', 'steelDrill'],
+    steelDrill: ['steelDrill'],
+    axe: ['axe'],
+    sword: ['sword'],
+  } as Record<string, ItemId[]>,
   /**
    * What the player can buy, and what it costs (question 171). From the
    * start: an animal, clay, saplings, hay and a pump. From a level-3 camp: the tools (plan section
@@ -504,6 +597,7 @@ export const FRONTIER_MARKET = {
     { item: 'clay', count: 1, coins: 1 },
     { item: 'sapling', count: 1, coins: 3 },
     { item: 'appleSapling', count: 1, coins: 6 },
+    { item: 'mapleSapling', count: 1, coins: 6 },
     { item: 'hay', count: 1, coins: 1 },
     // The pump drains a flood (hazards plan, section 2): from the start.
     { item: 'pump', count: 1, coins: 30 },
@@ -513,11 +607,15 @@ export const FRONTIER_MARKET = {
     { item: 'copperLantern', count: 1, coins: 40, fromLevel: 3 },
     // The sword drives a dragon off (hazards plan, section 4).
     { item: 'sword', count: 1, coins: 60, fromLevel: 3 },
-    // From the first tier-1 contract (phase 4): the deep camp's kit, and
-    // wood and food in bulk, so farming becomes a choice.
+    // The axe: more wood from each tree, from the start.
+    { item: 'axe', count: 1, coins: 25 },
+    // From the first tier-1 contract (phase 4): the deep camp's kit.
     { item: 'campKit', count: 1, coins: 150, afterTier1: true },
-    { item: 'wood', count: 10, coins: 8, afterTier1: true },
-    { item: 'apple', count: 5, coins: 5, afterTier1: true },
+    // Wood and food in bulk, from the start (owner, after the 0.17.0 build:
+    // "Apples and wood can be in sale at the start"; until then they came
+    // with the first tier-1 contract).
+    { item: 'wood', count: 10, coins: 8 },
+    { item: 'apple', count: 5, coins: 5 },
   ] as FrontierLot[],
 };
 
@@ -606,6 +704,14 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
     asks: [{ item: 'clay', count: 80 }],
     pays: 70,
   },
+  // Mushrooms (owner, after the 0.17.0 build: "Contracts for mushrooms in the market").
+  {
+    id: 't1-mushrooms',
+    tier: 1,
+    name: 'Mushrooms for the cook',
+    asks: [{ item: 'mushroom', count: 10 }],
+    pays: 60,
+  },
   // Tier 2: bulk stone, ore, ingots and clay.
   {
     id: 't2-stone',
@@ -660,6 +766,13 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
     name: 'Bricks for a town',
     asks: [{ item: 'clay', count: 400 }],
     pays: 380,
+  },
+  {
+    id: 't2-mushrooms',
+    tier: 2,
+    name: 'Mushrooms for a feast',
+    asks: [{ item: 'mushroom', count: 30 }],
+    pays: 220,
   },
   // Tier 3: crystal, rare ore and relics.
   { id: 't3-crystal', tier: 3, name: 'Crystal', asks: [{ item: 'crystal', count: 10 }], pays: 700 },
@@ -737,6 +850,34 @@ export const FRONTIER_RAIN = {
   clayChance: 1 / 3,
   fillBlock: 'dirt' as BlockId,
   clayBlock: 'clay' as BlockId,
+};
+
+/**
+ * Mushrooms (owner, after the 0.17.0 build: "If a (non-maple) tree is
+ * standing when rain happens, 3-7 days later a mushroom has a chance of
+ * emerging. The chance increases for every adjacent space where there is
+ * another tree."). On a night it rains, each square with a tree or an apple
+ * tree (not a maple), and no mushroom on it or coming, gets one coming with a
+ * chance of `chance` plus `perTreeBeside` for each of the 8 squares round it
+ * with a tree of any kind, at most `most`. It comes up a whole number of
+ * nights drawn from `nights` later, at the End shift, if its square is still
+ * ground never dug with no camp or building on it. A tap picks it (1
+ * mushroom) before anything else on the square. Every number is a [Default].
+ */
+export const FRONTIER_MUSHROOM = {
+  chance: 0.02,
+  perTreeBeside: 0.03,
+  most: 0.3,
+  nights: [3, 7] as [number, number],
+};
+
+/**
+ * Filling a square with dirt (owner, after the 0.17.0 build: "Fill any square
+ * with dirt as a move. No resource restrictions. Height restrictions still
+ * apply."): 1 tap puts one `block` on top of a dug square, from nothing.
+ */
+export const FRONTIER_FILL = {
+  block: 'dirt' as BlockId,
 };
 
 /**
@@ -880,6 +1021,7 @@ export const FRONTIER_RAID = {
     'drill',
     'steelDrill',
     'ironPickaxe',
+    'axe',
     'copperLantern',
     'campKit',
   ] as ItemId[],

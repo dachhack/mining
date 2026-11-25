@@ -1347,3 +1347,11 @@ body[data-screen='lab2'] {
   line-height: 1.3;
   color: #d9cfb8;
 }
+
+/* Why a lot cannot be bought yet (owner: "I can't buy the apples"). */
+.lab2-market-locked {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.8rem;
+  color: #e0a35a;
+}

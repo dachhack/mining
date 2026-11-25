@@ -27,7 +27,7 @@
 
 import { FRONTIER_SHIFT } from '../../data/frontier';
 import { campAt, sightAt } from './camps';
-import { APPLE_TREE, GRASS, NO_FEATURE, TREE } from './state';
+import { GRASS, NO_FEATURE, isTree } from './state';
 import type { Feature, FrontierCamp, FrontierState } from './state';
 
 /** The four face neighbours of a square, in a fixed order. */
@@ -162,7 +162,7 @@ export function burnFires(state: FrontierState): Burning {
     const feature = features[i] ?? NO_FEATURE;
     if (feature === GRASS) {
       grassIn[i] = FRONTIER_SHIFT.grassRegrowShifts; // grows back as cut grass does
-    } else if (feature === TREE || feature === APPLE_TREE) {
+    } else if (isTree(feature)) {
       stumps[i] = feature; // a stump, as a felled tree leaves
       regrowIn[i] = FRONTIER_SHIFT.treeRegrowShifts;
     } else if ((stumps[i] ?? NO_FEATURE) !== NO_FEATURE) {
