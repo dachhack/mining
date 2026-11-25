@@ -77,8 +77,10 @@ import type { GameState } from './state';
  *        delivered there.
  * 0.15.0: after the 0.14.0 build: relics and keystones in every world
  *        (question 197).
+ * 0.16.0: after the 0.15.0 build: tier 2's coal contract asks for 40 coal,
+ *        not 80 (question 197).
  */
-export const ENGINE_VERSION = '0.15.0';
+export const ENGINE_VERSION = '0.16.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
