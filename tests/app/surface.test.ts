@@ -486,7 +486,7 @@ describe('what grows where, and no coal at the surface (owner, after the PR #126
     }
   });
 
-  it('Lab 2 has no coal at the surface; its cube is the game’s, apart from timber-root (dirt) and clay', () => {
+  it('Lab 2 has no coal at the surface; its cube is the game’s, apart from timber-root (dirt), clay, relics and keystones', () => {
     // No coal at the surface is now the game's own rule (question 140), so
     // Lab 2 no longer swaps it; it only turns timber-root into dirt.
     const coal = BLOCKS.coalSeam.code;
@@ -506,6 +506,9 @@ describe('what grows where, and no coal at the surface (owner, after the PR #126
         } else if (after === BLOCKS.clay.code) {
           // Clay replaces dirt or stone just under the surface (plan A1).
           expect([BLOCKS.dirt.code, BLOCKS.stone.code]).toContain(before);
+        } else if (after === BLOCKS.relic.code || after === BLOCKS.keystone.code) {
+          // Relics and keystones go into plain rock deep down (question 197).
+          expect([BLOCKS.dirt.code, BLOCKS.stone.code, BLOCKS.hardRock.code]).toContain(before);
         } else if (after !== before) {
           expect.fail(`seed ${seed}, cell ${i}: ${before} became ${after}`);
         }

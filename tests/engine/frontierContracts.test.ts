@@ -2,7 +2,14 @@
 // the contract board, taking, delivering and dropping a contract, tiers
 // opening in turn, and the phases of a run.
 import { describe, expect, it } from 'vitest';
-import { FRONTIER_BOARD, FRONTIER_CONTRACTS, FRONTIER_MARKET } from '../../src/data/frontier';
+import { BLOCKS } from '../../src/data';
+import {
+  FRONTIER_BOARD,
+  FRONTIER_CONTRACTS,
+  FRONTIER_MARKET,
+  FRONTIER_TREASURE,
+} from '../../src/data/frontier';
+import { blockAt } from '../../src/engine/state';
 import {
   contractBoard,
   contractLimit,
@@ -269,6 +276,35 @@ describe('the board offers only what the world can fill (owner, on the hazards b
     expect(contractBoard(rich).length).toBe(FRONTIER_BOARD.perTier);
   });
 
+  it('every world holds the relics and keystones the tier-3 contracts ask for (question 197)', () => {
+    for (let seed = 1; seed <= 10; seed += 1) {
+      const stock = worldStock(createFrontier(seed));
+      for (const c of FRONTIER_CONTRACTS.filter((k) => k.tier === 3)) {
+        expect(worldCanFill(stock, c.asks), `${c.id} on seed ${seed}`).toBe(true);
+      }
+    }
+  });
+
+  it('places them deep, where the data says, the same for the same seed', () => {
+    const cube = createFrontier(3).cube;
+    const found: { block: number; z: number }[] = [];
+    for (let z = 0; z < cube.size.z; z += 1) {
+      for (let y = 0; y < cube.size.y; y += 1) {
+        for (let x = 0; x < cube.size.x; x += 1) {
+          const b = blockAt(cube, { x, y, z });
+          if (b === BLOCKS.relic.code || b === BLOCKS.keystone.code) found.push({ block: b, z });
+        }
+      }
+    }
+    const relics = found.filter((f) => f.block === BLOCKS.relic.code);
+    const keys = found.filter((f) => f.block === BLOCKS.keystone.code);
+    expect(relics).toHaveLength(FRONTIER_TREASURE.relics);
+    expect(keys).toHaveLength(FRONTIER_TREASURE.keystones);
+    for (const r of relics) expect(r.z).toBeGreaterThanOrEqual(FRONTIER_TREASURE.relicFromDepth);
+    for (const k of keys) expect(k.z).toBeGreaterThanOrEqual(FRONTIER_TREASURE.keystoneFromDepth);
+    expect(createFrontier(3).cube.blocks).toEqual(cube.blocks);
+  });
+
   it('never offers a contract the world cannot fill, on real worlds and many market days', () => {
     for (let seed = 1; seed <= 6; seed += 1) {
       const start = createFrontier(seed);
@@ -282,8 +318,8 @@ describe('the board offers only what the world can fill (owner, on the hazards b
         };
         const stock = worldStock(s);
         for (const c of contractBoard(s)) expect(worldCanFill(stock, c.asks), c.id).toBe(true);
-        // Relics and keystones are nowhere in the world: never asked for.
-        expect(contractBoard(s).some((c) => c.asks.some((a) => a.item === 'relic'))).toBe(false);
+        // Every world holds relics and keystones now (question 197).
+        expect(worldStock(s).get('relic')).toBeGreaterThanOrEqual(3);
       }
     }
   });

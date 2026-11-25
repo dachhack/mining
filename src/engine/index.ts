@@ -75,8 +75,10 @@ import type { GameState } from './state';
  * 0.14.0: after the hazards build: contracts are filled at the market at
  *        once when the store holds what they ask for, and held ones can be
  *        delivered there.
+ * 0.15.0: after the 0.14.0 build: relics and keystones in every world
+ *        (question 197).
  */
-export const ENGINE_VERSION = '0.14.0';
+export const ENGINE_VERSION = '0.15.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
