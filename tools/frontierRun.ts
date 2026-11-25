@@ -5,6 +5,7 @@
 
 import {
   FRONTIER_AXE,
+  FRONTIER_CROPS,
   FRONTIER_DEEP_CAMP,
   FRONTIER_DRAGON,
   FRONTIER_DRILL,
@@ -54,6 +55,7 @@ import {
   sawHouseReaches,
   buildRefusal,
   hasBuilding,
+  isRipe,
   inCircle,
   smelterRefusal,
   upgradeCostFrom,
@@ -326,6 +328,18 @@ export function marketStep(state: FrontierState): FrontierStep | null {
   if (!maples && (state.inventory.get('mapleSapling') ?? 0) === 0 && coinsHeld(state) >= 60) {
     if (tradeRefusal(state, 'buy', 'mapleSapling', 2) === null) return 'buy mapleSapling 2';
   }
+  // Seeds (owner, after the 0.19.0 build): four of each kind once none is
+  // held or sown, keeping 60 coins back.
+  const sowing =
+    state.crops.some((k) => k > 0) ||
+    FRONTIER_CROPS.some((c) => (state.inventory.get(c.seed) ?? 0) > 0);
+  if (!sowing) {
+    for (const c of FRONTIER_CROPS) {
+      const lot = FRONTIER_MARKET.buyPrices.find((l) => l.item === c.seed);
+      if (lot === undefined || coinsHeld(state) < 60 + 4 * lot.coins) continue;
+      if (tradeRefusal(state, 'buy', c.seed, 4) === null) return `buy ${c.seed} 4`;
+    }
+  }
   const tier3 = openTiers(state).includes(3);
   for (const item of tier3 ? [] : GATHERER_SELLS_ALL) {
     const lots = mostLots(state, 'sell', item);
@@ -595,7 +609,9 @@ function flattenStep(state: FrontierState): FrontierStep | null {
  * square met first, row by row. `null` with no sapling, or nowhere to plant.
  */
 export function plantStep(state: FrontierState): FrontierStep | null {
-  const item = ['mapleSapling', 'sapling'].find((k) => (state.inventory.get(k) ?? 0) > 0);
+  const item = ['mapleSapling', 'sapling', ...FRONTIER_CROPS.map((c) => c.seed)].find(
+    (k) => (state.inventory.get(k) ?? 0) > 0,
+  );
   if (item === undefined) return null;
   const newest = state.camps[state.camps.length - 1];
   if (newest === undefined) return null;
@@ -761,6 +777,9 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
   squares.sort((a, b) => a.d - b.d);
   const animal = squares.find((s) => state.animals.some((a) => a.x === s.x && a.y === s.y));
   if (animal !== undefined) return `tap ${animal.x},${animal.y}`;
+  // A ripe crop: harvested at once (food; owner, after the 0.19.0 build).
+  const ripe = squares.find((s) => isRipe(state, s.x + width * s.y));
+  if (ripe !== undefined) return `tap ${ripe.x},${ripe.y}`;
   // A plant the tap would take: not on a camp's ground (`frontierTap` checks the rest).
   // An apple tree picked bare is left standing, for its apples to come back.
   const plant = squares.find(

@@ -22,6 +22,7 @@ import { BLOCKS, blockDefByCode, ITEMS } from '../../data';
 import type { ItemId, ItemStack } from '../../data';
 import {
   FRONTIER_AXE,
+  FRONTIER_CROPS,
   FRONTIER_SURFACE,
   FRONTIER_DEEP_CAMP,
   FRONTIER_DEFENSE,
@@ -169,6 +170,7 @@ import {
 } from './hazardArt';
 import { itemInfo } from './itemInfo';
 import { drawMushroom, drawSawHouse, drawSugarShack } from './buildingArt';
+import { drawCrop } from './cropArt';
 import { showNight } from './night';
 import type { Night } from './night';
 
@@ -182,10 +184,27 @@ const HARVEST_HINTS = {
   apple: 'An apple picked. Empty trees regrow their apples after a while.',
   sap: 'Sap tapped. Boil it into syrup at a sugar shack.',
   mushroom: 'A mushroom picked. Sell it, or fill a mushroom contract.',
+  crop: 'Harvested. The soil is bare again: sow another seed.',
   caught: 'Animal caught!',
 };
 const GREYED_HINT = 'Out of range now: put a camp nearby to mine here.';
 const PLANT_HINT = `Tap bare dirt: trees in ${FRONTIER_SAPLINGS.saplingGrowShifts} shifts, apple and maple trees in ${FRONTIER_SAPLINGS.appleSaplingGrowShifts}.`;
+/** What the 🌱 tool plants, in its order: saplings, then seeds (owner, after the 0.19.0 build). */
+const PLANTABLES: { item: string; label: string }[] = [
+  { item: 'sapling', label: '🌲 Sapling' },
+  { item: 'appleSapling', label: '🍎 Apple' },
+  { item: 'mapleSapling', label: '🍁 Maple' },
+  { item: 'wheatSeed', label: '🌾 Wheat' },
+  { item: 'cornSeed', label: '🌽 Corn' },
+  { item: 'carrotSeed', label: '🥕 Carrot' },
+  { item: 'potatoSeed', label: '🥔 Potato' },
+];
+/** What the planting line says for `item`. */
+function plantHint(item: string): string {
+  const crop = FRONTIER_CROPS.find((c) => c.seed === item);
+  if (crop === undefined) return PLANT_HINT;
+  return `Tap bare dirt: ripe in ${crop.growShifts} shifts, then tap it for ${crop.yield} ${itemName(crop.crop).toLowerCase()}.`;
+}
 /** Why a sapling cannot be planted, for the hint (progression PR 3). */
 const PLANT_REFUSALS: Record<string, string> = {
   noTaps: 'No taps left this shift: tap End shift to carry on.',
@@ -313,7 +332,11 @@ function shiftText(report: ShiftReport, turn: CampTurn, rested: boolean): string
     report.mushroomsCame > 0
       ? ` ${report.mushroomsCame === 1 ? 'A mushroom 🍄 came' : `${report.mushroomsCame} mushrooms 🍄 came`} up under the trees.`
       : '';
-  const market = `${born}${rain}${mushrooms}${pumped}${burnt}${dragon}${raided}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
+  const ripened =
+    report.cropsRipened > 0
+      ? ` ${report.cropsRipened === 1 ? 'A crop is' : `${report.cropsRipened} crops are`} ripe 🌾: tap to harvest.`
+      : '';
+  const market = `${born}${rain}${mushrooms}${ripened}${pumped}${burnt}${dragon}${raided}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
   if (turn.status === 'finished') {
     return `${start}. That was the last shift: the run is over.`;
   }
@@ -692,6 +715,7 @@ export function mountCampLab(
       world.hazards.pumps.some((p) => p.x + world.lab.state.size.x * p.y === i) ? 'p' : '',
       world.buildings.find((b) => b.x + world.lab.state.size.x * b.y === i)?.kind ?? '',
       world.mushrooms[i] === true ? 'm' : '',
+      `${world.crops[i] ?? 0}${world.cropIn[i] === 0 ? 'r' : ''}`,
     ].join(',');
   }
 
@@ -747,6 +771,8 @@ export function mountCampLab(
         world.hazards,
         world.buildings,
         world.mushrooms,
+        world.crops,
+        world.cropIn,
       ];
       drawnSquares = [];
       for (let i = 0; i < size.x * size.y; i += 1) drawnSquares.push(squareLook(i));
@@ -766,6 +792,8 @@ export function mountCampLab(
       world.hazards,
       world.buildings,
       world.mushrooms,
+      world.crops,
+      world.cropIn,
     ];
     if (key.every((k, i) => k === groundKey[i])) {
       return; // the same world: the ground is as it was
@@ -998,6 +1026,9 @@ export function mountCampLab(
         const building = world.buildings.find((b) => b.x === x && b.y === y);
         if (building?.kind === 'sawHouse') drawSawHouse(ctx, box);
         if (building?.kind === 'sugarShack') drawSugarShack(ctx, box);
+        // A crop (owner, after the 0.19.0 build): sprouts, or ripe.
+        const sown = FRONTIER_CROPS[(world.crops[i] ?? 0) - 1];
+        if (sown !== undefined) drawCrop(ctx, box, sown.crop, world.cropIn[i] === 0);
         // A mushroom (owner, after the 0.17.0 build), at the foot of its tree.
         if (world.mushrooms[i] === true) drawMushroom(ctx, box);
         // A fire (hazards PR 3), drawn still: the ground is drawn once and kept.
@@ -1061,6 +1092,15 @@ export function mountCampLab(
       if (m) mushrooms.push(`${i % width},${Math.floor(i / width)}`);
     });
     canvas.dataset['mushrooms'] = mushrooms.join(' ');
+    // The crops, as "x,y:crop" with ":ripe" once ripe.
+    const crops: string[] = [];
+    world.crops.forEach((k, i) => {
+      const def = FRONTIER_CROPS[k - 1];
+      if (def === undefined) return;
+      const ripe = world.cropIn[i] === 0 ? ':ripe' : '';
+      crops.push(`${i % width},${Math.floor(i / width)}:${def.crop}${ripe}`);
+    });
+    canvas.dataset['crops'] = crops.join(' ');
     // The buildings, as "kind@x,y".
     canvas.dataset['buildings'] = world.buildings.map((b) => `${b.kind}@${b.x},${b.y}`).join(' ');
     // Each camp's defense level, as drawn on its marker: "id:level".
@@ -1652,6 +1692,14 @@ export function mountCampLab(
       'sap',
       'syrup',
       'mushroom',
+      'wheatSeed',
+      'cornSeed',
+      'carrotSeed',
+      'potatoSeed',
+      'wheat',
+      'corn',
+      'carrot',
+      'potato',
       FRONTIER_PUMP.item,
       FRONTIER_DRAGON.sword,
     ]) {
@@ -1794,8 +1842,7 @@ export function mountCampLab(
     head.append(book, market, tool);
     // Planting (progression PR 3): shown only while a sapling is held.
     const held = (item: string): number => world.lab.counts.get(item) ?? 0;
-    const saplings = ['sapling', 'appleSapling', 'mapleSapling'];
-    const firstHeld = saplings.find((k) => held(k) > 0);
+    const firstHeld = PLANTABLES.map((p) => p.item).find((k) => held(k) > 0);
     if (firstHeld !== undefined) {
       const sow = button('lab2-book-button', '🌱');
       sow.dataset['testid'] = 'lab2-plant-tool';
@@ -2440,14 +2487,17 @@ export function mountCampLab(
     cancel.dataset['testid'] = 'lab2-plant-cancel';
     cancel.addEventListener('click', () => setMode({ kind: 'idle' }));
     head.append(cancel);
-    const body = element('p', 'lab2-panel-line', PLANT_HINT);
+    const body = element('p', 'lab2-panel-line', plantHint(item));
     body.dataset['testid'] = 'lab2-plant-line';
-    const actions = element('div', 'lab2-actions');
-    for (const kind of ['sapling', 'appleSapling', 'mapleSapling']) {
+    // Only what is held (and the one chosen), in a row that scrolls sideways
+    // when there are more than fit: seven kinds never fit a phone.
+    const actions = element('div', 'lab2-actions lab2-actions-scroll');
+    for (const { item: kind, label } of PLANTABLES) {
       const count = world.lab.counts.get(kind) ?? 0;
+      if (count === 0 && kind !== item) continue;
       const choose = button(
         kind === item ? 'lab2-button lab2-button-main' : 'lab2-button',
-        `${kind === 'sapling' ? '🌲 Sapling' : kind === 'appleSapling' ? '🍎 Apple' : '🍁 Maple'} ×${count}`,
+        `${label} ×${count}`,
       );
       choose.dataset['testid'] = `lab2-plant-${kind}`;
       choose.setAttribute('aria-pressed', String(kind === item));
@@ -2474,9 +2524,7 @@ export function mountCampLab(
       false,
     );
     if (left === 0) {
-      const other = ['sapling', 'appleSapling', 'mapleSapling'].find(
-        (k) => (world.lab.counts.get(k) ?? 0) > 0,
-      );
+      const other = PLANTABLES.map((p) => p.item).find((k) => (world.lab.counts.get(k) ?? 0) > 0);
       setMode(other !== undefined ? { kind: 'planting', item: other } : { kind: 'idle' });
     }
   }
@@ -3187,6 +3235,12 @@ export function mountCampLab(
         setMode({ kind: 'camp', id: camp.id });
       }
       setHint(result.kind === 'noTaps' ? NO_TAPS_HINT : OVER_HINT, true);
+      return;
+    }
+    if (result.kind === 'growing') {
+      const i = x + world.lab.state.size.x * y;
+      const left = world.cropIn[i] ?? 0;
+      setHint(`Still growing: ripe in ${left} ${left === 1 ? 'shift' : 'shifts'}.`, false);
       return;
     }
     if (result.kind === 'building') {

@@ -99,6 +99,8 @@ export function world(options: WorldOptions = {}): FrontierState {
     buildings: [],
     mushrooms: new Array<boolean>(SIDE * SIDE).fill(false),
     mushroomIn: new Array<number>(SIDE * SIDE).fill(-1),
+    crops: new Array<number>(SIDE * SIDE).fill(0),
+    cropIn: new Array<number>(SIDE * SIDE).fill(-1),
     shift: 1,
     tapsLeft: FRONTIER_SHIFT.taps,
     health: FRONTIER_SHIFT.startHealth,

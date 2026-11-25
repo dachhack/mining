@@ -1,10 +1,10 @@
 {
   "description": "The random policy on seed 1 for 25 shifts: it leaves a fire burning overnight, which burns its square out (hazards PR 4: the other runs put every fire out)",
   "recordedWith": "random",
-  "engineVersion": "0.19.0",
+  "engineVersion": "0.20.0",
   "seed": 1,
   "stepCount": 1611,
-  "expectedHash": "d38af09a229cfbc3",
+  "expectedHash": "8c992dbfb242ddd0",
   "steps": [
     "tap 22,12",
     "tap 18,14",

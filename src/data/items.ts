@@ -47,7 +47,16 @@ export type ItemId =
   | 'sap'
   | 'syrup'
   // Picked where a tree stood in the rain (owner, after the 0.17.0 build).
-  | 'mushroom';
+  | 'mushroom'
+  // Grains and vegetables, grown from seeds (owner, after the 0.19.0 build).
+  | 'wheatSeed'
+  | 'cornSeed'
+  | 'carrotSeed'
+  | 'potatoSeed'
+  | 'wheat'
+  | 'corn'
+  | 'carrot'
+  | 'potato';
 
 // Fuel is a gauge, not an item, so it is not here. The torch and the safety
 // lamp are gone with light (design doc v0.2, section 7). Items have no weight:
@@ -95,6 +104,14 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   sap: { name: 'Sap' },
   syrup: { name: 'Syrup' },
   mushroom: { name: 'Mushrooms' },
+  wheatSeed: { name: 'Wheat seeds' },
+  cornSeed: { name: 'Corn seeds' },
+  carrotSeed: { name: 'Carrot seeds' },
+  potatoSeed: { name: 'Potato seeds' },
+  wheat: { name: 'Wheat' },
+  corn: { name: 'Corn' },
+  carrot: { name: 'Carrots' },
+  potato: { name: 'Potatoes' },
   appleSapling: { name: 'Apple saplings' },
   copperLantern: { name: 'Copper lantern' },
 };

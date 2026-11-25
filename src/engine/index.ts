@@ -80,11 +80,12 @@ import type { GameState } from './state';
  * 0.16.0: after the 0.15.0 build: tier 2's coal contract asks for 40 coal,
  *        not 80 (question 197).
  * 0.17.0: after the 0.16.0 build: about three times the coal in every world.
+ * 0.20.0: after the 0.19.0 build: grains and vegetables from seeds; state version 23.
  * 0.19.0: after the 0.18.0 build: no mushrooms under apple trees.
  * 0.18.0: after the 0.17.0 build: the axe (3 wood a tree) and the saw house
  *        (1 more wood from each tree in its reach); state version 20.
  */
-export const ENGINE_VERSION = '0.19.0';
+export const ENGINE_VERSION = '0.20.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
@@ -536,7 +537,8 @@ export type { LanternRefusal, MakeRefusal, SmelterRefusal } from './frontier/sme
 export type { FrontierTap, FrontierTapKind } from './frontier/tap';
 export { hashFrontier } from './frontier/hash';
 // Planting saplings (docs/plans/progression-phases.md, PR 3).
-export { isSapling, plant, plantRefusal } from './frontier/farming';
+export { isPlantable, isSapling, plant, plantRefusal } from './frontier/farming';
+export { cropAt, cropOfSeed, growCrops, isRipe, isSeed } from './frontier/crops';
 export {
   BUILDING_COSTS,
   build,

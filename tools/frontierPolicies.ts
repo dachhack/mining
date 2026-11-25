@@ -25,6 +25,7 @@
 //             then lets the crew starve. The hunger path, start to end.
 
 import {
+  FRONTIER_CROPS,
   FRONTIER_FOODS,
   FRONTIER_MARKET,
   FRONTIER_RECIPES,
@@ -161,7 +162,12 @@ function randomPolicy(rng: RngState): FrontierPolicy {
       const y = Math.floor(nextFloat(rng) * state.cube.size.y);
       if (fillSquareRefusal(state, x, y) === null) options.push(`fillSquare ${x},${y}`);
     }
-    for (const item of ['sapling', 'appleSapling', 'mapleSapling']) {
+    for (const item of [
+      'sapling',
+      'appleSapling',
+      'mapleSapling',
+      ...FRONTIER_CROPS.map((c) => c.seed),
+    ]) {
       if ((state.inventory.get(item) ?? 0) < 1) continue;
       for (let k = 0; k < 4; k += 1) {
         const x = Math.floor(nextFloat(rng) * state.cube.size.x);

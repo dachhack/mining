@@ -38,7 +38,17 @@ describe('hay (plan section 6.3)', () => {
     const made = frontierAct(world({ inventory: { grass: 3 } }), { kind: 'make', recipe: 'hay' });
     expect(made.done).toBe(true);
     expect(made.state.inventory.get('hay')).toBe(1);
-    expect(FRONTIER_FOODS.map((f) => f.item)).toEqual(['grass', 'hay', 'apple', 'animal']);
+    // Grains and vegetables (owner, after the 0.19.0 build) come after apples, before an animal.
+    expect(FRONTIER_FOODS.map((f) => f.item)).toEqual([
+      'grass',
+      'hay',
+      'apple',
+      'wheat',
+      'corn',
+      'carrot',
+      'potato',
+      'animal',
+    ]);
     const hungry = { ...world({ inventory: { wood: 5, hay: 1, apple: 1 } }), shift: 2 };
     const fed = frontierAct(hungry, { kind: 'endShift' });
     expect(fed.report?.paid).toContainEqual({ item: 'hay', count: 1 });

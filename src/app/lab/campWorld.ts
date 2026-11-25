@@ -109,6 +109,9 @@ export interface CampWorld {
   /** Where mushrooms stand, and the nights until those coming come up (the engine's mushrooms.ts). */
   mushrooms: boolean[];
   mushroomIn: number[];
+  /** The crops sown, and the shifts until each is ripe (the engine's crops.ts). */
+  crops: number[];
+  cropIn: number[];
 }
 
 /** Where the run stands (plan A4). */
@@ -224,6 +227,8 @@ export function toFrontier(world: CampWorld): FrontierState {
     buildings: world.buildings,
     mushrooms: world.mushrooms,
     mushroomIn: world.mushroomIn,
+    crops: world.crops,
+    cropIn: world.cropIn,
   };
 }
 
@@ -269,6 +274,8 @@ export function fromFrontier(world: CampWorld, state: FrontierState): CampWorld 
     buildings: state.buildings,
     mushrooms: state.mushrooms,
     mushroomIn: state.mushroomIn,
+    crops: state.crops,
+    cropIn: state.cropIn,
   };
 }
 
@@ -369,6 +376,8 @@ export function campWorldFromLab(
     buildings: [],
     mushrooms: new Array<boolean>(width * height).fill(false),
     mushroomIn: new Array<number>(width * height).fill(-1),
+    crops: new Array<number>(width * height).fill(0),
+    cropIn: new Array<number>(width * height).fill(-1),
   };
 }
 
@@ -416,6 +425,8 @@ export function campWorldOf(state: FrontierState): CampWorld {
     buildings: state.buildings,
     mushrooms: state.mushrooms,
     mushroomIn: state.mushroomIn,
+    crops: state.crops,
+    cropIn: state.cropIn,
     surface: bareSurface(state.cube),
     turn: firstTurn(),
   };
@@ -433,6 +444,7 @@ export function campWorldOf(state: FrontierState): CampWorld {
  * - 'greyed': the square is outside every camp's circle now, so nothing happened;
  * - 'camp': the square holds a camp, which is never mined;
  * - 'building': the square holds a saw house or a sugar shack, which is never mined;
+ * - 'growing': a crop grows on the square and is not ripe yet;
  * - 'refused': the level rule refused it (`tap.result.refusal` says why);
  * - 'tooHard': the level rule allows it, but the camps covering the square
  *   cannot mine its top block (`needs` says which level can, `needsTool`
@@ -452,6 +464,7 @@ export type CampTapKind =
   | 'greyed'
   | 'camp'
   | 'building'
+  | 'growing'
   | 'tooHard'
   | 'refused'
   | 'flooded'
@@ -520,7 +533,7 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
     return { ...answer('refused'), tap: { world: world.lab, result } };
   }
   if (!outcome.done) {
-    return answer(tap.kind); // 'fog', 'greyed', 'camp', 'building', 'tooHard' or 'flooded': nothing changes
+    return answer(tap.kind); // 'fog', 'greyed', 'camp', 'building', 'growing', 'tooHard' or 'flooded': nothing changes
   }
   const after = fromFrontier(world, outcome.state);
   if (tap.kind === 'pump') {

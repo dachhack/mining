@@ -126,7 +126,8 @@ export function buildRefusal(
     (state.features[i] ?? NO_FEATURE) !== NO_FEATURE ||
     (state.stumps[i] ?? NO_FEATURE) !== NO_FEATURE ||
     state.planted[i] === true ||
-    state.mushrooms[i] === true
+    state.mushrooms[i] === true ||
+    (state.crops[i] ?? 0) > 0
   ) {
     return 'growing';
   }

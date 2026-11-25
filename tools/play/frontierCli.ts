@@ -451,9 +451,15 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
   const plantStep = /^plant (\d+)[ ,]+(\d+) ([a-z]+)$/.exec(text);
   if (plantStep !== null) {
     // "sapling" or "applesapling" (the typed text is lower case).
-    const item = ['sapling', 'appleSapling', 'mapleSapling'].find(
-      (id) => id.toLowerCase() === plantStep[3],
-    );
+    const item = [
+      'sapling',
+      'appleSapling',
+      'mapleSapling',
+      'wheatSeed',
+      'cornSeed',
+      'carrotSeed',
+      'potatoSeed',
+    ].find((id) => id.toLowerCase() === plantStep[3]);
     return item === undefined ? null : `plant ${plantStep[1] ?? ''},${plantStep[2] ?? ''} ${item}`;
   }
   const tradeStep = /^(sell|buy) ([a-z]+) (\d+)$/.exec(text);

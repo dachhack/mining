@@ -41,6 +41,7 @@ import { labMine } from '../lab';
 import { campAt, frontierMineCheck, sightAt } from './camps';
 import { gained, harvestAt } from './surface';
 import { buildingAt, woodFromTree } from './buildings';
+import { cropAt, isRipe } from './crops';
 import { isFlooded, pumpIndexAt, takeWaterOpened, withFlood } from './water';
 import { isBurning, putOut } from './fire';
 import { gasOpened } from './gas';
@@ -57,6 +58,7 @@ import type { FrontierState } from './state';
  * - 'fog' or 'greyed': the square is outside every camp's circle;
  * - 'camp': the square is a camp's ground;
  * - 'building': a saw house or a sugar shack stands on the square (buildings.ts);
+ * - 'growing': a crop grows on the square and is not ripe yet (crops.ts);
  * - 'refused': the level rule refused it, or the square is off the map (`refusal`);
  * - 'tooHard': the camps covering it cannot mine its top block (`needs`
  *   or `needsTool`);
@@ -73,6 +75,7 @@ export type FrontierTapKind =
   | 'greyed'
   | 'camp'
   | 'building'
+  | 'growing'
   | 'refused'
   | 'tooHard'
   | 'flooded'
@@ -164,6 +167,11 @@ export function frontierTap(state: FrontierState, x: number, y: number): Frontie
   }
   if (buildingAt(state, x, y) !== null) {
     return nothing('building');
+  }
+  // A crop still growing is left be, so a stray tap never digs it up (crops.ts).
+  const here = x + state.cube.size.x * y;
+  if ((state.crops[here] ?? 0) > 0 && !isRipe(state, here)) {
+    return nothing('growing');
   }
   if (taken !== null) {
     const gain = taken.extra === null ? [taken.gain] : [taken.gain, taken.extra];
@@ -293,6 +301,12 @@ export function previewTap(
   const i = x + state.cube.size.x * y;
   if (state.mushrooms[i] === true) {
     return { kind: 'harvested', gain: [{ item: 'mushroom', count: 1 }] };
+  }
+  const sown = cropAt(state, i);
+  if (sown !== null) {
+    return isRipe(state, i)
+      ? { kind: 'harvested', gain: [{ item: sown.crop, count: sown.yield }] }
+      : { kind: 'growing', gain: [] };
   }
   const feature = state.features[i];
   if (feature === GRASS) {

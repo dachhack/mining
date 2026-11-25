@@ -446,6 +446,8 @@ export function createFrontier(seed: number): FrontierState {
     buildings: [],
     mushrooms: new Array<boolean>(cube.size.x * cube.size.y).fill(false),
     mushroomIn: new Array<number>(cube.size.x * cube.size.y).fill(-1),
+    crops: new Array<number>(cube.size.x * cube.size.y).fill(0),
+    cropIn: new Array<number>(cube.size.x * cube.size.y).fill(-1),
     shift: 1,
     tapsLeft: FRONTIER_SHIFT.taps,
     health: FRONTIER_SHIFT.startHealth,
