@@ -263,6 +263,7 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 - **Trading:** while the market is open, the player sells or buys any whole number of one item's lots, and takes a contract; none of it costs a tap. Nothing else can be done until the market is closed. A lot is [Default] (`FRONTIER_MARKET`):
   - sold: 5 grass, 2 wood, 2 apples or 2 clay for 1 coin; 10 stone for 1 coin; 1 animal for 3; 1 coal for 1; 1 raw iron or copper ore for 2; 1 ingot for 5; 1 crystal for 20; 1 rare ore for 15; 1 relic for 40;
   - bought: 1 animal for 8 coins; 1 clay for 1 coin; 1 sapling for 3, 1 apple sapling for 6; 1 hay for 1; 10 wood for 8 and 5 apples for 5 (from the start: owner, after the 0.17.0 build; until then after a tier-1 contract); once a tier-1 contract is done, a camp kit for 150; and, while the best camp is level 3 or more, an iron drill for 80, a steel drill for 250, an iron pickaxe for 60 and a copper lantern for 40; an axe for 25 and a maple sapling for 6 from the start. Saplings and hay join with farming (plan section 6).
+  - grains and vegetables (section 7d): seeds bought from the start; the crops sold.
   - Nothing can be bought and sold back at a profit.
   - An item a second of which adds nothing is not on sale while one is held, and is bought one at a time (owner, after the 0.17.0 build: "If you own an item and it doesn't help to buy another one, remove that item from the market"): the iron pickaxe, the drills (the iron drill also while a steel drill is held), the axe and the sword (`FRONTIER_MARKET.uselessWhenHeld`). Pumps, lanterns, camp kits and saplings stay on sale: more of them help.
 - A trade can be undone while the market is open; closing it starts a new Undo history.
@@ -286,6 +287,25 @@ Owner, after the 0.17.0 build: "If a (non-maple) tree is standing when rain happ
 - **Where and when it comes up:** on the tree's square, after [Default] 3 to 7 nights (drawn), if that ground has still never been dug and no camp or building stands on it; otherwise it is lost. The night's news says how many came up.
 - **Picking:** a tap on the square picks the mushroom (1 mushroom) before anything else there; the tree is untouched. On the map it is a small red-capped mushroom at the tree's foot.
 - **Use:** sold at the market for [Default] 3 coins each; contracts ask for them: tier 1, 10 mushrooms for 60 coins; tier 2, 30 for 220. The board offers them only once the mushrooms standing, coming and held add up to what they ask.
+
+## 7d. Grains and vegetables [Decided; numbers Default]
+
+Owner, after the 0.19.0 build: "Let's add seeds to the market for a few grains and vegetables. You can plant these in soil and they grow and you can harvest."
+
+| Crop | Seed (market, from the start) | Ripe after | A harvest gives | Food | Sells |
+|---|---|---|---|---|---|
+| Wheat | 2 coins | 6 shifts | 4 wheat | 2 a meal | 2 for 1 coin |
+| Corn | 3 coins | 8 shifts | 3 corn | 1 a meal | 1 coin |
+| Carrot | 2 coins | 5 shifts | 3 carrots | 1 a meal | 1 coin |
+| Potato | 3 coins | 7 shifts | 4 potatoes | 1 a meal | 1 coin |
+
+(`FRONTIER_CROPS`; every number a [Default].)
+
+- **Sowing:** from the 🌱 tool, as a sapling is planted, for 1 tap: on lit surface dirt never dug, with nothing growing on it and no stump, sapling, mushroom, building, camp or animal. The tool offers only what is held; its row scrolls sideways.
+- **Growing:** each End shift brings it a shift nearer ripe; the night's news says when crops ripen. While it grows, a tap on it does nothing and costs nothing, so a stray tap never digs it up.
+- **Harvest:** a tap on a ripe crop puts its harvest in the store and leaves bare dirt, ready for another seed.
+- **Food:** eaten after apples and before an animal (section 4.2).
+- On the map a sown square is dark, furrowed earth with sprouts; a ripe one shows its wheat, corn, carrots or potatoes.
 
 ## 7b. Hay and animal pens [Decided; numbers Default]
 

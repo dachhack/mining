@@ -7,6 +7,7 @@
 // ground.
 
 import { drawMushroom } from './buildingArt';
+import { drawCropIcon } from './cropArt';
 import { drawPump, drawWater } from './hazardArt';
 import { LAB_LOOK } from './labLook';
 import type { SquareBox } from './labDraw';
@@ -734,6 +735,9 @@ export function labItemIcon(item: string, className: string): HTMLCanvasElement 
       ctx.arc(s * 0.74, s * 0.58, s * 0.12, -Math.PI / 2, Math.PI / 2);
       ctx.stroke();
     }
+  } else if (['wheat', 'corn', 'carrot', 'potato'].includes(item.replace('Seed', ''))) {
+    // Grains and vegetables, and their seed packets (owner, after the 0.19.0 build).
+    drawCropIcon(ctx, s, item.replace('Seed', ''), item.endsWith('Seed'));
   } else if (item === 'mushroom') {
     // A mushroom, as the map draws it, on dark ground.
     ctx.fillStyle = '#2a2420';

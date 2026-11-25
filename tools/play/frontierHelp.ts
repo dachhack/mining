@@ -5,6 +5,7 @@
 import { campRadius } from '../../src/engine';
 import {
   FRONTIER_AXE,
+  FRONTIER_CROPS,
   FRONTIER_SAW_HOUSE,
   FRONTIER_SUGAR_SHACK,
   FRONTIER_CAMP_LEVELS,
@@ -127,6 +128,8 @@ export function frontierHelpText(): string {
     '  Saplings, apple saplings and maple saplings come only from the market.',
     `  "plant X,Y sapling" plants one on lit surface dirt or a stump (1 tap): a tree in ${FRONTIER_SAPLINGS.saplingGrowShifts} shifts,`,
     `  an apple tree in ${FRONTIER_SAPLINGS.appleSaplingGrowShifts}, a maple tree in ${FRONTIER_SAPLINGS.mapleSaplingGrowShifts}. Mining its square digs it out.`,
+    `  Seeds (${FRONTIER_CROPS.map((c) => `${c.seed}: ${c.yield} ${c.crop} after ${c.growShifts} shifts`).join('; ')}) are sown the same way, on bare dirt;`,
+    '  a tap harvests a ripe crop; one still growing is left be. Grains and vegetables are food, and sell.',
     `  A maple holds ${FRONTIER_SURFACE.sapPerTree} sap, 1 a tap, and fills again as an apple tree does; then a tap fells it.`,
     `- An axe in your store fells a tree for ${FRONTIER_AXE.woodPerTree} wood, not ${FRONTIER_SURFACE.woodPerTree}. "saw X,Y" builds a saw house on lit, bare, undug ground`,
     `  (${cost(FRONTIER_SAW_HOUSE.cost)}; 1 tap): trees within ${campRadius(FRONTIER_SAW_HOUSE.radiusOfLevel)} squares of it give ${FRONTIER_SAW_HOUSE.bonus} more wood. Its square is never mined.`,

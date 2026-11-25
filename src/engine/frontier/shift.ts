@@ -72,6 +72,7 @@ import {
 import { build, buildRefusal } from './buildings';
 import { fillSquare, fillSquareRefusal } from './fill';
 import { nightOfMushrooms } from './mushrooms';
+import { growCrops } from './crops';
 import { frontierTap } from './tap';
 import type { FrontierTap } from './tap';
 import { GRASS, NO_FEATURE } from './state';
@@ -146,6 +147,8 @@ export interface ShiftReport {
   rainFilled: number;
   /** Mushrooms that came up in the night (mushrooms.ts). */
   mushroomsCame: number;
+  /** Crops that ripened in the night (crops.ts). */
+  cropsRipened: number;
   /** Flooded squares the pumps drained (water.ts). */
   drained: number;
   /** Pumps whose flood is dry: back in the store. */
@@ -339,7 +342,9 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
   };
   // Mushrooms, after the rain that sets them coming (mushrooms.ts).
   const mushroomed = nightOfMushrooms(beforeMushrooms, rain.rained, rng);
-  const next: FrontierState = { ...mushroomed.state, rng };
+  // Crops grow a shift nearer ripe (crops.ts).
+  const grownCrops = growCrops(mushroomed.state);
+  const next: FrontierState = { ...grownCrops.state, rng };
   // A market day's market opens now, after the night, before the day (market.ts).
   next.marketOpen = isMarketDay(next);
   return {
@@ -361,6 +366,7 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
       rained: rain.rained,
       rainFilled: rain.filled.length,
       mushroomsCame: mushroomed.came,
+      cropsRipened: grownCrops.ripened,
       drained: pumping.drained,
       pumpsBack: pumping.pumpsBack,
       burned: fire.burned,

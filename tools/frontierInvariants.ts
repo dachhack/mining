@@ -647,6 +647,19 @@ export function checkStep(
     if (isTree(f)) say(`an animal on a tree at ${key}`);
     if (depthAt(after.cube, a.x, a.y) !== 0) say(`an animal in a pit at ${key}`);
   }
+  // Crops (owner, after the 0.19.0 build): on ground never dug, with nothing
+  // else growing there, and a count only while a crop is sown.
+  after.crops.forEach((k, i) => {
+    const left = after.cropIn[i] ?? -1;
+    if (k === 0) {
+      if (left !== -1) say(`square ${i} counts down a crop that is not there`);
+      return;
+    }
+    if (left < 0) say(`the crop on square ${i} has no count`);
+    if (after.features[i] !== NO_FEATURE) say(`a crop and a plant share square ${i}`);
+    if (depthAt(after.cube, i % width, Math.floor(i / width)) !== 0)
+      say(`a crop on square ${i}, whose ground was mined`);
+  });
   after.apples.forEach((n, i) => {
     // An apple tree's apples, or a maple's sap (`cropOf`).
     const appleTree = cropOf(after.features[i]) !== null;

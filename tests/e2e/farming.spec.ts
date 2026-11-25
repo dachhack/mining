@@ -58,7 +58,9 @@ test('plant a sapling on bare dirt, be told why not on a camp, and undo it', asy
   await page.getByTestId('lab2-plant-tool').click();
   await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'planting');
   await expect(page.getByTestId('lab2-plant-sapling')).toContainText('×2');
-  await expect(page.getByTestId('lab2-plant-appleSapling')).toBeDisabled();
+  // Only what is held is offered (owner, after the 0.19.0 build: seven kinds
+  // would not fit a phone; the row scrolls when several are held).
+  await expect(page.getByTestId('lab2-plant-appleSapling')).toHaveCount(0);
 
   await tapSquare(page, canvas, camp.x, camp.y);
   await expect(page.getByTestId('lab-hint')).toHaveText('Not on a camp’s ground.');

@@ -258,7 +258,40 @@ export const FRONTIER_FOODS: ItemStack[] = [
   // Hay (progression plan section 6.3; question 175): after grass, before apples.
   { item: 'hay', count: 1 },
   { item: 'apple', count: 1 },
+  // Grains and vegetables (owner, after the 0.19.0 build): after apples, before an animal.
+  { item: 'wheat', count: 2 },
+  { item: 'corn', count: 1 },
+  { item: 'carrot', count: 1 },
+  { item: 'potato', count: 1 },
   { item: 'animal', count: 1 },
+];
+
+/** A grain or vegetable grown from seed (FRONTIER_CROPS). */
+export interface FrontierCropDef {
+  /** The seed planted. */
+  seed: ItemId;
+  /** What a ripe one gives when harvested, and how many. */
+  crop: ItemId;
+  yield: number;
+  /** Shifts from planting until it is ripe. */
+  growShifts: number;
+}
+
+/**
+ * Grains and vegetables (owner, after the 0.19.0 build: "Let's add seeds to
+ * the market for a few grains and vegetables. You can plant these in soil and
+ * they grow and you can harvest."). A seed is planted as a sapling is
+ * (farming.ts), on lit surface dirt never dug with nothing on it, for 1 tap.
+ * It is ripe `growShifts` End shifts later; a tap then harvests `yield` of
+ * `crop` and leaves bare dirt. While it grows its square is not mined (a tap
+ * says so and costs nothing). Seeds come from the market; the crops are food
+ * (FRONTIER_FOODS) and sell. Every number is a [Default].
+ */
+export const FRONTIER_CROPS: FrontierCropDef[] = [
+  { seed: 'wheatSeed', crop: 'wheat', yield: 4, growShifts: 6 },
+  { seed: 'cornSeed', crop: 'corn', yield: 3, growShifts: 8 },
+  { seed: 'carrotSeed', crop: 'carrot', yield: 3, growShifts: 5 },
+  { seed: 'potatoSeed', crop: 'potato', yield: 4, growShifts: 7 },
 ];
 
 // ----- Smelting and crafting (docs/plans/smelting-and-crafting.md) -----
@@ -571,6 +604,11 @@ export const FRONTIER_MARKET = {
     { item: 'syrup', count: 1, coins: 8 },
     // Mushrooms (owner, after the 0.17.0 build: "mushrooms sell for gold").
     { item: 'mushroom', count: 1, coins: 3 },
+    // Grains and vegetables (owner, after the 0.19.0 build).
+    { item: 'wheat', count: 2, coins: 1 },
+    { item: 'corn', count: 1, coins: 1 },
+    { item: 'carrot', count: 1, coins: 1 },
+    { item: 'potato', count: 1, coins: 1 },
   ] as FrontierLot[],
   /**
    * Items a second of which adds nothing (owner, after the 0.17.0 build: "If
@@ -598,6 +636,11 @@ export const FRONTIER_MARKET = {
     { item: 'sapling', count: 1, coins: 3 },
     { item: 'appleSapling', count: 1, coins: 6 },
     { item: 'mapleSapling', count: 1, coins: 6 },
+    // Seeds for grains and vegetables, from the start (owner, after the 0.19.0 build).
+    { item: 'wheatSeed', count: 1, coins: 2 },
+    { item: 'cornSeed', count: 1, coins: 3 },
+    { item: 'carrotSeed', count: 1, coins: 2 },
+    { item: 'potatoSeed', count: 1, coins: 3 },
     { item: 'hay', count: 1, coins: 1 },
     // The pump drains a flood (hazards plan, section 2): from the start.
     { item: 'pump', count: 1, coins: 30 },

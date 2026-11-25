@@ -3,6 +3,7 @@
 //
 // - an animal standing on the square is caught (1 animal);
 // - a mushroom is picked (1 mushroom; mushrooms.ts);
+// - a ripe crop is harvested (crops.ts);
 // - grass is cut (grass);
 // - an apple tree with apples gives one apple a tap, and a maple tree with
 //   sap one sap a tap (`cropOf`);
@@ -17,11 +18,12 @@
 import type { ItemStack } from '../../data';
 import { FRONTIER_SHIFT, FRONTIER_SURFACE } from '../../data/frontier';
 import { woodFromTree } from './buildings';
+import { cropAt, isRipe, withoutCrop } from './crops';
 import { GRASS, NO_FEATURE, cropOf, isTree } from './state';
 import type { FrontierAnimal, FrontierState } from './state';
 
 /** What a harvest was: an animal 'caught', 'grass' cut, an 'apple' picked, 'sap' tapped or a tree 'felled'. */
-export type HarvestKind = 'caught' | 'mushroom' | 'grass' | 'apple' | 'sap' | 'felled';
+export type HarvestKind = 'caught' | 'mushroom' | 'crop' | 'grass' | 'apple' | 'sap' | 'felled';
 
 /** What `harvestAt` did: the state after it, what it gave and what it was. */
 export interface FrontierHarvest {
@@ -91,6 +93,12 @@ export function harvestAt(state: FrontierState, x: number, y: number): FrontierH
   if (state.mushrooms[i] === true) {
     const mushrooms = replaced(state.mushrooms, i, false);
     return take({ ...state, mushrooms }, { item: 'mushroom', count: 1 }, 'mushroom');
+  }
+  // A ripe crop is harvested, leaving bare dirt (crops.ts). One still
+  // growing is left be: tap.ts says so before it gets here.
+  const sown = cropAt(state, i);
+  if (sown !== null && isRipe(state, i)) {
+    return take(withoutCrop(state, i), { item: sown.crop, count: sown.yield }, 'crop');
   }
   const feature = state.features[i];
   if (feature === GRASS) {

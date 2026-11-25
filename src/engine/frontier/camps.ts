@@ -610,6 +610,8 @@ export function placeFrontierCamp(
   const fires = [...state.hazards.fires];
   const mushrooms = [...state.mushrooms];
   const mushroomIn = [...state.mushroomIn];
+  const crops = [...state.crops];
+  const cropIn = [...state.cropIn];
   for (const s of foundation.dug) {
     // Dug out: nothing grows back there (as under a mine).
     const i = s.x + state.cube.size.x * s.y;
@@ -635,12 +637,16 @@ export function placeFrontierCamp(
     // A mushroom there, or one coming, is cleared with the rest.
     mushrooms[i] = false;
     mushroomIn[i] = -1;
+    crops[i] = 0;
+    cropIn[i] = -1;
   }
   return {
     ...state,
     ...change,
     mushrooms,
     mushroomIn,
+    crops,
+    cropIn,
     cube: foundation.cube,
     features,
     apples,

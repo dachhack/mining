@@ -7,6 +7,7 @@
 
 import {
   FRONTIER_AXE,
+  FRONTIER_CROPS,
   FRONTIER_DEEP_CAMP,
   FRONTIER_DRAGON,
   FRONTIER_DRILL,
@@ -64,6 +65,22 @@ export function itemInfo(item: string): string | null {
       return 'Boiled from maple sap at a sugar shack. Sells well at the market.';
     case 'mushroom':
       return 'Comes up under trees some nights after rain. Sells for coins; mushroom contracts ask for it.';
+    case 'wheatSeed':
+    case 'cornSeed':
+    case 'carrotSeed':
+    case 'potatoSeed': {
+      const crop = FRONTIER_CROPS.find((c) => c.seed === item);
+      return crop === undefined
+        ? null
+        : `Sow it with 🌱 on bare dirt: ripe in ${crop.growShifts} shifts, then a tap harvests ${crop.yield}.`;
+    }
+    case 'wheat':
+    case 'corn':
+    case 'carrot':
+    case 'potato': {
+      const food = FRONTIER_FOODS.find((f) => f.item === item)?.count ?? 1;
+      return `Food for the crew: ${food === 1 ? 'one' : food} a meal. Sells at the market.`;
+    }
     case 'appleSapling':
       return `Plant it with 🌱 on bare dirt: an apple tree in ${FRONTIER_SAPLINGS.appleSaplingGrowShifts} shifts.`;
     case FRONTIER_PUMP.item:

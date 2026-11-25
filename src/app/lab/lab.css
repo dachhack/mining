@@ -1355,3 +1355,14 @@ body[data-screen='lab2'] {
   font-size: 0.8rem;
   color: #e0a35a;
 }
+
+/* A row of choices that may not fit a phone (the planting tray's seven
+   kinds, owner, after the 0.19.0 build): it scrolls sideways, and its
+   buttons keep their size. */
+.lab2-actions.lab2-actions-scroll {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.lab2-actions.lab2-actions-scroll .lab2-button {
+  flex: 0 0 auto;
+}
