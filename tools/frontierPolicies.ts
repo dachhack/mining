@@ -50,6 +50,7 @@ import {
   makeRefusal,
   smelterRefusal,
   upkeepDue,
+  fillSquareRefusal,
 } from '../src/engine';
 import type { FrontierState } from '../src/engine';
 import { nextFloat } from '../src/engine/rng';
@@ -154,7 +155,13 @@ function randomPolicy(rng: RngState): FrontierPolicy {
       if (deliverRefusal(state, held.id) === null) options.push(`deliver ${held.id}`);
     }
     // A sapling it holds, on a few squares tried at random.
-    for (const item of ['sapling', 'appleSapling']) {
+    // A dug square filled with dirt, tried at a few random squares.
+    for (let k = 0; k < 4; k += 1) {
+      const x = Math.floor(nextFloat(rng) * state.cube.size.x);
+      const y = Math.floor(nextFloat(rng) * state.cube.size.y);
+      if (fillSquareRefusal(state, x, y) === null) options.push(`fillSquare ${x},${y}`);
+    }
+    for (const item of ['sapling', 'appleSapling', 'mapleSapling']) {
       if ((state.inventory.get(item) ?? 0) < 1) continue;
       for (let k = 0; k < 4; k += 1) {
         const x = Math.floor(nextFloat(rng) * state.cube.size.x);

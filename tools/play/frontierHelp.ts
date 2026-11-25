@@ -130,6 +130,7 @@ export function frontierHelpText(): string {
     `  A maple holds ${FRONTIER_SURFACE.sapPerTree} sap, 1 a tap, and fills again as an apple tree does; then a tap fells it.`,
     `- An axe in your store fells a tree for ${FRONTIER_AXE.woodPerTree} wood, not ${FRONTIER_SURFACE.woodPerTree}. "saw X,Y" builds a saw house on lit, bare, undug ground`,
     `  (${cost(FRONTIER_SAW_HOUSE.cost)}; 1 tap): trees within ${campRadius(FRONTIER_SAW_HOUSE.radiusOfLevel)} squares of it give ${FRONTIER_SAW_HOUSE.bonus} more wood. Its square is never mined.`,
+    '- "dirt X,Y" fills a dug square with one block of dirt, from nothing (1 tap); not beside a deeper square.',
     `  "shack X,Y" builds a sugar shack the same way (${cost(FRONTIER_SUGAR_SHACK.cost)}; 1 tap): while one stands, "make syrup" boils 3 sap into 1 syrup.`,
     `- "pen N" builds an animal pen at camp N (level ${FRONTIER_PEN.minLevel} or more; ${cost(FRONTIER_PEN.cost)}; one a camp; lost with it, its animals back to the store).`,
     `  "penin N" / "penout N" moves an animal from the store into it or back (up to ${FRONTIER_PEN.capacity}). Penned animals are never eaten.`,

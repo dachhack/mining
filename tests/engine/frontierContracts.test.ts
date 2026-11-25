@@ -281,7 +281,10 @@ describe('the board offers only what the world can fill (owner, on the hazards b
     // Relics and keystones in every world; tier 2's coal asks for 40, not 80.
     for (let seed = 1; seed <= 20; seed += 1) {
       const stock = worldStock(createFrontier(seed));
-      for (const c of FRONTIER_CONTRACTS) {
+      // Mushrooms come with rain (mushrooms.ts): a new world has none yet.
+      for (const c of FRONTIER_CONTRACTS.filter(
+        (k) => !k.asks.some((a) => a.item === 'mushroom'),
+      )) {
         expect(worldCanFill(stock, c.asks), `${c.id} on seed ${seed}`).toBe(true);
       }
     }

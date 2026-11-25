@@ -159,6 +159,7 @@ In this order:
 - **The level rule** (owner: "After mining, at most 1 step"): after the mine, the square must be no more than 1 level lower than each of its face neighbours. Going deep means digging a terraced pit, about one more ring of squares a level.
 - **The camps' levels and the tools:** a block can be mined only if a camp whose circle covers the square has a level that mines it (section 3.5). Where several camps cover a square, the best level counts. A block no camp level mines (ore, crystal, relics) can be mined on any camp's lit ground while the store holds a tool that mines it; a tool does not help with a block a camp level mines. A refused tap names one thing: the camp level, or the tool.
 - **A camp's own 3×3 is never mined.**
+- **Filling with dirt** (owner, after the 0.17.0 build: "Fill any square with dirt as a move. No resource restrictions. Height restrictions still apply."): the 🔨 tool's 🟫 Dirt choice puts one block of dirt on top of a lit, dug square, for 1 tap and nothing else. The level rule holds: a square cannot be filled while a face neighbour is deeper than it (fill that one first). Not on a camp's ground, a building, water, fire or a dragon. What was on top is buried, not lost.
 - **The order of the checks:** a tap the level rule forbids says so ("too steep") before saying a block is too hard, so an upgrade never promises a block the level rule still forbids.
 
 ### 4.4 Undo
@@ -250,6 +251,7 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 - **The saw house** (owner, after the 0.17.0 build: "you can build a one-square building saw house that increases the harvest of all trees within a camp level 1 radius by 1") is one of them, for [Default] 15 wood and 10 stone and 1 tap, on one lit square of ground never dug with nothing on it (no camp, plant, stump, animal, water, fire or dragon). Every tree felled inside the circle of a level-1 camp's radius (9) round it gives 1 more wood: 3 without an axe, 4 with one. A tree in reach of two saw houses gets the bonus [Default] once. Its square is never mined, planted or built on, and a gas blast passes it by. It cannot be removed.
 - **The sugar shack** (owner, after the 0.17.0 build: "Let's add maple tree saplings and a one square sugar shack where you can produce syrup if you harvest sap") is the other, for [Default] 15 wood and 10 clay. While one stands anywhere, the recipe book boils [Default] 3 sap into 1 syrup, for 1 tap. Syrup sells for [Default] 8 coins; sap for 1 coin a 2.
 - **The steel drill** (bought only, question 172): mines what the iron drill does, and crystal, unstable ore, relics and the keystone.
+- **One is enough** (owner, after the 0.17.0 build: "Recipe book can hide items where it doesn't help to have a second"): while the store holds an item a second of which adds nothing (the pickaxe, the drills, the axe, the sword; `FRONTIER_MARKET.uselessWhenHeld`), the recipe book leaves out its recipe and it cannot be made, as the market leaves it out.
 - **The recipe book** lists what a new camp and each upgrade cost, and what is made with a smelter (with a Make button). Pinned recipes show, in the tray, how much of each item the player holds against what is needed. Pins are saved (question 143).
 
 ## 6a. The market [Decided cadence; prices Default]
@@ -260,7 +262,7 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 - **Money** is an item, **coins** (question 170). A run starts with none.
 - **Trading:** while the market is open, the player sells or buys any whole number of one item's lots, and takes a contract; none of it costs a tap. Nothing else can be done until the market is closed. A lot is [Default] (`FRONTIER_MARKET`):
   - sold: 5 grass, 2 wood, 2 apples or 2 clay for 1 coin; 10 stone for 1 coin; 1 animal for 3; 1 coal for 1; 1 raw iron or copper ore for 2; 1 ingot for 5; 1 crystal for 20; 1 rare ore for 15; 1 relic for 40;
-  - bought: 1 animal for 8 coins; 1 clay for 1 coin; 1 sapling for 3, 1 apple sapling for 6; 1 hay for 1; once a tier-1 contract is done, a camp kit for 150, 10 wood for 8 and 5 apples for 5; and, while the best camp is level 3 or more, an iron drill for 80, a steel drill for 250, an iron pickaxe for 60 and a copper lantern for 40; an axe for 25 and a maple sapling for 6 from the start. Saplings and hay join with farming (plan section 6).
+  - bought: 1 animal for 8 coins; 1 clay for 1 coin; 1 sapling for 3, 1 apple sapling for 6; 1 hay for 1; 10 wood for 8 and 5 apples for 5 (from the start: owner, after the 0.17.0 build; until then after a tier-1 contract); once a tier-1 contract is done, a camp kit for 150; and, while the best camp is level 3 or more, an iron drill for 80, a steel drill for 250, an iron pickaxe for 60 and a copper lantern for 40; an axe for 25 and a maple sapling for 6 from the start. Saplings and hay join with farming (plan section 6).
   - Nothing can be bought and sold back at a profit.
   - An item a second of which adds nothing is not on sale while one is held, and is bought one at a time (owner, after the 0.17.0 build: "If you own an item and it doesn't help to buy another one, remove that item from the market"): the iron pickaxe, the drills (the iron drill also while a steel drill is held), the axe and the sword (`FRONTIER_MARKET.uselessWhenHeld`). Pumps, lanterns, camp kits and saplings stay on sale: more of them help.
 - A trade can be undone while the market is open; closing it starts a new Undo history.
@@ -275,6 +277,15 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 - **Growing:** a sapling becomes a tree [Default] 15 shifts later, an apple sapling an apple tree full of apples [Default] 20 shifts later, by the stump rules (section 4.2): it waits under an animal or a camp, and mining its square digs it out.
 - **Maple trees** (owner, after the 0.17.0 build) grow only from maple saplings ([Default] 6 coins at the market from the start; a maple tree [Default] 20 shifts after planting). A maple holds [Default] 3 sap; a tap takes 1, and tapped dry it fills again as an apple tree's apples come back. A dry maple is felled for wood by the next tap, as an emptied apple tree is. Sap is boiled into syrup at a sugar shack (section 6). On the map a maple is red-orange, with a sap bucket while it holds sap.
 - **Interface:** while a sapling is held, a 🌱 button in the tray opens the planting mode: choose a sapling, an apple sapling or a maple sapling, then each tap on the map plants one, or the hint says why it cannot. A planted sapling is drawn as a small sprout. Planting can be undone.
+
+## 7c. Mushrooms [Decided; numbers Default]
+
+Owner, after the 0.17.0 build: "If a (non-maple) tree is standing when rain happens, 3-7 days later a mushroom has a chance of emerging. The chance increases for every adjacent space where there is another tree. Contracts for mushrooms in the market and mushrooms sell for gold."
+
+- **When:** on a night it rains, every tree or apple tree (not a maple) with no mushroom on it or coming gets one coming with a chance of [Default] 2%, plus [Default] 3% for each of the 8 squares round it with a tree of any kind, at most [Default] 30% (`FRONTIER_MUSHROOM`).
+- **Where and when it comes up:** on the tree's square, after [Default] 3 to 7 nights (drawn), if that ground has still never been dug and no camp or building stands on it; otherwise it is lost. The night's news says how many came up.
+- **Picking:** a tap on the square picks the mushroom (1 mushroom) before anything else there; the tree is untouched. On the map it is a small red-capped mushroom at the tree's foot.
+- **Use:** sold at the market for [Default] 3 coins each; contracts ask for them: tier 1, 10 mushrooms for 60 coins; tier 2, 30 for 220. The board offers them only once the mushrooms standing, coming and held add up to what they ask.
 
 ## 7b. Hay and animal pens [Decided; numbers Default]
 

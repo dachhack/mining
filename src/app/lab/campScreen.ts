@@ -99,6 +99,8 @@ import {
   plantRefusal,
   buildCampBuilding,
   buildRefusal,
+  fillCampSquare,
+  fillSquareRefusal,
   nextMarketShift,
   smelterRefusal,
   tradeCamp,
@@ -166,7 +168,7 @@ import {
   drawWater,
 } from './hazardArt';
 import { itemInfo } from './itemInfo';
-import { drawSawHouse, drawSugarShack } from './buildingArt';
+import { drawMushroom, drawSawHouse, drawSugarShack } from './buildingArt';
 import { showNight } from './night';
 import type { Night } from './night';
 
@@ -179,6 +181,7 @@ const HARVEST_HINTS = {
   felled: 'Tree felled. The ground under it can be dug now.',
   apple: 'An apple picked. Empty trees regrow their apples after a while.',
   sap: 'Sap tapped. Boil it into syrup at a sugar shack.',
+  mushroom: 'A mushroom picked. Sell it, or fill a mushroom contract.',
   caught: 'Animal caught!',
 };
 const GREYED_HINT = 'Out of range now: put a camp nearby to mine here.';
@@ -196,19 +199,46 @@ const PLANT_REFUSALS: Record<string, string> = {
 };
 /** How far a saw house reaches: a level-1 camp's ring (owner, after the 0.17.0 build). */
 const SAW_REACH = campRadius(FRONTIER_SAW_HOUSE.radiusOfLevel);
+const FILL_HINT = 'Tap a dug square to fill it 1 level. Free.';
+/** Why a square cannot be filled, for the hint. */
+const FILL_REFUSALS: Record<string, string> = {
+  noTaps: 'No taps left this shift: tap End shift to carry on.',
+  over: 'This run is over. Tap New world to start another.',
+  notShown: 'Fill only inside a camp’s ring.',
+  surface: 'Nothing to fill: that ground was never dug.',
+  camp: 'Not on a camp’s ground.',
+  building: 'A building stands there.',
+  hazard: 'Not on water, fire or a dragon.',
+  neighbourDeeper: 'Too high: fill the deeper squares beside it first.',
+};
 /** The one-square buildings the 🔨 tool builds, in its order: name, icon, and what it does. */
-const BUILDINGS: { kind: BuildingKind; name: string; icon: string; does: string }[] = [
-  {
-    kind: 'sawHouse',
-    name: 'Saw house',
-    icon: '🪚',
-    does: `+${FRONTIER_SAW_HOUSE.bonus} wood a tree within ${SAW_REACH}.`,
-  },
-  { kind: 'sugarShack', name: 'Sugar shack', icon: '🍁', does: 'Boils maple sap into syrup.' },
-];
+const BUILDINGS: { kind: BuildingKind; name: string; short: string; icon: string; does: string }[] =
+  [
+    {
+      kind: 'sawHouse',
+      name: 'Saw house',
+      short: 'Saw',
+      icon: '🪚',
+      does: `+${FRONTIER_SAW_HOUSE.bonus} wood a tree within ${SAW_REACH}.`,
+    },
+    {
+      kind: 'sugarShack',
+      name: 'Sugar shack',
+      short: 'Shack',
+      icon: '🍁',
+      does: 'Boils maple sap into syrup.',
+    },
+  ];
 /** The building of kind `kind`'s entry in BUILDINGS. */
-function buildingInfo(kind: BuildingKind): { name: string; icon: string; does: string } {
-  return BUILDINGS.find((b) => b.kind === kind) ?? { name: kind, icon: '🏠', does: '' };
+function buildingInfo(kind: BuildingKind): {
+  name: string;
+  short: string;
+  icon: string;
+  does: string;
+} {
+  return (
+    BUILDINGS.find((b) => b.kind === kind) ?? { name: kind, short: kind, icon: '🏠', does: '' }
+  );
 }
 /** Why a building cannot be built, for the hint. */
 const BUILD_REFUSALS: Record<string, string> = {
@@ -278,7 +308,12 @@ function shiftText(report: ShiftReport, turn: CampTurn, rested: boolean): string
       : raid.turnedAway
         ? ` Marauders 🏴 came for camp ${raid.campId}, but its defenses turned them away.`
         : ` Marauders 🏴 raided camp ${raid.campId}${raid.stolen.length > 0 ? `, stole ${raid.stolen.map((st) => `${st.count} ${itemName(st.item).toLowerCase()}`).join(', ')}` : ''}${raid.upgradesLost > 0 ? `, and tore down ${raid.upgradesLost === 1 ? 'an upgrade' : `${raid.upgradesLost} upgrades`}` : ''}. Build defenses 🛡 at your camps.`;
-  const market = `${born}${rain}${pumped}${burnt}${dragon}${raided}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
+  // Mushrooms (owner, after the 0.17.0 build) come up some nights after rain.
+  const mushrooms =
+    report.mushroomsCame > 0
+      ? ` ${report.mushroomsCame === 1 ? 'A mushroom 🍄 came' : `${report.mushroomsCame} mushrooms 🍄 came`} up under the trees.`
+      : '';
+  const market = `${born}${rain}${mushrooms}${pumped}${burnt}${dragon}${raided}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
   if (turn.status === 'finished') {
     return `${start}. That was the last shift: the run is over.`;
   }
@@ -343,7 +378,9 @@ type Mode =
   // Planting saplings: each tap on the map plants one `item` (progression PR 3).
   | { kind: 'planting'; item: string }
   // Building saw houses: each tap on the map builds one (owner, after the 0.17.0 build).
-  | { kind: 'building'; what: BuildingKind };
+  // Building (a saw house or a sugar shack), or filling squares with dirt
+  // ('dirt'): each tap on the map builds or fills one (owner, after the 0.17.0 build).
+  | { kind: 'building'; what: BuildingKind | 'dirt' };
 
 /** How long each kind of effect lasts, in milliseconds. */
 function effectMs(kind: Effect['kind']): number {
@@ -654,6 +691,7 @@ export function mountCampLab(
       world.hazards.fires[i] === true ? 'f' : '',
       world.hazards.pumps.some((p) => p.x + world.lab.state.size.x * p.y === i) ? 'p' : '',
       world.buildings.find((b) => b.x + world.lab.state.size.x * b.y === i)?.kind ?? '',
+      world.mushrooms[i] === true ? 'm' : '',
     ].join(',');
   }
 
@@ -708,6 +746,7 @@ export function mountCampLab(
         sights,
         world.hazards,
         world.buildings,
+        world.mushrooms,
       ];
       drawnSquares = [];
       for (let i = 0; i < size.x * size.y; i += 1) drawnSquares.push(squareLook(i));
@@ -726,6 +765,7 @@ export function mountCampLab(
       sights,
       world.hazards,
       world.buildings,
+      world.mushrooms,
     ];
     if (key.every((k, i) => k === groundKey[i])) {
       return; // the same world: the ground is as it was
@@ -958,6 +998,8 @@ export function mountCampLab(
         const building = world.buildings.find((b) => b.x === x && b.y === y);
         if (building?.kind === 'sawHouse') drawSawHouse(ctx, box);
         if (building?.kind === 'sugarShack') drawSugarShack(ctx, box);
+        // A mushroom (owner, after the 0.17.0 build), at the foot of its tree.
+        if (world.mushrooms[i] === true) drawMushroom(ctx, box);
         // A fire (hazards PR 3), drawn still: the ground is drawn once and kept.
         if (world.hazards.fires[i] === true) drawFire(ctx, box, x, y, 0);
         if (sight === 'greyed') {
@@ -1014,6 +1056,11 @@ export function mountCampLab(
     });
     canvas.dataset['fires'] = fires.join(' ');
     canvas.dataset['dragons'] = world.hazards.dragons.map((d) => `${d.x},${d.y}`).join(' ');
+    const mushrooms: string[] = [];
+    world.mushrooms.forEach((m, i) => {
+      if (m) mushrooms.push(`${i % width},${Math.floor(i / width)}`);
+    });
+    canvas.dataset['mushrooms'] = mushrooms.join(' ');
     // The buildings, as "kind@x,y".
     canvas.dataset['buildings'] = world.buildings.map((b) => `${b.kind}@${b.x},${b.y}`).join(' ');
     // Each camp's defense level, as drawn on its marker: "id:level".
@@ -1604,6 +1651,7 @@ export function mountCampLab(
       'hay',
       'sap',
       'syrup',
+      'mushroom',
       FRONTIER_PUMP.item,
       FRONTIER_DRAGON.sword,
     ]) {
@@ -1759,7 +1807,7 @@ export function mountCampLab(
     // One-square buildings (owner, after the 0.17.0 build): a saw house or a sugar shack.
     const build = button('lab2-book-button', '🔨');
     build.dataset['testid'] = 'lab2-build-tool';
-    build.setAttribute('aria-label', 'Build a saw house or a sugar shack');
+    build.setAttribute('aria-label', 'Build a saw house or a sugar shack, or fill with dirt');
     build.title = 'Build';
     build.addEventListener('click', () => setMode({ kind: 'building', what: 'sawHouse' }));
     head.append(build);
@@ -1853,7 +1901,11 @@ export function mountCampLab(
   function pinStrip(): HTMLElement {
     const strip = element('div', 'lab2-pins');
     strip.dataset['testid'] = 'lab2-pins';
-    const pinned = pins.map((id) => recipeById(id)).filter((r): r is Recipe => r !== null);
+    const pinned = pins
+      .map((id) => recipeById(id))
+      .filter((r): r is Recipe => r !== null)
+      // A second of this would add nothing: its pin waits until it would.
+      .filter((r) => r.makes === null || !ownsUseful(toFrontier(world), r.makes.item));
     if (pinned.length === 0) {
       strip.append(element('span', 'lab2-pins-empty', 'Pin a recipe from the book 📖'));
       return strip;
@@ -1974,6 +2026,8 @@ export function mountCampLab(
     const list = element('div', 'lab2-book-list');
     list.dataset['testid'] = 'lab2-book-list';
     for (const recipe of labRecipes()) {
+      // A second of this would add nothing (owner, after the 0.17.0 build).
+      if (recipe.makes !== null && ownsUseful(toFrontier(world), recipe.makes.item)) continue;
       const row = element('div', 'lab2-recipe');
       row.dataset['testid'] = `lab2-recipe-${recipe.id}`;
       const pinned = pins.includes(recipe.id);
@@ -2432,40 +2486,64 @@ export function mountCampLab(
    * it does and costs, and ×. Each tap on bare, undug, lit ground builds the
    * one chosen, for 1 tap.
    */
-  function showBuildingTray(what: BuildingKind): void {
-    const info = buildingInfo(what);
-    const cost = BUILDING_COSTS[what];
+  function showBuildingTray(what: BuildingKind | 'dirt'): void {
     const head = element('div', 'lab2-panel-head');
     head.append(element('span', 'lab2-panel-title', '🔨 Build'));
-    // The cost goes in the head: beside the two choices it would not fit a
-    // phone, and a row of its own would grow the tray and move the map.
-    const costs = costRow(cost);
-    costs.dataset['testid'] = 'lab2-build-cost';
-    head.append(costs);
+    const body = element('p', 'lab2-panel-line');
+    body.dataset['testid'] = 'lab2-build-line';
+    if (what === 'dirt') {
+      // Filling with dirt costs nothing but the tap (owner: "No resource restrictions").
+      body.textContent = FILL_HINT;
+    } else {
+      const info = buildingInfo(what);
+      const cost = BUILDING_COSTS[what];
+      // The cost goes in the head: beside the choices it would not fit a
+      // phone, and a row of its own would grow the tray and move the map.
+      const costs = costRow(cost);
+      costs.dataset['testid'] = 'lab2-build-cost';
+      head.append(costs);
+      body.textContent = `Tap bare ground. ${info.does}`;
+      if (!canAfford(world.lab.counts, cost)) {
+        body.textContent = `${missingText(cost)} · ${info.does}`;
+        body.classList.add('lab2-panel-warn');
+      }
+    }
     const cancel = button('lab2-close', '×');
     cancel.setAttribute('aria-label', 'Stop building');
     cancel.dataset['testid'] = 'lab2-build-cancel';
     cancel.addEventListener('click', () => setMode({ kind: 'idle' }));
     head.append(cancel);
-    const line = `Tap bare ground. ${info.does}`;
-    const body = element('p', 'lab2-panel-line', line);
-    body.dataset['testid'] = 'lab2-build-line';
-    if (!canAfford(world.lab.counts, cost)) {
-      body.textContent = `${missingText(cost)} · ${info.does}`;
-      body.classList.add('lab2-panel-warn');
-    }
+    // The choices, short so three fit a 320 px phone: the line above says what each does.
+    const choices: { kind: BuildingKind | 'dirt'; label: string; name: string }[] = [
+      ...BUILDINGS.map((b) => ({ kind: b.kind, label: `${b.icon} ${b.short}`, name: b.name })),
+      { kind: 'dirt', label: '🟫 Dirt', name: 'Fill with dirt' },
+    ];
     const actions = element('div', 'lab2-actions');
-    for (const b of BUILDINGS) {
+    for (const c of choices) {
       const choose = button(
-        b.kind === what ? 'lab2-button lab2-button-main' : 'lab2-button',
-        `${b.icon} ${b.name}`,
+        c.kind === what ? 'lab2-button lab2-button-main' : 'lab2-button',
+        c.label,
       );
-      choose.dataset['testid'] = `lab2-build-${b.kind}`;
-      choose.setAttribute('aria-pressed', String(b.kind === what));
-      choose.addEventListener('click', () => setMode({ kind: 'building', what: b.kind }));
+      choose.dataset['testid'] = `lab2-build-${c.kind}`;
+      choose.setAttribute('aria-label', c.name);
+      choose.setAttribute('aria-pressed', String(c.kind === what));
+      choose.addEventListener('click', () => setMode({ kind: 'building', what: c.kind }));
       actions.append(choose);
     }
     tray.replaceChildren(head, body, actions);
+  }
+
+  /** A tap on the map while filling: fill it, or say why not. */
+  function tapWhileFilling(x: number, y: number): void {
+    canvas.dataset['lastTap'] = `fill ${x},${y}`;
+    const why = fillSquareRefusal(world, x, y);
+    if (why !== null) {
+      setHint(FILL_REFUSALS[why] ?? 'That square cannot be filled.', true);
+      return;
+    }
+    remember({ kind: 'fillSquare', x, y });
+    setWorld(fillCampSquare(world, x, y));
+    setHint('Filled with dirt: 1 level higher.', false);
   }
 
   /** A tap on the map while building: build the chosen one there, or say why not. */
@@ -3036,6 +3114,7 @@ export function mountCampLab(
     if (step.kind === 'demolish') return `demolishing camp ${step.id}`;
     if (step.kind === 'sell' || step.kind === 'buy') return `the ${step.kind} of ${step.item}`;
     if (step.kind === 'plant') return `planting at ${step.x}, ${step.y}`;
+    if (step.kind === 'fillSquare') return `filling ${step.x}, ${step.y}`;
     if (step.kind === 'build') {
       return isBuildingKind(step.building)
         ? `the ${buildingInfo(step.building).name.toLowerCase()} at ${step.x}, ${step.y}`
@@ -3091,9 +3170,11 @@ export function mountCampLab(
       return;
     }
     if (mode.kind === 'building') {
-      tapWhileBuilding(x, y, mode.what);
+      if (mode.what === 'dirt') tapWhileFilling(x, y);
+      else tapWhileBuilding(x, y, mode.what);
       return;
     }
+
     const result = campTap(world, x, y);
     canvas.dataset['lastTap'] = `${result.kind} ${x},${y}`;
     if (result.kind === 'fog') {

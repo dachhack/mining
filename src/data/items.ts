@@ -45,7 +45,9 @@ export type ItemId =
   // Maple trees, their sap and the syrup boiled from it (owner, after the 0.17.0 build).
   | 'mapleSapling'
   | 'sap'
-  | 'syrup';
+  | 'syrup'
+  // Picked where a tree stood in the rain (owner, after the 0.17.0 build).
+  | 'mushroom';
 
 // Fuel is a gauge, not an item, so it is not here. The torch and the safety
 // lamp are gone with light (design doc v0.2, section 7). Items have no weight:
@@ -92,6 +94,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   mapleSapling: { name: 'Maple saplings' },
   sap: { name: 'Sap' },
   syrup: { name: 'Syrup' },
+  mushroom: { name: 'Mushrooms' },
   appleSapling: { name: 'Apple saplings' },
   copperLantern: { name: 'Copper lantern' },
 };

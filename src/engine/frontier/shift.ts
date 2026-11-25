@@ -70,6 +70,8 @@ import {
   smelterRefusal,
 } from './smelting';
 import { build, buildRefusal } from './buildings';
+import { fillSquare, fillSquareRefusal } from './fill';
+import { nightOfMushrooms } from './mushrooms';
 import { frontierTap } from './tap';
 import type { FrontierTap } from './tap';
 import { GRASS, NO_FEATURE } from './state';
@@ -111,6 +113,8 @@ export type FrontierAction =
   | { kind: 'plant'; x: number; y: number; item: string }
   // Build a one-square building, a saw house or a sugar shack, on square (x, y) (buildings.ts).
   | { kind: 'build'; building: string; x: number; y: number }
+  // Fill square (x, y) with one block of dirt (fill.ts).
+  | { kind: 'fillSquare'; x: number; y: number }
   | { kind: 'buy'; item: string; lots: number }
   | { kind: 'close' };
 
@@ -140,6 +144,8 @@ export interface ShiftReport {
   rained: boolean;
   /** Squares the rain filled. */
   rainFilled: number;
+  /** Mushrooms that came up in the night (mushrooms.ts). */
+  mushroomsCame: number;
   /** Flooded squares the pumps drained (water.ts). */
   drained: number;
   /** Pumps whose flood is dry: back in the store. */
@@ -309,7 +315,7 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
       isFlooded({ cube: state.cube, hazards: pumping.hazards }, x, y) ||
       pumping.hazards.fires[x + width * y] === true,
   );
-  const next: FrontierState = {
+  const beforeMushrooms: FrontierState = {
     ...state,
     cube: rain.cube,
     hazards: pumping.hazards,
@@ -331,6 +337,9 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
     // A lost crew ends the run first; otherwise the run is over once its last shift has ended.
     status: health <= 0 ? 'lost' : state.shift >= FRONTIER_RUN.shifts ? 'finished' : 'active',
   };
+  // Mushrooms, after the rain that sets them coming (mushrooms.ts).
+  const mushroomed = nightOfMushrooms(beforeMushrooms, rain.rained, rng);
+  const next: FrontierState = { ...mushroomed.state, rng };
   // A market day's market opens now, after the night, before the day (market.ts).
   next.marketOpen = isMarketDay(next);
   return {
@@ -351,6 +360,7 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
       marketOpens: next.marketOpen,
       rained: rain.rained,
       rainFilled: rain.filled.length,
+      mushroomsCame: mushroomed.came,
       drained: pumping.drained,
       pumpsBack: pumping.pumpsBack,
       burned: fire.burned,
@@ -598,6 +608,10 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
   if (action.kind === 'buildDefense') {
     const why = defenseRefusal(state, action.id);
     return why === null ? spent(buildDefense(state, action.id)) : refused(state, why);
+  }
+  if (action.kind === 'fillSquare') {
+    const why = fillSquareRefusal(state, action.x, action.y);
+    return why === null ? spent(fillSquare(state, action.x, action.y)) : refused(state, why);
   }
   if (action.kind === 'build') {
     const why = buildRefusal(state, action.building, action.x, action.y);

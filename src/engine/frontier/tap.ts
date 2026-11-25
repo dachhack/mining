@@ -8,7 +8,7 @@
 // 2. an animal there is caught, even on a camp's ground;
 // 3. a camp's own 3 x 3 is never mined ('camp'), nor a building's square
 //    ('building'; buildings.ts);
-// 4. grass, a tree or an apple tree is taken before the block under it;
+// 4. a mushroom, grass, a tree or an apple tree is taken before the block under it;
 // 4a. a flooded square (water.ts) is never mined: a tap sets a pump from the
 //    store on it, or picks up the pump that is there ('pump'), or, with no
 //    pump, does nothing ('flooded');
@@ -291,6 +291,9 @@ export function previewTap(
   if (campAt(state.camps, x, y) !== null) return { kind: 'camp', gain: [] };
   if (buildingAt(state, x, y) !== null) return { kind: 'building', gain: [] };
   const i = x + state.cube.size.x * y;
+  if (state.mushrooms[i] === true) {
+    return { kind: 'harvested', gain: [{ item: 'mushroom', count: 1 }] };
+  }
   const feature = state.features[i];
   if (feature === GRASS) {
     return { kind: 'harvested', gain: [{ item: 'grass', count: FRONTIER_SURFACE.grassPerTuft }] };

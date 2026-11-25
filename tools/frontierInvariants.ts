@@ -187,7 +187,8 @@ export function checkStep(
   // Rain (hazards plan, section 1): at End shift a square may be filled by
   // 1 block, only if it was a low spot (worked out here: dug, no neighbour
   // deeper, some neighbour shallower) and not a camp's ground; the level rule
-  // still holds everywhere. Other steps never fill a square.
+  // still holds everywhere. "fillSquare" fills its own square by 1 block.
+  // Other steps never fill a square.
   if (after.cube !== before.cube && !(after.mined > before.mined)) {
     const w = before.cube.size.x;
     const h = before.cube.size.y;
@@ -228,7 +229,13 @@ export function checkStep(
           if (n < d) say(`the foundation raised ${x},${y}`);
           continue;
         }
-        if (!endsShift) say(`${x},${y} went from depth ${d} to ${n} without a mining tap`);
+        // Filling a square with dirt (fill.ts): that square, 1 level, never above a deeper neighbour.
+        const filledHere = verb === 'fillSquare' && step.split(' ')[1] === `${x},${y}`;
+        if (filledHere) {
+          if (n !== d - 1) say(`filling took ${x},${y} from depth ${d} to ${n}`);
+          else if (deeper) say(`filled ${x},${y}, beside a deeper square`);
+          else if (campAt(after.camps, x, y) !== null) say(`filled ${x},${y}, a camp's ground`);
+        } else if (!endsShift) say(`${x},${y} went from depth ${d} to ${n} without a mining tap`);
         else if (n !== d - 1) say(`rain took ${x},${y} from depth ${d} to ${n}`);
         else if (deeper || !shallower) say(`rain filled ${x},${y}, which was not a low spot`);
         else if (campAt(after.camps, x, y) !== null) say(`rain filled ${x},${y}, a camp's ground`);

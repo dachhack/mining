@@ -90,6 +90,7 @@ function explode(state: FrontierState, x: number, y: number): Blast {
     const i = sq.x + width * sq.y;
     if (campAt(state.camps, sq.x, sq.y) !== null) continue;
     if (buildingAt(state, sq.x, sq.y) !== null) continue;
+    if (state.mushrooms[i] === true) continue;
     if (hazards.flooded[i] === true) continue;
     if ((state.features[i] ?? NO_FEATURE) !== NO_FEATURE) continue;
     if ((state.stumps[i] ?? NO_FEATURE) !== NO_FEATURE) continue;

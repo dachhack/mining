@@ -547,6 +547,9 @@ export {
   sawHouseReaches,
   woodFromTree,
 } from './frontier/buildings';
+export { fillSquare, fillSquareRefusal } from './frontier/fill';
+export type { FillSquareRefusal } from './frontier/fill';
+export { mushroomAt, mushroomChance, nightOfMushrooms } from './frontier/mushrooms';
 export type { BuildRefusal } from './frontier/buildings';
 // Contracts and the phases of a run (PR 5).
 export {

@@ -91,6 +91,7 @@ export const FIRST_NAMES = [
   'axe',
   'sawHouse',
   'syrup',
+  'mushroom',
   'drill',
   'steelDrill',
   'lantern',
@@ -116,6 +117,7 @@ function reached(state: FrontierState): Set<FirstName> {
   if (held(FRONTIER_PICKAXE.item)) got.add('pickaxe');
   if (held(FRONTIER_AXE.item)) got.add('axe');
   if (state.buildings.some((b) => b.kind === 'sawHouse')) got.add('sawHouse');
+  if (held('mushroom')) got.add('mushroom');
   if (held('syrup') || state.buildings.some((b) => b.kind === 'sugarShack')) got.add('syrup');
   if (held(FRONTIER_DRILL.item)) got.add('drill');
   if (held(FRONTIER_STEEL_DRILL.item)) got.add('steelDrill');

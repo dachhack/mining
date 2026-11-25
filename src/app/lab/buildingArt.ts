@@ -97,3 +97,43 @@ export function drawSugarShack(ctx: CanvasRenderingContext2D, box: SquareBox): v
   ctx.stroke();
   ctx.restore();
 }
+
+/**
+ * A mushroom (owner, after the 0.17.0 build): a red cap with white spots on
+ * a pale stalk, small, at the bottom-left of its square, so the tree over it
+ * still shows.
+ */
+export function drawMushroom(ctx: CanvasRenderingContext2D, box: SquareBox): void {
+  const s = box.inner;
+  const cx = box.left + s * 0.3;
+  const base = box.top + s * 0.94;
+  const r = s * 0.24;
+  ctx.save();
+  // The stalk.
+  ctx.fillStyle = '#efe6d2';
+  ctx.strokeStyle = '#5b4a36';
+  ctx.lineWidth = Math.max(1, s * 0.03);
+  ctx.beginPath();
+  ctx.rect(cx - r * 0.35, base - r * 1.1, r * 0.7, r * 1.1);
+  ctx.fill();
+  ctx.stroke();
+  // The cap.
+  ctx.fillStyle = '#d23a2c';
+  ctx.beginPath();
+  ctx.arc(cx, base - r * 1.05, r, Math.PI, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // Its spots.
+  ctx.fillStyle = '#ffffff';
+  for (const [dx, dy] of [
+    [-0.45, -0.35],
+    [0.3, -0.55],
+    [0.05, -0.2],
+  ] as const) {
+    ctx.beginPath();
+    ctx.arc(cx + dx * r, base - r * 1.05 + dy * r, r * 0.14, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}

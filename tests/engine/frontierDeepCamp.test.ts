@@ -72,13 +72,19 @@ describe('the deep camp (plan section 2.4)', () => {
 });
 
 describe('the market from the first tier-1 contract (plan section 3)', () => {
-  it('sells the camp kit, wood and apples only once a tier-1 contract is done', () => {
+  it('sells the camp kit only once a tier-1 contract is done', () => {
     const w = { ...world({ inventory: { coin: 1000 } }), shift: 30, marketOpen: true };
     expect(isMarketDay(w)).toBe(true);
-    for (const item of ['campKit', 'wood', 'apple']) {
-      expect(frontierAct(w, { kind: 'buy', item, lots: 1 }).refusal, item).toBe('notYet');
-      const done = { ...w, contractsDone: [1, 0, 0] };
-      expect(frontierAct(done, { kind: 'buy', item, lots: 1 }).done, item).toBe(true);
+    expect(frontierAct(w, { kind: 'buy', item: 'campKit', lots: 1 }).refusal).toBe('notYet');
+    const done = { ...w, contractsDone: [1, 0, 0] };
+    expect(frontierAct(done, { kind: 'buy', item: 'campKit', lots: 1 }).done).toBe(true);
+  });
+
+  it('sells wood and apples from the start (owner, after the 0.17.0 build)', () => {
+    // "Apples and wood can be in sale at the start."
+    const w = { ...world({ inventory: { coin: 1000 } }), shift: 30, marketOpen: true };
+    for (const item of ['wood', 'apple']) {
+      expect(frontierAct(w, { kind: 'buy', item, lots: 1 }).done, item).toBe(true);
     }
   });
 });

@@ -62,6 +62,8 @@ export function itemInfo(item: string): string | null {
       return `From a maple tree, 1 a tap (${FRONTIER_SURFACE.sapPerTree} a tree). Boil it into syrup at a sugar shack.`;
     case 'syrup':
       return 'Boiled from maple sap at a sugar shack. Sells well at the market.';
+    case 'mushroom':
+      return 'Comes up under trees some nights after rain. Sells for coins; mushroom contracts ask for it.';
     case 'appleSapling':
       return `Plant it with 🌱 on bare dirt: an apple tree in ${FRONTIER_SAPLINGS.appleSaplingGrowShifts} shifts.`;
     case FRONTIER_PUMP.item:

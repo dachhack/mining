@@ -72,7 +72,8 @@ import { APPLE_TREE, MAPLE_TREE, NO_FEATURE, TREE, cropOf } from '../src/engine/
  * an apple sapling on square X,Y), "buildPen ID", "penIn ID" or "penOut ID"
  * (a pen at camp ID, an animal into it or out of it), "takeContract ID"
  * (a contract from today's board), "deliver ID", "dropContract ID", or
- * "placeDeep X,Y" (a deep camp), "build KIND X,Y" (a saw house or a sugar shack), or
+ * "placeDeep X,Y" (a deep camp), "fillSquare X,Y" (a block of dirt on a dug
+ * square), "build KIND X,Y" (a saw house or a sugar shack), or
  * "closeMarket" (the market closes and the day starts).
  */
 export type FrontierStep = string;
@@ -150,7 +151,10 @@ export function actionOf(step: FrontierStep): FrontierAction {
   if (verb === 'make' && arg !== undefined) {
     return { kind: 'make', recipe: arg };
   }
-  if ((verb === 'tap' || verb === 'place' || verb === 'placeDeep') && arg !== undefined) {
+  if (
+    (verb === 'tap' || verb === 'place' || verb === 'placeDeep' || verb === 'fillSquare') &&
+    arg !== undefined
+  ) {
     return { kind: verb, ...squareOf(arg) };
   }
   if (verb === 'build' && arg !== undefined && third !== undefined) {

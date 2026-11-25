@@ -14,6 +14,7 @@
 // charges it. The numbers are in src/data/frontier.ts.
 
 import { hasBuilding } from './buildings';
+import { ownsUseful } from './market';
 import type { ItemStack } from '../../data';
 import { FRONTIER_LANTERN, FRONTIER_RECIPES, FRONTIER_SMELTER } from '../../data/frontier';
 import type { FrontierRecipe } from '../../data/frontier';
@@ -66,15 +67,20 @@ export function frontierRecipe(id: string): FrontierRecipe | null {
  * - 'unknown': there is no such recipe;
  * - 'noSmelter': it needs a smelter, and no camp has one;
  * - 'noSugarShack': it needs a sugar shack, and none stands (buildings.ts);
+ * - 'owned': it makes an item a second of which adds nothing, and the store
+ *   holds one (FRONTIER_MARKET.uselessWhenHeld; owner, after the 0.17.0
+ *   build: "Recipe book can hide items where it doesn't help to have a
+ *   second");
  * - 'cost': the store does not hold its inputs.
  */
-export type MakeRefusal = 'unknown' | 'noSmelter' | 'noSugarShack' | 'cost';
+export type MakeRefusal = 'unknown' | 'noSmelter' | 'noSugarShack' | 'owned' | 'cost';
 
 export function makeRefusal(state: FrontierState, id: string): MakeRefusal | null {
   const recipe = frontierRecipe(id);
   if (recipe === null) return 'unknown';
   if (recipe.needsSmelter && !hasSmelter(state)) return 'noSmelter';
   if (recipe.needsSugarShack === true && !hasBuilding(state, 'sugarShack')) return 'noSugarShack';
+  if (ownsUseful(state, recipe.output.item)) return 'owned';
   if (!canAfford(state.inventory, recipe.inputs)) return 'cost';
   return null;
 }

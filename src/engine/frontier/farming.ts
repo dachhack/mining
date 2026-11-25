@@ -66,6 +66,7 @@ export function plantRefusal(
   if (
     (state.features[i] ?? NO_FEATURE) !== NO_FEATURE ||
     state.planted[i] === true ||
+    state.mushrooms[i] === true ||
     buildingAt(state, x, y) !== null
   ) {
     return 'occupied';

@@ -569,6 +569,8 @@ export const FRONTIER_MARKET = {
     // Maple sap and the syrup boiled from it (owner, after the 0.17.0 build).
     { item: 'sap', count: 2, coins: 1 },
     { item: 'syrup', count: 1, coins: 8 },
+    // Mushrooms (owner, after the 0.17.0 build: "mushrooms sell for gold").
+    { item: 'mushroom', count: 1, coins: 3 },
   ] as FrontierLot[],
   /**
    * Items a second of which adds nothing (owner, after the 0.17.0 build: "If
@@ -607,11 +609,13 @@ export const FRONTIER_MARKET = {
     { item: 'sword', count: 1, coins: 60, fromLevel: 3 },
     // The axe: more wood from each tree, from the start.
     { item: 'axe', count: 1, coins: 25 },
-    // From the first tier-1 contract (phase 4): the deep camp's kit, and
-    // wood and food in bulk, so farming becomes a choice.
+    // From the first tier-1 contract (phase 4): the deep camp's kit.
     { item: 'campKit', count: 1, coins: 150, afterTier1: true },
-    { item: 'wood', count: 10, coins: 8, afterTier1: true },
-    { item: 'apple', count: 5, coins: 5, afterTier1: true },
+    // Wood and food in bulk, from the start (owner, after the 0.17.0 build:
+    // "Apples and wood can be in sale at the start"; until then they came
+    // with the first tier-1 contract).
+    { item: 'wood', count: 10, coins: 8 },
+    { item: 'apple', count: 5, coins: 5 },
   ] as FrontierLot[],
 };
 
@@ -700,6 +704,14 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
     asks: [{ item: 'clay', count: 80 }],
     pays: 70,
   },
+  // Mushrooms (owner, after the 0.17.0 build: "Contracts for mushrooms in the market").
+  {
+    id: 't1-mushrooms',
+    tier: 1,
+    name: 'Mushrooms for the cook',
+    asks: [{ item: 'mushroom', count: 10 }],
+    pays: 60,
+  },
   // Tier 2: bulk stone, ore, ingots and clay.
   {
     id: 't2-stone',
@@ -754,6 +766,13 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
     name: 'Bricks for a town',
     asks: [{ item: 'clay', count: 400 }],
     pays: 380,
+  },
+  {
+    id: 't2-mushrooms',
+    tier: 2,
+    name: 'Mushrooms for a feast',
+    asks: [{ item: 'mushroom', count: 30 }],
+    pays: 220,
   },
   // Tier 3: crystal, rare ore and relics.
   { id: 't3-crystal', tier: 3, name: 'Crystal', asks: [{ item: 'crystal', count: 10 }], pays: 700 },
@@ -831,6 +850,34 @@ export const FRONTIER_RAIN = {
   clayChance: 1 / 3,
   fillBlock: 'dirt' as BlockId,
   clayBlock: 'clay' as BlockId,
+};
+
+/**
+ * Mushrooms (owner, after the 0.17.0 build: "If a (non-maple) tree is
+ * standing when rain happens, 3-7 days later a mushroom has a chance of
+ * emerging. The chance increases for every adjacent space where there is
+ * another tree."). On a night it rains, each square with a tree or an apple
+ * tree (not a maple), and no mushroom on it or coming, gets one coming with a
+ * chance of `chance` plus `perTreeBeside` for each of the 8 squares round it
+ * with a tree of any kind, at most `most`. It comes up a whole number of
+ * nights drawn from `nights` later, at the End shift, if its square is still
+ * ground never dug with no camp or building on it. A tap picks it (1
+ * mushroom) before anything else on the square. Every number is a [Default].
+ */
+export const FRONTIER_MUSHROOM = {
+  chance: 0.02,
+  perTreeBeside: 0.03,
+  most: 0.3,
+  nights: [3, 7] as [number, number],
+};
+
+/**
+ * Filling a square with dirt (owner, after the 0.17.0 build: "Fill any square
+ * with dirt as a move. No resource restrictions. Height restrictions still
+ * apply."): 1 tap puts one `block` on top of a dug square, from nothing.
+ */
+export const FRONTIER_FILL = {
+  block: 'dirt' as BlockId,
 };
 
 /**

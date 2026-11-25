@@ -7,6 +7,7 @@
 //   top block, by what mining it yields (blockDefByCode(...).yields; the
 //   pickaxe's doubling is not counted);
 // - what the store holds;
+// - the mushrooms standing and coming (mushrooms.ts);
 // - the ingots that ore and coal could be smelted into (FRONTIER_RECIPES:
 //   'smelt-iron' and 'smelt-copper'), on top of any held: each smelting
 //   recipe counted alone, as if the coal went to it only.
@@ -55,6 +56,10 @@ export function worldStock(state: FrontierState): Map<string, number> {
   for (const [item, count] of state.inventory) {
     stock.set(item, (stock.get(item) ?? 0) + count);
   }
+  // Mushrooms standing, and those coming (mushrooms.ts).
+  const mushrooms =
+    state.mushrooms.filter((m) => m).length + state.mushroomIn.filter((n) => n >= 0).length;
+  if (mushrooms > 0) stock.set('mushroom', (stock.get('mushroom') ?? 0) + mushrooms);
   // Ingots from smelting: as many times as the scarcest input allows.
   for (const recipe of FRONTIER_RECIPES) {
     if (!recipe.id.startsWith('smelt-')) continue;

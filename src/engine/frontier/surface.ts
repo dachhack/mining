@@ -2,6 +2,7 @@
 // ground level. Lab 2's harvests (src/app/lab/surface.ts), in the engine:
 //
 // - an animal standing on the square is caught (1 animal);
+// - a mushroom is picked (1 mushroom; mushrooms.ts);
 // - grass is cut (grass);
 // - an apple tree with apples gives one apple a tap, and a maple tree with
 //   sap one sap a tap (`cropOf`);
@@ -20,7 +21,7 @@ import { GRASS, NO_FEATURE, cropOf, isTree } from './state';
 import type { FrontierAnimal, FrontierState } from './state';
 
 /** What a harvest was: an animal 'caught', 'grass' cut, an 'apple' picked, 'sap' tapped or a tree 'felled'. */
-export type HarvestKind = 'caught' | 'grass' | 'apple' | 'sap' | 'felled';
+export type HarvestKind = 'caught' | 'mushroom' | 'grass' | 'apple' | 'sap' | 'felled';
 
 /** What `harvestAt` did: the state after it, what it gave and what it was. */
 export interface FrontierHarvest {
@@ -86,6 +87,11 @@ export function harvestAt(state: FrontierState, x: number, y: number): FrontierH
     return take({ ...state, animals }, { item: 'animal', count: 1 }, 'caught');
   }
   const i = x + state.cube.size.x * y;
+  // A mushroom is picked before what grows under it (mushrooms.ts).
+  if (state.mushrooms[i] === true) {
+    const mushrooms = replaced(state.mushrooms, i, false);
+    return take({ ...state, mushrooms }, { item: 'mushroom', count: 1 }, 'mushroom');
+  }
   const feature = state.features[i];
   if (feature === GRASS) {
     const features = replaced(state.features, i, NO_FEATURE);
