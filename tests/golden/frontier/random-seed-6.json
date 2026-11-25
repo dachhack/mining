@@ -1,7 +1,7 @@
 {
   "description": "The random policy: a useful step at random, ending each shift when its taps run out; it makes hay and is never hungry",
   "recordedWith": "random",
-  "engineVersion": "0.15.0",
+  "engineVersion": "0.16.0",
   "seed": 6,
   "stepCount": 678,
   "expectedHash": "72827e955d6ed2c7",

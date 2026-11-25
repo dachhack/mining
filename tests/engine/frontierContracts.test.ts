@@ -276,10 +276,11 @@ describe('the board offers only what the world can fill (owner, on the hazards b
     expect(contractBoard(rich).length).toBe(FRONTIER_BOARD.perTier);
   });
 
-  it('every world holds the relics and keystones the tier-3 contracts ask for (question 197)', () => {
-    for (let seed = 1; seed <= 10; seed += 1) {
+  it('every world can fill every contract, of every tier (question 197)', () => {
+    // Relics and keystones in every world; tier 2's coal asks for 40, not 80.
+    for (let seed = 1; seed <= 20; seed += 1) {
       const stock = worldStock(createFrontier(seed));
-      for (const c of FRONTIER_CONTRACTS.filter((k) => k.tier === 3)) {
+      for (const c of FRONTIER_CONTRACTS) {
         expect(worldCanFill(stock, c.asks), `${c.id} on seed ${seed}`).toBe(true);
       }
     }

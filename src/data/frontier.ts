@@ -618,8 +618,10 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
     id: 't2-coal',
     tier: 2,
     name: 'Coal for a winter',
-    asks: [{ item: 'coal', count: 80 }],
-    pays: 220,
+    // 40, not 80: a world holds only 52 to 103 coal, and smelting burns some
+    // (owner, question 197: "Lower the contract").
+    asks: [{ item: 'coal', count: 40 }],
+    pays: 150,
   },
   {
     id: 't2-iron',
