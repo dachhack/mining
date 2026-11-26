@@ -157,6 +157,12 @@ export const FRONTIER_SURFACE = {
   appleTrees: 10,
   /** Each square left over is grass with this chance; the rest is bare ground. */
   grassChance: 0.65,
+  /**
+   * The chance a night that an open square of dirt (never dug, nothing on it)
+   * comes up in grass (owner, after the 0.20.0 build: "Grass should grow on
+   * any open dirt space"). A [Default].
+   */
+  grassSpreadChance: 0.1,
   /** What a tap gives: 1 grass from a tuft, 2 wood from a felled tree (apple trees too, once empty). */
   grassPerTuft: 1,
   woodPerTree: 2,

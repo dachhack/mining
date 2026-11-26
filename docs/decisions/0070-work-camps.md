@@ -31,3 +31,32 @@ How it is built:
   to seed 2.
 
 Engine 0.21.0, the same unmerged batch.
+
+## Grass on any open dirt
+
+The owner, after the 0.20.0 build: "Grass should grow on any open dirt
+space."
+
+- Cut grass now grows back after its wait without needing grass beside it.
+- Every other open square of dirt (never dug, nothing on it) comes up in
+  grass with `FRONTIER_SURFACE.grassSpreadChance` (10%) a night. It is
+  rolled row by row on the night's generator.
+- Within about 20 nights most open ground is grass again. To place a
+  building or a work camp, the player cuts the grass first.
+- Grass burns. In a test world of open dirt, a dragon's fire after shift 20
+  spread through the meadow and burned off a third of it. That is real
+  play, so the new engine test stops before dragons come.
+
+Gatherer simulator, 40 runs of 100 shifts, after the work camps and the
+grass:
+
+|                       | Before | After |
+| --------------------- | ------ | ----- |
+| Crews lost            | 2      | 1     |
+| Runs that went hungry | 13     | 23    |
+| Coins (average)       | 4,093  | 4,130 |
+| Saw houses built      | 32     | 19    |
+
+Fewer saw houses get built because the policy does not clear grass to make
+room for one. The extra hunger has not been traced. It may come from the
+work camps' food, or from fires on the new grass.

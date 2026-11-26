@@ -1,5 +1,5 @@
 // Progression PR 3 (docs/plans/progression-phases.md, sections 6.1 and 6.2):
-// cut grass grows back beside grass, and saplings and apple saplings (from
+// cut grass grows back (and grass comes up on any open dirt), and saplings and apple saplings (from
 // the market only) are planted and grow into trees.
 import { describe, expect, it } from 'vitest';
 import {
@@ -7,6 +7,7 @@ import {
   FRONTIER_RECIPES,
   FRONTIER_SAPLINGS,
   FRONTIER_SHIFT,
+  FRONTIER_SURFACE,
 } from '../../src/data/frontier';
 import { frontierAct, frontierTap, hashFrontier, previewTap } from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
@@ -32,7 +33,7 @@ function endShifts(state: FrontierState, n: number): FrontierState {
 const i = AT.x + 25 * AT.y;
 
 describe('cut grass grows back (plan section 6.1)', () => {
-  it('after the set number of shifts, when grass grows beside it', () => {
+  it('after the set number of shifts', () => {
     const w = world({
       features: [
         { ...AT, feature: GRASS },
@@ -59,12 +60,32 @@ describe('cut grass grows back (plan section 6.1)', () => {
     expect(out.report?.grassRegrown).toBe(1);
   });
 
-  it('waits while no grass grows beside it: a patch cut bare stays bare', () => {
+  it('grows back on its own too, with no grass beside it', () => {
+    // Owner, after the 0.20.0 build: "Grass should grow on any open dirt
+    // space." (Until then a patch cut bare stayed bare.)
     const w = world({ features: [{ ...AT, feature: GRASS }] });
     const cut = frontierTap(w, AT.x, AT.y).state;
-    const later = endShifts(cut, FRONTIER_SHIFT.grassRegrowShifts + 3);
-    expect(later.features[i]).toBe(NO_FEATURE);
-    expect(later.grassIn[i]).toBe(1); // still waiting for a neighbour
+    const later = endShifts(cut, FRONTIER_SHIFT.grassRegrowShifts);
+    expect(later.features[i]).toBe(GRASS);
+  });
+
+  it('comes up on any open dirt, a little each night, but never on a camp, a crop, a building or dug ground', () => {
+    // Owner, after the 0.20.0 build: "Grass should grow on any open dirt space."
+    expect(FRONTIER_SURFACE.grassSpreadChance).toBeGreaterThan(0);
+    const w = world({ special: [{ x: AT.x, y: AT.y + 2, z: 0, char: '.' }] });
+    const open = (s: FrontierState): number => s.features.filter((f) => f === GRASS).length;
+    expect(open(w)).toBe(0);
+    const one = endShifts(w, 1);
+    // About grassSpreadChance of the open squares, give or take.
+    const squares = w.features.length - 9; // less the camp's 3 x 3
+    expect(open(one)).toBeGreaterThan(squares * FRONTIER_SURFACE.grassSpreadChance * 0.5);
+    expect(open(one)).toBeLessThan(squares * FRONTIER_SURFACE.grassSpreadChance * 1.5);
+    // Over 15 nights (before dragons come and set fires), most of it.
+    const many = endShifts(w, 15);
+    expect(open(many)).toBeGreaterThan(squares * 0.6);
+    // Not on the camp's ground, nor on the dug square.
+    expect(many.features[MID + 25 * MID]).toBe(NO_FEATURE);
+    expect(many.features[AT.x + 25 * (AT.y + 2)]).toBe(NO_FEATURE);
   });
 
   it('never grows back on ground dug out', () => {
