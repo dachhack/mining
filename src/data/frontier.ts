@@ -1054,7 +1054,10 @@ export const FRONTIER_RAID = {
     { depth: 0, strength: 1 },
     { depth: 4, strength: 2 },
     { depth: 8, strength: 3 },
-    { depth: 16, strength: 4 },
+    // No more: 3 is the most defense levels a camp can have, so a fully
+    // defended camp always turns them away (owner, after the 0.20.0 build:
+    // "Defneses don't seem to do anything"; asked, "Cap raids at strength 3".
+    // Until engine 0.21.0 they reached 4 at depth 16).
   ],
   stealShare: 0.1,
   upgradesPerShortfall: 2,

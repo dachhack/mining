@@ -64,7 +64,15 @@ describe('marauders (hazards plan, section 5)', () => {
     });
     expect(raidStrength(dug)).toBe(1);
     const steps = FRONTIER_RAID.strengthFromDepth;
-    expect(steps.map((s) => s.strength)).toEqual([1, 2, 3, 4]);
+    expect(steps.map((s) => s.strength)).toEqual([1, 2, 3]);
+  });
+
+  it('are never stronger than a camp can be defended, so full defenses always turn them away', () => {
+    // Owner, after the 0.20.0 build: "Defneses don't seem to do anything";
+    // asked, chose "Cap raids at strength 3". Until then strength reached 4
+    // at depth 16, above the 3 levels of defenses.
+    const strongest = Math.max(...FRONTIER_RAID.strengthFromDepth.map((s) => s.strength));
+    expect(strongest).toBe(FRONTIER_DEFENSE.length);
   });
 
   it(`do not come before shift ${FRONTIER_RAID.fromShift}`, () => {

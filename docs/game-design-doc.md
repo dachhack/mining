@@ -199,7 +199,7 @@ The owner (2026-11-24): "Marauders can come and steal things from your camps and
 
 - **Defenses** (`FRONTIER_DEFENSE`; question 189): three levels, built one at a time from a camp's panel for 1 tap each, at a camp of level 2 or more (question 194), deep camps too: [Default] a palisade (15 wood), a stone wall (20 stone, 10 wood), a gatehouse (10 iron ingots, 20 stone). A raid never takes them down (question 191).
 - **When:** from [Default] shift 15, at End shift, on [Default] 1 night in 10, marauders raid one camp drawn at random (question 188; `FRONTIER_RAID`).
-- **Strength:** from the deepest square on the map: [Default] 1, then 2 from depth 4, 3 from depth 8, 4 from depth 16.
+- **Strength:** from the deepest square on the map: [Default] 1, then 2 from depth 4, 3 from depth 8, and no more: a camp with all 3 levels of defenses always turns them away (owner, after the 0.20.0 build: "Defneses don't seem to do anything"; it was 4 from depth 16 until engine 0.21.0).
 - **Turned away** if the camp's defense level is at least their strength.
 - **Otherwise** each point of shortfall (strength minus defense) steals [Default] 10% of each goods stack in the store, rounded down, never coins or tools (question 190; `FRONTIER_RAID.neverStolen`), and tears down [Default] 2 of the camp's upgrades: the lantern, the pen and its animals, the smelter, then levels down to 1. A deep camp keeps its level.
 
