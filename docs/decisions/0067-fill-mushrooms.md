@@ -33,3 +33,9 @@ coins on average (5,383 before).
 After the 0.18.0 build the owner said: "Let's omit apple trees from mushroom
 generation". Mushrooms now come only under plain trees. Apple trees and
 maples still count as trees beside one, raising its chance. Engine 0.19.0.
+
+After the 0.20.0 build the owner said: "Mushrooms need uncut trees to grow
+and appear." Each night, before the countdown, a mushroom coming or standing
+on a square with no plain tree is lost. Felling the tree, fire, or a camp
+cleared over it all count. A tap still picks a mushroom before it fells the
+tree, so a picked mushroom is never lost this way. Engine 0.21.0.

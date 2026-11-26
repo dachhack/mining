@@ -372,12 +372,12 @@ const FRONTIER_RUNS: {
       'The random policy on another seed, for 42 shifts: it upgrades its camp to level 2, builds a smelter and a pen, moves animals in and out, makes hay, and buys hay at the market',
   },
   {
-    name: 'random-seed-1-fire',
-    seed: 1,
+    name: 'random-seed-3-fire',
+    seed: 3,
     policy: 'random',
     maxShifts: 25,
     description:
-      'The random policy on seed 1 for 25 shifts: it leaves a fire burning overnight, which burns its square out (hazards PR 4: the other runs put every fire out)',
+      'The random policy on seed 3 for 25 shifts: it leaves a fire burning overnight, which burns its square out (hazards PR 4: the other runs put every fire out; seed 1 until engine 0.21.0)',
   },
   {
     name: 'careful-seed-1-defended',

@@ -904,8 +904,9 @@ export const FRONTIER_RAIN = {
  * (not a maple or an apple tree), and no mushroom on it or coming, gets one coming with a
  * chance of `chance` plus `perTreeBeside` for each of the 8 squares round it
  * with a tree of any kind, at most `most`. It comes up a whole number of
- * nights drawn from `nights` later, at the End shift, if its square is still
- * ground never dug with no camp or building on it. A tap picks it (1
+ * nights drawn from `nights` later, at the End shift, if its tree still
+ * stands (owner, after the 0.20.0 build: "Mushrooms need uncut trees to grow
+ * and appear"; a mushroom whose tree is gone is lost, coming or standing). A tap picks it (1
  * mushroom) before anything else on the square. Every number is a [Default].
  */
 export const FRONTIER_MUSHROOM = {
