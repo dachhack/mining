@@ -28,6 +28,39 @@ const SAPLINGS: Record<string, { tree: Feature; shifts: number }> = {
   mapleSapling: { tree: MAPLE_TREE, shifts: FRONTIER_SAPLINGS.mapleSaplingGrowShifts },
 };
 
+/** The sapling item that grows into a tree of kind `tree`, or `null`. */
+export function saplingOf(tree: number | undefined): ItemId | null {
+  for (const [item, grows] of Object.entries(SAPLINGS)) {
+    // `as ItemId`: the keys of SAPLINGS are sapling items.
+    if (grows.tree === tree) return item as ItemId;
+  }
+  return null;
+}
+
+/**
+ * `state` with the sapling planted on square index `i` pulled up and back in
+ * the store (owner, after the 0.20.0 build: a tap "removes the sapling, but
+ * does not dig the block"). The ground is left as it is.
+ */
+export function uproot(state: FrontierState, i: number): FrontierState {
+  if (state.planted[i] !== true) return state;
+  const sapling = saplingOf(state.stumps[i]);
+  const set = <T>(list: T[], value: T): T[] => {
+    const copy = [...list];
+    copy[i] = value;
+    return copy;
+  };
+  const inventory = new Map(state.inventory);
+  if (sapling !== null) inventory.set(sapling, (inventory.get(sapling) ?? 0) + 1);
+  return {
+    ...state,
+    stumps: set(state.stumps, NO_FEATURE),
+    regrowIn: set(state.regrowIn, -1),
+    planted: set(state.planted, false),
+    inventory,
+  };
+}
+
 /** True if `item` is a sapling. */
 export function isSapling(item: string): boolean {
   return item in SAPLINGS;

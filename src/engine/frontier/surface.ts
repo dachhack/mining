@@ -16,7 +16,8 @@
 // numbers are in src/data/frontier.ts.
 
 import type { ItemStack } from '../../data';
-import { FRONTIER_SHIFT, FRONTIER_SURFACE } from '../../data/frontier';
+import { FRONTIER_SEED_BACK, FRONTIER_SHIFT, FRONTIER_SURFACE } from '../../data/frontier';
+import { nextFloat } from '../rng';
 import { woodFromTree } from './buildings';
 import { cropAt, isRipe, withoutCrop } from './crops';
 import { GRASS, NO_FEATURE, cropOf, isTree } from './state';
@@ -29,7 +30,7 @@ export type HarvestKind = 'caught' | 'mushroom' | 'crop' | 'grass' | 'apple' | '
 export interface FrontierHarvest {
   state: FrontierState;
   gain: ItemStack;
-  /** A sapling that came with a felled tree, or `null`. */
+  /** Something that came with it: a seed with a harvested crop, or `null`. */
   extra: ItemStack | null;
   kind: HarvestKind;
 }
@@ -98,7 +99,17 @@ export function harvestAt(state: FrontierState, x: number, y: number): FrontierH
   // growing is left be: tap.ts says so before it gets here.
   const sown = cropAt(state, i);
   if (sown !== null && isRipe(state, i)) {
-    return take(withoutCrop(state, i), { item: sown.crop, count: sown.yield }, 'crop');
+    // Half the time a seed comes with it (owner, after the 0.20.0 build: "When
+    // you harvest plants get one seed as well 50% of the time"), rolled on the
+    // state's own generator.
+    const rng = { ...state.rng };
+    const seed = nextFloat(rng) < FRONTIER_SEED_BACK ? { item: sown.seed, count: 1 } : null;
+    return take(
+      { ...withoutCrop(state, i), rng },
+      { item: sown.crop, count: sown.yield },
+      'crop',
+      seed,
+    );
   }
   const feature = state.features[i];
   if (feature === GRASS) {

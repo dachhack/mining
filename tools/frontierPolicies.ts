@@ -52,6 +52,8 @@ import {
   smelterRefusal,
   upkeepDue,
   fillSquareRefusal,
+  areaCost,
+  digAreaRefusal,
 } from '../src/engine';
 import type { FrontierState } from '../src/engine';
 import { nextFloat } from '../src/engine/rng';
@@ -156,6 +158,12 @@ function randomPolicy(rng: RngState): FrontierPolicy {
       if (deliverRefusal(state, held.id) === null) options.push(`deliver ${held.id}`);
     }
     // A sapling it holds, on a few squares tried at random.
+    // The miners' dig of a 3 x 3, tried at a few random squares.
+    for (let k = 0; k < 4 && areaCost(state.inventory) !== null; k += 1) {
+      const x = Math.floor(nextFloat(rng) * state.cube.size.x);
+      const y = Math.floor(nextFloat(rng) * state.cube.size.y);
+      if (digAreaRefusal(state, x, y) === null) options.push(`digArea ${x},${y}`);
+    }
     // A dug square filled with dirt, tried at a few random squares.
     for (let k = 0; k < 4; k += 1) {
       const x = Math.floor(nextFloat(rng) * state.cube.size.x);

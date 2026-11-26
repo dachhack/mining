@@ -398,7 +398,12 @@ export function drawStump(ctx: CanvasRenderingContext2D, box: SquareBox): void {
  * A planted sapling (progression PR 3): a small mound of earth with a green
  * sprout of three leaves, smaller than a stump, over the block.
  */
-export function drawSapling(ctx: CanvasRenderingContext2D, box: SquareBox, apple: boolean): void {
+export function drawSapling(
+  ctx: CanvasRenderingContext2D,
+  box: SquareBox,
+  apple: boolean,
+  maple = false,
+): void {
   const cx = box.left + box.inner / 2;
   const cy = box.top + box.inner / 2;
   const r = box.inner * 0.18;
@@ -407,6 +412,37 @@ export function drawSapling(ctx: CanvasRenderingContext2D, box: SquareBox, apple
   ctx.beginPath();
   ctx.ellipse(cx, cy + r * 0.9, r * 1.2, r * 0.55, 0, 0, Math.PI * 2);
   ctx.fill();
+  if (maple) {
+    // A maple sapling (owner, after the 0.20.0 build: "Make the maple sapling
+    // look different"): a thin red stem and two pointed red-orange leaves,
+    // each a five-pointed maple leaf.
+    const p = SURFACE_PAINT.mapleTree;
+    ctx.strokeStyle = p.canopyDark;
+    ctx.lineWidth = Math.max(1, r * 0.18);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + r * 0.8);
+    ctx.lineTo(cx, cy - r * 0.6);
+    ctx.stroke();
+    for (const [lx, ly, size, colour] of [
+      [cx - r * 0.7, cy - r * 0.25, r * 1.05, p.canopy],
+      [cx + r * 0.65, cy - r * 0.85, r * 1.15, p.canopyLight],
+    ] as const) {
+      ctx.fillStyle = colour;
+      ctx.beginPath();
+      for (let k = 0; k < 10; k += 1) {
+        const angle = -Math.PI / 2 + (k * Math.PI) / 5;
+        const reach = k % 2 === 0 ? size : size * 0.45;
+        const px = lx + Math.cos(angle) * reach;
+        const py = ly + Math.sin(angle) * reach;
+        if (k === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+    return;
+  }
   ctx.fillStyle = '#5fae3e';
   for (const angle of [-Math.PI / 2, -Math.PI / 2 - 1.1, -Math.PI / 2 + 1.1]) {
     ctx.beginPath();
@@ -699,13 +735,23 @@ export function labItemIcon(item: string, className: string): HTMLCanvasElement 
     ctx.lineTo(s * 0.16, s * 0.84);
     ctx.stroke();
   } else if (item === 'mapleSapling') {
-    // A maple sapling: the planted-sapling art, on dark ground, with a red leaf.
+    // A maple sapling: the map's maple-sapling art, on dark ground.
     ctx.fillStyle = '#3a2a1c';
     ctx.fillRect(0, 0, s, s);
-    drawSapling(ctx, { left: -s / 4, top: -s / 4, inner: s * 1.5 }, false);
-    ctx.fillStyle = SURFACE_PAINT.mapleTree.canopy;
+    drawSapling(ctx, { left: -s / 4, top: -s / 4, inner: s * 1.5 }, false, true);
+  } else if (item === 'miner') {
+    // A miner (owner, after the 0.20.0 build): a yellow hard hat with a lamp.
+    ctx.fillStyle = '#2a2420';
+    ctx.fillRect(0, 0, s, s);
+    ctx.fillStyle = '#f0c23a';
     ctx.beginPath();
-    ctx.arc(s * 0.7, s * 0.28, s * 0.12, 0, Math.PI * 2);
+    ctx.arc(s * 0.5, s * 0.62, s * 0.3, Math.PI, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillRect(s * 0.12, s * 0.6, s * 0.76, s * 0.08);
+    ctx.fillStyle = '#fff6c8';
+    ctx.beginPath();
+    ctx.arc(s * 0.5, s * 0.42, s * 0.08, 0, Math.PI * 2);
     ctx.fill();
   } else if (item === 'sap' || item === 'syrup') {
     // Sap: a pale drop. Syrup: a small jug of amber syrup.

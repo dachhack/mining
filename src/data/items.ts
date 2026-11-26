@@ -56,7 +56,9 @@ export type ItemId =
   | 'wheat'
   | 'corn'
   | 'carrot'
-  | 'potato';
+  | 'potato'
+  // A miner hired at the market: one more of the crew (owner, after the 0.20.0 build).
+  | 'miner';
 
 // Fuel is a gauge, not an item, so it is not here. The torch and the safety
 // lamp are gone with light (design doc v0.2, section 7). Items have no weight:
@@ -112,6 +114,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   corn: { name: 'Corn' },
   carrot: { name: 'Carrots' },
   potato: { name: 'Potatoes' },
+  miner: { name: 'Miners' },
   appleSapling: { name: 'Apple saplings' },
   copperLantern: { name: 'Copper lantern' },
 };

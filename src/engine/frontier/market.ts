@@ -19,7 +19,7 @@
 // The numbers are in src/data/frontier.ts.
 
 import type { ItemStack } from '../../data';
-import { FRONTIER_MARKET } from '../../data/frontier';
+import { FRONTIER_MARKET, FRONTIER_MINERS } from '../../data/frontier';
 import type { FrontierLot } from '../../data/frontier';
 import { canAfford, pay } from './camps';
 import { gained } from './surface';
@@ -104,6 +104,14 @@ export function tradeRefusal(
   if (!Number.isInteger(lots) || lots < 1) return 'lots';
   if (side === 'buy' && ownsUseful(state, item)) return 'owned';
   if (side === 'buy' && item in FRONTIER_MARKET.uselessWhenHeld && lots > 1) return 'lots';
+  // No more miners than the crew holds (FRONTIER_MINERS.most).
+  if (
+    side === 'buy' &&
+    item === FRONTIER_MINERS.item &&
+    (state.inventory.get(item) ?? 0) + lots > FRONTIER_MINERS.most
+  ) {
+    return 'lots';
+  }
   const given = tradeOf(side, lot, lots).give;
   if (!canAfford(state.inventory, [given])) return 'cost';
   return null;
@@ -115,6 +123,10 @@ export function tradeRefusal(
  * (FRONTIER_MARKET.uselessWhenHeld). The market leaves such an item out.
  */
 export function ownsUseful(state: FrontierState, item: string): boolean {
+  // Miners: no more once the crew is full (FRONTIER_MINERS.most).
+  if (item === FRONTIER_MINERS.item) {
+    return (state.inventory.get(item) ?? 0) >= FRONTIER_MINERS.most;
+  }
   const makesUseless = FRONTIER_MARKET.uselessWhenHeld[item] ?? [];
   return makesUseless.some((held) => (state.inventory.get(held) ?? 0) > 0);
 }
@@ -162,6 +174,9 @@ export function mostLots(state: FrontierState, side: TradeSide, item: string): n
   // One at most of an item a second of which adds nothing, and none once held.
   if (side === 'buy' && item in FRONTIER_MARKET.uselessWhenHeld) {
     return ownsUseful(state, item) ? 0 : Math.min(most, 1);
+  }
+  if (side === 'buy' && item === FRONTIER_MINERS.item) {
+    return Math.max(0, Math.min(most, FRONTIER_MINERS.most - (state.inventory.get(item) ?? 0)));
   }
   return most;
 }

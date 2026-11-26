@@ -42,6 +42,7 @@ import { campAt, frontierMineCheck, sightAt } from './camps';
 import { gained, harvestAt } from './surface';
 import { buildingAt, woodFromTree } from './buildings';
 import { cropAt, isRipe } from './crops';
+import { saplingOf, uproot } from './farming';
 import { isFlooded, pumpIndexAt, takeWaterOpened, withFlood } from './water';
 import { isBurning, putOut } from './fire';
 import { gasOpened } from './gas';
@@ -59,6 +60,7 @@ import type { FrontierState } from './state';
  * - 'camp': the square is a camp's ground;
  * - 'building': a saw house or a sugar shack stands on the square (buildings.ts);
  * - 'growing': a crop grows on the square and is not ripe yet (crops.ts);
+ * - 'uprooted': a planted sapling was pulled up, back into the store (farming.ts);
  * - 'refused': the level rule refused it, or the square is off the map (`refusal`);
  * - 'tooHard': the camps covering it cannot mine its top block (`needs`
  *   or `needsTool`);
@@ -76,6 +78,7 @@ export type FrontierTapKind =
   | 'camp'
   | 'building'
   | 'growing'
+  | 'uprooted'
   | 'refused'
   | 'tooHard'
   | 'flooded'
@@ -176,6 +179,17 @@ export function frontierTap(state: FrontierState, x: number, y: number): Frontie
   if (taken !== null) {
     const gain = taken.extra === null ? [taken.gain] : [taken.gain, taken.extra];
     return { ...nothing('harvested'), state: taken.state, gain, harvest: taken.kind };
+  }
+  // A planted sapling is pulled up, back into the store, and the ground is
+  // not dug (owner, after the 0.20.0 build: "Click on a block with growing
+  // saplings and it removes the sapling, but does not dig the block").
+  if (state.planted[here] === true) {
+    const sapling = saplingOf(state.stumps[here]);
+    return {
+      ...nothing('uprooted'),
+      state: uproot(state, here),
+      gain: sapling === null ? [] : [{ item: sapling, count: 1 }],
+    };
   }
   if (isFlooded(state, x, y)) {
     return pumpTap(state, x, y, nothing);
@@ -307,6 +321,10 @@ export function previewTap(
     return isRipe(state, i)
       ? { kind: 'harvested', gain: [{ item: sown.crop, count: sown.yield }] }
       : { kind: 'growing', gain: [] };
+  }
+  if (state.planted[i] === true && (state.features[i] ?? NO_FEATURE) === NO_FEATURE) {
+    const sapling = saplingOf(state.stumps[i]);
+    return { kind: 'uprooted', gain: sapling === null ? [] : [{ item: sapling, count: 1 }] };
   }
   const feature = state.features[i];
   if (feature === GRASS) {

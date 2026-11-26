@@ -23,6 +23,7 @@ import type { ItemId, ItemStack } from '../../data';
 import {
   FRONTIER_AXE,
   FRONTIER_CROPS,
+  FRONTIER_MINERS,
   FRONTIER_SURFACE,
   FRONTIER_DEEP_CAMP,
   FRONTIER_DEFENSE,
@@ -50,6 +51,7 @@ import {
   BUILDING_COSTS,
   SQUARE_STEPS,
   isBuildingKind,
+  tapsPerShift,
   contractBoard,
   anyDeliverable,
   contractLimit,
@@ -100,6 +102,8 @@ import {
   plantRefusal,
   buildCampBuilding,
   buildRefusal,
+  digAreaRefusal,
+  digCampArea,
   fillCampSquare,
   fillSquareRefusal,
   nextMarketShift,
@@ -184,7 +188,7 @@ const HARVEST_HINTS = {
   apple: 'An apple picked. Empty trees regrow their apples after a while.',
   sap: 'Sap tapped. Boil it into syrup at a sugar shack.',
   mushroom: 'A mushroom picked. Sell it, or fill a mushroom contract.',
-  crop: 'Harvested. The soil is bare again: sow another seed.',
+  crop: 'Harvested. The soil is bare again: sow another seed (one may have come with it).',
   caught: 'Animal caught!',
 };
 const GREYED_HINT = 'Out of range now: put a camp nearby to mine here.';
@@ -1138,7 +1142,7 @@ export function mountCampLab(
     if (!isTree(feature)) {
       const stump = world.surface.stumps[i] ?? NO_FEATURE;
       if (stump !== NO_FEATURE && world.surface.planted[i] === true) {
-        drawSapling(ctx, box, stump === APPLE_TREE); // a planted sapling
+        drawSapling(ctx, box, stump === APPLE_TREE, stump === MAPLE_TREE); // a planted sapling
       } else if (stump !== NO_FEATURE) {
         drawStump(ctx, box); // a felled tree that will grow back
       }
@@ -1692,6 +1696,7 @@ export function mountCampLab(
       'sap',
       'syrup',
       'mushroom',
+      FRONTIER_MINERS.item,
       'wheatSeed',
       'cornSeed',
       'carrotSeed',
@@ -3037,7 +3042,10 @@ export function mountCampLab(
     hudShift.textContent = `Shift ${turn.shift}`;
     // Taps left only: with 100 a shift, "100/100" crowds Close mine on a 320 px phone.
     hudTaps.textContent = `⚡ ${turn.tapsLeft}`;
-    hudTaps.setAttribute('aria-label', `${turn.tapsLeft} of ${FRONTIER_SHIFT.taps} taps left`);
+    hudTaps.setAttribute(
+      'aria-label',
+      `${turn.tapsLeft} of ${tapsPerShift(world.lab.counts)} taps left`,
+    );
     hudHealth.textContent = `♥ ${turn.health}/${FRONTIER_SHIFT.startHealth}`;
     hud.dataset['shift'] = String(turn.shift);
     hud.dataset['taps'] = String(turn.tapsLeft);
@@ -3163,6 +3171,7 @@ export function mountCampLab(
     if (step.kind === 'sell' || step.kind === 'buy') return `the ${step.kind} of ${step.item}`;
     if (step.kind === 'plant') return `planting at ${step.x}, ${step.y}`;
     if (step.kind === 'fillSquare') return `filling ${step.x}, ${step.y}`;
+    if (step.kind === 'digArea') return `the miners' dig at ${step.x}, ${step.y}`;
     if (step.kind === 'build') {
       return isBuildingKind(step.building)
         ? `the ${buildingInfo(step.building).name.toLowerCase()} at ${step.x}, ${step.y}`
@@ -3235,6 +3244,12 @@ export function mountCampLab(
         setMode({ kind: 'camp', id: camp.id });
       }
       setHint(result.kind === 'noTaps' ? NO_TAPS_HINT : OVER_HINT, true);
+      return;
+    }
+    if (result.kind === 'uprooted') {
+      remember({ kind: 'tap', x, y });
+      setWorld(result.world);
+      setHint('Sapling pulled up: it is back in your store, and the ground is not dug.', false);
       return;
     }
     if (result.kind === 'growing') {
@@ -3436,9 +3451,33 @@ export function mountCampLab(
     setMode({ kind: 'placing', target: { x, y } });
   }
 
-  /** A long press on a lit square opens the camp tool with that square chosen. */
+  /**
+   * A long press on a lit square: with 2 or more miners, it digs every
+   * diggable square of the 3 x 3 round it (owner, after the 0.20.0 build:
+   * "Long press is no longer just for camp placement"); where nothing there
+   * can be dug, or without the miners, it opens the camp tool with that square
+   * chosen, as before.
+   */
   function hold(x: number, y: number): void {
     if (sightOf(x, y) !== 'shown' || campAt(world, x, y) !== null) {
+      return;
+    }
+    const dig = digAreaRefusal(world, x, y);
+    if (dig === null) {
+      const before = world.lab.mined;
+      const taps = world.turn.tapsLeft;
+      remember({ kind: 'digArea', x, y });
+      setWorld(digCampArea(world, x, y));
+      const dug = world.lab.mined - before;
+      const spent = taps - world.turn.tapsLeft;
+      setHint(
+        `Your miners dug ${dug} ${dug === 1 ? 'square' : 'squares'} for ${spent} ${spent === 1 ? 'tap' : 'taps'}.`,
+        false,
+      );
+      return;
+    }
+    if (dig === 'noTaps') {
+      setHint('Not enough taps left for your miners to dig there: End shift.', true);
       return;
     }
     setMode({ kind: 'placing', target: null });

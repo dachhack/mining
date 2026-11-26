@@ -552,6 +552,10 @@ export {
   woodFromTree,
 } from './frontier/buildings';
 export { fillSquare, fillSquareRefusal } from './frontier/fill';
+export { areaCost, minersHeld, tapsPerShift } from './frontier/crew';
+export { digArea, digAreaPlan, digAreaRefusal } from './frontier/dig';
+export type { DigAreaRefusal } from './frontier/dig';
+export { saplingOf, uproot } from './frontier/farming';
 export type { FillSquareRefusal } from './frontier/fill';
 export { mushroomAt, mushroomChance, nightOfMushrooms } from './frontier/mushrooms';
 export type { BuildRefusal } from './frontier/buildings';

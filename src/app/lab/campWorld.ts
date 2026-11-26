@@ -45,6 +45,7 @@ import {
   defenseRefusal as engineDefenseRefusal,
   buildRefusal as engineBuildRefusal,
   fillSquareRefusal as engineFillSquareRefusal,
+  digAreaRefusal as engineDigAreaRefusal,
   raidStrength as engineRaidStrength,
   foundationDepth as engineFoundationDepth,
   plantRefusal as enginePlantRefusal,
@@ -445,6 +446,7 @@ export function campWorldOf(state: FrontierState): CampWorld {
  * - 'camp': the square holds a camp, which is never mined;
  * - 'building': the square holds a saw house or a sugar shack, which is never mined;
  * - 'growing': a crop grows on the square and is not ripe yet;
+ * - 'uprooted': a planted sapling was pulled up, back into the store;
  * - 'refused': the level rule refused it (`tap.result.refusal` says why);
  * - 'tooHard': the level rule allows it, but the camps covering the square
  *   cannot mine its top block (`needs` says which level can, `needsTool`
@@ -465,6 +467,7 @@ export type CampTapKind =
   | 'camp'
   | 'building'
   | 'growing'
+  | 'uprooted'
   | 'tooHard'
   | 'refused'
   | 'flooded'
@@ -539,7 +542,7 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
   if (tap.kind === 'pump') {
     return { ...answer('pump'), world: after, pump: tap.pump };
   }
-  if (tap.kind === 'fire' || tap.kind === 'dragon') {
+  if (tap.kind === 'fire' || tap.kind === 'dragon' || tap.kind === 'uprooted') {
     return { ...answer(tap.kind), world: after };
   }
   if (tap.kind === 'harvested') {
@@ -778,6 +781,19 @@ export function buildCampBuilding(
   return act(world, { kind: 'build', building, x, y }).world;
 }
 
+// ----- Digging a 3 x 3 with miners (owner, after the 0.20.0 build) -----
+
+/** Why the 3 x 3 round (x, y) cannot be dug now ('over', or the engine's reason), or `null` if it can. */
+export function digAreaRefusal(world: CampWorld, x: number, y: number): string | null {
+  if (world.turn.status !== 'active') return 'over';
+  return engineDigAreaRefusal(toFrontier(world), x, y);
+}
+
+/** Dig the 3 x 3 round (x, y), for its taps; the very same world if it cannot. */
+export function digCampArea(world: CampWorld, x: number, y: number): CampWorld {
+  return act(world, { kind: 'digArea', x, y }).world;
+}
+
 // ----- Filling a square with dirt (owner, after the 0.17.0 build) -----
 
 /** Why (x, y) cannot be filled now ('noTaps', 'over', or the engine's reason), or `null` if it can. */
@@ -907,6 +923,8 @@ export type CampStep =
   | { kind: 'build'; building: string; x: number; y: number }
   // Fill a square with dirt (owner, after the 0.17.0 build).
   | { kind: 'fillSquare'; x: number; y: number }
+  // Dig a 3 x 3 with miners (owner, after the 0.20.0 build).
+  | { kind: 'digArea'; x: number; y: number }
   // End the shift, rest at a camp, or close the mine (A4).
   | { kind: 'endShift' }
   | { kind: 'rest'; id: number }
@@ -963,6 +981,9 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   }
   if (step.kind === 'buildDefense') {
     return buildCampDefense(world, step.id);
+  }
+  if (step.kind === 'digArea') {
+    return digCampArea(world, step.x, step.y);
   }
   if (step.kind === 'fillSquare') {
     return fillCampSquare(world, step.x, step.y);

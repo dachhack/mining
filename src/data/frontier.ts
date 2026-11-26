@@ -267,6 +267,29 @@ export const FRONTIER_FOODS: ItemStack[] = [
 ];
 
 /** A grain or vegetable grown from seed (FRONTIER_CROPS). */
+/**
+ * Miners (owner, after the 0.20.0 build: "Let's add miners to the market.
+ * You can hire a miner to add to the crew. You just pay them a annual salary
+ * when you hire them. They just need food upkeep."). A miner is hired at the
+ * market (its lot is the salary, paid once) and held as the item `miner`, up
+ * to `most`. Each eats `foodEach` food every FRONTIER_SHIFT.foodEveryShifts
+ * shifts, on top of the crew's own. The miners held set the crew's level:
+ * `levels[n - 1]` with n miners gives the taps a shift and, from 2 miners,
+ * a long press that digs every diggable square of the 3 x 3 round it for
+ * the lesser of `areaCost` and the squares dug (dig.ts).
+ */
+export const FRONTIER_MINERS = {
+  item: 'miner' as ItemId,
+  most: 4,
+  foodEach: 1,
+  levels: [
+    { taps: 125, areaCost: null },
+    { taps: 135, areaCost: 4 },
+    { taps: 150, areaCost: 3 },
+    { taps: 165, areaCost: 2 },
+  ] as { taps: number; areaCost: number | null }[],
+};
+
 export interface FrontierCropDef {
   /** The seed planted. */
   seed: ItemId;
@@ -276,6 +299,13 @@ export interface FrontierCropDef {
   /** Shifts from planting until it is ripe. */
   growShifts: number;
 }
+
+/**
+ * The chance that harvesting a ripe crop also gives 1 of its seed (owner,
+ * after the 0.20.0 build: "When you harvest plants get one seed as well 50%
+ * of the time").
+ */
+export const FRONTIER_SEED_BACK = 0.5;
 
 /**
  * Grains and vegetables (owner, after the 0.19.0 build: "Let's add seeds to
@@ -641,6 +671,9 @@ export const FRONTIER_MARKET = {
     { item: 'cornSeed', count: 1, coins: 3 },
     { item: 'carrotSeed', count: 1, coins: 2 },
     { item: 'potatoSeed', count: 1, coins: 3 },
+    // A miner, hired for a year's pay (owner, after the 0.20.0 build: "Let's
+    // add miners to the market"): FRONTIER_MINERS.
+    { item: 'miner', count: 1, coins: 80 },
     { item: 'hay', count: 1, coins: 1 },
     // The pump drains a flood (hazards plan, section 2): from the start.
     { item: 'pump', count: 1, coins: 30 },
@@ -850,6 +883,20 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
 export const FRONTIER_BOARD = {
   perTier: 3,
   tier1Level: 3,
+  /**
+   * How many contracts the board offers on a market day, at most: a whole
+   * number drawn from [low, high] for the day, taken from the open tiers'
+   * offers lowest tier first (owner, after the 0.20.0 build: "Contract
+   * management. Only 3-7 available to take").
+   */
+  offers: [3, 7] as [number, number],
+  /**
+   * How far below the deepest square dug the board looks for what a contract
+   * asks for (owner: "Gauge on how deep the player has dug, no keystone or
+   * relics etc if they are still far away"): only the ground down to this
+   * many levels below the deepest square counts, with the store and smelting.
+   */
+  reachBelowDeepest: 4,
 };
 
 /**
@@ -1070,6 +1117,7 @@ export const FRONTIER_RAID = {
     'steelDrill',
     'ironPickaxe',
     'axe',
+    'miner',
     'copperLantern',
     'campKit',
   ] as ItemId[],

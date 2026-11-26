@@ -33,6 +33,7 @@ import { BLOCKS } from '../../data';
 import type { ItemStack } from '../../data';
 import {
   FRONTIER_FOODS,
+  FRONTIER_MINERS,
   FRONTIER_RUN,
   FRONTIER_SHIFT,
   FRONTIER_SURFACE,
@@ -71,6 +72,8 @@ import {
 } from './smelting';
 import { build, buildRefusal } from './buildings';
 import { fillSquare, fillSquareRefusal } from './fill';
+import { minersHeld, tapsPerShift } from './crew';
+import { digArea, digAreaRefusal } from './dig';
 import { nightOfMushrooms } from './mushrooms';
 import { growCrops } from './crops';
 import { frontierTap } from './tap';
@@ -116,6 +119,8 @@ export type FrontierAction =
   | { kind: 'build'; building: string; x: number; y: number }
   // Fill square (x, y) with one block of dirt (fill.ts).
   | { kind: 'fillSquare'; x: number; y: number }
+  // Dig every diggable square of the 3 x 3 round (x, y), with 2 or more miners (dig.ts).
+  | { kind: 'digArea'; x: number; y: number }
   | { kind: 'buy'; item: string; lots: number }
   | { kind: 'close' };
 
@@ -187,14 +192,21 @@ export interface FrontierOutcome {
   report: ShiftReport | null;
 }
 
-/** The upkeep due at the end of shift `shift` with `camps` camps, item by item (one entry per item). */
-export function upkeepDue(shift: number, camps: number): ItemStack[] {
+/**
+ * The upkeep due at the end of shift `shift` with `camps` camps and `miners`
+ * miners hired (crew.ts), item by item (one entry per item).
+ */
+export function upkeepDue(shift: number, camps: number, miners = 0): ItemStack[] {
   const due: ItemStack[] = [];
   for (let i = 0; i < FRONTIER_SHIFT.woodEveryShift; i += 1) {
     due.push({ item: 'wood', count: 1 });
   }
   if (shift % FRONTIER_SHIFT.foodEveryShifts === 0) {
     due.push({ item: 'food', count: 1 });
+    // Each miner eats too (owner: "They just need food upkeep").
+    for (let i = 0; i < miners * FRONTIER_MINERS.foodEach; i += 1) {
+      due.push({ item: 'food', count: 1 });
+    }
   }
   if (shift % FRONTIER_SHIFT.campWoodEveryShifts === 0) {
     for (let i = 1; i < camps; i += 1) {
@@ -268,7 +280,7 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
   const inventory = new Map(state.inventory);
   const paid: ItemStack[] = [];
   const unpaid: ItemStack[] = [];
-  for (const due of upkeepDue(state.shift, state.camps.length)) {
+  for (const due of upkeepDue(state.shift, state.camps.length, minersHeld(state.inventory))) {
     // What can pay it: wood pays wood; food is paid by the first of FRONTIER_FOODS held.
     const candidates = due.item === 'food' ? FRONTIER_FOODS : [due];
     const pay = candidates.find((c) => (inventory.get(c.item) ?? 0) >= c.count);
@@ -335,7 +347,8 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
     inventory: pumping.inventory,
     health,
     shift: state.shift + 1,
-    tapsLeft: FRONTIER_SHIFT.taps,
+    // More taps with miners in the crew (crew.ts).
+    tapsLeft: tapsPerShift(pumping.inventory),
     marketOpen: false,
     // A lost crew ends the run first; otherwise the run is over once its last shift has ended.
     status: health <= 0 ? 'lost' : state.shift >= FRONTIER_RUN.shifts ? 'finished' : 'active',
@@ -617,6 +630,19 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
     const why = defenseRefusal(state, action.id);
     return why === null ? spent(buildDefense(state, action.id)) : refused(state, why);
   }
+  if (action.kind === 'digArea') {
+    // Its own taps: the lesser of the crew's cost and the squares dug (dig.ts).
+    const why = digAreaRefusal(state, action.x, action.y);
+    return why === null
+      ? {
+          state: digArea(state, action.x, action.y),
+          done: true,
+          refusal: null,
+          tap: null,
+          report: null,
+        }
+      : refused(state, why);
+  }
   if (action.kind === 'fillSquare') {
     const why = fillSquareRefusal(state, action.x, action.y);
     return why === null ? spent(fillSquare(state, action.x, action.y)) : refused(state, why);
@@ -646,7 +672,8 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
       tap.kind !== 'harvested' &&
       tap.kind !== 'pump' &&
       tap.kind !== 'fire' &&
-      tap.kind !== 'dragon'
+      tap.kind !== 'dragon' &&
+      tap.kind !== 'uprooted'
     ) {
       return refused(state, tap.kind, tap);
     }

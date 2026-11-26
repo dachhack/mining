@@ -34,6 +34,7 @@ import { canAfford, pay } from './camps';
 import { bestCampLevel, marketIsOpen } from './market';
 import { worldCanFill, worldStock } from './stock';
 import { gained } from './surface';
+import { deepestDug } from './raids';
 import type { FrontierState } from './state';
 
 /** The tiers whose contracts the board offers now: [1], [1, 2] or [1, 2, 3], or none. */
@@ -63,18 +64,39 @@ export function contractBoard(state: FrontierState): FrontierContractDef[] {
   const rng = createRng(
     (Math.imul(state.seed, 0x9e3779b1) ^ Math.imul(state.shift, 0x85ebca6b)) >>> 0,
   );
-  const board: FrontierContractDef[] = [];
-  const stock = worldStock(state);
+  // Only what is within reach of the deepest square dug counts (owner, after
+  // the 0.20.0 build: "no keystone or relics etc if they are still far away").
+  const stock = worldStock(state, deepestDug(state) + FRONTIER_BOARD.reachBelowDeepest);
+  const byTier: FrontierContractDef[][] = [];
   for (const tier of openTiers(state)) {
     const pool = FRONTIER_CONTRACTS.filter((c) => c.tier === tier && worldCanFill(stock, c.asks));
     // Draw without putting back: a few steps of a shuffle.
     const left = [...pool];
+    const drawn: FrontierContractDef[] = [];
     for (let k = 0; k < FRONTIER_BOARD.perTier && left.length > 0; k += 1) {
       const [picked] = left.splice(nextInt(rng, left.length), 1);
-      if (picked !== undefined) board.push(picked);
+      if (picked !== undefined) drawn.push(picked);
     }
+    byTier.push(drawn);
   }
-  return board;
+  // At most 3 to 7 a day (owner: "Only 3-7 available to take"): taken in
+  // turn from each tier, highest first, so every open tier is offered; then
+  // shown lowest tier first.
+  const [low, high] = FRONTIER_BOARD.offers;
+  const most = low + nextInt(rng, high - low + 1);
+  const chosen: FrontierContractDef[] = [];
+  for (let round = 0; chosen.length < most; round += 1) {
+    let any = false;
+    for (let t = byTier.length - 1; t >= 0 && chosen.length < most; t -= 1) {
+      const pick = byTier[t]?.[round];
+      if (pick !== undefined) {
+        chosen.push(pick);
+        any = true;
+      }
+    }
+    if (!any) break;
+  }
+  return FRONTIER_CONTRACTS.filter((c) => chosen.includes(c));
 }
 
 /** The contract with this id, or `null`. */

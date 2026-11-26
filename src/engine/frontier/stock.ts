@@ -26,33 +26,40 @@ import { blockAt } from '../state';
 import type { GameState } from '../state';
 import type { FrontierState } from './state';
 
-/** What the ground still holds, by item: kept for each cube. */
-const groundCache = new WeakMap<GameState, Map<string, number>>();
+/** What the ground still holds, by item: kept for each cube and each depth limit. */
+const groundCache = new WeakMap<GameState, Map<number, Map<string, number>>>();
 
-/** Every item still in the ground of `cube`, at and below each square's top block. */
-export function groundStock(cube: GameState): Map<string, number> {
-  const cached = groundCache.get(cube);
+/**
+ * Every item still in the ground of `cube`, at and below each square's top
+ * block, down to layer `maxDepth` (all the way down if not given).
+ */
+export function groundStock(cube: GameState, maxDepth = Infinity): Map<string, number> {
+  const byLimit = groundCache.get(cube) ?? new Map<number, Map<string, number>>();
+  groundCache.set(cube, byLimit);
+  const cached = byLimit.get(maxDepth);
   if (cached !== undefined) return cached;
   const stock = new Map<string, number>();
+  const bottom = Math.min(cube.size.z, maxDepth + 1);
   for (let y = 0; y < cube.size.y; y += 1) {
     for (let x = 0; x < cube.size.x; x += 1) {
-      for (let z = depthAt(cube, x, y); z < cube.size.z; z += 1) {
+      for (let z = depthAt(cube, x, y); z < bottom; z += 1) {
         for (const stack of blockDefByCode(blockAt(cube, { x, y, z })).yields) {
           stock.set(stack.item, (stock.get(stack.item) ?? 0) + stack.count);
         }
       }
     }
   }
-  groundCache.set(cube, stock);
+  byLimit.set(maxDepth, stock);
   return stock;
 }
 
 /**
- * What the world holds, by item: the ground, the store, and the ingots its
- * ore and coal could be smelted into (see the top of this file).
+ * What the world holds, by item: the ground (down to layer `maxDepth`, all
+ * of it if not given), the store, and the ingots its ore and coal could be
+ * smelted into (see the top of this file).
  */
-export function worldStock(state: FrontierState): Map<string, number> {
-  const stock = new Map(groundStock(state.cube));
+export function worldStock(state: FrontierState, maxDepth = Infinity): Map<string, number> {
+  const stock = new Map(groundStock(state.cube, maxDepth));
   for (const [item, count] of state.inventory) {
     stock.set(item, (stock.get(item) ?? 0) + count);
   }

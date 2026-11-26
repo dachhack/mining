@@ -6,6 +6,7 @@
 import {
   FRONTIER_AXE,
   FRONTIER_CROPS,
+  FRONTIER_MINERS,
   FRONTIER_DEEP_CAMP,
   FRONTIER_DRAGON,
   FRONTIER_DRILL,
@@ -56,6 +57,10 @@ import {
   buildRefusal,
   hasBuilding,
   isRipe,
+  areaCost,
+  digAreaPlan,
+  digAreaRefusal,
+  minersHeld,
   inCircle,
   smelterRefusal,
   upgradeCostFrom,
@@ -74,7 +79,7 @@ import { APPLE_TREE, MAPLE_TREE, NO_FEATURE, TREE, cropOf } from '../src/engine/
  * an apple sapling on square X,Y), "buildPen ID", "penIn ID" or "penOut ID"
  * (a pen at camp ID, an animal into it or out of it), "takeContract ID"
  * (a contract from today's board), "deliver ID", "dropContract ID", or
- * "placeDeep X,Y" (a deep camp), "fillSquare X,Y" (a block of dirt on a dug
+ * "placeDeep X,Y" (a deep camp), "digArea X,Y" (the miners dig a 3 x 3), "fillSquare X,Y" (a block of dirt on a dug
  * square), "build KIND X,Y" (a saw house or a sugar shack), or
  * "closeMarket" (the market closes and the day starts).
  */
@@ -154,7 +159,11 @@ export function actionOf(step: FrontierStep): FrontierAction {
     return { kind: 'make', recipe: arg };
   }
   if (
-    (verb === 'tap' || verb === 'place' || verb === 'placeDeep' || verb === 'fillSquare') &&
+    (verb === 'tap' ||
+      verb === 'place' ||
+      verb === 'placeDeep' ||
+      verb === 'fillSquare' ||
+      verb === 'digArea') &&
     arg !== undefined
   ) {
     return { kind: verb, ...squareOf(arg) };
@@ -246,6 +255,10 @@ const GATHERER_GRASS_KEPT = 60;
 
 /** On a market day that sells wood, the gatherer buys it up to this much. */
 const GATHERER_WOOD_STOCK = 40;
+
+/** The gatherer hires miners up to this many, while it would still hold this many coins after. */
+const GATHERER_MINERS = 2;
+const GATHERER_MINER_COINS_KEPT = 200;
 
 /** The gatherer buys an axe only while it would still hold this many coins after. */
 const GATHERER_AXE_COINS_KEPT = 20;
@@ -339,6 +352,17 @@ export function marketStep(state: FrontierState): FrontierStep | null {
       if (lot === undefined || coinsHeld(state) < 60 + 4 * lot.coins) continue;
       if (tradeRefusal(state, 'buy', c.seed, 4) === null) return `buy ${c.seed} 4`;
     }
+  }
+  // Miners (owner, after the 0.20.0 build): one at a time, up to
+  // GATHERER_MINERS, keeping GATHERER_MINER_COINS_KEPT coins back.
+  const minerLot = FRONTIER_MARKET.buyPrices.find((l) => l.item === FRONTIER_MINERS.item);
+  if (
+    minerLot !== undefined &&
+    minersHeld(state.inventory) < GATHERER_MINERS &&
+    coinsHeld(state) >= minerLot.coins + GATHERER_MINER_COINS_KEPT &&
+    tradeRefusal(state, 'buy', FRONTIER_MINERS.item, 1) === null
+  ) {
+    return `buy ${FRONTIER_MINERS.item} 1`;
   }
   const tier3 = openTiers(state).includes(3);
   for (const item of tier3 ? [] : GATHERER_SELLS_ALL) {
@@ -804,7 +828,18 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
   if (plant !== undefined && short) return `tap ${plant.x},${plant.y}`;
   for (const s of squares) {
     if (state.features[s.x + width * s.y] !== NO_FEATURE) continue; // a plant must go first
-    if (previewTap(state, s.x, s.y).kind === 'mined') return `tap ${s.x},${s.y}`;
+    if (previewTap(state, s.x, s.y).kind === 'mined') {
+      // With 2 or more miners, a long-press dig of the 3 x 3 round it when it
+      // digs at least 3 squares (owner, after the 0.20.0 build).
+      if (
+        areaCost(state.inventory) !== null &&
+        digAreaRefusal(state, s.x, s.y) === null &&
+        digAreaPlan(state, s.x, s.y).dug.length >= 3
+      ) {
+        return `digArea ${s.x},${s.y}`;
+      }
+      return `tap ${s.x},${s.y}`;
+    }
   }
   // Nothing left to take: end the shift, so the animals and apples come round again.
   return plant === undefined ? 'endShift' : `tap ${plant.x},${plant.y}`;
