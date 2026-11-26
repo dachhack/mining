@@ -577,6 +577,16 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
       report: null,
     };
   }
+  // Delivering or dropping a contract held costs no tap, even with none
+  // left (owner, after the 0.20.0 build: "Free, any time"), as at the market.
+  if (action.kind === 'deliver') {
+    const why = deliverRefusal(state, action.id);
+    return why === null ? free(deliverContract(state, action.id)) : refused(state, why);
+  }
+  if (action.kind === 'dropContract') {
+    const why = dropRefusal(state, action.id);
+    return why === null ? free(dropContract(state, action.id)) : refused(state, why);
+  }
   if (state.tapsLeft <= 0) {
     return refused(state, 'noTaps');
   }
@@ -598,14 +608,6 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
   }
   if (action.kind === 'fillContract') {
     return refused(state, 'closed'); // only while the market is open
-  }
-  if (action.kind === 'deliver') {
-    const why = deliverRefusal(state, action.id);
-    return why === null ? spent(deliverContract(state, action.id)) : refused(state, why);
-  }
-  if (action.kind === 'dropContract') {
-    const why = dropRefusal(state, action.id);
-    return why === null ? spent(dropContract(state, action.id)) : refused(state, why);
   }
   if (action.kind === 'buildPen' || action.kind === 'penIn' || action.kind === 'penOut') {
     const why = penRefusal(state, action.kind, action.id);

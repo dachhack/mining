@@ -104,6 +104,27 @@ test('deliver a contract held from the goals card during the day, for its coins'
   await expect(page.getByTestId('lab2-goal')).toHaveText(FRONTIER_PHASES[3]?.next ?? '');
   await expect(page.getByTestId('lab2-hud')).toHaveAttribute(
     'data-taps',
-    String(FRONTIER_SHIFT.taps - 1), // delivering during the day costs a tap
+    String(FRONTIER_SHIFT.taps), // delivering is free (owner, after the 0.20.0 build)
   );
+});
+
+test('a contract held can be delivered with no taps left (owner: "I can\'t deliver these?")', async ({
+  page,
+}) => {
+  const base = marketDay();
+  const offer = contractBoard(base)[0];
+  if (offer === undefined) throw new Error('no contract on the board');
+  const state: FrontierState = {
+    ...base,
+    marketOpen: false,
+    tapsLeft: 0,
+    contracts: [{ id: offer.id, takenOn: 30 }],
+    inventory: new Map(offer.asks.map((a) => [a.item, a.count] as [string, number])),
+  };
+  await openGame(page, state);
+  await page.getByTestId('lab2-goals').click();
+  await expect(page.getByTestId(`lab2-contract-deliver-${offer.id}`)).toBeEnabled();
+  await page.getByTestId(`lab2-contract-deliver-${offer.id}`).click();
+  await expect(page.getByTestId('lab-coins')).toHaveAttribute('data-count', String(offer.pays));
+  await expect(page.getByTestId('lab2-hud')).toHaveAttribute('data-taps', '0');
 });

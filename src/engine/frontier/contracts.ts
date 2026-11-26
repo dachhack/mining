@@ -18,8 +18,9 @@
 //   contracts can be delivered while the market is open too, also for no tap.
 // - Taking one (while the market is open, holding fewer than the limit; no tap), delivering it (any shift,
 //   holding everything it asks for: the items leave the store and its
-//   coins arrive), and dropping it (any shift, nothing back) cost 1 tap
-//   each; shift.ts charges it. A contract never ends the run.
+//   coins arrive), and dropping it (any shift, nothing back) cost no tap,
+//   even with none left (owner, after the 0.20.0 build: "Free, any time").
+//   A contract never ends the run.
 // - The phase (plan section 1) is worked out from the camps and the
 //   contracts done: 1 until a level-2 camp, 2 until a level-3 camp, 3 until
 //   a tier-1 contract is done, 4 until a tier-2 one is, then 5.

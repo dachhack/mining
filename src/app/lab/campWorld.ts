@@ -719,8 +719,11 @@ export function contractRefusal(
     | { kind: 'deliver'; id: string }
     | { kind: 'dropContract'; id: string },
 ): string | null {
+  // Delivering and dropping cost no tap (owner, after the 0.20.0 build: "Free,
+  // any time"): only a run that has ended stops them.
+  const free = action.kind === 'deliver' || action.kind === 'dropContract';
   const turn = turnRefusal(world);
-  if (turn !== null) return turn;
+  if (turn !== null && !(free && turn === 'noTaps')) return turn;
   const state = toFrontier(world);
   if (action.kind === 'takeContract') return engineTakeRefusal(state, action.id);
   if (action.kind === 'fillContract') return engineFillRefusal(state, action.id);
@@ -729,7 +732,7 @@ export function contractRefusal(
     : engineDropRefusal(state, action.id);
 }
 
-/** Take, deliver or drop a contract, for 1 tap; the very same world if it cannot. */
+/** Take, fill, deliver or drop a contract, for no tap; the very same world if it cannot. */
 export function contractCamp(
   world: CampWorld,
   action:

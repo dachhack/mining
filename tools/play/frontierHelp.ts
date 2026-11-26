@@ -141,7 +141,7 @@ export function frontierHelpText(): string {
     `- Contracts: while the market is open the board offers ${FRONTIER_BOARD.perTier} of each open tier ("take ID"). Tier 1 opens with a level ${FRONTIER_BOARD.tier1Level} camp,`,
     '  Only contracts the world can fill are offered: the ground, your store and smelting hold all they ask for.',
     "  tier 2 after a tier-1 contract is delivered, tier 3 after a tier-2. Hold as many as your best camp's level;",
-    '  "deliver ID" on any shift once you hold everything it asks for pays its coins; "drop ID" gives it up (1 tap each).',
+    '  "deliver ID" on any shift once you hold everything it asks for pays its coins; "drop ID" gives it up (no tap, even with none left).',
     '  At the market, "fill ID" fills a contract on the board at once if your store holds everything it asks for (it',
     '  needs no free place), and "deliver ID" delivers one held; neither costs a tap there.',
     '  The view names your phase and goal.',

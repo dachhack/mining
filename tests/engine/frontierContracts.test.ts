@@ -114,7 +114,7 @@ describe('clay contracts (owner: bricks, pottery and roads)', () => {
 });
 
 describe('taking, delivering and dropping contracts', () => {
-  it('takes one from the board at the market for no tap, delivers it later for 1 tap and its coins, and counts it done', () => {
+  it('takes one from the board at the market for no tap, delivers it later for its coins, and counts it done', () => {
     const w = at(3);
     const offer = contractBoard(w)[0];
     if (offer === undefined) throw new Error('no contract on the board');
@@ -136,6 +136,16 @@ describe('taking, delivering and dropping contracts', () => {
     for (const a of offer.asks) expect(out.state.inventory.get(a.item)).toBe(1);
     expect(out.state.contractsDone).toEqual([1, 0, 0]);
     expect(out.state.status).toBe('active'); // a contract never ends the run
+    // Delivering costs no tap, even with none left (owner, after the 0.20.0
+    // build: Deliver was greyed out at 0 taps; "Free, any time").
+    expect(out.state.tapsLeft).toBe(later.tapsLeft);
+    const spent = frontierAct({ ...later, tapsLeft: 0 }, { kind: 'deliver', id: offer.id });
+    expect(spent.done).toBe(true);
+    expect(spent.state.tapsLeft).toBe(0);
+    // Nor does dropping one.
+    const dropped = frontierAct({ ...later, tapsLeft: 0 }, { kind: 'dropContract', id: offer.id });
+    expect(dropped.done).toBe(true);
+    expect(dropped.state.contracts).toEqual([]);
   });
 
   it('holds as many as the best camp’s level (owner), each once, and delivers or drops each by name', () => {

@@ -147,6 +147,9 @@ export function checkStep(
   } else if (before.marketOpen) {
     // Market actions cost no taps (market.ts).
     if (after.tapsLeft !== before.tapsLeft) say(`a market action changed the taps`);
+  } else if (verb === 'deliver' || verb === 'dropContract') {
+    // Delivering or dropping a contract held is free (owner, after the 0.20.0 build).
+    if (after.tapsLeft !== before.tapsLeft) say(`${verb} changed the taps`);
   } else if (verb !== 'close' && after.tapsLeft !== before.tapsLeft - 1) {
     say(`taps went from ${before.tapsLeft} to ${after.tapsLeft}`);
   }

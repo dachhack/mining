@@ -39,3 +39,10 @@ and appear." Each night, before the countdown, a mushroom coming or standing
 on a square with no plain tree is lost. Felling the tree, fire, or a camp
 cleared over it all count. A tap still picks a mushroom before it fells the
 tree, so a picked mushroom is never lost this way. Engine 0.21.0.
+
+Also after the 0.20.0 build, the owner sent a screenshot: "I can't deliver
+these?" Both contracts held everything they asked for, but the shift had no
+taps left, and delivering cost 1 tap. Asked how it should work, the owner
+chose "Free, any time". Delivering and dropping a held contract now cost no
+tap on any shift, and work with none left. Only a run that has ended stops
+them.
