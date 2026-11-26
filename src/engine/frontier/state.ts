@@ -17,7 +17,7 @@ import type { RngState } from '../rng';
  * not loaded into a new shape. Separate from the old game's STATE_VERSION
  * while the two rule sets live side by side.
  */
-export const FRONTIER_STATE_VERSION = 23; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`; 12: `marketOpen`; 13: `contracts` (several held) for `contract`; 14: `hazards` (flooded squares, pumps); 15: `hazards.fires`; 16: `hazards.dragons`, `nextDragonId`; 17: a camp's `defense`; 18: a dragon's heading (`dx`, `dy`); 19: a dragon's `restMines`; 20: `sawHouses`; 21: `buildings` for `sawHouses`, and maple trees; 22: `mushrooms`, `mushroomIn`; 23: `crops`, `cropIn`
+export const FRONTIER_STATE_VERSION = 24; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`; 12: `marketOpen`; 13: `contracts` (several held) for `contract`; 14: `hazards` (flooded squares, pumps); 15: `hazards.fires`; 16: `hazards.dragons`, `nextDragonId`; 17: a camp's `defense`; 18: a dragon's heading (`dx`, `dy`); 19: a dragon's `restMines`; 20: `sawHouses`; 21: `buildings` for `sawHouses`, and maple trees; 22: `mushrooms`, `mushroomIn`; 23: `crops`, `cropIn`; 24: a building's `workers` and `horses`, and work camps
 
 /** What grows on a square: nothing, grass, a tree, an apple tree or a maple tree. */
 export const NO_FEATURE = 0;
@@ -51,13 +51,40 @@ export function cropOf(feature: number | undefined): 'apple' | 'sap' | null {
 }
 
 /** The kinds of one-square building (buildings.ts). */
-export type BuildingKind = 'sawHouse' | 'sugarShack';
+export type BuildingKind = 'sawHouse' | 'sugarShack' | 'lumberCamp' | 'farmCamp' | 'hermitCamp';
 
-/** A one-square building on square (x, y) (buildings.ts). */
+/**
+ * A building (buildings.ts): one square at (x, y), or for a work camp
+ * (workers.ts) the 2 x 2 whose top-left square is (x, y).
+ */
 export interface FrontierBuilding {
   kind: BuildingKind;
   x: number;
   y: number;
+  /** A work camp's workers hired (0 for the one-square buildings). */
+  workers: number;
+  /** A lumberjack camp's horses (0 elsewhere). */
+  horses: number;
+}
+
+/** True for the 2 x 2 work camps (workers.ts); false for the one-square buildings. */
+export function isWorkCamp(kind: BuildingKind): kind is 'lumberCamp' | 'farmCamp' | 'hermitCamp' {
+  return kind === 'lumberCamp' || kind === 'farmCamp' || kind === 'hermitCamp';
+}
+
+/** The squares a `kind` whose top-left square is (x, y) stands on: 1, or 2 x 2 for a work camp. */
+export function buildingFootprint(
+  kind: BuildingKind,
+  x: number,
+  y: number,
+): { x: number; y: number }[] {
+  if (!isWorkCamp(kind)) return [{ x, y }];
+  return [
+    { x, y },
+    { x: x + 1, y },
+    { x, y: y + 1 },
+    { x: x + 1, y: y + 1 },
+  ];
 }
 
 /** A roaming animal, on square (x, y). */

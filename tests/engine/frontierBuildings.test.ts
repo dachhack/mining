@@ -91,7 +91,7 @@ describe('the saw house', () => {
     const w = world({ inventory: COST });
     const out = frontierAct(w, { kind: 'build', building: 'sawHouse', ...SAW });
     expect(out.done).toBe(true);
-    expect(out.state.buildings).toEqual([{ kind: 'sawHouse', ...SAW }]);
+    expect(out.state.buildings).toEqual([{ kind: 'sawHouse', ...SAW, workers: 0, horses: 0 }]);
     expect(out.state.tapsLeft).toBe(w.tapsLeft - 1);
     for (const c of FRONTIER_SAW_HOUSE.cost) {
       expect(out.state.inventory.get(c.item) ?? 0).toBe(
@@ -234,7 +234,7 @@ describe('the sugar shack', () => {
   it('is built as a saw house is, for its own cost', () => {
     const w = world({ inventory: enough });
     const built = act(w, { kind: 'build', building: 'sugarShack', ...SHACK });
-    expect(built.buildings).toEqual([{ kind: 'sugarShack', ...SHACK }]);
+    expect(built.buildings).toEqual([{ kind: 'sugarShack', ...SHACK, workers: 0, horses: 0 }]);
     for (const c of FRONTIER_SUGAR_SHACK.cost) {
       expect(built.inventory.get(c.item)).toBe(
         ((enough as Record<string, number>)[c.item] ?? 0) - c.count,

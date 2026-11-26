@@ -13,6 +13,7 @@ import {
   FRONTIER_DRILL,
   FRONTIER_FOODS,
   FRONTIER_LANTERN,
+  FRONTIER_MINERS,
   FRONTIER_PEN,
   FRONTIER_PICKAXE,
   FRONTIER_PUMP,
@@ -81,6 +82,8 @@ export function itemInfo(item: string): string | null {
       const food = FRONTIER_FOODS.find((f) => f.item === item)?.count ?? 1;
       return `Food for the crew: ${food === 1 ? 'one' : food} a meal. Sells at the market.`;
     }
+    case FRONTIER_MINERS.item:
+      return `One more of the crew: more taps a shift, and from 2 a long press digs a 3 × 3. Eats ${FRONTIER_MINERS.foodEach} food when the crew eats. Up to ${FRONTIER_MINERS.most}.`;
     case 'appleSapling':
       return `Plant it with 🌱 on bare dirt: an apple tree in ${FRONTIER_SAPLINGS.appleSaplingGrowShifts} shifts.`;
     case FRONTIER_PUMP.item:

@@ -45,6 +45,8 @@ import {
   defenseRefusal as engineDefenseRefusal,
   buildRefusal as engineBuildRefusal,
   fillSquareRefusal as engineFillSquareRefusal,
+  digAreaRefusal as engineDigAreaRefusal,
+  hireRefusal as engineHireRefusal,
   raidStrength as engineRaidStrength,
   foundationDepth as engineFoundationDepth,
   plantRefusal as enginePlantRefusal,
@@ -445,6 +447,7 @@ export function campWorldOf(state: FrontierState): CampWorld {
  * - 'camp': the square holds a camp, which is never mined;
  * - 'building': the square holds a saw house or a sugar shack, which is never mined;
  * - 'growing': a crop grows on the square and is not ripe yet;
+ * - 'uprooted': a planted sapling was pulled up, back into the store;
  * - 'refused': the level rule refused it (`tap.result.refusal` says why);
  * - 'tooHard': the level rule allows it, but the camps covering the square
  *   cannot mine its top block (`needs` says which level can, `needsTool`
@@ -465,6 +468,7 @@ export type CampTapKind =
   | 'camp'
   | 'building'
   | 'growing'
+  | 'uprooted'
   | 'tooHard'
   | 'refused'
   | 'flooded'
@@ -539,7 +543,7 @@ export function campTap(world: CampWorld, x: number, y: number): CampTap {
   if (tap.kind === 'pump') {
     return { ...answer('pump'), world: after, pump: tap.pump };
   }
-  if (tap.kind === 'fire' || tap.kind === 'dragon') {
+  if (tap.kind === 'fire' || tap.kind === 'dragon' || tap.kind === 'uprooted') {
     return { ...answer(tap.kind), world: after };
   }
   if (tap.kind === 'harvested') {
@@ -719,8 +723,11 @@ export function contractRefusal(
     | { kind: 'deliver'; id: string }
     | { kind: 'dropContract'; id: string },
 ): string | null {
+  // Delivering and dropping cost no tap (owner, after the 0.20.0 build: "Free,
+  // any time"): only a run that has ended stops them.
+  const free = action.kind === 'deliver' || action.kind === 'dropContract';
   const turn = turnRefusal(world);
-  if (turn !== null) return turn;
+  if (turn !== null && !(free && turn === 'noTaps')) return turn;
   const state = toFrontier(world);
   if (action.kind === 'takeContract') return engineTakeRefusal(state, action.id);
   if (action.kind === 'fillContract') return engineFillRefusal(state, action.id);
@@ -729,7 +736,7 @@ export function contractRefusal(
     : engineDropRefusal(state, action.id);
 }
 
-/** Take, deliver or drop a contract, for 1 tap; the very same world if it cannot. */
+/** Take, fill, deliver or drop a contract, for no tap; the very same world if it cannot. */
 export function contractCamp(
   world: CampWorld,
   action:
@@ -773,6 +780,41 @@ export function buildCampBuilding(
   y: number,
 ): CampWorld {
   return act(world, { kind: 'build', building, x, y }).world;
+}
+
+// ----- Digging a 3 x 3 with miners (owner, after the 0.20.0 build) -----
+
+/** Why the 3 x 3 round (x, y) cannot be dug now ('over', or the engine's reason), or `null` if it can. */
+export function digAreaRefusal(world: CampWorld, x: number, y: number): string | null {
+  if (world.turn.status !== 'active') return 'over';
+  return engineDigAreaRefusal(toFrontier(world), x, y);
+}
+
+/** Dig the 3 x 3 round (x, y), for its taps; the very same world if it cannot. */
+export function digCampArea(world: CampWorld, x: number, y: number): CampWorld {
+  return act(world, { kind: 'digArea', x, y }).world;
+}
+
+// ----- Work camps (owner, after the 0.20.0 build) -----
+
+/** Why `who` cannot be hired at the work camp on (x, y) now ('noTaps', 'over', or the engine's reason), or `null`. */
+export function hireCampRefusal(
+  world: CampWorld,
+  x: number,
+  y: number,
+  who: 'worker' | 'horse',
+): string | null {
+  return turnRefusal(world) ?? engineHireRefusal(toFrontier(world), x, y, who);
+}
+
+/** Hire `who` at the work camp on (x, y), for its coins and 1 tap; the very same world if it cannot. */
+export function hireAtCamp(
+  world: CampWorld,
+  x: number,
+  y: number,
+  who: 'worker' | 'horse',
+): CampWorld {
+  return act(world, { kind: 'hire', x, y, who }).world;
 }
 
 // ----- Filling a square with dirt (owner, after the 0.17.0 build) -----
@@ -904,6 +946,10 @@ export type CampStep =
   | { kind: 'build'; building: string; x: number; y: number }
   // Fill a square with dirt (owner, after the 0.17.0 build).
   | { kind: 'fillSquare'; x: number; y: number }
+  // Dig a 3 x 3 with miners (owner, after the 0.20.0 build).
+  | { kind: 'digArea'; x: number; y: number }
+  // Hire a worker or a horse at a work camp (owner, after the 0.20.0 build).
+  | { kind: 'hire'; x: number; y: number; who: 'worker' | 'horse' }
   // End the shift, rest at a camp, or close the mine (A4).
   | { kind: 'endShift' }
   | { kind: 'rest'; id: number }
@@ -960,6 +1006,12 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   }
   if (step.kind === 'buildDefense') {
     return buildCampDefense(world, step.id);
+  }
+  if (step.kind === 'hire') {
+    return hireAtCamp(world, step.x, step.y, step.who);
+  }
+  if (step.kind === 'digArea') {
+    return digCampArea(world, step.x, step.y);
   }
   if (step.kind === 'fillSquare') {
     return fillCampSquare(world, step.x, step.y);

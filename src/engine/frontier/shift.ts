@@ -33,11 +33,13 @@ import { BLOCKS } from '../../data';
 import type { ItemStack } from '../../data';
 import {
   FRONTIER_FOODS,
+  FRONTIER_MINERS,
   FRONTIER_RUN,
   FRONTIER_SHIFT,
   FRONTIER_SURFACE,
 } from '../../data/frontier';
 import { nextFloat } from '../rng';
+import type { RngState } from '../rng';
 import { blockAt } from '../state';
 import { campAt, demolishFrontierCamp, placeFrontierCamp, upgradeFrontierCamp } from './camps';
 import { walkable } from './generation';
@@ -69,10 +71,14 @@ import {
   makeRefusal,
   smelterRefusal,
 } from './smelting';
-import { build, buildRefusal } from './buildings';
+import { build, buildRefusal, buildingAt } from './buildings';
 import { fillSquare, fillSquareRefusal } from './fill';
+import { minersHeld, tapsPerShift } from './crew';
+import { digArea, digAreaRefusal } from './dig';
 import { nightOfMushrooms } from './mushrooms';
 import { growCrops } from './crops';
+import { hire, hireRefusal, nightOfWorkers } from './workers';
+import type { Hire } from './workers';
 import { frontierTap } from './tap';
 import type { FrontierTap } from './tap';
 import { GRASS, NO_FEATURE } from './state';
@@ -116,6 +122,10 @@ export type FrontierAction =
   | { kind: 'build'; building: string; x: number; y: number }
   // Fill square (x, y) with one block of dirt (fill.ts).
   | { kind: 'fillSquare'; x: number; y: number }
+  // Dig every diggable square of the 3 x 3 round (x, y), with 2 or more miners (dig.ts).
+  | { kind: 'digArea'; x: number; y: number }
+  // Hire a worker, or a horse, at the work camp on (x, y) (workers.ts).
+  | { kind: 'hire'; x: number; y: number; who: Hire }
   | { kind: 'buy'; item: string; lots: number }
   | { kind: 'close' };
 
@@ -149,6 +159,12 @@ export interface ShiftReport {
   mushroomsCame: number;
   /** Crops that ripened in the night (crops.ts). */
   cropsRipened: number;
+  /** What the work camps' workers brought in (workers.ts): wood, crops, and apples, sap and mushrooms. */
+  workerWood: number;
+  workerCrops: number;
+  workerGathered: number;
+  /** Work camps whose upkeep could not be paid: their workers skipped the night. */
+  workCampsIdle: number;
   /** Flooded squares the pumps drained (water.ts). */
   drained: number;
   /** Pumps whose flood is dry: back in the store. */
@@ -187,14 +203,21 @@ export interface FrontierOutcome {
   report: ShiftReport | null;
 }
 
-/** The upkeep due at the end of shift `shift` with `camps` camps, item by item (one entry per item). */
-export function upkeepDue(shift: number, camps: number): ItemStack[] {
+/**
+ * The upkeep due at the end of shift `shift` with `camps` camps and `miners`
+ * miners hired (crew.ts), item by item (one entry per item).
+ */
+export function upkeepDue(shift: number, camps: number, miners = 0): ItemStack[] {
   const due: ItemStack[] = [];
   for (let i = 0; i < FRONTIER_SHIFT.woodEveryShift; i += 1) {
     due.push({ item: 'wood', count: 1 });
   }
   if (shift % FRONTIER_SHIFT.foodEveryShifts === 0) {
     due.push({ item: 'food', count: 1 });
+    // Each miner eats too (owner: "They just need food upkeep").
+    for (let i = 0; i < miners * FRONTIER_MINERS.foodEach; i += 1) {
+      due.push({ item: 'food', count: 1 });
+    }
   }
   if (shift % FRONTIER_SHIFT.campWoodEveryShifts === 0) {
     for (let i = 1; i < camps; i += 1) {
@@ -263,12 +286,12 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
     }
   }
   // Apples come back on trees whose wait is over, and felled trees on their stumps.
-  const grown = regrow({ ...state, animals });
+  const grown = regrow({ ...state, animals }, rng);
   // Upkeep, item by item; what cannot be paid costs 1 health each.
   const inventory = new Map(state.inventory);
   const paid: ItemStack[] = [];
   const unpaid: ItemStack[] = [];
-  for (const due of upkeepDue(state.shift, state.camps.length)) {
+  for (const due of upkeepDue(state.shift, state.camps.length, minersHeld(state.inventory))) {
     // What can pay it: wood pays wood; food is paid by the first of FRONTIER_FOODS held.
     const candidates = due.item === 'food' ? FRONTIER_FOODS : [due];
     const pay = candidates.find((c) => (inventory.get(c.item) ?? 0) >= c.count);
@@ -335,7 +358,8 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
     inventory: pumping.inventory,
     health,
     shift: state.shift + 1,
-    tapsLeft: FRONTIER_SHIFT.taps,
+    // More taps with miners in the crew (crew.ts).
+    tapsLeft: tapsPerShift(pumping.inventory),
     marketOpen: false,
     // A lost crew ends the run first; otherwise the run is over once its last shift has ended.
     status: health <= 0 ? 'lost' : state.shift >= FRONTIER_RUN.shifts ? 'finished' : 'active',
@@ -344,7 +368,9 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
   const mushroomed = nightOfMushrooms(beforeMushrooms, rain.rained, rng);
   // Crops grow a shift nearer ripe (crops.ts).
   const grownCrops = growCrops(mushroomed.state);
-  const next: FrontierState = { ...grownCrops.state, rng };
+  // The work camps' workers work (workers.ts), after the crops ripen.
+  const worked = nightOfWorkers(grownCrops.state, rng);
+  const next: FrontierState = { ...worked.state, rng };
   // A market day's market opens now, after the night, before the day (market.ts).
   next.marketOpen = isMarketDay(next);
   return {
@@ -367,6 +393,10 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
       rainFilled: rain.filled.length,
       mushroomsCame: mushroomed.came,
       cropsRipened: grownCrops.ripened,
+      workerWood: worked.wood,
+      workerCrops: worked.crops,
+      workerGathered: worked.gathered,
+      workCampsIdle: worked.idle,
       drained: pumping.drained,
       pumpsBack: pumping.pumpsBack,
       burned: fire.burned,
@@ -404,7 +434,7 @@ interface Regrowth {
  *   stump under a camp grows back once the camp is demolished.
  * `state.animals` are the animals after this shift's steps.
  */
-function regrow(state: FrontierState): Regrowth {
+function regrow(state: FrontierState, rng: RngState): Regrowth {
   const width = state.cube.size.x;
   const growOn = new Set<number>(FRONTIER_SURFACE.plantsGrowOn.map((id) => BLOCKS[id].code));
   const features = [...state.features];
@@ -438,36 +468,45 @@ function regrow(state: FrontierState): Regrowth {
     }
     return -1;
   });
-  // Cut grass (progression plan section 6.1): when its wait is over, it
-  // grows back if the square is still unmined dirt with nothing on it and
-  // no camp, and grass grew on a face neighbour at the start of this End
-  // shift (so the order squares are looked at does not matter). Otherwise
-  // it waits a shift more; on ground dug out it never grows.
-  const height = state.cube.size.y;
-  const grassBefore = state.features;
+  // Grass (owner, after the 0.20.0 build: "Grass should grow on any open
+  // dirt space"). A square is open if it is dirt never dug, with nothing on
+  // it: no plant, stump or sapling, crop, mushroom, building or camp (an
+  // animal may stand on grass).
+  const open = (i: number): boolean => {
+    const x = i % width;
+    const y = Math.floor(i / width);
+    return (
+      growOn.has(blockAt(state.cube, { x, y, z: 0 })) &&
+      features[i] === NO_FEATURE &&
+      (stumps[i] ?? NO_FEATURE) === NO_FEATURE &&
+      planted[i] !== true &&
+      (state.crops[i] ?? 0) === 0 &&
+      state.mushrooms[i] !== true &&
+      buildingAt(state, x, y) === null &&
+      campAt(state.camps, x, y) === null
+    );
+  };
   let grassRegrown = 0;
+  // Cut grass grows back when its wait is over, if its square is open then;
+  // otherwise it waits a shift more. On ground dug out it never grows.
   const grassIn = state.grassIn.map((left, i) => {
     if (left < 0) return left;
     if (left > 1) return left - 1;
     const x = i % width;
     const y = Math.floor(i / width);
     if (!growOn.has(blockAt(state.cube, { x, y, z: 0 }))) return -1; // dug out
-    const neighbours = [
-      { x, y: y - 1 },
-      { x: x + 1, y },
-      { x, y: y + 1 },
-      { x: x - 1, y },
-    ].filter((s) => s.x >= 0 && s.y >= 0 && s.x < width && s.y < height);
-    const beside = neighbours.some((s) => grassBefore[s.x + width * s.y] === GRASS);
-    const free =
-      features[i] === NO_FEATURE &&
-      (stumps[i] ?? NO_FEATURE) === NO_FEATURE &&
-      campAt(state.camps, x, y) === null;
-    if (!beside || !free) return 1; // try again next shift
+    if (!open(i)) return 1; // try again next shift
     features[i] = GRASS;
     grassRegrown += 1;
     return -1;
   });
+  // Every other open square comes up in grass with a chance of
+  // FRONTIER_SURFACE.grassSpreadChance a night, rolled row by row.
+  for (let i = 0; i < features.length; i += 1) {
+    if ((grassIn[i] ?? -1) >= 0 || !open(i)) continue;
+    if (nextFloat(rng) >= FRONTIER_SURFACE.grassSpreadChance) continue;
+    features[i] = GRASS; // new grass: not counted as regrown
+  }
   return {
     features,
     apples,
@@ -577,6 +616,16 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
       report: null,
     };
   }
+  // Delivering or dropping a contract held costs no tap, even with none
+  // left (owner, after the 0.20.0 build: "Free, any time"), as at the market.
+  if (action.kind === 'deliver') {
+    const why = deliverRefusal(state, action.id);
+    return why === null ? free(deliverContract(state, action.id)) : refused(state, why);
+  }
+  if (action.kind === 'dropContract') {
+    const why = dropRefusal(state, action.id);
+    return why === null ? free(dropContract(state, action.id)) : refused(state, why);
+  }
   if (state.tapsLeft <= 0) {
     return refused(state, 'noTaps');
   }
@@ -599,14 +648,6 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
   if (action.kind === 'fillContract') {
     return refused(state, 'closed'); // only while the market is open
   }
-  if (action.kind === 'deliver') {
-    const why = deliverRefusal(state, action.id);
-    return why === null ? spent(deliverContract(state, action.id)) : refused(state, why);
-  }
-  if (action.kind === 'dropContract') {
-    const why = dropRefusal(state, action.id);
-    return why === null ? spent(dropContract(state, action.id)) : refused(state, why);
-  }
   if (action.kind === 'buildPen' || action.kind === 'penIn' || action.kind === 'penOut') {
     const why = penRefusal(state, action.kind, action.id);
     return why === null ? spent(penAct(state, action.kind, action.id)) : refused(state, why);
@@ -614,6 +655,23 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
   if (action.kind === 'buildDefense') {
     const why = defenseRefusal(state, action.id);
     return why === null ? spent(buildDefense(state, action.id)) : refused(state, why);
+  }
+  if (action.kind === 'hire') {
+    const why = hireRefusal(state, action.x, action.y, action.who);
+    return why === null ? spent(hire(state, action.x, action.y, action.who)) : refused(state, why);
+  }
+  if (action.kind === 'digArea') {
+    // Its own taps: the lesser of the crew's cost and the squares dug (dig.ts).
+    const why = digAreaRefusal(state, action.x, action.y);
+    return why === null
+      ? {
+          state: digArea(state, action.x, action.y),
+          done: true,
+          refusal: null,
+          tap: null,
+          report: null,
+        }
+      : refused(state, why);
   }
   if (action.kind === 'fillSquare') {
     const why = fillSquareRefusal(state, action.x, action.y);
@@ -644,7 +702,8 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
       tap.kind !== 'harvested' &&
       tap.kind !== 'pump' &&
       tap.kind !== 'fire' &&
-      tap.kind !== 'dragon'
+      tap.kind !== 'dragon' &&
+      tap.kind !== 'uprooted'
     ) {
       return refused(state, tap.kind, tap);
     }

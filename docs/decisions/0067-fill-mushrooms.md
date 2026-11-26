@@ -33,3 +33,25 @@ coins on average (5,383 before).
 After the 0.18.0 build the owner said: "Let's omit apple trees from mushroom
 generation". Mushrooms now come only under plain trees. Apple trees and
 maples still count as trees beside one, raising its chance. Engine 0.19.0.
+
+After the 0.20.0 build the owner said: "Mushrooms need uncut trees to grow
+and appear." Each night, before the countdown, a mushroom coming or standing
+on a square with no plain tree is lost. Felling the tree, fire, or a camp
+cleared over it all count. A tap still picks a mushroom before it fells the
+tree, so a picked mushroom is never lost this way. Engine 0.21.0.
+
+Also after the 0.20.0 build, the owner sent a screenshot: "I can't deliver
+these?" Both contracts held everything they asked for, but the shift had no
+taps left, and delivering cost 1 tap. Asked how it should work, the owner
+chose "Free, any time". Delivering and dropping a held contract now cost no
+tap on any shift, and work with none left. Only a run that has ended stops
+them.
+
+Also after the 0.20.0 build, the owner sent a screenshot of a raid: "Defneses
+don't seem to do anything". They do: each level cuts the damage. That raid
+was one level short, so it took 10% of each stack and 2 upgrades. But the
+night's news never showed it. And from depth 16 the raiders' strength (4)
+was above the most a camp can be defended (3), so even full defenses could
+not turn them away. Asked, the owner chose only "Cap raids at strength 3",
+not the other choices offered: the news showing strength against defense,
+raiding the weakest camp, or any defense protecting the store. Engine 0.21.0.

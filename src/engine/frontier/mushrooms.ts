@@ -5,6 +5,10 @@
 // gold.").
 //
 // At End shift, after the rain (`nightOfMushrooms`):
+// 0. a mushroom needs its tree (owner, after the 0.20.0 build: "Mushrooms
+//    need uncut trees to grow and appear"): where the plain tree is gone
+//    (felled, burnt, or cleared for a camp), a mushroom standing or coming
+//    there is lost;
 // 1. every mushroom coming counts down a night; one that reaches 0 comes up
 //    if its square is still ground never dug with no camp or building on
 //    it, and is lost otherwise;
@@ -74,6 +78,18 @@ export function nightOfMushrooms(
   const mushroomIn = [...state.mushroomIn];
   let came = 0;
   let counted = false;
+  // 0. No tree, no mushroom: standing or coming, it is lost.
+  for (let i = 0; i < mushrooms.length; i += 1) {
+    if (state.features[i] === TREE) continue;
+    if (mushrooms[i] === true) {
+      mushrooms[i] = false;
+      counted = true;
+    }
+    if ((mushroomIn[i] ?? -1) >= 0) {
+      mushroomIn[i] = -1;
+      counted = true;
+    }
+  }
   // 1. Those coming count down, and come up where they still can.
   mushroomIn.forEach((left, i) => {
     if (left < 0) return;

@@ -107,6 +107,7 @@ import {
   previewTap,
   topBlockAt,
 } from '../src/engine';
+import { areaCost, digAreaPlan, frontierAct, hashFrontier, tapsPerShift } from '../src/engine';
 import type { FrontierOutcome, FrontierState } from '../src/engine';
 import { NO_FEATURE, cropOf, isTree } from '../src/engine/frontier/state';
 import { fullCrop } from '../src/engine/frontier/surface';
@@ -126,6 +127,30 @@ export function checkStep(
   const verb = step.split(' ')[0] ?? '';
   const endsShift = verb === 'endShift' || verb === 'rest';
 
+  // The miners' dig of a 3 x 3 (owner, after the 0.20.0 build): it must be
+  // the mining taps it stands for, one after another, each checked as a tap,
+  // for the lesser of the crew's cost and the squares dug.
+  if (verb === 'digArea' && outcome.done) {
+    const [cx, cy] = (step.split(' ')[1] ?? '').split(',').map(Number);
+    const plan = digAreaPlan(before, cx ?? -1, cy ?? -1);
+    const most = areaCost(before.inventory);
+    if (most === null) say('dug a 3 x 3 with fewer than 2 miners');
+    if (plan.dug.length === 0) say('dug a 3 x 3 that had nothing to dig');
+    if (plan.cost !== Math.min(most ?? 0, plan.dug.length)) say(`a dig cost ${plan.cost}`);
+    if (after.tapsLeft !== before.tapsLeft - plan.cost)
+      say(`taps went from ${before.tapsLeft} to ${after.tapsLeft} for a dig costing ${plan.cost}`);
+    if (hashFrontier({ ...plan.state, tapsLeft: after.tapsLeft }) !== hashFrontier(after))
+      say('the dig is not the taps it stands for');
+    let s = { ...before, tapsLeft: FRONTIER_SHIFT.taps };
+    for (const sq of plan.dug) {
+      const tapStep = `tap ${sq.x},${sq.y}`;
+      const out = frontierAct(s, { kind: 'tap', x: sq.x, y: sq.y });
+      for (const p of checkStep(s, tapStep, out)) problems.push(`${p} (in "${step}")`);
+      s = out.state;
+    }
+    return problems;
+  }
+
   // A tap does what previewTap said it would (policies and views rely on it).
   if (verb === 'tap') {
     const [x, y] = (step.split(' ')[1] ?? '').split(',').map(Number);
@@ -142,15 +167,21 @@ export function checkStep(
     return problems;
   }
   if (endsShift) {
-    if (after.tapsLeft !== FRONTIER_SHIFT.taps && after.status === 'active')
+    // A shift's taps, more with miners (crew.ts).
+    if (after.tapsLeft !== tapsPerShift(after.inventory) && after.status === 'active')
       say(`a new shift has ${after.tapsLeft} taps`);
   } else if (before.marketOpen) {
     // Market actions cost no taps (market.ts).
     if (after.tapsLeft !== before.tapsLeft) say(`a market action changed the taps`);
+  } else if (verb === 'digArea') {
+    // Its own cost, checked above.
+  } else if (verb === 'deliver' || verb === 'dropContract') {
+    // Delivering or dropping a contract held is free (owner, after the 0.20.0 build).
+    if (after.tapsLeft !== before.tapsLeft) say(`${verb} changed the taps`);
   } else if (verb !== 'close' && after.tapsLeft !== before.tapsLeft - 1) {
     say(`taps went from ${before.tapsLeft} to ${after.tapsLeft}`);
   }
-  if (after.tapsLeft < 0 || after.tapsLeft > FRONTIER_SHIFT.taps)
+  if (after.tapsLeft < 0 || after.tapsLeft > tapsPerShift(after.inventory))
     say(`${after.tapsLeft} taps left`);
 
   // The level rule, for a mined square.

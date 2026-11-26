@@ -34,8 +34,14 @@ import { collapseSpaceUnder } from '../breach';
 import { depthAt } from '../heightmap';
 import { cloneState, setBlock, setGas, setLava, setWater } from '../state';
 import type { GameState } from '../state';
-import { NO_FEATURE, isTree } from './state';
-import type { FrontierAnimal, FrontierCamp, FrontierHazards, FrontierState } from './state';
+import { NO_FEATURE, buildingFootprint, isTree } from './state';
+import type {
+  FrontierAnimal,
+  FrontierBuilding,
+  FrontierCamp,
+  FrontierHazards,
+  FrontierState,
+} from './state';
 
 /**
  * What the camp rules read and change. `FrontierState` has all of these
@@ -57,8 +63,8 @@ export interface CampGround {
    * flooded square. A ground made without them (a hand-made test) has none.
    */
   hazards?: FrontierHazards;
-  /** The one-square buildings (buildings.ts): a camp cannot stand on one. A ground made without them has none. */
-  buildings?: { x: number; y: number }[];
+  /** The buildings (buildings.ts): a camp cannot stand on one. A ground made without them has none. */
+  buildings?: FrontierBuilding[];
   /**
    * The animals: a deep camp's foundation is not dug where one stands. A
    * ground made without them (a hand-made test) has none.
@@ -352,8 +358,8 @@ export function placeRefusal(
   if (footprint.some((s) => campAt(ground.camps, s.x, s.y) !== null)) {
     return 'occupied';
   }
-  const saws = ground.buildings ?? [];
-  if (footprint.some((s) => saws.some((h) => h.x === s.x && h.y === s.y))) {
+  const taken = (ground.buildings ?? []).flatMap((b) => buildingFootprint(b.kind, b.x, b.y));
+  if (footprint.some((s) => taken.some((h) => h.x === s.x && h.y === s.y))) {
     return 'occupied';
   }
   // A deep camp comes with a concrete foundation that levels its 3 x 3

@@ -65,7 +65,7 @@ This changes the design doc's Hazards row (section 2: "None for now") and sectio
 ## 5. Marauders and defenses (PR 5)
 
 - **When:** from shift `FRONTIER_RAID.fromShift` (15), at End shift, with a chance of `chance` (1 in 10). They choose one camp, at random (question 188).
-- **Their strength** comes from how far the player has dug, the deepest square on the map: strength 1 above depth 4, 2 from depth 4, 3 from depth 8, 4 from depth 16 (`strengthFromDepth`).
+- **Their strength** comes from how far the player has dug, the deepest square on the map: strength 1 above depth 4, 2 from depth 4, 3 from depth 8 (`strengthFromDepth`; 4 from depth 16 until engine 0.21.0, when the owner chose to cap it at the 3 defense levels).
 - **Defenses** are a camp upgrade in the camp's panel, 3 levels (`FRONTIER_DEFENSE`): a palisade (level 1: 15 wood), a stone wall (level 2: 20 stone, 10 wood), a gatehouse (level 3: 10 iron ingots, 20 stone). Each costs 1 tap, at a camp of level 2 or more (as the smelter and the pen; question 194), deep camps too (question 189).
 - **Turned away** if the camp's defense level is at least the raiders' strength. Nothing is lost.
 - **Otherwise** the shortfall (strength minus defense, 1 to 4) sets the damage:

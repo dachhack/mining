@@ -34,6 +34,7 @@ import {
   FRONTIER_LANTERN,
   FRONTIER_PICKAXE,
   FRONTIER_AXE,
+  FRONTIER_MINERS,
   FRONTIER_SHIFT,
 } from '../src/data/frontier';
 import { ENGINE_VERSION, createFrontier, depthAt, frontierAct, hashFrontier } from '../src/engine';
@@ -154,7 +155,9 @@ export function playFrontierRun(
   const firsts = Object.fromEntries(FIRST_NAMES.map((n) => [n, -1])) as Record<FirstName, number>;
   const mined = { coal: 0, rawIronOre: 0, rawCopperOre: 0, crystal: 0 };
   // A safety cap on steps per shift, so a policy that never ends a shift cannot loop.
-  const maxSteps = maxShifts * (FRONTIER_SHIFT.taps + 20);
+  // The most taps a shift can give: with a full crew of miners (crew.ts).
+  const most = Math.max(FRONTIER_SHIFT.taps, ...FRONTIER_MINERS.levels.map((l) => l.taps));
+  const maxSteps = maxShifts * (most + 20);
   while (state.status === 'active' && state.shift <= maxShifts && steps.length < maxSteps) {
     const step = policy(state);
     if (step === null) break;

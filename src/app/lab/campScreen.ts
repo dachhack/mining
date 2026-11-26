@@ -23,6 +23,8 @@ import type { ItemId, ItemStack } from '../../data';
 import {
   FRONTIER_AXE,
   FRONTIER_CROPS,
+  FRONTIER_MINERS,
+  FRONTIER_WORK_CAMPS,
   FRONTIER_SURFACE,
   FRONTIER_DEEP_CAMP,
   FRONTIER_DEFENSE,
@@ -50,6 +52,11 @@ import {
   BUILDING_COSTS,
   SQUARE_STEPS,
   isBuildingKind,
+  isWorkCamp,
+  buildingFootprint,
+  campReach,
+  campUpkeep,
+  tapsPerShift,
   contractBoard,
   anyDeliverable,
   contractLimit,
@@ -60,7 +67,7 @@ import {
   runPhase,
   saveFrontier,
 } from '../../engine';
-import type { BuildingKind, TradeSide } from '../../engine';
+import type { BuildingKind, FrontierBuilding, TradeSide } from '../../engine';
 import { randomSeed } from '../previewSession';
 import { CAMP_LOOK, CAMP_MARKS } from './campLook';
 import {
@@ -100,6 +107,10 @@ import {
   plantRefusal,
   buildCampBuilding,
   buildRefusal,
+  digAreaRefusal,
+  digCampArea,
+  hireAtCamp,
+  hireCampRefusal,
   fillCampSquare,
   fillSquareRefusal,
   nextMarketShift,
@@ -169,7 +180,7 @@ import {
   drawWater,
 } from './hazardArt';
 import { itemInfo } from './itemInfo';
-import { drawMushroom, drawSawHouse, drawSugarShack } from './buildingArt';
+import { drawMushroom, drawSawHouse, drawSugarShack, drawWorkCamp } from './buildingArt';
 import { drawCrop } from './cropArt';
 import { showNight } from './night';
 import type { Night } from './night';
@@ -184,7 +195,7 @@ const HARVEST_HINTS = {
   apple: 'An apple picked. Empty trees regrow their apples after a while.',
   sap: 'Sap tapped. Boil it into syrup at a sugar shack.',
   mushroom: 'A mushroom picked. Sell it, or fill a mushroom contract.',
-  crop: 'Harvested. The soil is bare again: sow another seed.',
+  crop: 'Harvested. The soil is bare again: sow another seed (one may have come with it).',
   caught: 'Animal caught!',
 };
 const GREYED_HINT = 'Out of range now: put a camp nearby to mine here.';
@@ -247,6 +258,28 @@ const BUILDINGS: { kind: BuildingKind; name: string; short: string; icon: string
       icon: '🍁',
       does: 'Boils maple sap into syrup.',
     },
+    // Work camps, 2 x 2 (owner, after the 0.20.0 build).
+    {
+      kind: 'lumberCamp',
+      name: 'Lumberjack camp',
+      short: 'Lumber',
+      icon: '🪓',
+      does: 'Next to a saw house. Lumberjacks fell a tree each a night.',
+    },
+    {
+      kind: 'farmCamp',
+      name: 'Farm camp',
+      short: 'Farm',
+      icon: '🚜',
+      does: 'Farmers harvest every ripe crop in reach each night.',
+    },
+    {
+      kind: 'hermitCamp',
+      name: 'Hermit camp',
+      short: 'Hermit',
+      icon: '🛖',
+      does: 'Gatherers take apples, sap and mushrooms in reach each night.',
+    },
   ];
 /** The building of kind `kind`'s entry in BUILDINGS. */
 function buildingInfo(kind: BuildingKind): {
@@ -271,6 +304,17 @@ const BUILD_REFUSALS: Record<string, string> = {
   growing: 'Something grows there: clear it first.',
   animal: 'An animal stands there.',
   hazard: 'Not on water, fire or a dragon.',
+  sawHouse: 'A lumberjack camp must touch a saw house.',
+};
+/** Why a worker or a horse cannot be hired at a work camp, for its button. */
+const HIRE_REFUSALS: Record<string, string> = {
+  noTaps: 'No taps left this shift.',
+  over: 'This run is over.',
+  full: 'This camp holds as many as it can.',
+  horse: 'The next lumberjack needs a horse first.',
+  noHorses: 'No horses here.',
+  cost: 'Not enough coins.',
+  none: 'No camp here.',
 };
 const PLACE_HINT = 'Tap the middle of a flat, lit 3 × 3 patch for the new camp.';
 const PLACE_CHOSEN_HINT = 'Tap Place camp to build here, or tap another spot.';
@@ -336,7 +380,20 @@ function shiftText(report: ShiftReport, turn: CampTurn, rested: boolean): string
     report.cropsRipened > 0
       ? ` ${report.cropsRipened === 1 ? 'A crop is' : `${report.cropsRipened} crops are`} ripe 🌾: tap to harvest.`
       : '';
-  const market = `${born}${rain}${mushrooms}${ripened}${pumped}${burnt}${dragon}${raided}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
+  // The work camps (owner, after the 0.20.0 build).
+  const work = [
+    report.workerWood > 0 ? ` Lumberjacks 🪓 brought in ${report.workerWood} wood.` : '',
+    report.workerCrops > 0
+      ? ` Farmers 🚜 harvested ${report.workerCrops} ${report.workerCrops === 1 ? 'crop' : 'crops'}.`
+      : '',
+    report.workerGathered > 0
+      ? ` Gatherers 🛖 took ${report.workerGathered} apples, sap and mushrooms.`
+      : '',
+    report.workCampsIdle > 0
+      ? ` ${report.workCampsIdle === 1 ? 'A work camp' : `${report.workCampsIdle} work camps`} went unfed and did no work.`
+      : '',
+  ].join('');
+  const market = `${born}${rain}${mushrooms}${ripened}${work}${pumped}${burnt}${dragon}${raided}${report.marketOpens ? ' Market day: the market 🏪 is open.' : ''}`;
   if (turn.status === 'finished') {
     return `${start}. That was the last shift: the run is over.`;
   }
@@ -403,7 +460,9 @@ type Mode =
   // Building saw houses: each tap on the map builds one (owner, after the 0.17.0 build).
   // Building (a saw house or a sugar shack), or filling squares with dirt
   // ('dirt'): each tap on the map builds or fills one (owner, after the 0.17.0 build).
-  | { kind: 'building'; what: BuildingKind | 'dirt' };
+  | { kind: 'building'; what: BuildingKind | 'dirt' }
+  // A work camp's panel: its workers, reach and upkeep, and Hire (owner, after the 0.20.0 build).
+  | { kind: 'workCamp'; x: number; y: number };
 
 /** How long each kind of effect lasts, in milliseconds. */
 function effectMs(kind: Effect['kind']): number {
@@ -700,6 +759,13 @@ export function mountCampLab(
    */
   let drawnSquares: string[] = [];
 
+  /** A building's look on square `i`, for `squareLook`: its kind and, for a work camp, its workers. */
+  function buildingLook(i: number): string {
+    const width = world.lab.state.size.x;
+    const b = buildingOn(i % width, Math.floor(i / width));
+    return b === null ? '' : `${b.kind}${b.workers}`;
+  }
+
   /** How square `i` looks, as one string, for spotting the squares that changed. */
   function squareLook(i: number): string {
     return [
@@ -713,7 +779,7 @@ export function mountCampLab(
       world.hazards.flooded[i] === true ? 'w' : '',
       world.hazards.fires[i] === true ? 'f' : '',
       world.hazards.pumps.some((p) => p.x + world.lab.state.size.x * p.y === i) ? 'p' : '',
-      world.buildings.find((b) => b.x + world.lab.state.size.x * b.y === i)?.kind ?? '',
+      buildingLook(i),
       world.mushrooms[i] === true ? 'm' : '',
       `${world.crops[i] ?? 0}${world.cropIn[i] === 0 ? 'r' : ''}`,
     ].join(',');
@@ -1022,10 +1088,29 @@ export function mountCampLab(
           drawWater(ctx, box, x, y);
           if (world.hazards.pumps.some((p) => p.x === x && p.y === y)) drawPump(ctx, box);
         }
-        // A one-square building (owner, after the 0.17.0 build).
-        const building = world.buildings.find((b) => b.x === x && b.y === y);
+        // A building (owner, after the 0.17.0 build). A 2 x 2 work camp is
+        // drawn whole, clipped to this square, so one square can be redrawn.
+        const building = buildingOn(x, y);
         if (building?.kind === 'sawHouse') drawSawHouse(ctx, box);
         if (building?.kind === 'sugarShack') drawSugarShack(ctx, box);
+        if (
+          building !== null &&
+          (building.kind === 'lumberCamp' ||
+            building.kind === 'farmCamp' ||
+            building.kind === 'hermitCamp')
+        ) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(px, py, c, c);
+          ctx.clip();
+          const whole = {
+            left: box.left - (x - building.x) * c,
+            top: box.top - (y - building.y) * c,
+            inner: box.inner + c,
+          };
+          drawWorkCamp(ctx, whole, building.kind, building.workers);
+          ctx.restore();
+        }
         // A crop (owner, after the 0.19.0 build): sprouts, or ripe.
         const sown = FRONTIER_CROPS[(world.crops[i] ?? 0) - 1];
         if (sown !== undefined) drawCrop(ctx, box, sown.crop, world.cropIn[i] === 0);
@@ -1107,6 +1192,15 @@ export function mountCampLab(
     canvas.dataset['defenses'] = world.camps.map((camp) => `${camp.id}:${camp.defense}`).join(' ');
   }
 
+  /** The building whose square or 2 x 2 covers (x, y), or `null`. */
+  function buildingOn(x: number, y: number): FrontierBuilding | null {
+    return (
+      world.buildings.find((b) =>
+        buildingFootprint(b.kind, b.x, b.y).some((s) => s.x === x && s.y === y),
+      ) ?? null
+    );
+  }
+
   /** True if square (x, y) is on the map, not in fog, and has a tree or an apple tree: part of a forest. */
   function forestAt(x: number, y: number): boolean {
     const size = world.lab.state.size;
@@ -1138,7 +1232,7 @@ export function mountCampLab(
     if (!isTree(feature)) {
       const stump = world.surface.stumps[i] ?? NO_FEATURE;
       if (stump !== NO_FEATURE && world.surface.planted[i] === true) {
-        drawSapling(ctx, box, stump === APPLE_TREE); // a planted sapling
+        drawSapling(ctx, box, stump === APPLE_TREE, stump === MAPLE_TREE); // a planted sapling
       } else if (stump !== NO_FEATURE) {
         drawStump(ctx, box); // a felled tree that will grow back
       }
@@ -1692,6 +1786,7 @@ export function mountCampLab(
       'sap',
       'syrup',
       'mushroom',
+      FRONTIER_MINERS.item,
       'wheatSeed',
       'cornSeed',
       'carrotSeed',
@@ -1790,6 +1885,8 @@ export function mountCampLab(
       showPlantingTray(mode.item);
     } else if (mode.kind === 'building') {
       showBuildingTray(mode.what);
+    } else if (mode.kind === 'workCamp') {
+      showWorkCampTray(mode.x, mode.y);
     } else if (mode.kind === 'placing') {
       showPlacingTray(mode.target);
     } else {
@@ -2550,7 +2647,10 @@ export function mountCampLab(
       const costs = costRow(cost);
       costs.dataset['testid'] = 'lab2-build-cost';
       head.append(costs);
-      body.textContent = `Tap bare ground. ${info.does}`;
+      // A work camp is 2 x 2: the square tapped is its top-left square.
+      body.textContent = isWorkCamp(what)
+        ? `Tap its top-left square (2 × 2). ${info.does}`
+        : `Tap bare ground. ${info.does}`;
       if (!canAfford(world.lab.counts, cost)) {
         body.textContent = `${missingText(cost)} · ${info.does}`;
         body.classList.add('lab2-panel-warn');
@@ -2566,7 +2666,8 @@ export function mountCampLab(
       ...BUILDINGS.map((b) => ({ kind: b.kind, label: `${b.icon} ${b.short}`, name: b.name })),
       { kind: 'dirt', label: '🟫 Dirt', name: 'Fill with dirt' },
     ];
-    const actions = element('div', 'lab2-actions');
+    // Six choices never fit a phone: the row scrolls sideways.
+    const actions = element('div', 'lab2-actions lab2-actions-scroll');
     for (const c of choices) {
       const choose = button(
         c.kind === what ? 'lab2-button lab2-button-main' : 'lab2-button',
@@ -2577,6 +2678,65 @@ export function mountCampLab(
       choose.setAttribute('aria-pressed', String(c.kind === what));
       choose.addEventListener('click', () => setMode({ kind: 'building', what: c.kind }));
       actions.append(choose);
+    }
+    tray.replaceChildren(head, body, actions);
+  }
+
+  /**
+   * A work camp's panel (owner, after the 0.20.0 build): who works there, how
+   * far they reach, what they eat, and Hire. Hiring costs coins and 1 tap.
+   */
+  function showWorkCampTray(x: number, y: number): void {
+    const camp = buildingOn(x, y);
+    if (camp === null || !isWorkCamp(camp.kind)) {
+      setMode({ kind: 'idle' });
+      return;
+    }
+    const def = FRONTIER_WORK_CAMPS[camp.kind];
+    const info = buildingInfo(camp.kind);
+    const who =
+      camp.kind === 'lumberCamp' ? 'lumberjack' : camp.kind === 'farmCamp' ? 'farmer' : 'gatherer';
+    const head = element('div', 'lab2-panel-head');
+    head.append(element('span', 'lab2-panel-title', `${info.icon} ${info.name}`));
+    const cancel = button('lab2-close', '×');
+    cancel.setAttribute('aria-label', 'Close');
+    cancel.dataset['testid'] = 'lab2-work-close';
+    cancel.addEventListener('click', () => setMode({ kind: 'idle' }));
+    head.append(cancel);
+    const upkeep = campUpkeep(camp);
+    const eats =
+      upkeep.food === 0
+        ? 'nothing yet'
+        : `${upkeep.food} food${upkeep.syrup > 0 ? `, ${upkeep.syrup} syrup` : ''} when the crew eats`;
+    const horses = def.horse === null ? '' : ` · ${camp.horses} horses`;
+    const body = element(
+      'p',
+      'lab2-panel-line',
+      `${camp.workers}/${def.most} ${who}s${horses} · reach ${campReach(camp)} · eats ${eats}`,
+    );
+    body.dataset['testid'] = 'lab2-work-line';
+    const actions = element('div', 'lab2-actions');
+    const hires: { who: 'worker' | 'horse'; label: string; coins: number }[] = [
+      { who: 'worker', label: `Hire ${who}`, coins: def.hire },
+    ];
+    if (def.horse !== null)
+      hires.push({ who: 'horse', label: 'Hire horse', coins: def.horse.hire });
+    for (const h of hires) {
+      const why = hireCampRefusal(world, camp.x, camp.y, h.who);
+      const b = button(
+        why === null ? 'lab2-button lab2-button-main' : 'lab2-button',
+        `${h.label} · ${h.coins} 🪙`,
+      );
+      b.dataset['testid'] = `lab2-hire-${h.who}`;
+      b.disabled = why !== null;
+      b.title = why === null ? '' : (HIRE_REFUSALS[why] ?? '');
+      b.addEventListener('click', () => {
+        remember({ kind: 'hire', x: camp.x, y: camp.y, who: h.who });
+        setWorld(hireAtCamp(world, camp.x, camp.y, h.who));
+        setHint(`Hired: a ${h.who === 'worker' ? who : 'horse'}.`, false);
+        setMode({ kind: 'workCamp', x: camp.x, y: camp.y });
+      });
+      actions.append(b);
     }
     tray.replaceChildren(head, body, actions);
   }
@@ -3037,7 +3197,10 @@ export function mountCampLab(
     hudShift.textContent = `Shift ${turn.shift}`;
     // Taps left only: with 100 a shift, "100/100" crowds Close mine on a 320 px phone.
     hudTaps.textContent = `⚡ ${turn.tapsLeft}`;
-    hudTaps.setAttribute('aria-label', `${turn.tapsLeft} of ${FRONTIER_SHIFT.taps} taps left`);
+    hudTaps.setAttribute(
+      'aria-label',
+      `${turn.tapsLeft} of ${tapsPerShift(world.lab.counts)} taps left`,
+    );
     hudHealth.textContent = `♥ ${turn.health}/${FRONTIER_SHIFT.startHealth}`;
     hud.dataset['shift'] = String(turn.shift);
     hud.dataset['taps'] = String(turn.tapsLeft);
@@ -3163,6 +3326,8 @@ export function mountCampLab(
     if (step.kind === 'sell' || step.kind === 'buy') return `the ${step.kind} of ${step.item}`;
     if (step.kind === 'plant') return `planting at ${step.x}, ${step.y}`;
     if (step.kind === 'fillSquare') return `filling ${step.x}, ${step.y}`;
+    if (step.kind === 'hire') return `hiring at ${step.x}, ${step.y}`;
+    if (step.kind === 'digArea') return `the miners' dig at ${step.x}, ${step.y}`;
     if (step.kind === 'build') {
       return isBuildingKind(step.building)
         ? `the ${buildingInfo(step.building).name.toLowerCase()} at ${step.x}, ${step.y}`
@@ -3237,6 +3402,12 @@ export function mountCampLab(
       setHint(result.kind === 'noTaps' ? NO_TAPS_HINT : OVER_HINT, true);
       return;
     }
+    if (result.kind === 'uprooted') {
+      remember({ kind: 'tap', x, y });
+      setWorld(result.world);
+      setHint('Sapling pulled up: it is back in your store, and the ground is not dug.', false);
+      return;
+    }
     if (result.kind === 'growing') {
       const i = x + world.lab.state.size.x * y;
       const left = world.cropIn[i] ?? 0;
@@ -3244,8 +3415,13 @@ export function mountCampLab(
       return;
     }
     if (result.kind === 'building') {
-      const here = world.buildings.find((b) => b.x === x && b.y === y);
-      if (here !== undefined) {
+      const here = buildingOn(x, y);
+      // A work camp opens its panel (owner, after the 0.20.0 build).
+      if (here !== null && isWorkCamp(here.kind)) {
+        setMode({ kind: 'workCamp', x: here.x, y: here.y });
+        return;
+      }
+      if (here !== null) {
         const info = buildingInfo(here.kind);
         setHint(`A ${info.name.toLowerCase()}. ${info.does}`, false);
       }
@@ -3436,9 +3612,33 @@ export function mountCampLab(
     setMode({ kind: 'placing', target: { x, y } });
   }
 
-  /** A long press on a lit square opens the camp tool with that square chosen. */
+  /**
+   * A long press on a lit square: with 2 or more miners, it digs every
+   * diggable square of the 3 x 3 round it (owner, after the 0.20.0 build:
+   * "Long press is no longer just for camp placement"); where nothing there
+   * can be dug, or without the miners, it opens the camp tool with that square
+   * chosen, as before.
+   */
   function hold(x: number, y: number): void {
     if (sightOf(x, y) !== 'shown' || campAt(world, x, y) !== null) {
+      return;
+    }
+    const dig = digAreaRefusal(world, x, y);
+    if (dig === null) {
+      const before = world.lab.mined;
+      const taps = world.turn.tapsLeft;
+      remember({ kind: 'digArea', x, y });
+      setWorld(digCampArea(world, x, y));
+      const dug = world.lab.mined - before;
+      const spent = taps - world.turn.tapsLeft;
+      setHint(
+        `Your miners dug ${dug} ${dug === 1 ? 'square' : 'squares'} for ${spent} ${spent === 1 ? 'tap' : 'taps'}.`,
+        false,
+      );
+      return;
+    }
+    if (dig === 'noTaps') {
+      setHint('Not enough taps left for your miners to dig there: End shift.', true);
       return;
     }
     setMode({ kind: 'placing', target: null });

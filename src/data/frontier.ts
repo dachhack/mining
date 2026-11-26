@@ -157,6 +157,12 @@ export const FRONTIER_SURFACE = {
   appleTrees: 10,
   /** Each square left over is grass with this chance; the rest is bare ground. */
   grassChance: 0.65,
+  /**
+   * The chance a night that an open square of dirt (never dug, nothing on it)
+   * comes up in grass (owner, after the 0.20.0 build: "Grass should grow on
+   * any open dirt space"). A [Default].
+   */
+  grassSpreadChance: 0.1,
   /** What a tap gives: 1 grass from a tuft, 2 wood from a felled tree (apple trees too, once empty). */
   grassPerTuft: 1,
   woodPerTree: 2,
@@ -240,9 +246,11 @@ export const FRONTIER_SHIFT = {
  * an apple tree full of apples `appleSaplingGrowShifts` later.
  */
 export const FRONTIER_SAPLINGS = {
-  saplingGrowShifts: 15,
-  appleSaplingGrowShifts: 20,
-  mapleSaplingGrowShifts: 20,
+  // Owner, after the 0.20.0 build: "Saplings take way too long"; asked, chose
+  // 5 and 8 (they were 15 and 20).
+  saplingGrowShifts: 5,
+  appleSaplingGrowShifts: 8,
+  mapleSaplingGrowShifts: 8,
 };
 
 /**
@@ -267,6 +275,29 @@ export const FRONTIER_FOODS: ItemStack[] = [
 ];
 
 /** A grain or vegetable grown from seed (FRONTIER_CROPS). */
+/**
+ * Miners (owner, after the 0.20.0 build: "Let's add miners to the market.
+ * You can hire a miner to add to the crew. You just pay them a annual salary
+ * when you hire them. They just need food upkeep."). A miner is hired at the
+ * market (its lot is the salary, paid once) and held as the item `miner`, up
+ * to `most`. Each eats `foodEach` food every FRONTIER_SHIFT.foodEveryShifts
+ * shifts, on top of the crew's own. The miners held set the crew's level:
+ * `levels[n - 1]` with n miners gives the taps a shift and, from 2 miners,
+ * a long press that digs every diggable square of the 3 x 3 round it for
+ * the lesser of `areaCost` and the squares dug (dig.ts).
+ */
+export const FRONTIER_MINERS = {
+  item: 'miner' as ItemId,
+  most: 4,
+  foodEach: 1,
+  levels: [
+    { taps: 125, areaCost: null },
+    { taps: 135, areaCost: 4 },
+    { taps: 150, areaCost: 3 },
+    { taps: 165, areaCost: 2 },
+  ] as { taps: number; areaCost: number | null }[],
+};
+
 export interface FrontierCropDef {
   /** The seed planted. */
   seed: ItemId;
@@ -276,6 +307,13 @@ export interface FrontierCropDef {
   /** Shifts from planting until it is ripe. */
   growShifts: number;
 }
+
+/**
+ * The chance that harvesting a ripe crop also gives 1 of its seed (owner,
+ * after the 0.20.0 build: "When you harvest plants get one seed as well 50%
+ * of the time").
+ */
+export const FRONTIER_SEED_BACK = 0.5;
 
 /**
  * Grains and vegetables (owner, after the 0.19.0 build: "Let's add seeds to
@@ -495,6 +533,82 @@ export const FRONTIER_SUGAR_SHACK = {
   ] as ItemStack[],
 };
 
+/**
+ * Work camps (owner, after the 0.20.0 build): 2 x 2 buildings whose hired
+ * workers work every night within the camp's reach (workers.ts).
+ * - The lumberjack camp: "2 by 2 must be placed next to saw house. You can
+ *   hire a lumber jack to auto-collect wood each shift. Each lumber jack
+ *   adds 3 to the radius. After 3 you need to buy a horse and lumber jack
+ *   for further increases. Food upkeep and syrup upkeep required for the
+ *   lumber jacks and horses." Each lumberjack fells one plain tree a night.
+ * - The farm camp: "2 by 2 that allows you to hire farmers to auto-harvest
+ *   crops (planted)". Its farmers harvest every ripe crop in reach.
+ * - The hermit camp: "Hire a gatherer to auto harvest sap, mushrooms,
+ *   apples." Its gatherers take every one in reach.
+ * Asked, the owner chose: farmers and gatherers take everything in reach;
+ * workers and horses are hired from the camp's panel, for coins paid once;
+ * workers whose upkeep cannot be paid skip that night's work.
+ * `cost` builds the camp (1 tap); `hire` is a worker's coins (1 tap);
+ * `reachEach` is the reach each worker adds; `most` the workers it holds;
+ * upkeep is due when the crew eats (FRONTIER_SHIFT.foodEveryShifts): `food`
+ * a worker (and a horse), and `syrup` a worker and a horse at the lumberjack
+ * camp. The prices and the caps are [Default]s.
+ */
+export const FRONTIER_WORK_CAMPS = {
+  lumberCamp: {
+    cost: [
+      { item: 'wood', count: 20 },
+      { item: 'stone', count: 10 },
+    ] as ItemStack[],
+    hire: 60,
+    most: 6,
+    reachEach: 3,
+    food: 1,
+    syrup: 1,
+    /** Lumberjacks a camp may have without horses; each one more needs a horse. */
+    withoutHorses: 3,
+    horse: { hire: 80 },
+  },
+  farmCamp: {
+    cost: [
+      { item: 'wood', count: 20 },
+      { item: 'clay', count: 10 },
+    ] as ItemStack[],
+    hire: 50,
+    most: 3,
+    reachEach: 3,
+    food: 1,
+    syrup: 0,
+    withoutHorses: 3,
+    horse: null,
+  },
+  hermitCamp: {
+    cost: [
+      { item: 'wood', count: 15 },
+      { item: 'stone', count: 5 },
+    ] as ItemStack[],
+    hire: 50,
+    most: 3,
+    reachEach: 3,
+    food: 1,
+    syrup: 0,
+    withoutHorses: 3,
+    horse: null,
+  },
+} as Record<
+  'lumberCamp' | 'farmCamp' | 'hermitCamp',
+  {
+    cost: ItemStack[];
+    hire: number;
+    most: number;
+    reachEach: number;
+    food: number;
+    syrup: number;
+    withoutHorses: number;
+    horse: { hire: number } | null;
+  }
+>;
+
 /** A tool that mines blocks no camp level mines: while the store holds `item`, a lit square's `mines` blocks can be mined. */
 export interface FrontierTool {
   item: ItemId;
@@ -641,6 +755,9 @@ export const FRONTIER_MARKET = {
     { item: 'cornSeed', count: 1, coins: 3 },
     { item: 'carrotSeed', count: 1, coins: 2 },
     { item: 'potatoSeed', count: 1, coins: 3 },
+    // A miner, hired for a year's pay (owner, after the 0.20.0 build: "Let's
+    // add miners to the market"): FRONTIER_MINERS.
+    { item: 'miner', count: 1, coins: 80 },
     { item: 'hay', count: 1, coins: 1 },
     // The pump drains a flood (hazards plan, section 2): from the start.
     { item: 'pump', count: 1, coins: 30 },
@@ -850,6 +967,20 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
 export const FRONTIER_BOARD = {
   perTier: 3,
   tier1Level: 3,
+  /**
+   * How many contracts the board offers on a market day, at most: a whole
+   * number drawn from [low, high] for the day, taken from the open tiers'
+   * offers lowest tier first (owner, after the 0.20.0 build: "Contract
+   * management. Only 3-7 available to take").
+   */
+  offers: [3, 7] as [number, number],
+  /**
+   * How far below the deepest square dug the board looks for what a contract
+   * asks for (owner: "Gauge on how deep the player has dug, no keystone or
+   * relics etc if they are still far away"): only the ground down to this
+   * many levels below the deepest square counts, with the store and smelting.
+   */
+  reachBelowDeepest: 4,
 };
 
 /**
@@ -904,8 +1035,9 @@ export const FRONTIER_RAIN = {
  * (not a maple or an apple tree), and no mushroom on it or coming, gets one coming with a
  * chance of `chance` plus `perTreeBeside` for each of the 8 squares round it
  * with a tree of any kind, at most `most`. It comes up a whole number of
- * nights drawn from `nights` later, at the End shift, if its square is still
- * ground never dug with no camp or building on it. A tap picks it (1
+ * nights drawn from `nights` later, at the End shift, if its tree still
+ * stands (owner, after the 0.20.0 build: "Mushrooms need uncut trees to grow
+ * and appear"; a mushroom whose tree is gone is lost, coming or standing). A tap picks it (1
  * mushroom) before anything else on the square. Every number is a [Default].
  */
 export const FRONTIER_MUSHROOM = {
@@ -1053,7 +1185,10 @@ export const FRONTIER_RAID = {
     { depth: 0, strength: 1 },
     { depth: 4, strength: 2 },
     { depth: 8, strength: 3 },
-    { depth: 16, strength: 4 },
+    // No more: 3 is the most defense levels a camp can have, so a fully
+    // defended camp always turns them away (owner, after the 0.20.0 build:
+    // "Defneses don't seem to do anything"; asked, "Cap raids at strength 3".
+    // Until engine 0.21.0 they reached 4 at depth 16).
   ],
   stealShare: 0.1,
   upgradesPerShortfall: 2,
@@ -1066,6 +1201,7 @@ export const FRONTIER_RAID = {
     'steelDrill',
     'ironPickaxe',
     'axe',
+    'miner',
     'copperLantern',
     'campKit',
   ] as ItemId[],

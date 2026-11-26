@@ -157,6 +157,33 @@ describe('mushrooms', () => {
     expect(night.state.mushrooms[at(T.x, T.y)]).toBe(false);
   });
 
+  it('need their tree still standing, to grow and to come up', () => {
+    // Owner, after the 0.20.0 build: "Mushrooms need uncut trees to grow and appear."
+    const sq = at(T.x, T.y);
+    // A mushroom coming where the tree was cut: lost, not counted down.
+    let felled = world();
+    felled = { ...felled, mushroomIn: felled.mushroomIn.map((n, i) => (i === sq ? 3 : n)) };
+    const lost = nightOfMushrooms(felled, false, { s: 1 });
+    expect(lost.state.mushroomIn[sq]).toBe(-1);
+    // One due tonight where the tree was cut: it does not come up.
+    let due = world();
+    due = { ...due, mushroomIn: due.mushroomIn.map((n, i) => (i === sq ? 1 : n)) };
+    const none = nightOfMushrooms(due, false, { s: 1 });
+    expect(none.came).toBe(0);
+    expect(none.state.mushrooms[sq]).toBe(false);
+    // One standing where its tree is gone (burnt): it goes too.
+    let bare = world();
+    bare = { ...bare, mushrooms: bare.mushrooms.map((m, i) => i === sq || m) };
+    expect(nightOfMushrooms(bare, false, { s: 1 }).state.mushrooms[sq]).toBe(false);
+    // With the tree standing, it counts down and comes up as before.
+    let standing = world({ features: [{ ...T, feature: TREE }] });
+    standing = {
+      ...standing,
+      mushroomIn: standing.mushroomIn.map((n, i) => (i === sq ? 1 : n)),
+    };
+    expect(nightOfMushrooms(standing, false, { s: 1 }).came).toBe(1);
+  });
+
   it('come up through End shift, which reports them', () => {
     let w = world({
       features: [{ ...T, feature: TREE }],
