@@ -7,6 +7,7 @@ import {
   FRONTIER_AXE,
   FRONTIER_CROPS,
   FRONTIER_MINERS,
+  FRONTIER_WORK_CAMPS,
   FRONTIER_DEEP_CAMP,
   FRONTIER_DRAGON,
   FRONTIER_DRILL,
@@ -56,6 +57,7 @@ import {
   sawHouseReaches,
   buildRefusal,
   hasBuilding,
+  hireRefusal,
   isRipe,
   areaCost,
   digAreaPlan,
@@ -66,7 +68,7 @@ import {
   upgradeCostFrom,
   upgradeRefusal,
 } from '../src/engine';
-import type { FrontierAction, FrontierState } from '../src/engine';
+import type { FrontierAction, FrontierState, WorkCampKind } from '../src/engine';
 import { APPLE_TREE, MAPLE_TREE, NO_FEATURE, TREE, cropOf } from '../src/engine/frontier/state';
 
 /**
@@ -79,7 +81,7 @@ import { APPLE_TREE, MAPLE_TREE, NO_FEATURE, TREE, cropOf } from '../src/engine/
  * an apple sapling on square X,Y), "buildPen ID", "penIn ID" or "penOut ID"
  * (a pen at camp ID, an animal into it or out of it), "takeContract ID"
  * (a contract from today's board), "deliver ID", "dropContract ID", or
- * "placeDeep X,Y" (a deep camp), "digArea X,Y" (the miners dig a 3 x 3), "fillSquare X,Y" (a block of dirt on a dug
+ * "placeDeep X,Y" (a deep camp), "hire X,Y worker|horse" (at a work camp), "digArea X,Y" (the miners dig a 3 x 3), "fillSquare X,Y" (a block of dirt on a dug
  * square), "build KIND X,Y" (a saw house or a sugar shack), or
  * "closeMarket" (the market closes and the day starts).
  */
@@ -167,6 +169,9 @@ export function actionOf(step: FrontierStep): FrontierAction {
     arg !== undefined
   ) {
     return { kind: verb, ...squareOf(arg) };
+  }
+  if (verb === 'hire' && arg !== undefined && (third === 'worker' || third === 'horse')) {
+    return { kind: 'hire', ...squareOf(arg), who: third };
   }
   if (verb === 'build' && arg !== undefined && third !== undefined) {
     return { kind: 'build', building: arg, ...squareOf(third) };
@@ -716,6 +721,55 @@ export function sugarShackStep(state: FrontierState): FrontierStep | null {
   return best === null ? null : `build sugarShack ${best.x},${best.y}`;
 }
 
+/** The gatherer hires a worker only while it would still hold this many coins after. */
+const GATHERER_HIRE_COINS_KEPT = 200;
+
+/**
+ * Work camps (owner, after the 0.20.0 build), one of each, first come first
+ * built: a lumberjack camp beside the saw house, a farm camp once crops are
+ * sown, a hermit camp once a maple or an apple tree stands; each on the
+ * square nearest the newest camp where it can go (a lumberjack camp nearest
+ * its saw house), keeping GATHERER_SAW_WOOD_KEPT wood after paying. Then one
+ * worker at each, keeping GATHERER_HIRE_COINS_KEPT coins. `null` if none.
+ */
+export function workCampStep(state: FrontierState): FrontierStep | null {
+  const newest = state.camps[state.camps.length - 1];
+  if (newest === undefined) return null;
+  const saw = state.buildings.find((b) => b.kind === 'sawHouse');
+  const wanted: { kind: WorkCampKind; near: { x: number; y: number } }[] = [];
+  if (saw !== undefined) wanted.push({ kind: 'lumberCamp', near: saw });
+  if (state.crops.some((k) => k > 0)) wanted.push({ kind: 'farmCamp', near: newest });
+  if (state.features.some((f) => f === MAPLE_TREE || f === APPLE_TREE)) {
+    wanted.push({ kind: 'hermitCamp', near: newest });
+  }
+  for (const w of wanted) {
+    const camp = state.buildings.find((b) => b.kind === w.kind);
+    if (camp !== undefined) {
+      const lot = FRONTIER_WORK_CAMPS[w.kind].hire;
+      if (
+        camp.workers === 0 &&
+        coinsHeld(state) >= lot + GATHERER_HIRE_COINS_KEPT &&
+        hireRefusal(state, camp.x, camp.y, 'worker') === null
+      ) {
+        return `hire ${camp.x},${camp.y} worker`;
+      }
+      continue;
+    }
+    const woodCost = FRONTIER_WORK_CAMPS[w.kind].cost.find((c) => c.item === 'wood')?.count ?? 0;
+    if ((state.inventory.get('wood') ?? 0) - woodCost < GATHERER_SAW_WOOD_KEPT) continue;
+    let best: { x: number; y: number; d: number } | null = null;
+    for (let y = 0; y < state.cube.size.y; y += 1) {
+      for (let x = 0; x < state.cube.size.x; x += 1) {
+        if (buildRefusal(state, w.kind, x, y) !== null) continue;
+        const d = (x - w.near.x) ** 2 + (y - w.near.y) ** 2;
+        if (best === null || d < best.d) best = { x, y, d };
+      }
+    }
+    if (best !== null) return `build ${w.kind} ${best.x},${best.y}`;
+  }
+  return null;
+}
+
 /**
  * The gatherer: a plain policy for recording golden runs. In order:
  * 0. with no taps left, end the shift, or rest if the crew's health is at
@@ -760,7 +814,8 @@ export function gathererStep(state: FrontierState): FrontierStep | null {
     marketStep(state) ??
     plantStep(state) ??
     sawHouseStep(state) ??
-    sugarShackStep(state);
+    sugarShackStep(state) ??
+    workCampStep(state);
   if (craft !== null) return craft;
   const byLevel = [...state.camps].sort((a, b) => a.level - b.level || a.id - b.id);
   for (const camp of byLevel) {

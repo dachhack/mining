@@ -240,9 +240,11 @@ export const FRONTIER_SHIFT = {
  * an apple tree full of apples `appleSaplingGrowShifts` later.
  */
 export const FRONTIER_SAPLINGS = {
-  saplingGrowShifts: 15,
-  appleSaplingGrowShifts: 20,
-  mapleSaplingGrowShifts: 20,
+  // Owner, after the 0.20.0 build: "Saplings take way too long"; asked, chose
+  // 5 and 8 (they were 15 and 20).
+  saplingGrowShifts: 5,
+  appleSaplingGrowShifts: 8,
+  mapleSaplingGrowShifts: 8,
 };
 
 /**
@@ -524,6 +526,82 @@ export const FRONTIER_SUGAR_SHACK = {
     { item: 'clay', count: 10 },
   ] as ItemStack[],
 };
+
+/**
+ * Work camps (owner, after the 0.20.0 build): 2 x 2 buildings whose hired
+ * workers work every night within the camp's reach (workers.ts).
+ * - The lumberjack camp: "2 by 2 must be placed next to saw house. You can
+ *   hire a lumber jack to auto-collect wood each shift. Each lumber jack
+ *   adds 3 to the radius. After 3 you need to buy a horse and lumber jack
+ *   for further increases. Food upkeep and syrup upkeep required for the
+ *   lumber jacks and horses." Each lumberjack fells one plain tree a night.
+ * - The farm camp: "2 by 2 that allows you to hire farmers to auto-harvest
+ *   crops (planted)". Its farmers harvest every ripe crop in reach.
+ * - The hermit camp: "Hire a gatherer to auto harvest sap, mushrooms,
+ *   apples." Its gatherers take every one in reach.
+ * Asked, the owner chose: farmers and gatherers take everything in reach;
+ * workers and horses are hired from the camp's panel, for coins paid once;
+ * workers whose upkeep cannot be paid skip that night's work.
+ * `cost` builds the camp (1 tap); `hire` is a worker's coins (1 tap);
+ * `reachEach` is the reach each worker adds; `most` the workers it holds;
+ * upkeep is due when the crew eats (FRONTIER_SHIFT.foodEveryShifts): `food`
+ * a worker (and a horse), and `syrup` a worker and a horse at the lumberjack
+ * camp. The prices and the caps are [Default]s.
+ */
+export const FRONTIER_WORK_CAMPS = {
+  lumberCamp: {
+    cost: [
+      { item: 'wood', count: 20 },
+      { item: 'stone', count: 10 },
+    ] as ItemStack[],
+    hire: 60,
+    most: 6,
+    reachEach: 3,
+    food: 1,
+    syrup: 1,
+    /** Lumberjacks a camp may have without horses; each one more needs a horse. */
+    withoutHorses: 3,
+    horse: { hire: 80 },
+  },
+  farmCamp: {
+    cost: [
+      { item: 'wood', count: 20 },
+      { item: 'clay', count: 10 },
+    ] as ItemStack[],
+    hire: 50,
+    most: 3,
+    reachEach: 3,
+    food: 1,
+    syrup: 0,
+    withoutHorses: 3,
+    horse: null,
+  },
+  hermitCamp: {
+    cost: [
+      { item: 'wood', count: 15 },
+      { item: 'stone', count: 5 },
+    ] as ItemStack[],
+    hire: 50,
+    most: 3,
+    reachEach: 3,
+    food: 1,
+    syrup: 0,
+    withoutHorses: 3,
+    horse: null,
+  },
+} as Record<
+  'lumberCamp' | 'farmCamp' | 'hermitCamp',
+  {
+    cost: ItemStack[];
+    hire: number;
+    most: number;
+    reachEach: number;
+    food: number;
+    syrup: number;
+    withoutHorses: number;
+    horse: { hire: number } | null;
+  }
+>;
 
 /** A tool that mines blocks no camp level mines: while the store holds `item`, a lit square's `mines` blocks can be mined. */
 export interface FrontierTool {

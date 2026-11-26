@@ -52,6 +52,8 @@ import {
   smelterRefusal,
   upkeepDue,
   fillSquareRefusal,
+  buildRefusal,
+  hireRefusal,
   areaCost,
   digAreaRefusal,
 } from '../src/engine';
@@ -163,6 +165,19 @@ function randomPolicy(rng: RngState): FrontierPolicy {
       const x = Math.floor(nextFloat(rng) * state.cube.size.x);
       const y = Math.floor(nextFloat(rng) * state.cube.size.y);
       if (digAreaRefusal(state, x, y) === null) options.push(`digArea ${x},${y}`);
+    }
+    // A building of any kind, and a hire at a work camp, tried at a few random squares.
+    for (let k = 0; k < 4; k += 1) {
+      const x = Math.floor(nextFloat(rng) * state.cube.size.x);
+      const y = Math.floor(nextFloat(rng) * state.cube.size.y);
+      for (const kind of ['sawHouse', 'sugarShack', 'lumberCamp', 'farmCamp', 'hermitCamp']) {
+        if (buildRefusal(state, kind, x, y) === null) options.push(`build ${kind} ${x},${y}`);
+      }
+    }
+    for (const b of state.buildings) {
+      for (const who of ['worker', 'horse'] as const) {
+        if (hireRefusal(state, b.x, b.y, who) === null) options.push(`hire ${b.x},${b.y} ${who}`);
+      }
     }
     // A dug square filled with dirt, tried at a few random squares.
     for (let k = 0; k < 4; k += 1) {

@@ -46,6 +46,7 @@ import {
   buildRefusal as engineBuildRefusal,
   fillSquareRefusal as engineFillSquareRefusal,
   digAreaRefusal as engineDigAreaRefusal,
+  hireRefusal as engineHireRefusal,
   raidStrength as engineRaidStrength,
   foundationDepth as engineFoundationDepth,
   plantRefusal as enginePlantRefusal,
@@ -794,6 +795,28 @@ export function digCampArea(world: CampWorld, x: number, y: number): CampWorld {
   return act(world, { kind: 'digArea', x, y }).world;
 }
 
+// ----- Work camps (owner, after the 0.20.0 build) -----
+
+/** Why `who` cannot be hired at the work camp on (x, y) now ('noTaps', 'over', or the engine's reason), or `null`. */
+export function hireCampRefusal(
+  world: CampWorld,
+  x: number,
+  y: number,
+  who: 'worker' | 'horse',
+): string | null {
+  return turnRefusal(world) ?? engineHireRefusal(toFrontier(world), x, y, who);
+}
+
+/** Hire `who` at the work camp on (x, y), for its coins and 1 tap; the very same world if it cannot. */
+export function hireAtCamp(
+  world: CampWorld,
+  x: number,
+  y: number,
+  who: 'worker' | 'horse',
+): CampWorld {
+  return act(world, { kind: 'hire', x, y, who }).world;
+}
+
 // ----- Filling a square with dirt (owner, after the 0.17.0 build) -----
 
 /** Why (x, y) cannot be filled now ('noTaps', 'over', or the engine's reason), or `null` if it can. */
@@ -925,6 +948,8 @@ export type CampStep =
   | { kind: 'fillSquare'; x: number; y: number }
   // Dig a 3 x 3 with miners (owner, after the 0.20.0 build).
   | { kind: 'digArea'; x: number; y: number }
+  // Hire a worker or a horse at a work camp (owner, after the 0.20.0 build).
+  | { kind: 'hire'; x: number; y: number; who: 'worker' | 'horse' }
   // End the shift, rest at a camp, or close the mine (A4).
   | { kind: 'endShift' }
   | { kind: 'rest'; id: number }
@@ -981,6 +1006,9 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   }
   if (step.kind === 'buildDefense') {
     return buildCampDefense(world, step.id);
+  }
+  if (step.kind === 'hire') {
+    return hireAtCamp(world, step.x, step.y, step.who);
   }
   if (step.kind === 'digArea') {
     return digCampArea(world, step.x, step.y);

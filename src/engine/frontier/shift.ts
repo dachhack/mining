@@ -76,6 +76,8 @@ import { minersHeld, tapsPerShift } from './crew';
 import { digArea, digAreaRefusal } from './dig';
 import { nightOfMushrooms } from './mushrooms';
 import { growCrops } from './crops';
+import { hire, hireRefusal, nightOfWorkers } from './workers';
+import type { Hire } from './workers';
 import { frontierTap } from './tap';
 import type { FrontierTap } from './tap';
 import { GRASS, NO_FEATURE } from './state';
@@ -121,6 +123,8 @@ export type FrontierAction =
   | { kind: 'fillSquare'; x: number; y: number }
   // Dig every diggable square of the 3 x 3 round (x, y), with 2 or more miners (dig.ts).
   | { kind: 'digArea'; x: number; y: number }
+  // Hire a worker, or a horse, at the work camp on (x, y) (workers.ts).
+  | { kind: 'hire'; x: number; y: number; who: Hire }
   | { kind: 'buy'; item: string; lots: number }
   | { kind: 'close' };
 
@@ -154,6 +158,12 @@ export interface ShiftReport {
   mushroomsCame: number;
   /** Crops that ripened in the night (crops.ts). */
   cropsRipened: number;
+  /** What the work camps' workers brought in (workers.ts): wood, crops, and apples, sap and mushrooms. */
+  workerWood: number;
+  workerCrops: number;
+  workerGathered: number;
+  /** Work camps whose upkeep could not be paid: their workers skipped the night. */
+  workCampsIdle: number;
   /** Flooded squares the pumps drained (water.ts). */
   drained: number;
   /** Pumps whose flood is dry: back in the store. */
@@ -357,7 +367,9 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
   const mushroomed = nightOfMushrooms(beforeMushrooms, rain.rained, rng);
   // Crops grow a shift nearer ripe (crops.ts).
   const grownCrops = growCrops(mushroomed.state);
-  const next: FrontierState = { ...grownCrops.state, rng };
+  // The work camps' workers work (workers.ts), after the crops ripen.
+  const worked = nightOfWorkers(grownCrops.state, rng);
+  const next: FrontierState = { ...worked.state, rng };
   // A market day's market opens now, after the night, before the day (market.ts).
   next.marketOpen = isMarketDay(next);
   return {
@@ -380,6 +392,10 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
       rainFilled: rain.filled.length,
       mushroomsCame: mushroomed.came,
       cropsRipened: grownCrops.ripened,
+      workerWood: worked.wood,
+      workerCrops: worked.crops,
+      workerGathered: worked.gathered,
+      workCampsIdle: worked.idle,
       drained: pumping.drained,
       pumpsBack: pumping.pumpsBack,
       burned: fire.burned,
@@ -629,6 +645,10 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
   if (action.kind === 'buildDefense') {
     const why = defenseRefusal(state, action.id);
     return why === null ? spent(buildDefense(state, action.id)) : refused(state, why);
+  }
+  if (action.kind === 'hire') {
+    const why = hireRefusal(state, action.x, action.y, action.who);
+    return why === null ? spent(hire(state, action.x, action.y, action.who)) : refused(state, why);
   }
   if (action.kind === 'digArea') {
     // Its own taps: the lesser of the crew's cost and the squares dug (dig.ts).

@@ -137,3 +137,87 @@ export function drawMushroom(ctx: CanvasRenderingContext2D, box: SquareBox): voi
   }
   ctx.restore();
 }
+
+/**
+ * A 2 x 2 work camp (owner, after the 0.20.0 build), drawn into `box`, which
+ * spans its whole 2 x 2: a lumberjack camp is a log cabin with an axe; a farm
+ * camp a red barn; a hermit camp a mossy hut. `workers` small heads stand by
+ * the door (up to 6). The caller clips to the square being drawn, so one
+ * square of it can be drawn again on its own.
+ */
+export function drawWorkCamp(
+  ctx: CanvasRenderingContext2D,
+  box: SquareBox,
+  kind: 'lumberCamp' | 'farmCamp' | 'hermitCamp',
+  workers: number,
+): void {
+  const s = box.inner;
+  const left = box.left;
+  const top = box.top;
+  const walls = kind === 'lumberCamp' ? '#8a5a32' : kind === 'farmCamp' ? '#b0362a' : '#6f7d4a';
+  const roof = kind === 'lumberCamp' ? '#5b3a1e' : kind === 'farmCamp' ? '#efe6d2' : '#3f5a2e';
+  ctx.save();
+  ctx.lineWidth = Math.max(1, s * 0.025);
+  ctx.strokeStyle = '#2a1b0e';
+  // A yard of trodden earth.
+  ctx.fillStyle = 'rgba(90, 64, 36, 0.55)';
+  ctx.fillRect(left + s * 0.04, top + s * 0.04, s * 0.92, s * 0.92);
+  // The walls and the roof.
+  ctx.fillStyle = walls;
+  ctx.fillRect(left + s * 0.18, top + s * 0.42, s * 0.64, s * 0.4);
+  ctx.strokeRect(left + s * 0.18, top + s * 0.42, s * 0.64, s * 0.4);
+  ctx.fillStyle = roof;
+  ctx.beginPath();
+  ctx.moveTo(left + s * 0.1, top + s * 0.44);
+  ctx.lineTo(left + s * 0.5, top + s * 0.14);
+  ctx.lineTo(left + s * 0.9, top + s * 0.44);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // The door.
+  ctx.fillStyle = '#2a1b0e';
+  ctx.fillRect(left + s * 0.44, top + s * 0.6, s * 0.12, s * 0.22);
+  if (kind === 'lumberCamp') {
+    // Logs along the wall, and an axe.
+    ctx.fillStyle = '#b07a46';
+    for (const k of [0, 1, 2]) {
+      ctx.beginPath();
+      ctx.arc(left + s * (0.24 + k * 0.06), top + s * 0.78, s * 0.03, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.strokeStyle = '#8a5a32';
+    ctx.lineWidth = s * 0.03;
+    ctx.beginPath();
+    ctx.moveTo(left + s * 0.7, top + s * 0.86);
+    ctx.lineTo(left + s * 0.82, top + s * 0.62);
+    ctx.stroke();
+    ctx.fillStyle = '#aeb5bd';
+    ctx.fillRect(left + s * 0.78, top + s * 0.6, s * 0.08, s * 0.06);
+  } else if (kind === 'farmCamp') {
+    // White cross-bracing on the barn door.
+    ctx.strokeStyle = '#efe6d2';
+    ctx.lineWidth = s * 0.015;
+    ctx.beginPath();
+    ctx.moveTo(left + s * 0.44, top + s * 0.6);
+    ctx.lineTo(left + s * 0.56, top + s * 0.82);
+    ctx.moveTo(left + s * 0.56, top + s * 0.6);
+    ctx.lineTo(left + s * 0.44, top + s * 0.82);
+    ctx.stroke();
+  } else {
+    // Moss tufts on the roof.
+    ctx.fillStyle = '#7fae4a';
+    for (const k of [0, 1, 2]) {
+      ctx.beginPath();
+      ctx.arc(left + s * (0.32 + k * 0.18), top + s * 0.38, s * 0.035, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  // The workers: small heads in a row by the door.
+  ctx.fillStyle = '#f0c9a0';
+  for (let k = 0; k < Math.min(6, workers); k += 1) {
+    ctx.beginPath();
+    ctx.arc(left + s * (0.12 + k * 0.08), top + s * 0.92, s * 0.03, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}

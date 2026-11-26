@@ -556,6 +556,17 @@ export { areaCost, minersHeld, tapsPerShift } from './frontier/crew';
 export { digArea, digAreaPlan, digAreaRefusal } from './frontier/dig';
 export type { DigAreaRefusal } from './frontier/dig';
 export { saplingOf, uproot } from './frontier/farming';
+export {
+  campReach,
+  campUpkeep,
+  hire,
+  hireRefusal,
+  inReach,
+  nightOfWorkers,
+  workCampAt,
+} from './frontier/workers';
+export type { Hire, HireRefusal, WorkCampKind } from './frontier/workers';
+export { besideSawHouse, buildingFootprint, isWorkCamp } from './frontier/buildings';
 export type { FillSquareRefusal } from './frontier/fill';
 export { mushroomAt, mushroomChance, nightOfMushrooms } from './frontier/mushrooms';
 export type { BuildRefusal } from './frontier/buildings';

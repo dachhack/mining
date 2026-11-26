@@ -29,16 +29,22 @@ import {
   FRONTIER_SAW_HOUSE,
   FRONTIER_SUGAR_SHACK,
   FRONTIER_SURFACE,
+  FRONTIER_WORK_CAMPS,
 } from '../../data/frontier';
 import { blockAt } from '../state';
 import { campAt, campRadius, canAfford, inCircle, pay, sightAt } from './camps';
-import { NO_FEATURE } from './state';
+import { NO_FEATURE, buildingFootprint, isWorkCamp } from './state';
+
+export { buildingFootprint, isWorkCamp };
 import type { BuildingKind, FrontierBuilding, FrontierState } from './state';
 
 /** What each kind of building costs. */
 export const BUILDING_COSTS: Record<BuildingKind, ItemStack[]> = {
   sawHouse: FRONTIER_SAW_HOUSE.cost,
   sugarShack: FRONTIER_SUGAR_SHACK.cost,
+  lumberCamp: FRONTIER_WORK_CAMPS.lumberCamp.cost,
+  farmCamp: FRONTIER_WORK_CAMPS.farmCamp.cost,
+  hermitCamp: FRONTIER_WORK_CAMPS.hermitCamp.cost,
 };
 
 /** True if `kind` names a kind of building. */
@@ -46,13 +52,17 @@ export function isBuildingKind(kind: string): kind is BuildingKind {
   return kind in BUILDING_COSTS;
 }
 
-/** The building on square (x, y), or `null`. */
+/** The building standing on square (x, y) (any square of its footprint), or `null`. */
 export function buildingAt(
   state: { buildings: FrontierBuilding[] },
   x: number,
   y: number,
 ): FrontierBuilding | null {
-  return state.buildings.find((b) => b.x === x && b.y === y) ?? null;
+  return (
+    state.buildings.find((b) =>
+      buildingFootprint(b.kind, b.x, b.y).some((s) => s.x === x && s.y === y),
+    ) ?? null
+  );
 }
 
 /** True if a building of kind `kind` stands anywhere. */
@@ -93,7 +103,9 @@ export function woodFromTree(state: FrontierState, x: number, y: number): number
  * - 'growing': grass, a tree, a stump or a planted sapling is on it;
  * - 'animal': an animal stands on it;
  * - 'hazard': it is flooded, burning, or a dragon is on it;
+ * - 'sawHouse': a lumberjack camp that touches no saw house;
  * - 'cost': the store does not hold its cost.
+ * For a 2 x 2 work camp, every square of it is checked.
  */
 export type BuildRefusal =
   | 'unknown'
@@ -104,6 +116,7 @@ export type BuildRefusal =
   | 'growing'
   | 'animal'
   | 'hazard'
+  | 'sawHouse'
   | 'cost';
 
 export function buildRefusal(
@@ -114,47 +127,62 @@ export function buildRefusal(
 ): BuildRefusal | null {
   if (!isBuildingKind(kind)) return 'unknown';
   const width = state.cube.size.x;
-  const onMap = x >= 0 && y >= 0 && x < width && y < state.cube.size.y;
-  if (!onMap || sightAt(state, x, y) !== 'shown') return 'notShown';
-  if (campAt(state.camps, x, y) !== null) return 'camp';
-  if (buildingAt(state, x, y) !== null) return 'occupied';
-  // Ground never mined: its top block is still the surface's dirt.
   const surface = FRONTIER_SURFACE.plantsGrowOn.map((id) => BLOCKS[id].code);
-  if (!surface.includes(blockAt(state.cube, { x, y, z: 0 }))) return 'ground';
-  const i = x + width * y;
-  if (
-    (state.features[i] ?? NO_FEATURE) !== NO_FEATURE ||
-    (state.stumps[i] ?? NO_FEATURE) !== NO_FEATURE ||
-    state.planted[i] === true ||
-    state.mushrooms[i] === true ||
-    (state.crops[i] ?? 0) > 0
-  ) {
-    return 'growing';
+  // Every square of its footprint must do (a work camp is 2 x 2).
+  for (const sq of buildingFootprint(kind, x, y)) {
+    const onMap = sq.x >= 0 && sq.y >= 0 && sq.x < width && sq.y < state.cube.size.y;
+    if (!onMap || sightAt(state, sq.x, sq.y) !== 'shown') return 'notShown';
+    if (campAt(state.camps, sq.x, sq.y) !== null) return 'camp';
+    if (buildingAt(state, sq.x, sq.y) !== null) return 'occupied';
+    // Ground never mined: its top block is still the surface's dirt.
+    if (!surface.includes(blockAt(state.cube, { x: sq.x, y: sq.y, z: 0 }))) return 'ground';
+    const i = sq.x + width * sq.y;
+    if (
+      (state.features[i] ?? NO_FEATURE) !== NO_FEATURE ||
+      (state.stumps[i] ?? NO_FEATURE) !== NO_FEATURE ||
+      state.planted[i] === true ||
+      state.mushrooms[i] === true ||
+      (state.crops[i] ?? 0) > 0
+    ) {
+      return 'growing';
+    }
+    if (state.animals.some((a) => a.x === sq.x && a.y === sq.y)) return 'animal';
+    const h = state.hazards;
+    if (
+      h.flooded[i] === true ||
+      h.fires[i] === true ||
+      h.dragons.some((d) => d.x === sq.x && d.y === sq.y)
+    ) {
+      return 'hazard';
+    }
   }
-  if (state.animals.some((a) => a.x === x && a.y === y)) return 'animal';
-  const h = state.hazards;
-  if (
-    h.flooded[i] === true ||
-    h.fires[i] === true ||
-    h.dragons.some((d) => d.x === x && d.y === y)
-  ) {
-    return 'hazard';
-  }
+  // A lumberjack camp stands next to a saw house (owner, after the 0.20.0 build).
+  if (kind === 'lumberCamp' && !besideSawHouse(state, x, y)) return 'sawHouse';
   if (!canAfford(state.inventory, BUILDING_COSTS[kind])) return 'cost';
   return null;
+}
+
+/** True if a 2 x 2 at (x, y) touches a saw house: a saw house on one of the squares round it, corners too. */
+export function besideSawHouse(
+  state: { buildings: FrontierBuilding[] },
+  x: number,
+  y: number,
+): boolean {
+  return state.buildings.some(
+    (b) => b.kind === 'sawHouse' && b.x >= x - 1 && b.x <= x + 2 && b.y >= y - 1 && b.y <= y + 2,
+  );
 }
 
 /** Build a `kind` on square (x, y). If `buildRefusal` says no, the very same state comes back. */
 export function build(state: FrontierState, kind: string, x: number, y: number): FrontierState {
   if (!isBuildingKind(kind) || buildRefusal(state, kind, x, y) !== null) return state;
-  const i = x + state.cube.size.x * y;
   // Cut grass waiting to grow back there never will.
   const grassIn = [...state.grassIn];
-  grassIn[i] = -1;
+  for (const sq of buildingFootprint(kind, x, y)) grassIn[sq.x + state.cube.size.x * sq.y] = -1;
   return {
     ...state,
     grassIn,
-    buildings: [...state.buildings, { kind, x, y }],
+    buildings: [...state.buildings, { kind, x, y, workers: 0, horses: 0 }],
     inventory: pay(state.inventory, BUILDING_COSTS[kind]),
   };
 }
