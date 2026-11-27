@@ -72,7 +72,6 @@ import { randomSeed } from '../previewSession';
 import { CAMP_LOOK, CAMP_MARKS } from './campLook';
 import {
   campWorldOf,
-  closeMine,
   toFrontier,
   endShift,
   restCrew,
@@ -462,7 +461,9 @@ type Mode =
   // ('dirt'): each tap on the map builds or fills one (owner, after the 0.17.0 build).
   | { kind: 'building'; what: BuildingKind | 'dirt' }
   // A work camp's panel: its workers, reach and upkeep, and Hire (owner, after the 0.20.0 build).
-  | { kind: 'workCamp'; x: number; y: number };
+  | { kind: 'workCamp'; x: number; y: number }
+  // What can be placed (owner, UI rework: the Place button): camps, buildings, dirt, plants.
+  | { kind: 'placeMenu' };
 
 /** How long each kind of effect lasts, in milliseconds. */
 function effectMs(kind: Effect['kind']): number {
@@ -655,12 +656,27 @@ export function mountCampLab(
   endShiftButton.dataset['testid'] = 'lab2-end-shift';
   endShiftButton.addEventListener('click', () => finishShift(null));
   shiftButtons.append(endShiftButton);
-  const closeButton = button('lab2-close-mine', 'Close mine');
-  closeButton.dataset['testid'] = 'lab2-close-mine';
-  closeButton.addEventListener('click', askCloseMine);
+  // Three small buttons over the map's top-right corner, where Close mine
+  // was (owner, UI rework: "Don't need the close mine button. ... Three small
+  // buttons where close mine used to be: Contracts, Recipe book/Craft, Place").
+  const mapButtons = element('div', 'lab2-map-buttons');
+  const goalsButton = button('lab2-map-button', '🎯');
+  goalsButton.dataset['testid'] = 'lab2-goals';
+  goalsButton.addEventListener('click', () => openGoals());
+  const bookButton = button('lab2-map-button', '📖');
+  bookButton.dataset['testid'] = 'lab2-book';
+  bookButton.setAttribute('aria-label', 'Recipe book: craft');
+  bookButton.title = 'Craft';
+  bookButton.addEventListener('click', () => openBook());
+  const placeButton = button('lab2-map-button', '⊕');
+  placeButton.dataset['testid'] = 'lab2-place-tool';
+  placeButton.setAttribute('aria-label', 'Place: a camp, a building, dirt or a plant');
+  placeButton.title = 'Place';
+  placeButton.addEventListener('click', () => setMode({ kind: 'placeMenu' }));
+  mapButtons.append(goalsButton, bookButton, placeButton);
   const overBanner = element('div', 'lab2-over');
   overBanner.dataset['testid'] = 'lab2-over';
-  frame.append(hud, shiftButtons, closeButton, overBanner);
+  frame.append(hud, shiftButtons, mapButtons, overBanner);
 
   const hint = element('p', 'lab-hint', HINT);
   hint.dataset['testid'] = 'lab-hint';
@@ -1718,9 +1734,18 @@ export function mountCampLab(
    * One row at a fixed height, as in Lab 1, so the map never moves.
    */
   function showCampCounter(): void {
+    counter.replaceChildren(...counterChips(''));
+  }
+
+  /**
+   * The counter's chips: Dug, Coins, then every item held. `prefix` is put
+   * before each chip's test id, so the recipe book's copy of them (owner, UI
+   * rework: "When crafting, we need to show inventory") has its own ids.
+   */
+  function counterChips(prefix: string): HTMLElement[] {
     const counts = world.lab.counts;
     const dug = element('div', 'lab-chip lab-chip-dug');
-    dug.dataset['testid'] = 'lab-dug';
+    dug.dataset['testid'] = `${prefix}lab-dug`;
     dug.dataset['count'] = String(world.lab.mined);
     dug.append(
       element('span', 'lab-chip-glyph', '⛏'),
@@ -1730,7 +1755,7 @@ export function mountCampLab(
     // Coins (progression PR 1): the run's score, so always shown, next to Dug.
     const coins = counts.get(FRONTIER_MARKET.coin) ?? 0;
     const coinChip = element('div', 'lab-chip lab-chip-dug');
-    coinChip.dataset['testid'] = 'lab-coins';
+    coinChip.dataset['testid'] = `${prefix}lab-coins`;
     coinChip.dataset['count'] = String(coins);
     coinChip.append(
       element('span', 'lab-chip-glyph', '🪙'),
@@ -1740,7 +1765,7 @@ export function mountCampLab(
     const chips: HTMLElement[] = [dug, coinChip];
     const chip = (item: string, count: number, icon: HTMLCanvasElement): void => {
       const made = element('div', 'lab-chip');
-      made.dataset['testid'] = `lab-res-${item}`;
+      made.dataset['testid'] = `${prefix}lab-res-${item}`;
       made.dataset['count'] = String(count);
       made.title = itemName(item);
       made.append(
@@ -1822,7 +1847,7 @@ export function mountCampLab(
         chip(entry.item, entry.count, icon);
       }
     }
-    counter.replaceChildren(...chips);
+    return chips;
   }
 
   // ----- The tray under the map -----
@@ -1887,6 +1912,8 @@ export function mountCampLab(
       showBuildingTray(mode.what);
     } else if (mode.kind === 'workCamp') {
       showWorkCampTray(mode.x, mode.y);
+    } else if (mode.kind === 'placeMenu') {
+      showPlaceTray();
     } else if (mode.kind === 'placing') {
       showPlacingTray(mode.target);
     } else {
@@ -1902,60 +1929,12 @@ export function mountCampLab(
   }
 
   function showIdleTray(): void {
-    // The top row (owner: "revamp the 'what you are building' row"): the
-    // recipe book, the camp tool, then the pinned recipes, side by side in a
-    // strip that scrolls sideways. The row's height never changes.
+    // The pinned recipes, in a strip that scrolls sideways, above the legend
+    // (owner, UI rework: "Square Legend at bottom", the pinned bar above it).
+    // The contracts, the recipe book and placing are buttons over the map.
+    // The row's height never changes.
     const head = element('div', 'lab2-tray-head');
-    const book = button('lab2-book-button', '📖');
-    book.dataset['testid'] = 'lab2-book';
-    book.setAttribute('aria-label', 'Recipe book');
-    book.title = 'Recipe book';
-    book.addEventListener('click', openBook);
-    // The goals card (🎯): the phase, its goal, the contract held. It glows
-    // when the contract can be delivered. The market itself opens only
-    // after a market day's night (it has no button).
-    const deliverable = anyDeliverable(toFrontier(world));
-    const market = button(
-      deliverable ? 'lab2-book-button lab2-market-open' : 'lab2-book-button',
-      '🎯',
-    );
-    market.dataset['deliverable'] = String(deliverable);
-    market.dataset['testid'] = 'lab2-goals';
-    const goalsLabel = deliverable ? 'Goals: your contract can be delivered' : 'Goals and contract';
-    market.setAttribute('aria-label', goalsLabel);
-    market.title = goalsLabel;
-    market.addEventListener('click', openGoals);
-    const tool = button('lab2-tool', '');
-    tool.dataset['testid'] = 'lab2-camp-tool';
-    tool.setAttribute('aria-label', 'New camp: choose where');
-    tool.title = 'New camp';
-    const affordable = canAfford(world.lab.counts, LAB_NEW_CAMP_COST);
-    if (!affordable) {
-      tool.classList.add('lab2-tool-short');
-    }
-    tool.append(element('span', 'lab2-tool-glyph', '⛺'), element('span', 'lab2-tool-plus', '+'));
-    tool.addEventListener('click', () => setMode({ kind: 'placing', target: null }));
-    const side = pinStrip();
-    head.append(book, market, tool);
-    // Planting (progression PR 3): shown only while a sapling is held.
-    const held = (item: string): number => world.lab.counts.get(item) ?? 0;
-    const firstHeld = PLANTABLES.map((p) => p.item).find((k) => held(k) > 0);
-    if (firstHeld !== undefined) {
-      const sow = button('lab2-book-button', '🌱');
-      sow.dataset['testid'] = 'lab2-plant-tool';
-      sow.setAttribute('aria-label', 'Plant a sapling');
-      sow.title = 'Plant a sapling';
-      sow.addEventListener('click', () => setMode({ kind: 'planting', item: firstHeld }));
-      head.append(sow);
-    }
-    // One-square buildings (owner, after the 0.17.0 build): a saw house or a sugar shack.
-    const build = button('lab2-book-button', '🔨');
-    build.dataset['testid'] = 'lab2-build-tool';
-    build.setAttribute('aria-label', 'Build a saw house or a sugar shack, or fill with dirt');
-    build.title = 'Build';
-    build.addEventListener('click', () => setMode({ kind: 'building', what: 'sawHouse' }));
-    head.append(build);
-    head.append(side);
+    head.append(pinStrip());
     const key = labKey();
     // The key lists the kinds you can see: lit and greyed squares, never what is under the fog.
     const seenTops = tops.filter((_, i) => (sights[i] ?? 'fog') !== 'fog');
@@ -2166,6 +2145,10 @@ export function mountCampLab(
     close.dataset['testid'] = 'lab2-book-close';
     close.addEventListener('click', closeBook);
     head.append(close);
+    // What the store holds, while crafting (owner, UI rework).
+    const inventory = element('div', 'lab2-book-inventory');
+    inventory.dataset['testid'] = 'lab2-book-inventory';
+    inventory.append(...counterChips('book-'));
     // The list scrolls inside the card.
     const list = element('div', 'lab2-book-list');
     list.dataset['testid'] = 'lab2-book-list';
@@ -2241,7 +2224,7 @@ export function mountCampLab(
       list.append(row);
     }
     const inner = element('div', 'lab2-book-inner');
-    inner.append(head, bookNote, list);
+    inner.append(head, inventory, bookNote, list);
     bookCard.replaceChildren(inner);
   }
 
@@ -2741,6 +2724,55 @@ export function mountCampLab(
     tray.replaceChildren(head, body, actions);
   }
 
+  /**
+   * The Place tray (owner, UI rework: "Place button"; asked, everything that
+   * can be placed): a camp, each building, dirt, and a plant while a sapling
+   * or a seed is held, in a row that scrolls sideways. Each opens its own
+   * tray, as the old buttons did.
+   */
+  function showPlaceTray(): void {
+    const head = element('div', 'lab2-panel-head');
+    head.append(element('span', 'lab2-panel-title', '⊕ Place'));
+    const cancel = button('lab2-close', '×');
+    cancel.setAttribute('aria-label', 'Close');
+    cancel.dataset['testid'] = 'lab2-place-menu-close';
+    cancel.addEventListener('click', () => setMode({ kind: 'idle' }));
+    head.append(cancel);
+    const body = element('p', 'lab2-panel-line', 'What to place: then tap the map.');
+    body.dataset['testid'] = 'lab2-place-menu-line';
+    const actions = element('div', 'lab2-actions lab2-actions-scroll');
+    const camp = button('lab2-button lab2-button-main', '⛺ Camp');
+    camp.dataset['testid'] = 'lab2-camp-tool';
+    camp.setAttribute('aria-label', 'New camp: choose where');
+    if (!canAfford(world.lab.counts, LAB_NEW_CAMP_COST)) camp.classList.add('lab2-tool-short');
+    camp.addEventListener('click', () => setMode({ kind: 'placing', target: null }));
+    actions.append(camp);
+    const held = (item: string): number => world.lab.counts.get(item) ?? 0;
+    const firstHeld = PLANTABLES.map((p) => p.item).find((k) => held(k) > 0);
+    if (firstHeld !== undefined) {
+      const sow = button('lab2-button', '🌱 Plant');
+      sow.dataset['testid'] = 'lab2-plant-tool';
+      sow.setAttribute('aria-label', 'Plant a sapling or a seed');
+      sow.addEventListener('click', () => setMode({ kind: 'planting', item: firstHeld }));
+      actions.append(sow);
+    }
+    for (const b of BUILDINGS) {
+      const choose = button('lab2-button', `${b.icon} ${b.short}`);
+      choose.dataset['testid'] = `lab2-place-${b.kind}`;
+      choose.setAttribute('aria-label', b.name);
+      if (!canAfford(world.lab.counts, BUILDING_COSTS[b.kind]))
+        choose.classList.add('lab2-tool-short');
+      choose.addEventListener('click', () => setMode({ kind: 'building', what: b.kind }));
+      actions.append(choose);
+    }
+    const dirt = button('lab2-button', '🟫 Dirt');
+    dirt.dataset['testid'] = 'lab2-place-dirt';
+    dirt.setAttribute('aria-label', 'Fill with dirt');
+    dirt.addEventListener('click', () => setMode({ kind: 'building', what: 'dirt' }));
+    actions.append(dirt);
+    tray.replaceChildren(head, body, actions);
+  }
+
   /** A tap on the map while filling: fill it, or say why not. */
   function tapWhileFilling(x: number, y: number): void {
     canvas.dataset['lastTap'] = `fill ${x},${y}`;
@@ -3195,7 +3227,7 @@ export function mountCampLab(
   function showHud(): void {
     const turn = world.turn;
     hudShift.textContent = `Shift ${turn.shift}`;
-    // Taps left only: with 100 a shift, "100/100" crowds Close mine on a 320 px phone.
+    // Taps left only: with 100 a shift, "100/100" crowds the map's buttons on a 320 px phone.
     hudTaps.textContent = `⚡ ${turn.tapsLeft}`;
     hudTaps.setAttribute(
       'aria-label',
@@ -3210,7 +3242,14 @@ export function mountCampLab(
     hudHealth.classList.toggle('lab2-hud-low', turn.health <= FRONTIER_SHIFT.startHealth * 0.3);
     const active = turn.status === 'active';
     endShiftButton.disabled = !active;
-    closeButton.disabled = !active;
+    placeButton.disabled = !active;
+    // The contracts button glows when a contract held can be delivered.
+    const deliverable = anyDeliverable(toFrontier(world));
+    goalsButton.classList.toggle('lab2-market-open', deliverable);
+    goalsButton.dataset['deliverable'] = String(deliverable);
+    const goalsLabel = deliverable ? 'Contracts: one can be delivered' : 'Contracts and goals';
+    goalsButton.setAttribute('aria-label', goalsLabel);
+    goalsButton.title = goalsLabel;
     // Out of taps: End shift is what to press next, so it stands out.
     endShiftButton.classList.toggle('lab2-end-shift-now', active && turn.tapsLeft === 0);
     overBanner.hidden = active;
@@ -3271,32 +3310,6 @@ export function mountCampLab(
 
   /** The night being shown between two shifts, or `null`. */
   let night: Night | null = null;
-
-  /** Close mine takes two taps: the first asks, the second (within a few seconds) closes it. */
-  let closeAskedAt = -Infinity;
-  function askCloseMine(): void {
-    const now = performance.now();
-    if (now - closeAskedAt > CLOSE_CONFIRM_MS) {
-      closeAskedAt = now;
-      closeButton.textContent = 'Tap to confirm';
-      setHint('Close the mine and end this run? Tap Close mine again to confirm.', true);
-      window.setTimeout(() => {
-        closeButton.textContent = 'Close mine';
-      }, CLOSE_CONFIRM_MS);
-      return;
-    }
-    closeAskedAt = -Infinity;
-    closeButton.textContent = 'Close mine';
-    const closed = closeMine(world);
-    if (asGame) {
-      saveRun(closed);
-    }
-    history = emptyHistory(closed);
-    showUndo();
-    mode = { kind: 'idle' };
-    setWorld(closed);
-    setHint(OVER_HINT, false);
-  }
 
   // ----- Undo -----
 
@@ -3613,6 +3626,28 @@ export function mountCampLab(
   }
 
   /**
+   * Placing a camp (owner, UI rework: "When placing a camp, you should be able
+   * to drag the square around the map"): a press that starts on the chosen
+   * 3 x 3 grabs it, and the drag moves it, keeping the same square of it under
+   * the finger. Where the new middle cannot be chosen, it stays where it was.
+   */
+  let grabOffset = { x: 0, y: 0 };
+  function grabTarget(x: number, y: number): boolean {
+    if (mode.kind !== 'placing' || mode.target === null) return false;
+    const { target } = mode;
+    if (Math.abs(x - target.x) > 1 || Math.abs(y - target.y) > 1) return false;
+    grabOffset = { x: x - target.x, y: y - target.y };
+    return true;
+  }
+  function dragTarget(x: number, y: number): void {
+    if (mode.kind !== 'placing' || mode.target === null) return;
+    const next = { x: x - grabOffset.x, y: y - grabOffset.y };
+    if (next.x === mode.target.x && next.y === mode.target.y) return;
+    if (sightOf(next.x, next.y) !== 'shown' || campAt(world, next.x, next.y) !== null) return;
+    setMode({ kind: 'placing', target: next });
+  }
+
+  /**
    * A long press on a lit square: with 2 or more miners, it digs every
    * diggable square of the 3 x 3 round it (owner, after the 0.20.0 build:
    * "Long press is no longer just for camp placement"); where nothing there
@@ -3719,6 +3754,8 @@ export function mountCampLab(
     ground: () => world.lab.state.size,
     onTap: tap,
     onHold: hold,
+    grab: grabTarget,
+    onGrabMove: dragTarget,
   });
 
   showUndo();

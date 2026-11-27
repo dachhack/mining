@@ -52,7 +52,8 @@ test('the 🔨 tool’s 🟫 Dirt fills a dug square with dirt, for a tap and no
     animals: start.animals.filter((a) => a.x !== at.x || a.y !== at.y),
   };
   const canvas = await openGame(page, state);
-  await page.getByTestId('lab2-build-tool').click();
+  await page.getByTestId('lab2-place-tool').click();
+  await page.getByTestId('lab2-place-sawHouse').click();
   await page.getByTestId('lab2-build-dirt').click();
   await expect(page.getByTestId('lab2-build-line')).toContainText('fill it 1 level');
   // Ground never dug: nothing to fill.

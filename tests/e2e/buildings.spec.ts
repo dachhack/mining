@@ -61,7 +61,8 @@ test('the 🔨 tool builds a saw house on a bare square, and the map shows it', 
   const canvas = await openGame(page, { ...start, inventory: cost });
   await expect(page.getByTestId('lab-res-axe')).toHaveAttribute('data-count', '1');
   await expect(canvas).toHaveAttribute('data-buildings', '');
-  await page.getByTestId('lab2-build-tool').click();
+  await page.getByTestId('lab2-place-tool').click();
+  await page.getByTestId('lab2-place-sawHouse').click();
   await expect(page.getByTestId('lab2-build-sawHouse')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('lab2-build-line')).toContainText('wood a tree within');
   // The camp's own ground says no, and builds nothing.
@@ -111,7 +112,8 @@ test('a sugar shack is built from the same tool, and the recipe book boils syrup
   await page.getByTestId('lab2-book').click();
   await expect(page.getByTestId('lab2-recipe-why-syrup')).toContainText('sugar shack');
   await page.getByTestId('lab2-book-close').click();
-  await page.getByTestId('lab2-build-tool').click();
+  await page.getByTestId('lab2-place-tool').click();
+  await page.getByTestId('lab2-place-sawHouse').click();
   await page.getByTestId('lab2-build-sugarShack').click();
   await expect(page.getByTestId('lab2-build-line')).toContainText('syrup');
   await tapSquare(page, canvas, at.x, at.y);

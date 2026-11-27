@@ -377,11 +377,13 @@ Each rule that comes back is its own small batch, playtested before the next.
 
 - **Primary view:** the ground from above. Lit squares show their top block and what grows on them, shaded by depth so the terraces read at a glance. Greyed squares are drained of colour, and the fog is dark. Animals slide to their new squares when a shift ends.
 - **Tap:** a tap on a lit square takes or mines (one action, no menu). A tap on a camp opens its panel (rest, upgrade, demolish). A refused tap says why.
-- **The camp tool** (⛺+) places a new camp. It previews the ring and the squares it would light, says what is missing, and shows the cost.
-- **The recipe book** (📖, in the tray) opens as a card over the whole screen, inside the system bars; × or the phone's back button closes it (owner, after the playtest of PR #146). The pinned row is in the tray.
-- **HUD**, over the map so it never moves it: shift, taps left, health. **End shift** at the bottom-left, by the thumb (Rest is in a camp's panel); **Undo** at the bottom-right; **Close mine** at the top-right, with a second tap to confirm.
+- **Three small buttons over the map's top-right corner** (owner, UI rework: "Don't need the close mine button. ... Three small buttons where close mine used to be: Contracts, Recipe book/Craft, Place button"), in a column so a narrow phone's HUD never runs into them: 🎯 **Contracts** (the goals card; it glows when a contract held can be delivered), 📖 **Craft** (the recipe book), ⊕ **Place**. There is no Close mine button any more; a run ends after its last shift or when the crew is lost.
+- **Place** opens a tray of everything that can be placed (owner's choice): ⛺ Camp, 🌱 Plant (while a sapling or a seed is held), each building, and 🟫 Dirt, in a row that scrolls sideways. Each opens its own tray. **The camp tool** previews the ring and the squares it would light, says what is missing, and shows the cost; a press on the chosen 3 × 3 **drags it** across the map (owner: "When placing a camp, you should be able to drag the square around the map"); a press anywhere else still pans.
+- **The recipe book** opens as a card over the whole screen, inside the system bars; × or the phone's back button closes it (owner, after the playtest of PR #146). It shows what the store holds, in a row under its title (owner: "When crafting, we need to show inventory").
+- **The tray under the map:** the pinned recipes' bar, then the square legend at the bottom (owner: "Square Legend at bottom", the pinned bar above it).
+- **HUD**, over the map so it never moves it: shift, taps left, health. **End shift** at the bottom-left, by the thumb (Rest is in a camp's panel); **Undo** at the bottom-right.
 - **Night** (owner, after the playtest of PR #146): when a shift ends (End shift or Rest), the screen fades to black and white, then to dark, and shows the moon, whose phase steps once a shift through 8 phases from the shift number, with a line on what the shift's end paid and cost. About 2.6 s; a tap skips it; with reduced motion it is a still moon and a quick fade. The game has already moved on when it starts.
-- **The resource counter** is one row above the map.
+- **The resource counter** is one row above the map (owner, UI rework: "Inventory scroll bar - still at top").
 - **Orientation:** portrait, with a landscape layout for phones on their side. One-handed play should be possible.
 
 ## 12. Run length targets [Default]

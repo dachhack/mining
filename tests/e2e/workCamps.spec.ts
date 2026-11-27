@@ -63,7 +63,8 @@ test('a farm camp is built 2 x 2 from 🔨, and a tap on it opens its panel to h
   }
   if (at === null) throw new Error('a 2 x 2 for a farm camp near the camp');
   const canvas = await openGame(page, state);
-  await page.getByTestId('lab2-build-tool').click();
+  await page.getByTestId('lab2-place-tool').click();
+  await page.getByTestId('lab2-place-sawHouse').click();
   await page.getByTestId('lab2-build-farmCamp').click();
   await expect(page.getByTestId('lab2-build-line')).toContainText('2 × 2');
   await tapSquare(page, canvas, at.x, at.y);

@@ -5,6 +5,7 @@ import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { FRONTIER_SHIFT } from '../../src/data/frontier';
 import { campTap, newCampWorld, sightMap } from '../../src/app/lab/campWorld';
+import { createFrontier, saveFrontier } from '../../src/engine';
 
 /** Skip the night that follows End shift or Rest (a tap on it), and see it go. */
 async function skipNight(page: Page): Promise<void> {
@@ -107,11 +108,13 @@ test('a run is saved every shift and carries on when the app opens again', async
 });
 
 test('a closed mine stays closed when the app opens again', async ({ page }) => {
-  await page.goto(`/#play/${SEED}`);
-  await page.getByTestId('lab2-close-mine').click();
-  await page.getByTestId('lab2-close-mine').click();
-  await expect(page.getByTestId('lab2-over')).toBeVisible();
+  // The map has no Close mine button now (owner, UI rework); a run saved
+  // closed (by an older build) still opens closed.
   await page.goto('/');
+  await page.evaluate(([key, text]) => window.localStorage.setItem(key, text), [
+    'mining-game.run',
+    saveFrontier({ ...createFrontier(SEED), status: 'closed' }),
+  ] as const);
   await page.reload();
   await expect(page.getByTestId('lab2-hud')).toHaveAttribute('data-status', 'closed');
   await expect(page.getByTestId('lab2-over')).toContainText('Mine closed');

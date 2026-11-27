@@ -55,6 +55,8 @@ test('plant a sapling on bare dirt, be told why not on a camp, and undo it', asy
   if (spot === null) throw new Error('no square to plant near the first camp');
   const canvas = await openGame(page, state);
 
+  await page.getByTestId('lab2-place-tool').click();
+
   await page.getByTestId('lab2-plant-tool').click();
   await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'planting');
   await expect(page.getByTestId('lab2-plant-sapling')).toContainText('×2');
