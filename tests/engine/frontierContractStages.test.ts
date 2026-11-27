@@ -20,7 +20,12 @@ for (const c of FRONTIER_CONTRACTS) {
 function at(
   level: number,
   delivered: number,
-  opts: { smelter?: boolean; deep?: boolean; inventory?: Record<string, number>; shift?: number } = {},
+  opts: {
+    smelter?: boolean;
+    deep?: boolean;
+    inventory?: Record<string, number>;
+    shift?: number;
+  } = {},
 ): FrontierState {
   const w = world({ inventory: opts.inventory ?? {} });
   const s = {

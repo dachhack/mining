@@ -5,12 +5,7 @@
 // first market day; one delivered opens tier 2 like any tier-1 contract;
 // lumber is 2 wood for 1, at a saw house.
 import { describe, expect, it } from 'vitest';
-import {
-  FRONTIER_BOARD,
-  FRONTIER_CONTRACTS,
-  FRONTIER_MARKET,
-  FRONTIER_RECIPES,
-} from '../../src/data/frontier';
+import { FRONTIER_CONTRACTS, FRONTIER_MARKET, FRONTIER_RECIPES } from '../../src/data/frontier';
 import { contractBoard, frontierAct, isMarketDay, makeRefusal } from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
 import { MID, world } from './frontierHelpers';
