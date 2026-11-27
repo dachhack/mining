@@ -38,6 +38,7 @@ import {
   FRONTIER_PICKAXE,
   FRONTIER_PUMP,
   FRONTIER_RAID,
+  FRONTIER_STAGES,
   FRONTIER_RUN,
   FRONTIER_SAPLINGS,
   FRONTIER_SAW_HOUSE,
@@ -61,6 +62,8 @@ import {
   contractBoard,
   anyDeliverable,
   contractLimit,
+  contractStage,
+  contractsDelivered,
   heldContracts,
   loadFrontier,
   mostLots,
@@ -2368,6 +2371,27 @@ export function mountCampLab(
     const next = element('p', 'lab2-market-when', goal?.next ?? '');
     next.dataset['testid'] = 'lab2-goal';
     list.append(next);
+    // The contract stage (owner, after the 0.25.0 build): what the board
+    // offers now, and what opens the next stage.
+    const stage = contractStage(state);
+    const STAGE_GOODS = [
+      'clay, stone, wood, hay',
+      'coal, raw ore, apples, lumber',
+      'crops, animals, syrup, mushrooms',
+      'ingots, bigger contracts',
+      'crystal, rare ore, relics',
+    ];
+    const coming = FRONTIER_STAGES.find((st) => st.stage === stage + 1);
+    const stageLine = element(
+      'p',
+      'lab2-market-when',
+      `Contract stage ${stage} of 5: ${STAGE_GOODS.slice(0, stage).join('; ')}.` +
+        (coming === undefined
+          ? ''
+          : ` Stage ${coming.stage} (${STAGE_GOODS[coming.stage - 1] ?? ''}) opens with ${coming.milestone} and ${coming.delivered} contracts delivered (you have ${contractsDelivered(state)}).`),
+    );
+    stageLine.dataset['testid'] = 'lab2-contract-stage';
+    list.append(stageLine);
     // Up to the best camp's level of contracts at once (owner).
     const held = heldContracts(state);
     const limit = contractLimit(state);

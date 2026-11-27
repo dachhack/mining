@@ -1,21 +1,26 @@
 // Contracts and the phases of a run (docs/plans/progression-phases.md,
 // sections 1 and 5; PR 5).
 //
-// - The board: on a market day (market.ts) it shows up to
-//   FRONTIER_BOARD.perTier contracts of each open tier. Which ones is
-//   drawn from the run's seed and the shift with a generator of its own,
-//   so the board is never stored and the world's own generator is never
-//   touched: the same seed and shift always show the same board.
-// - Tiers open in turn: tier 1's surface contracts from the first market
-//   day, and the rest of tier 1 while the best camp is at least
-//   FRONTIER_BOARD.tier1Level (owner, after the 0.22.0 build: "We need more
-//   surface resource contracts especially early game"); tier 2 once any
-//   tier-1 contract is done (surface ones too: owner's choice); tier 3 once a
-//   tier-2 contract is done.
-// - Surface contracts and the others are drawn apart, FRONTIER_BOARD.perTier
-//   of each kind a tier, so neither crowds the other off the board. What a
-//   surface contract asks for is always to be had (FRONTIER_BOARD.renewable),
-//   except mushrooms, which are counted.
+// - The board: on a market day (market.ts) it shows 3 to 7 contracts, drawn
+//   from the run's seed and the shift with a generator of its own, so the
+//   board is never stored and the world's own generator is never touched:
+//   the same seed and shift always show the same board.
+// - Stages (owner, after the 0.25.0 build: "Let's stay heavy on clay stone
+//   wood and hay in early game. Then coal and common ores mix in. Then
+//   crops, sheep, syrup mix in. Then more refined ore products and larger
+//   contracts. Then special ores and items."): every contract has a stage,
+//   1 to 5, and the board offers only the stages open (`contractStage`):
+//   stage 1 from the start; each later one with its milestone and its count
+//   of contracts delivered, both needed (FRONTIER_STAGES). Up to
+//   FRONTIER_BOARD.perStage are drawn from each open stage, and the day's 3
+//   to 7 are taken from them in turn, the newest stage first, so the newest
+//   stage is always offered and the earlier ones stay in the mix. A
+//   contract with `fromLevel` waits for a camp of that level too (stone is
+//   mined from level 2). Tiers no longer open the board: they say how big a
+//   contract is, and what it pays.
+// - Only contracts the world can fill are offered (stock.ts): what grows
+//   back, or is bought and made, always counts (FRONTIER_BOARD.renewable);
+//   mushrooms are counted.
 // - Up to `contractLimit` (the best camp's level) are held at once.
 // - Filling one from the board (`fillContract`; owner, on the hazards build:
 //   "Should be able to immediately fill contracts if you have the
@@ -30,11 +35,17 @@
 //   A contract never ends the run.
 // - The phase (plan section 1) is worked out from the camps and the
 //   contracts done: 1 until a level-2 camp, 2 until a level-3 camp, 3 until
-//   a tier-1 contract is done, 4 until a tier-2 one is, then 5.
+//   a tier-1 contract is done, 4 until a tier-2 one is, then 5. (Phases are
+//   the run's goals on the contracts card; stages open the board.)
 //
 // The numbers are in src/data/frontier.ts.
 
-import { FRONTIER_BOARD, FRONTIER_CONTRACTS, FRONTIER_MARKET } from '../../data/frontier';
+import {
+  FRONTIER_BOARD,
+  FRONTIER_CONTRACTS,
+  FRONTIER_MARKET,
+  FRONTIER_STAGES,
+} from '../../data/frontier';
 import type { FrontierContractDef } from '../../data/frontier';
 import { createRng, nextInt } from '../rng';
 import { canAfford, pay } from './camps';
@@ -44,22 +55,39 @@ import { gained } from './surface';
 import { deepestDug } from './raids';
 import type { FrontierState } from './state';
 
-/** The tiers whose contracts the board offers now: [1], [1, 2] or [1, 2, 3]. Tier 1 is always open, for its surface contracts at least. */
-export function openTiers(state: FrontierState): number[] {
-  const tiers = [1];
-  if ((state.contractsDone[0] ?? 0) > 0) tiers.push(2);
-  if ((state.contractsDone[1] ?? 0) > 0) tiers.push(3);
-  return tiers;
+/** True if `state` has reached the milestone `needs` names (FRONTIER_STAGES). */
+function milestoneReached(
+  state: FrontierState,
+  needs: (typeof FRONTIER_STAGES)[number]['needs'],
+): boolean {
+  if (needs === 'level2') return bestCampLevel(state) >= 2;
+  if (needs === 'level3') return bestCampLevel(state) >= 3;
+  if (needs === 'smelter') return state.camps.some((c) => c.smelter);
+  return (state.inventory.get('steelDrill') ?? 0) > 0 || state.camps.some((c) => c.deep);
+}
+
+/** How many contracts have been delivered in the run, every tier. */
+export function contractsDelivered(state: FrontierState): number {
+  return state.contractsDone.reduce((sum, n) => sum + n, 0);
+}
+
+/** The contract stage open now, 1 to 5 (see the top of this file). */
+export function contractStage(state: FrontierState): number {
+  let stage = 1;
+  for (const next of FRONTIER_STAGES) {
+    if (!milestoneReached(state, next.needs) || contractsDelivered(state) < next.delivered) break;
+    stage = next.stage;
+  }
+  return stage;
 }
 
 /**
- * The board on the shift being played: for each open tier, lowest first,
- * up to FRONTIER_BOARD.perTier of its contracts in an order drawn from the
- * seed and the shift. Empty unless the market is open. Only contracts the
- * world can fill are offered (stock.ts; owner, on the hazards build: "Let's
- * inventory the entire board so that the contracts offered are not
- * unfillable"): what the ground, the store and smelting hold covers every
- * ask.
+ * The board on the shift being played: up to FRONTIER_BOARD.perStage of
+ * each open stage's contracts, in an order drawn from the seed and the
+ * shift, of which 3 to 7 are taken, the newest stage first (see the top of
+ * this file). Empty unless the market is open. Only contracts the world can
+ * fill are offered (stock.ts; owner, on the hazards build: "Let's inventory
+ * the entire board so that the contracts offered are not unfillable").
  */
 export function contractBoard(state: FrontierState): FrontierContractDef[] {
   if (!marketIsOpen(state)) return [];
@@ -71,67 +99,33 @@ export function contractBoard(state: FrontierState): FrontierContractDef[] {
   // Only what is within reach of the deepest square dug counts (owner, after
   // the 0.20.0 build: "no keystone or relics etc if they are still far away").
   const stock = worldStock(state, deepestDug(state) + FRONTIER_BOARD.reachBelowDeepest);
-  // The rest of tier 1 waits for a level-3 camp, or a tier-1 contract done.
-  const miningOpen =
-    bestCampLevel(state) >= FRONTIER_BOARD.tier1Level || (state.contractsDone[0] ?? 0) > 0;
   const level = bestCampLevel(state);
-  // While no camp is level 3, one early clay or stone contract leads tier 1's
-  // other draw, and that draw goes first, so one is on every board that can
-  // fill one (owner, after the 0.24.0 build: "Let's make sure we have some
-  // clay and stone contracts in the early mix").
-  const early = level < FRONTIER_BOARD.tier1Level;
-  // Each open tier's draw: its surface and its other contracts drawn apart,
-  // then taken in turn, surface first, so neither crowds the other out.
-  const byTier: FrontierContractDef[][] = [];
-  for (const tier of openTiers(state)) {
-    const draws: FrontierContractDef[][] = [];
-    const leadEarly = tier === 1 && early;
-    for (const surface of leadEarly ? [false, true] : [true, false]) {
-      const pool = FRONTIER_CONTRACTS.filter(
-        (c) =>
-          c.tier === tier &&
-          (c.surface === true) === surface &&
-          // The rest of tier 1 waits for a level-3 camp: until then, only the early ones.
-          (surface || tier !== 1 || miningOpen || c.early === true) &&
-          (c.fromLevel ?? 1) <= level &&
-          worldCanFill(stock, c.asks),
-      );
-      // Draw without putting back: a few steps of a shuffle. An early one first, if it leads.
-      const left = [...pool];
-      const drawn: FrontierContractDef[] = [];
-      if (leadEarly && !surface) {
-        const earlyOnes = left.filter((c) => c.early === true);
-        const lead = earlyOnes[nextInt(rng, Math.max(1, earlyOnes.length))];
-        if (lead !== undefined) {
-          drawn.push(lead);
-          left.splice(left.indexOf(lead), 1);
-        }
-      }
-      while (drawn.length < FRONTIER_BOARD.perTier && left.length > 0) {
-        const [picked] = left.splice(nextInt(rng, left.length), 1);
-        if (picked !== undefined) drawn.push(picked);
-      }
-      draws.push(drawn);
+  const open = contractStage(state);
+  // Each open stage's draw, the first stage first.
+  const byStage: FrontierContractDef[][] = [];
+  for (let stage = 1; stage <= open; stage += 1) {
+    const pool = FRONTIER_CONTRACTS.filter(
+      (c) => c.stage === stage && (c.fromLevel ?? 1) <= level && worldCanFill(stock, c.asks),
+    );
+    // Draw without putting back: a few steps of a shuffle.
+    const left = [...pool];
+    const drawn: FrontierContractDef[] = [];
+    while (drawn.length < FRONTIER_BOARD.perStage && left.length > 0) {
+      const [picked] = left.splice(nextInt(rng, left.length), 1);
+      if (picked !== undefined) drawn.push(picked);
     }
-    const merged: FrontierContractDef[] = [];
-    for (let k = 0; k < FRONTIER_BOARD.perTier; k += 1) {
-      for (const drawn of draws) {
-        const pick = drawn[k];
-        if (pick !== undefined) merged.push(pick);
-      }
-    }
-    byTier.push(merged);
+    byStage.push(drawn);
   }
   // At most 3 to 7 a day (owner: "Only 3-7 available to take"): taken in
-  // turn from each tier, highest first, so every open tier is offered; then
-  // shown lowest tier first.
+  // turn from each stage, the newest first, so every open stage is offered;
+  // then shown in the order of FRONTIER_CONTRACTS (the stages of a tier together).
   const [low, high] = FRONTIER_BOARD.offers;
   const most = low + nextInt(rng, high - low + 1);
   const chosen: FrontierContractDef[] = [];
   for (let round = 0; chosen.length < most; round += 1) {
     let any = false;
-    for (let t = byTier.length - 1; t >= 0 && chosen.length < most; t -= 1) {
-      const pick = byTier[t]?.[round];
+    for (let t = byStage.length - 1; t >= 0 && chosen.length < most; t -= 1) {
+      const pick = byStage[t]?.[round];
       if (pick !== undefined) {
         chosen.push(pick);
         any = true;

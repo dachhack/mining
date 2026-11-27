@@ -11,7 +11,7 @@ import {
   FRONTIER_MARKET,
   FRONTIER_RECIPES,
 } from '../../src/data/frontier';
-import { contractBoard, frontierAct, isMarketDay, makeRefusal, openTiers } from '../../src/engine';
+import { contractBoard, frontierAct, isMarketDay, makeRefusal } from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
 import { MID, world } from './frontierHelpers';
 
@@ -56,23 +56,26 @@ describe('surface contracts', () => {
     }
   });
 
-  it('are on the board from the first market day, before any level-3 camp; mining ones wait for it', () => {
-    expect(FRONTIER_BOARD.tier1Level).toBe(3);
-    expect(openTiers(day(1, 10))).toEqual([1]);
+  it('are on the board from the first market day as stage 1 allows: wood and hay', () => {
+    // Since the 0.26.0 stages (frontierContractStages.test.ts), stage 1 is
+    // clay, stone, wood and hay: the test world has no clay, and stone waits
+    // for a level-2 camp, so wood and hay it is.
     for (let shift = 10; shift <= 100; shift += 10) {
       const board = contractBoard(day(1, shift));
       expect(board.length, `shift ${shift}`).toBeGreaterThan(0);
-      // Surface contracts, and the early clay and stone ones (none here: the
-      // test world has no clay, and stone waits for a level-2 camp).
-      for (const c of board) expect(c.surface, `${c.id} on shift ${shift}`).toBe(true);
+      for (const c of board) {
+        expect(c.stage, c.id).toBe(1);
+        for (const a of c.asks) expect(['wood', 'hay'], c.id).toContain(a.item);
+      }
     }
   });
 
   it('are offered even when nothing of theirs stands yet: they grow back, or are bought and made', () => {
-    // The test world has no trees, maples or animals, and holds nothing.
+    // The test world has no trees, maples or animals, and holds nothing. At
+    // stage 3 (a level-3 camp, 5 delivered) syrup and animals are open too.
     const ids = new Set<string>();
-    for (let shift = 10; shift <= 300; shift += 10) {
-      for (const c of contractBoard(day(1, shift))) ids.add(c.id);
+    for (let shift = 9; shift <= 300; shift += 3) {
+      for (const c of contractBoard(day(3, shift, {}, [5, 0, 0]))) ids.add(c.id);
     }
     const offered = FRONTIER_CONTRACTS.filter((c) => ids.has(c.id));
     for (const item of ['wood', 'syrup', 'animal', 'lumber']) {
@@ -85,7 +88,7 @@ describe('surface contracts', () => {
     expect(offered.some((c) => c.asks.some((a) => a.item === 'mushroom'))).toBe(false);
   });
 
-  it('open tier 2 when one is delivered, like any tier-1 contract', () => {
+  it('count as delivered when filled', () => {
     const wood = FRONTIER_CONTRACTS.find((c) => c.id === 't1-firewood');
     if (wood === undefined) throw new Error('the firewood contract');
     let shift = 10;
@@ -97,7 +100,6 @@ describe('surface contracts', () => {
     const out = frontierAct(day(1, shift, stock), { kind: 'fillContract', id: wood.id });
     expect(out.done, out.refusal ?? '').toBe(true);
     expect(out.state.contractsDone).toEqual([1, 0, 0]);
-    expect(openTiers(out.state)).toEqual([1, 2]);
   });
 });
 
@@ -168,62 +170,49 @@ describe('one of each a market day', () => {
   });
 });
 
-describe('early clay and stone contracts', () => {
+describe('small clay and stone contracts', () => {
   // Owner, after the 0.24.0 build: "Let's make sure we have some clay and
-  // stone contracts in the early mix." Asked: new small ones; at least one on
-  // every early board; stone once a level-2 camp stands.
+  // stone contracts in the early mix." Asked: new small ones; stone once a
+  // level-2 camp stands. Since the 0.26.0 stages they are stage 1, with the
+  // other clay, stone, wood and hay contracts.
   const kiln = FRONTIER_CONTRACTS.find((c) => c.id === 't1-kiln');
   const hearth = FRONTIER_CONTRACTS.find((c) => c.id === 't1-hearth');
 
-  it('are small tier-1 contracts: 20 clay for 20 coins, 30 stone for 20, stone from a level-2 camp', () => {
+  it('are small stage-1 contracts: 20 clay for 20 coins, 30 stone for 20, stone from a level-2 camp', () => {
     expect(kiln).toMatchObject({
       tier: 1,
-      early: true,
+      stage: 1,
       asks: [{ item: 'clay', count: 20 }],
       pays: 20,
     });
     expect(kiln?.fromLevel ?? 1).toBe(1);
     expect(hearth).toMatchObject({
       tier: 1,
-      early: true,
+      stage: 1,
       fromLevel: 2,
       asks: [{ item: 'stone', count: 30 }],
       pays: 20,
     });
   });
 
-  it('one is on every board before a level-3 camp, when one can be filled; the hearth only from a level-2 camp', () => {
+  it('are offered from the first market day; stone only from a level-2 camp', () => {
     // The test world has stone in the ground but no clay: the store holds some.
+    let kilns = 0;
     let hearths = 0;
     for (let shift = 10; shift <= 200; shift += 10) {
       const one = contractBoard(day(1, shift, { clay: 30 }));
-      expect(
-        one.some((c) => c.id === 't1-kiln'),
-        `level 1, shift ${shift}`,
-      ).toBe(true);
-      expect(
-        one.some((c) => c.id === 't1-hearth'),
-        `level 1, shift ${shift}`,
-      ).toBe(false);
-      for (const c of one) expect(c.surface === true || c.early === true, c.id).toBe(true);
-      const two = contractBoard(day(2, shift, { clay: 30 }));
-      if (two.length === 0) continue; // not a market day at level 2
-      expect(
-        two.some((c) => c.id === 't1-kiln' || c.id === 't1-hearth'),
-        `level 2, shift ${shift}`,
-      ).toBe(true);
-      if (two.some((c) => c.id === 't1-hearth')) hearths += 1;
-      // Still on the board with a tier-2 contract open.
-      const later = contractBoard(day(2, shift, { clay: 30 }, [1, 0, 0]));
-      expect(
-        later.some((c) => c.id === 't1-kiln' || c.id === 't1-hearth'),
-        `level 2, tier 2 open, shift ${shift}`,
-      ).toBe(true);
+      if (one.some((c) => c.id === 't1-kiln')) kilns += 1;
+      for (const c of one) {
+        for (const a of c.asks) expect(['clay', 'wood', 'hay'], c.id).toContain(a.item);
+      }
+      if (contractBoard(day(2, shift, { clay: 30 })).some((c) => c.id === 't1-hearth'))
+        hearths += 1;
     }
+    expect(kilns).toBeGreaterThan(0);
     expect(hearths).toBeGreaterThan(0);
   });
 
-  it('can be delivered, and one opens tier 2', () => {
+  it('can be delivered', () => {
     let shift = 10;
     while (
       shift < 1000 &&

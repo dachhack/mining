@@ -30,7 +30,7 @@ import {
   footprintOf,
   contractById,
   coverLevels,
-  openTiers,
+  contractStage,
   deliverRefusal,
   takeRefusal,
   fillRefusal,
@@ -358,7 +358,7 @@ export function marketStep(state: FrontierState): FrontierStep | null {
   ) {
     return `buy ${FRONTIER_MINERS.item} 1`;
   }
-  const tier3 = openTiers(state).includes(3);
+  const tier3 = contractStage(state) >= 5; // the special ores' stage
   for (const item of tier3 ? [] : GATHERER_SELLS_ALL) {
     const lots = mostLots(state, 'sell', item);
     if (lots > 0) return `sell ${item} ${lots}`;
