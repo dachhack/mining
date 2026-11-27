@@ -21,7 +21,6 @@ import {
   frontierAct,
   heldContracts,
   isMarketDay,
-  openTiers,
   runPhase,
 } from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
@@ -53,43 +52,36 @@ for (const c of FRONTIER_CONTRACTS) {
   for (const a of c.asks) PLENTY[a.item] = Math.max(PLENTY[a.item] ?? 0, a.count * 10);
 }
 
-describe('the contract board (plan section 5)', () => {
-  it('opens tier 1 at once (its mining contracts with a level-3 camp), tier 2 after a tier-1 contract, tier 3 after a tier-2', () => {
-    expect(FRONTIER_BOARD.tier1Level).toBe(3);
-    // Tier 1's surface contracts are on the board from the first market day
-    // (frontierSurfaceContracts.test.ts); the rest wait for a level-3 camp.
-    expect(openTiers(at(2))).toEqual([1]);
-    expect(contractBoard(at(2, PLENTY)).every((c) => c.surface === true || c.early === true)).toBe(
-      true,
-    );
-    expect(contractBoard(at(3, PLENTY)).some((c) => c.surface !== true)).toBe(true);
-    expect(openTiers(at(3))).toEqual([1]);
-    expect(openTiers(at(3, {}, [1, 0, 0]))).toEqual([1, 2]);
-    expect(openTiers(at(3, {}, [1, 1, 0]))).toEqual([1, 2, 3]);
-  });
+/** `at`, with every stage open (frontierContractStages.test.ts): a smelter, a steel drill, 14 delivered. */
+function allOpen(shift = 30, inventory: Record<string, number> = PLENTY): FrontierState {
+  const s = at(3, { ...inventory, steelDrill: 1 }, [14, 0, 0], shift);
+  return { ...s, camps: s.camps.map((c) => ({ ...c, smelter: true })) };
+}
 
-  it('shows 3 to 7 on a market day only, every open tier, different ones, the same for the same seed and shift', () => {
+describe('the contract board (plan section 5)', () => {
+  it('shows 3 to 7 on a market day only, the newest stage first, different ones, the same for the same seed and shift', () => {
     // Owner, after the 0.20.0 build: "Contract management. Only 3-7 available to take."
     const [low, high] = FRONTIER_BOARD.offers;
     expect([low, high]).toEqual([3, 7]);
     const sizes = new Set<number>();
     for (let shift = 30; shift <= 90; shift += 3) {
-      const board = contractBoard(at(3, PLENTY, [1, 1, 0], shift));
+      const board = contractBoard(allOpen(shift));
       expect(board.length, `shift ${shift}`).toBeGreaterThanOrEqual(low);
       expect(board.length, `shift ${shift}`).toBeLessThanOrEqual(high);
-      // Every open tier is offered, each contract once, lowest tier first.
-      for (const tier of [1, 2, 3]) expect(board.some((c) => c.tier === tier)).toBe(true);
+      // The newest three stages are always offered (taken in turn, newest
+      // first), each contract once, lowest tier first.
+      for (const stage of [3, 4, 5]) expect(board.some((c) => c.stage === stage)).toBe(true);
       expect(new Set(board.map((c) => c.id)).size).toBe(board.length);
       expect(board.map((c) => c.tier)).toEqual([...board.map((c) => c.tier)].sort());
       sizes.add(board.length);
     }
     expect(sizes.size).toBeGreaterThan(1); // the size is drawn, not fixed
-    const board = contractBoard(at(3, PLENTY, [1, 1, 0]));
-    expect(contractBoard(at(3, PLENTY, [1, 1, 0]))).toEqual(board);
+    const board = contractBoard(allOpen());
+    expect(contractBoard(allOpen())).toEqual(board);
     expect(contractBoard(at(3, {}, [0, 0, 0], 31))).toEqual([]); // not a market day
     // Another market day shows another draw (over a few days, at least one differs).
     const days = [33, 36, 39, 42].map((s) =>
-      contractBoard(at(3, PLENTY, [0, 0, 0], s))
+      contractBoard(allOpen(s))
         .map((c) => c.id)
         .join(),
     );
@@ -103,8 +95,10 @@ describe('the contract board (plan section 5)', () => {
     const open = {
       ...fresh,
       shift: 30,
-      contractsDone: [1, 1, 0],
-      camps: fresh.camps.map((c) => ({ ...c, level: 3 })),
+      // Every stage open (frontierContractStages.test.ts).
+      contractsDone: [14, 0, 0],
+      inventory: new Map([['steelDrill', 1]]),
+      camps: fresh.camps.map((c) => ({ ...c, level: 3, smelter: true })),
     };
     const day = { ...open, marketOpen: isMarketDay(open) };
     // The whole world holds relics and keystones...
@@ -325,13 +319,11 @@ describe('the board offers only what the world can fill (owner, on the hazards b
     expect(board.length).toBeGreaterThan(0);
     for (const c of board) expect(worldCanFill(worldStock(bare), c.asks)).toBe(true);
     expect(board.some((c) => c.asks.some((a) => a.item === 'coal'))).toBe(false);
-    // Holding plenty, every tier-1 kind is drawn in full: perTier surface and
-    // perTier mining contracts, up to the day's most.
-    const rich = at(3, PLENTY);
+    // Holding plenty (at stage 3, which offers coal), the coal contract can be filled.
+    const rich = at(3, PLENTY, [5, 0, 0]);
     const coal = FRONTIER_CONTRACTS.find((c) => c.id === 't1-coal');
     expect(worldCanFill(worldStock(rich), coal?.asks ?? [])).toBe(true);
-    expect(contractBoard(rich).some((c) => c.surface !== true)).toBe(true);
-    expect(contractBoard(rich).length).toBeGreaterThanOrEqual(FRONTIER_BOARD.perTier);
+    expect(contractBoard(rich).length).toBeGreaterThanOrEqual(FRONTIER_BOARD.offers[0]);
   });
 
   it('every world can fill every contract, of every tier (question 197)', () => {
@@ -390,8 +382,9 @@ describe('the board offers only what the world can fill (owner, on the hazards b
         const s = {
           ...start,
           shift,
-          contractsDone: [1, 1, 0],
-          camps: start.camps.map((c) => ({ ...c, level: 3 })),
+          contractsDone: [14, 0, 0],
+          inventory: new Map([['steelDrill', 1]]),
+          camps: start.camps.map((c) => ({ ...c, level: 3, smelter: true })),
           marketOpen: true,
         };
         const stock = worldStock(s);

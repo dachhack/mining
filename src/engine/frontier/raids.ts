@@ -7,14 +7,15 @@
 // your targeted camp has."
 //
 // - Defenses: a camp's `defense` goes up one level at a time (FRONTIER_DEFENSE,
-//   up to 3) from its panel, for that level's cost and 1 tap (shift.ts
+//   up to 4) from its panel, for that level's cost and 1 tap (shift.ts
 //   charges it), at a camp of level FRONTIER_DEFENSE_MIN_LEVEL or more, a
 //   deep camp too. A raid never takes
 //   them down.
 // - A raid (`nightOfRaids`, at End shift after the dragons, before rain):
 //   from shift FRONTIER_RAID.fromShift, with a chance of FRONTIER_RAID.chance,
-//   marauders choose one camp at random. Their strength (`raidStrength`)
-//   comes from the deepest square on the map. If the camp's defense level is
+//   marauders choose one camp at random. Their strength is drawn from 1 to 4
+//   (`drawRaidStrength`, FRONTIER_RAID.strengthChances; owner, after the
+//   0.25.0 build: "Let's get randomized strength back into marauders"). If the camp's defense level is
 //   at least their strength they are turned away and nothing is lost.
 //   Otherwise the shortfall (strength minus defense) sets the damage:
 //   FRONTIER_RAID.stealShare of each goods stack in the store for each point,
@@ -85,14 +86,15 @@ export function deepestDug(state: FrontierState): number {
   return deepest;
 }
 
-/** How strong marauders would be now: from the deepest square dug (FRONTIER_RAID.strengthFromDepth). */
-export function raidStrength(state: FrontierState): number {
-  const deepest = deepestDug(state);
-  let strength = 0;
-  for (const step of FRONTIER_RAID.strengthFromDepth) {
-    if (deepest >= step.depth) strength = step.strength;
+/** A raid's strength, 1 to 4, drawn with `rng` (which it advances) by FRONTIER_RAID.strengthChances. */
+export function drawRaidStrength(rng: RngState): number {
+  const roll = nextFloat(rng);
+  let sum = 0;
+  for (let k = 0; k < FRONTIER_RAID.strengthChances.length; k += 1) {
+    sum += FRONTIER_RAID.strengthChances[k] ?? 0;
+    if (roll < sum) return k + 1;
   }
-  return strength;
+  return FRONTIER_RAID.strengthChances.length;
 }
 
 /** What a raid did. */
@@ -127,7 +129,22 @@ export function nightOfRaids(
   }
   const camp = state.camps[nextInt(rng, state.camps.length)];
   if (camp === undefined) return { state, raid: null };
-  const strength = raidStrength(state);
+  const out = raidCamp(state, camp.id, drawRaidStrength(rng));
+  return { state: out.state, raid: out.raid };
+}
+
+/**
+ * Marauders `strength` strong raid camp `campId` of `state`: turned away if
+ * its defense level is at least their strength; otherwise the shortfall sets
+ * what they take (see the top of this file). The camp must stand.
+ */
+export function raidCamp(
+  state: FrontierState,
+  campId: number,
+  strength: number,
+): { state: FrontierState; raid: Raid } {
+  const camp = state.camps.find((c) => c.id === campId);
+  if (camp === undefined) throw new Error(`no camp ${campId}`);
   const shortfall = strength - camp.defense;
   const base = {
     campId: camp.id,

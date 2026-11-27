@@ -37,6 +37,8 @@ import {
   FRONTIER_PHASES,
   FRONTIER_PICKAXE,
   FRONTIER_PUMP,
+  FRONTIER_RAID,
+  FRONTIER_STAGES,
   FRONTIER_RUN,
   FRONTIER_SAPLINGS,
   FRONTIER_SAW_HOUSE,
@@ -60,6 +62,8 @@ import {
   contractBoard,
   anyDeliverable,
   contractLimit,
+  contractStage,
+  contractsDelivered,
   heldContracts,
   loadFrontier,
   mostLots,
@@ -67,11 +71,12 @@ import {
   runPhase,
   saveFrontier,
 } from '../../engine';
-import type { BuildingKind, FrontierBuilding, TradeSide } from '../../engine';
+import type { BuildingKind, DragonAttack, FrontierBuilding, TradeSide } from '../../engine';
 import { randomSeed } from '../previewSession';
 import { CAMP_LOOK, CAMP_MARKS } from './campLook';
 import {
   campWorldOf,
+  takeDragonNews,
   toFrontier,
   endShift,
   turnRefusal,
@@ -99,7 +104,6 @@ import {
   foundationDepthOf,
   buildCampDefense,
   defenseRefusal,
-  raidStrengthOf,
   closeCampMarket,
   plantCamp,
   plantRefusal,
@@ -330,6 +334,16 @@ const OVER_HINT = 'This run is over. Tap New world to start another.';
 const CLOSE_CONFIRM_MS = 3000;
 /** Where the game keeps its run (plan B1). */
 export const RUN_KEY = 'mining-game.run';
+
+/** A dragon's attack in the day (dragons.ts), in one short sentence for the hint. */
+function dragonText(attack: DragonAttack): string {
+  if (attack.kind === 'camp') {
+    const lost = attack.upgradesLost ?? 0;
+    return `🐉 A dragon set camp ${attack.campId ?? ''} on fire${lost > 0 ? ' and tore down an upgrade' : ''}! Tap the fire to put it out.`;
+  }
+  if (attack.kind === 'eat') return `🐉 A dragon ate an animal at ${attack.x}, ${attack.y}.`;
+  return `🐉 A dragon set ${attack.x}, ${attack.y} on fire.`;
+}
 
 /** What End shift did, in one short line for the hint. */
 function shiftText(report: ShiftReport, turn: CampTurn): string {
@@ -2368,6 +2382,27 @@ export function mountCampLab(
     const next = element('p', 'lab2-market-when', goal?.next ?? '');
     next.dataset['testid'] = 'lab2-goal';
     list.append(next);
+    // The contract stage (owner, after the 0.25.0 build): what the board
+    // offers now, and what opens the next stage.
+    const stage = contractStage(state);
+    const STAGE_GOODS = [
+      'clay, stone, wood, hay',
+      'coal, raw ore, apples, lumber',
+      'crops, animals, syrup, mushrooms',
+      'ingots, bigger contracts',
+      'crystal, rare ore, relics',
+    ];
+    const coming = FRONTIER_STAGES.find((st) => st.stage === stage + 1);
+    const stageLine = element(
+      'p',
+      'lab2-market-when',
+      `Contract stage ${stage} of 5: ${STAGE_GOODS.slice(0, stage).join('; ')}.` +
+        (coming === undefined
+          ? ''
+          : ` Stage ${coming.stage} (${STAGE_GOODS[coming.stage - 1] ?? ''}) opens with ${coming.milestone} and ${coming.delivered} contracts delivered (you have ${contractsDelivered(state)}).`),
+    );
+    stageLine.dataset['testid'] = 'lab2-contract-stage';
+    list.append(stageLine);
     // Up to the best camp's level of contracts at once (owner).
     const held = heldContracts(state);
     const limit = contractLimit(state);
@@ -3083,7 +3118,7 @@ export function mountCampLab(
         'lab2-panel-line',
         `🛡 ${have} · ${camp.defense}/${FRONTIER_DEFENSE.length}`,
       );
-      line.title = `Marauders now come ${raidStrengthOf(world)} strong: a camp with that many levels of defenses turns them away.`;
+      line.title = `Marauders come 1 to ${FRONTIER_RAID.strengthChances.length} strong, the stronger the rarer: a camp with that many levels of defenses turns them away, and each level short lets them take less.`;
       line.dataset['testid'] = 'lab2-camp-defense';
       row.append(line);
       if (next !== undefined) {
@@ -3125,6 +3160,17 @@ export function mountCampLab(
   /** Take a new world: work out what is shown again, and refresh the counter and tray. */
   function setWorld(next: CampWorld): void {
     world = next;
+    // Say a dragon's attack even if the action says nothing more.
+    const news = takeDragonNews();
+    if (news.length > 0) {
+      dragonLine = news.map(dragonText).join(' ');
+      hint.textContent = dragonLine;
+      hint.classList.toggle('lab-hint-warn', true);
+      // A hint set straight after (the action's own) carries it; later ones do not.
+      queueMicrotask(() => {
+        dragonLine = '';
+      });
+    }
     tops = topBlocksOf(world.lab.state);
     sights = sightMap(world);
     showHud();
@@ -3150,8 +3196,17 @@ export function mountCampLab(
     cues.start();
   }
 
+  /** The dragons' news from the last action, said with the next hint (cleared once said). */
+  let dragonLine = '';
+
   function setHint(text: string, warn: boolean | 'hard'): void {
-    hint.textContent = text;
+    // A dragon attacked with the taps just spent (owner, after the 0.25.0
+    // build): its news leads whatever the action itself says.
+    const news = takeDragonNews();
+    if (news.length > 0) dragonLine = news.map(dragonText).join(' ');
+    hint.textContent = dragonLine === '' ? text : `${dragonLine} ${text}`.trim();
+    if (dragonLine !== '') warn = true;
+    dragonLine = '';
     hint.classList.toggle('lab-hint-warn', warn === true);
     hint.classList.toggle('lab2-hint-hard', warn === 'hard');
   }

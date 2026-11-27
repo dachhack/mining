@@ -72,6 +72,9 @@ test('fill a contract at the market at once when the store holds what it asks fo
   // A tier-1 contract done: phase 4. Filling it at the market cost no tap.
   await page.getByTestId('lab2-goals').click();
   await expect(page.getByTestId('lab2-goal')).toHaveText(FRONTIER_PHASES[3]?.next ?? '');
+  // The contract stage, and what opens the next one (owner, after the 0.25.0 build).
+  await expect(page.getByTestId('lab2-contract-stage')).toContainText('Contract stage');
+  await expect(page.getByTestId('lab2-contract-stage')).toContainText('(you have 1)');
   await expect(page.getByTestId('lab2-hud')).toHaveAttribute(
     'data-taps',
     String(FRONTIER_SHIFT.taps),

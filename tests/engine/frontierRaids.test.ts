@@ -6,11 +6,16 @@
 // of defense your targeted camp has."
 import { describe, expect, it } from 'vitest';
 import { FRONTIER_DEFENSE, FRONTIER_RAID } from '../../src/data/frontier';
-import { defenseRefusal, frontierAct, nightOfRaids, raidStrength } from '../../src/engine';
+import {
+  defenseRefusal,
+  drawRaidStrength,
+  frontierAct,
+  nightOfRaids,
+  raidCamp,
+} from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
 import { createRng, nextFloat } from '../../src/engine/rng';
-import { SIDE, world } from './frontierHelpers';
-import { buildState } from './helpers';
+import { world } from './frontierHelpers';
 
 /** A generator whose first roll brings marauders. */
 function raidRng(): { s: number } {
@@ -29,7 +34,7 @@ function campWith(
 
 describe('defenses (hazards plan, section 5)', () => {
   it('are built a level at a time from the data, for 1 tap each', () => {
-    const w = campWith(world({ inventory: { wood: 100, stone: 100, ironIngot: 20 } }), {
+    const w = campWith(world({ inventory: { wood: 100, stone: 100, ironIngot: 40 } }), {
       level: 2,
     });
     expect(defenseRefusal(campWith(w, { level: 1 }), 1)).toBe('level');
@@ -53,26 +58,38 @@ describe('defenses (hazards plan, section 5)', () => {
 });
 
 describe('marauders (hazards plan, section 5)', () => {
-  it('come as strong as the deepest square dug says', () => {
-    expect(raidStrength(world())).toBe(1);
-    // The test cube is 3 layers deep: a square dug 2 deep is still strength 1.
-    const dug = world({
-      special: [
-        { x: 2, y: 2, z: 0, char: '.' },
-        { x: 2, y: 2, z: 1, char: '.' },
-      ],
-    });
-    expect(raidStrength(dug)).toBe(1);
-    const steps = FRONTIER_RAID.strengthFromDepth;
-    expect(steps.map((s) => s.strength)).toEqual([1, 2, 3]);
+  // Owner, after the 0.25.0 build: "Let's get randomized strength back into
+  // marauders. 1-4 strength with declining probability as strength goes
+  // up." Asked, a 4th defense level, so a fully fortified camp repels them all.
+  it('come 1 to 4 strong, drawn with falling chances; 4 defense levels match the strongest', () => {
+    expect(FRONTIER_RAID.strengthChances).toEqual([0.5, 0.3, 0.15, 0.05]);
+    expect(FRONTIER_RAID.strengthChances.reduce((a, b) => a + b, 0)).toBeCloseTo(1);
+    expect(FRONTIER_DEFENSE).toHaveLength(FRONTIER_RAID.strengthChances.length);
+    expect(FRONTIER_DEFENSE[3]?.name).toBe('Fortress');
+    const counts = [0, 0, 0, 0, 0];
+    const rng = createRng(7);
+    for (let k = 0; k < 4000; k += 1) {
+      const n = drawRaidStrength(rng);
+      counts[n] = (counts[n] ?? 0) + 1;
+    }
+    expect(counts[0]).toBe(0);
+    for (let n = 1; n <= 3; n += 1) expect(counts[n] ?? 0).toBeGreaterThan(counts[n + 1] ?? 0);
+    expect(counts[4]).toBeGreaterThan(0);
   });
 
-  it('are never stronger than a camp can be defended, so full defenses always turn them away', () => {
-    // Owner, after the 0.20.0 build: "Defneses don't seem to do anything";
-    // asked, chose "Cap raids at strength 3". Until then strength reached 4
-    // at depth 16, above the 3 levels of defenses.
-    const strongest = Math.max(...FRONTIER_RAID.strengthFromDepth.map((s) => s.strength));
-    expect(strongest).toBe(FRONTIER_DEFENSE.length);
+  it('take less the better the camp is defended, and nothing from a camp defended to their strength', () => {
+    const w = campWith(
+      { ...world({ inventory: { wood: 100 } }), shift: 30 },
+      { level: 4, smelter: true, lantern: true, pen: true, penned: 1 },
+    );
+    const taken = [0, 1, 2, 3, 4].map(
+      (defense) => raidCamp(campWith(w, { defense }), 1, 4).raid.stolen[0]?.count ?? 0,
+    );
+    expect(taken).toEqual([40, 30, 20, 10, 0]);
+    for (let strength = 1; strength <= 4; strength += 1) {
+      const fort = raidCamp(campWith(w, { defense: 4 }), 1, strength);
+      expect(fort.raid.turnedAway, `strength ${strength}`).toBe(true);
+    }
   });
 
   it(`do not come before shift ${FRONTIER_RAID.fromShift}`, () => {
@@ -81,7 +98,7 @@ describe('marauders (hazards plan, section 5)', () => {
   });
 
   it('are turned away by a camp with defenses at least their strength', () => {
-    const w = campWith({ ...world({ inventory: { wood: 50 } }), shift: 30 }, { defense: 1 });
+    const w = campWith({ ...world({ inventory: { wood: 50 } }), shift: 30 }, { defense: 4 });
     const out = nightOfRaids(w, raidRng());
     expect(out.raid?.turnedAway).toBe(true);
     expect(out.state).toBe(w);
@@ -92,9 +109,8 @@ describe('marauders (hazards plan, section 5)', () => {
       { ...world({ inventory: { wood: 50, stone: 9, coin: 500, pump: 30 } }), shift: 30 },
       { level: 3, smelter: true, lantern: true, pen: true, penned: 2 },
     );
-    const out = nightOfRaids(w, raidRng());
+    const out = raidCamp(w, 1, 1);
     const raid = out.raid;
-    if (raid === null) throw new Error('marauders came');
     expect(raid.turnedAway).toBe(false);
     expect(raid.strength).toBe(1);
     // Shortfall 1: 10% of each stack, rounded down; coins are never taken.
@@ -117,26 +133,13 @@ describe('marauders (hazards plan, section 5)', () => {
   });
 
   it('take more for a bigger shortfall, and can put a camp back to basic', () => {
-    // A cube 9 layers deep with one shaft dug to depth 8: strength 3.
-    const layers: string[][] = [];
-    for (let z = 0; z < 9; z += 1) {
-      const rows: string[] = [];
-      for (let y = 0; y < SIDE; y += 1) {
-        let row = '';
-        for (let x = 0; x < SIDE; x += 1) row += x === 2 && y === 2 && z < 8 ? '.' : 'd';
-        rows.push(row);
-      }
-      layers.push(rows);
-    }
     const base = campWith(
       { ...world({ inventory: { wood: 50 } }), shift: 30 },
       { level: 4, smelter: true, lantern: true, pen: true, penned: 1 },
     );
-    const deep = { ...base, cube: buildState({ layers }) };
-    expect(raidStrength(deep)).toBe(3);
-    const out = nightOfRaids(deep, raidRng());
+    const out = raidCamp(base, 1, 3);
     // Shortfall 3: 30% of each stack; 6 upgrades, which is all of them.
-    expect(out.raid?.stolen).toEqual([{ item: 'wood', count: 15 }]);
+    expect(out.raid.stolen).toEqual([{ item: 'wood', count: 15 }]);
     expect(out.state.camps[0]).toMatchObject({
       level: 1,
       smelter: false,
@@ -145,8 +148,8 @@ describe('marauders (hazards plan, section 5)', () => {
       penned: 0,
     });
     // A palisade and a wall make the shortfall 1.
-    const walled = nightOfRaids(campWith(deep, { defense: 2 }), raidRng());
-    expect(walled.raid?.stolen).toEqual([{ item: 'wood', count: 5 }]);
+    const walled = raidCamp(campWith(base, { defense: 2 }), 1, 3);
+    expect(walled.raid.stolen).toEqual([{ item: 'wood', count: 5 }]);
     expect(walled.state.camps[0]?.level).toBe(4);
   });
 

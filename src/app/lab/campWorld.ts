@@ -48,7 +48,6 @@ import {
   digAreaRefusal as engineDigAreaRefusal,
   digAreaPlan as engineDigAreaPlan,
   hireRefusal as engineHireRefusal,
-  raidStrength as engineRaidStrength,
   foundationDepth as engineFoundationDepth,
   plantRefusal as enginePlantRefusal,
   nextMarketShift as engineNextMarketShift,
@@ -82,6 +81,7 @@ import type {
   ShiftReport,
   Sight,
   TradeSide,
+  DragonAttack,
 } from '../../engine';
 import { labWorldFromState } from './labWorld';
 import type { LabTap, LabWorld } from './labWorld';
@@ -283,11 +283,26 @@ export function fromFrontier(world: CampWorld, state: FrontierState): CampWorld 
 }
 
 /** Do `action` in the engine: the world after it (the very same world if it did nothing) and the engine's answer. */
+/**
+ * What the dragons did in the day with the taps of the last action done
+ * (dragons.ts): kept here for the screen's hint, which takes it once
+ * (`takeDragonNews`). It is news, not state: nothing replays it.
+ */
+let dragonNews: DragonAttack[] = [];
+
+/** The dragons' attacks since the screen last asked, oldest first; then none until the next. */
+export function takeDragonNews(): DragonAttack[] {
+  const news = dragonNews;
+  dragonNews = [];
+  return news;
+}
+
 function act(
   world: CampWorld,
   action: FrontierAction,
 ): { world: CampWorld; done: boolean; report: ShiftReport | null } {
   const outcome = frontierAct(toFrontier(world), action);
+  if (outcome.done) dragonNews = [...dragonNews, ...(outcome.attacks ?? [])];
   if (!outcome.done) {
     return { world, done: false, report: null };
   }
@@ -509,6 +524,7 @@ export interface CampTap {
  */
 export function campTap(world: CampWorld, x: number, y: number): CampTap {
   const outcome = frontierAct(toFrontier(world), { kind: 'tap', x, y });
+  if (outcome.done) dragonNews = [...dragonNews, ...(outcome.attacks ?? [])];
   const tap = outcome.tap;
   const answer = (kind: CampTapKind): CampTap => ({
     kind,
@@ -664,11 +680,6 @@ export function defenseRefusal(world: CampWorld, id: number): string | null {
 /** The depth a deep camp's concrete foundation would level the 3 x 3 on (x, y) to. */
 export function foundationDepthOf(world: CampWorld, x: number, y: number): number {
   return engineFoundationDepth(world.lab.state, x, y);
-}
-
-/** How strong marauders would come now: from the deepest square dug (hazards PR 5). */
-export function raidStrengthOf(world: CampWorld): number {
-  return engineRaidStrength(toFrontier(world));
 }
 
 /** Build camp `id`'s next level of defenses (hazards PR 5), for 1 tap; the very same world if it cannot. */

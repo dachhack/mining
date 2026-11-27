@@ -55,7 +55,7 @@ test('a dragon needs a sword; with one, a tap drives it off (hazards PR 4)', asy
   const start = createFrontier(110);
   const camp = start.camps[0] ?? { x: 0, y: 0 };
   const at = { x: camp.x + 3, y: camp.y };
-  const dragons = [{ id: 1, x: at.x, y: at.y, dx: 1, dy: 0, restMines: 5 }];
+  const dragons = [{ id: 1, x: at.x, y: at.y, dx: 1, dy: 0, restTaps: 3 }];
   const state: FrontierState = {
     ...start,
     hazards: { ...start.hazards, dragons, nextDragonId: 2 },
@@ -72,6 +72,27 @@ test('a dragon needs a sword; with one, a tap drives it off (hazards PR 4)', asy
   await expect(page.getByTestId('lab-hint')).toContainText('drove the dragon off');
 });
 
+test('a dragon attacks after a tap, and the hint says so (owner, after the 0.25.0 build)', async ({
+  page,
+}) => {
+  // "They fly to trees, grass, or animals and set them on fire or eat them on every 1-3 taps."
+  const start = createFrontier(110);
+  const camp = start.camps[0] ?? { x: 0, y: 0 };
+  // About to attack: 1 tap of rest left.
+  const dragons = [{ id: 1, x: camp.x + 4, y: camp.y + 4, dx: 1, dy: 0, restTaps: 1 }];
+  const state: FrontierState = {
+    ...start,
+    hazards: { ...start.hazards, dragons, nextDragonId: 2 },
+    inventory: new Map([['grass', 9]]),
+  };
+  await openGame(page, state);
+  // Making hay is a tap like any other.
+  await page.getByTestId('lab2-book').click();
+  await page.getByTestId('lab2-recipe-make-hay').click();
+  await page.getByTestId('lab2-book-close').click();
+  await expect(page.getByTestId('lab-hint')).toContainText('🐉 A dragon');
+});
+
 test('a level-2 camp builds its defenses from its panel (hazards PR 5)', async ({ page }) => {
   const start = createFrontier(110);
   const state: FrontierState = {
@@ -84,9 +105,9 @@ test('a level-2 camp builds its defenses from its panel (hazards PR 5)', async (
   await expect(canvas).toHaveAttribute('data-defenses', '1:0');
   await tapSquare(page, canvas, camp.x, camp.y);
   await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'camp');
-  await expect(page.getByTestId('lab2-camp-defense')).toContainText('No defenses · 0/3');
+  await expect(page.getByTestId('lab2-camp-defense')).toContainText('No defenses · 0/4');
   await page.getByTestId('lab2-build-defense').click();
-  await expect(page.getByTestId('lab2-camp-defense')).toContainText('Palisade · 1/3');
+  await expect(page.getByTestId('lab2-camp-defense')).toContainText('Palisade · 1/4');
   // The camp's marker shows it: a palisade round it and a shield with 1.
   await expect(canvas).toHaveAttribute('data-defenses', '1:1');
   await expect(page.getByTestId('lab-res-wood')).toHaveAttribute('data-count', '15');

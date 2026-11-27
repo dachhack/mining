@@ -80,6 +80,8 @@ import type { GameState } from './state';
  * 0.16.0: after the 0.15.0 build: tier 2's coal contract asks for 40 coal,
  *        not 80 (question 197).
  * 0.17.0: after the 0.16.0 build: about three times the coal in every world.
+ * 0.26.0: after the 0.25.0 build: contract stages; dragons attack every 1-3 taps;
+ *        marauders 1-4 strong at random, and the Fortress; state version 27.
  * 0.25.0: after the 0.24.0 build: small clay and stone contracts on every early board.
  * 0.24.0: after the 0.23.0 build: every world starts with 10 apple trees.
  * 0.23.0: after the 0.22.0 build: surface contracts from the first market day,
@@ -92,7 +94,7 @@ import type { GameState } from './state';
  * 0.18.0: after the 0.17.0 build: the axe (3 wood a tree) and the saw house
  *        (1 more wood from each tree in its reach); state version 20.
  */
-export const ENGINE_VERSION = '0.25.0';
+export const ENGINE_VERSION = '0.26.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
@@ -587,7 +589,8 @@ export {
   anyDeliverable,
   contractLimit,
   heldContracts,
-  openTiers,
+  contractStage,
+  contractsDelivered,
   runPhase,
   fillContract,
   fillRefusal,
@@ -606,7 +609,8 @@ export {
   defenseRefusal,
   nextDefense,
   nightOfRaids,
-  raidStrength,
+  drawRaidStrength,
+  raidCamp,
 } from './frontier/raids';
 export type { DefenseRefusal, Raid } from './frontier/raids';
 export type { PenAction, PenRefusal } from './frontier/pens';
@@ -629,6 +633,7 @@ export type { TradeRefusal, TradeSide } from './frontier/market';
 // Shifts (plan A4).
 export { endFrontierShift, frontierAct, upkeepDue } from './frontier/shift';
 export type { FrontierAction, FrontierOutcome, ShiftReport } from './frontier/shift';
+export type { DragonAttack } from './frontier/dragons';
 export type { FrontierStatus } from './frontier/state';
 // Undo within a shift (plan A5).
 export {

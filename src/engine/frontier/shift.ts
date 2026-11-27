@@ -59,7 +59,8 @@ import { plant, plantRefusal } from './farming';
 import { rainfall } from './rain';
 import { drainPumps, isFlooded } from './water';
 import { burnFires } from './fire';
-import { nightOfDragons } from './dragons';
+import { nightOfDragons, dragonsOnTaps } from './dragons';
+import type { DragonAttack } from './dragons';
 import { buildDefense, defenseRefusal, nightOfRaids } from './raids';
 import type { Raid } from './raids';
 import { breedPens, penAct, penRefusal } from './pens';
@@ -201,6 +202,11 @@ export interface FrontierOutcome {
   tap: FrontierTap | null;
   /** For End shift: what the end of the shift did. */
   report: ShiftReport | null;
+  /**
+   * What the dragons did with the taps this action spent (dragons.ts,
+   * `dragonsOnTaps`): empty or missing when it spent none or none attacked.
+   */
+  attacks?: DragonAttack[];
 }
 
 /**
@@ -565,6 +571,18 @@ function spent(next: FrontierState, tap: FrontierTap | null = null): FrontierOut
  * Nothing can be done once the run has ended.
  */
 export function frontierAct(state: FrontierState, action: FrontierAction): FrontierOutcome {
+  const outcome = actAlone(state, action);
+  // Every tap spent on the day's work counts the dragons down; one whose
+  // rest runs out attacks (dragons.ts; owner, after the 0.25.0 build). End
+  // shift starts the next shift's taps: its night is the dragons' own.
+  const taps = state.tapsLeft - outcome.state.tapsLeft;
+  if (!outcome.done || action.kind === 'endShift' || taps <= 0) return outcome;
+  const dragons = dragonsOnTaps(outcome.state, taps);
+  return { ...outcome, state: dragons.state, attacks: dragons.attacks };
+}
+
+/** `frontierAct` without the dragons' attacks: the action alone. */
+function actAlone(state: FrontierState, action: FrontierAction): FrontierOutcome {
   if (state.status !== 'active') {
     return refused(state, 'over');
   }

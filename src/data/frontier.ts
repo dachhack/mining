@@ -814,18 +814,17 @@ export interface FrontierContractDef {
   /**
    * True for a surface contract (owner, after the 0.22.0 build: "We need more
    * surface resource contracts especially early game"): it asks only for
-   * what the surface gives, and is on the board from the first market day,
-   * before a level-3 camp opens the rest of tier 1 (FRONTIER_BOARD.tier1Level).
+   * what the surface gives. (Its `stage` says when the board offers it.)
    */
   surface?: boolean;
   /**
-   * True for a small clay or stone contract that is on the board from the
-   * first market day too, with the surface ones (owner, after the 0.24.0
-   * build: "Let's make sure we have some clay and stone contracts in the
-   * early mix"): until a level-3 camp opens the rest of tier 1, one is on
-   * every board that can be filled.
+   * The stage that opens it, 1 to 5 (owner, after the 0.25.0 build: "Let's
+   * stay heavy on clay stone wood and hay in early game. Then coal and common
+   * ores mix in. Then crops, sheep, syrup mix in. Then more refined ore
+   * products and larger contracts. Then special ores and items."): see
+   * FRONTIER_STAGES.
    */
-  early?: boolean;
+  stage: number;
   /** The best camp's level the board needs before it offers this (1 if not given): stone is mined from level 2. */
   fromLevel?: number;
 }
@@ -844,6 +843,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't1-coal',
     tier: 1,
+    stage: 2,
     name: 'Coal for the forge',
     asks: [{ item: 'coal', count: 20 }],
     pays: 60,
@@ -851,14 +851,24 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't1-stone',
     tier: 1,
+    stage: 1,
     name: 'Stone for a wall',
     asks: [{ item: 'stone', count: 100 }],
     pays: 50,
+    fromLevel: 2,
   },
-  { id: 't1-iron', tier: 1, name: 'Raw iron', asks: [{ item: 'rawIronOre', count: 20 }], pays: 80 },
+  {
+    id: 't1-iron',
+    stage: 2,
+    tier: 1,
+    name: 'Raw iron',
+    asks: [{ item: 'rawIronOre', count: 20 }],
+    pays: 80,
+  },
   {
     id: 't1-copper',
     tier: 1,
+    stage: 2,
     name: 'Raw copper',
     asks: [{ item: 'rawCopperOre', count: 20 }],
     pays: 80,
@@ -866,6 +876,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't1-iron-ingots',
     tier: 1,
+    stage: 4,
     name: 'Iron ingots',
     asks: [{ item: 'ironIngot', count: 10 }],
     pays: 120,
@@ -873,6 +884,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't1-copper-ingots',
     tier: 1,
+    stage: 4,
     name: 'Copper ingots',
     asks: [{ item: 'copperIngot', count: 10 }],
     pays: 120,
@@ -880,6 +892,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't1-mixed',
     tier: 1,
+    stage: 2,
     name: 'Coal and iron',
     asks: [
       { item: 'coal', count: 10 },
@@ -893,6 +906,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't1-pottery',
     tier: 1,
+    stage: 1,
     name: 'Clay for pottery',
     asks: [{ item: 'clay', count: 40 }],
     pays: 40,
@@ -900,6 +914,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't1-bricks',
     tier: 1,
+    stage: 1,
     name: 'Clay for bricks',
     asks: [{ item: 'clay', count: 80 }],
     pays: 70,
@@ -911,19 +926,19 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't1-kiln',
     tier: 1,
+    stage: 1,
     name: 'Clay for a kiln',
     asks: [{ item: 'clay', count: 20 }],
     // Clay is sold at the market at 1 coin each: no more, so buying to fill it pays nothing.
     pays: 20,
-    early: true,
   },
   {
     id: 't1-hearth',
     tier: 1,
+    stage: 1,
     name: 'Stone for a hearth',
     asks: [{ item: 'stone', count: 30 }],
     pays: 20,
-    early: true,
     fromLevel: 2,
   },
   // Surface contracts (owner, after the 0.22.0 build: "We need more surface
@@ -933,6 +948,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't1-mushrooms',
     tier: 1,
+    stage: 3,
     name: 'Mushrooms for the cook',
     asks: [{ item: 'mushroom', count: 10 }],
     pays: 60,
@@ -941,6 +957,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't1-firewood',
     tier: 1,
+    stage: 1,
     name: 'Firewood for the winter',
     asks: [{ item: 'wood', count: 30 }],
     // No more than 30 wood cost at the market (24 coins), so buying to fill it pays nothing.
@@ -950,6 +967,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't1-hay',
     tier: 1,
+    stage: 1,
     name: 'Hay for the stables',
     asks: [{ item: 'hay', count: 20 }],
     pays: 20,
@@ -958,6 +976,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't1-sheep',
     tier: 1,
+    stage: 3,
     name: 'Sheep for a farm',
     asks: [{ item: 'animal', count: 3 }],
     pays: 20,
@@ -966,6 +985,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't1-apples',
     tier: 1,
+    stage: 2,
     name: 'Apples for the market',
     asks: [{ item: 'apple', count: 20 }],
     pays: 18,
@@ -974,6 +994,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't1-syrup',
     tier: 1,
+    stage: 3,
     name: 'Syrup for pancakes',
     asks: [{ item: 'syrup', count: 5 }],
     pays: 60,
@@ -982,6 +1003,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't1-grain',
     tier: 1,
+    stage: 3,
     name: 'Grain for the mill',
     asks: [{ item: 'wheat', count: 20 }],
     pays: 25,
@@ -990,6 +1012,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't1-corn',
     tier: 1,
+    stage: 3,
     name: 'Corn for the fair',
     asks: [{ item: 'corn', count: 15 }],
     pays: 30,
@@ -998,6 +1021,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't1-stew',
     tier: 1,
+    stage: 3,
     name: 'Vegetables for a stew',
     asks: [
       { item: 'carrot', count: 10 },
@@ -1009,6 +1033,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't1-lumber',
     tier: 1,
+    stage: 2,
     name: 'Lumber for a shed',
     asks: [{ item: 'lumber', count: 10 }],
     pays: 40,
@@ -1018,6 +1043,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't2-stone',
     tier: 2,
+    stage: 4,
     name: 'Stone for a bridge',
     asks: [{ item: 'stone', count: 300 }],
     pays: 200,
@@ -1025,6 +1051,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't2-coal',
     tier: 2,
+    stage: 4,
     name: 'Coal for a winter',
     // 40, not 80: a world holds only 52 to 103 coal, and smelting burns some
     // (owner, question 197: "Lower the contract").
@@ -1034,6 +1061,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't2-iron',
     tier: 2,
+    stage: 4,
     name: 'Iron ore in bulk',
     asks: [{ item: 'rawIronOre', count: 60 }],
     pays: 250,
@@ -1041,6 +1069,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't2-copper-ingots',
     tier: 2,
+    stage: 4,
     name: 'Copper for wire',
     asks: [{ item: 'copperIngot', count: 40 }],
     pays: 380,
@@ -1048,6 +1077,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't2-ingots',
     tier: 2,
+    stage: 4,
     name: 'Ingots for a works',
     asks: [
       { item: 'ironIngot', count: 30 },
@@ -1058,6 +1088,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't2-road',
     tier: 2,
+    stage: 4,
     name: 'Clay for a road',
     asks: [{ item: 'clay', count: 200 }],
     pays: 200,
@@ -1065,6 +1096,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't2-town',
     tier: 2,
+    stage: 4,
     name: 'Bricks for a town',
     asks: [{ item: 'clay', count: 400 }],
     pays: 380,
@@ -1072,6 +1104,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't2-mushrooms',
     tier: 2,
+    stage: 4,
     name: 'Mushrooms for a feast',
     asks: [{ item: 'mushroom', count: 30 }],
     pays: 220,
@@ -1080,6 +1113,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't2-lumber',
     tier: 2,
+    stage: 4,
     name: 'Lumber for a barn',
     asks: [{ item: 'lumber', count: 40 }],
     pays: 220,
@@ -1088,6 +1122,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't2-syrup',
     tier: 2,
+    stage: 4,
     name: 'Syrup for the town',
     asks: [{ item: 'syrup', count: 20 }],
     pays: 260,
@@ -1096,6 +1131,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't2-provisions',
     tier: 2,
+    stage: 4,
     name: 'Provisions for a camp',
     asks: [
       { item: 'apple', count: 30 },
@@ -1108,18 +1144,41 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't2-flock',
     tier: 2,
+    stage: 4,
     name: 'A flock',
     asks: [{ item: 'animal', count: 10 }],
     pays: 80,
     surface: true,
   },
   // Tier 3: crystal, rare ore and relics.
-  { id: 't3-crystal', tier: 3, name: 'Crystal', asks: [{ item: 'crystal', count: 10 }], pays: 700 },
-  { id: 't3-rare', tier: 3, name: 'Rare ore', asks: [{ item: 'rareOre', count: 15 }], pays: 900 },
-  { id: 't3-relics', tier: 3, name: 'Relics', asks: [{ item: 'relic', count: 3 }], pays: 800 },
+  {
+    id: 't3-crystal',
+    stage: 5,
+    tier: 3,
+    name: 'Crystal',
+    asks: [{ item: 'crystal', count: 10 }],
+    pays: 700,
+  },
+  {
+    id: 't3-rare',
+    stage: 5,
+    tier: 3,
+    name: 'Rare ore',
+    asks: [{ item: 'rareOre', count: 15 }],
+    pays: 900,
+  },
+  {
+    id: 't3-relics',
+    stage: 5,
+    tier: 3,
+    name: 'Relics',
+    asks: [{ item: 'relic', count: 3 }],
+    pays: 800,
+  },
   {
     id: 't3-collection',
     tier: 3,
+    stage: 5,
     name: 'A collector’s order',
     asks: [
       { item: 'crystal', count: 20 },
@@ -1130,6 +1189,7 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   {
     id: 't3-keystone',
     tier: 3,
+    stage: 5,
     name: 'The keystone',
     asks: [{ item: 'keystone', count: 1 }],
     pays: 2000,
@@ -1137,15 +1197,35 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
 ];
 
 /**
- * The contract board (plan section 5). On a market day it shows up to
- * `perTier` contracts of each open tier, drawn from the run's seed and the
- * shift. Tier 1 opens while the best camp is at least `tier1Level`; tier 2
- * once a tier-1 contract is done; tier 3 once a tier-2 contract is done.
- * One contract is held at a time (question 173), with no deadline.
+ * What opens each contract stage after the first (owner, after the 0.25.0
+ * build; asked, a milestone and a number of contracts delivered, both
+ * needed): stage 2 with a level-2 camp and 2 contracts delivered, stage 3
+ * with a level-3 camp and 5, stage 4 with a smelter standing and 9, stage 5
+ * with a steel drill held or a deep camp standing and 14. Stages open in
+ * order: a stage needs every stage before it open too. Delivered counts
+ * every tier.
+ */
+export const FRONTIER_STAGES: {
+  stage: number;
+  needs: 'level2' | 'level3' | 'smelter' | 'steelDrillOrDeep';
+  delivered: number;
+  /** What the contracts card says the milestone is. */
+  milestone: string;
+}[] = [
+  { stage: 2, needs: 'level2', delivered: 2, milestone: 'a level-2 camp' },
+  { stage: 3, needs: 'level3', delivered: 5, milestone: 'a level-3 camp' },
+  { stage: 4, needs: 'smelter', delivered: 9, milestone: 'a smelter' },
+  { stage: 5, needs: 'steelDrillOrDeep', delivered: 14, milestone: 'a steel drill or a deep camp' },
+];
+
+/**
+ * The contract board (plan section 5; contracts.ts). On a market day it
+ * shows 3 to 7 contracts, taken from up to `perStage` of each open stage's,
+ * drawn from the run's seed and the shift.
  */
 export const FRONTIER_BOARD = {
-  perTier: 3,
-  tier1Level: 3,
+  /** Up to this many contracts are drawn from each open stage, before the day's 3 to 7 are taken from them. */
+  perStage: 4,
   /**
    * How many contracts the board offers on a market day, at most: a whole
    * number drawn from [low, high] for the day, taken from the open tiers'
@@ -1315,13 +1395,15 @@ export const FRONTIER_DRAGON = {
   most: 1,
   steps: 4,
   /**
-   * In the day a dragon rests for `restMines` mining taps (a whole number
-   * from the first to the second, drawn from the run's generator), then flies
-   * `stepsPerMine` squares along its heading (owner: "Let's make the dragon
-   * fly every time you mine. Or every 3-7 mines. So it stays put for a bit.").
+   * In the day a dragon rests for `restTaps` taps of any kind (a whole number
+   * from the first to the second, drawn from the run's generator), then
+   * attacks (owner, after the 0.25.0 build: "They fly to trees, grass, or
+   * animals and set them on fire or eat them on every 1-3 taps. 1 of 20
+   * attacks will be your camp."): with a chance of `campChance` the nearest
+   * camp, else the nearest tree, grass or animal (dragons.ts).
    */
-  stepsPerMine: 1,
-  restMines: [3, 7] as [number, number],
+  restTaps: [1, 3] as [number, number],
+  campChance: 1 / 20,
   fireChance: 1 / 3,
   sword: 'sword' as ItemId,
 };
@@ -1358,18 +1440,30 @@ export const FRONTIER_DEFENSE: FrontierDefenseLevel[] = [
       { item: 'stone', count: 20 },
     ],
   },
+  // A 4th level, so a fully fortified camp turns away even the strongest
+  // marauders (owner, after the 0.25.0 build: "Even completely repelled if
+  // the camp is fortified enough"; asked, "Add a 4th defense level").
+  {
+    name: 'Fortress',
+    cost: [
+      { item: 'stone', count: 40 },
+      { item: 'wood', count: 20 },
+      { item: 'ironIngot', count: 10 },
+    ],
+  },
 ];
 
 /**
  * Marauders (hazards plan, section 5): "Marauders can come and steal things
  * from your camps and remove their upgrades and put them back to basic ...
- * The strength of the marauders depends on how far you have dug. The damage
- * they do depends on what level of defense your targeted camp has." From
- * shift `fromShift`, at End shift, with a chance of `chance`, they raid one
- * camp drawn at random (question 188). Their strength is the `strength` of
- * the last entry of `strengthFromDepth` whose `depth` the deepest square on
- * the map has reached. A camp whose defense level is at least that turns
- * them away. Otherwise the shortfall (strength minus defense) sets the
+ * The damage they do depends on what level of defense your targeted camp
+ * has." From shift `fromShift`, at End shift, with a chance of `chance`,
+ * they raid one camp drawn at random (question 188). Their strength is drawn
+ * from 1 to 4, with the chances in `strengthChances` (owner, after the 0.25.0
+ * build: "Let's get randomized strength back into marauders. 1-4 strength
+ * with declining probability as strength goes up"; until engine 0.26.0 it
+ * came from the deepest square dug). A camp whose defense level is at least
+ * that turns them away: with the Fortress, the 4th level, every raid. Otherwise the shortfall (strength minus defense) sets the
  * damage: `stealShare` of each goods stack in the store for each point of
  * shortfall, rounded down, never coins (question 190) or tools (`neverStolen`); and
  * `upgradesPerShortfall` of the camp's upgrades for each point, in the order
@@ -1378,15 +1472,8 @@ export const FRONTIER_DEFENSE: FrontierDefenseLevel[] = [
 export const FRONTIER_RAID = {
   fromShift: 15,
   chance: 0.1,
-  strengthFromDepth: [
-    { depth: 0, strength: 1 },
-    { depth: 4, strength: 2 },
-    { depth: 8, strength: 3 },
-    // No more: 3 is the most defense levels a camp can have, so a fully
-    // defended camp always turns them away (owner, after the 0.20.0 build:
-    // "Defneses don't seem to do anything"; asked, "Cap raids at strength 3".
-    // Until engine 0.21.0 they reached 4 at depth 16).
-  ],
+  /** The chance of each strength, 1 first: [Default] 50%, 30%, 15% and 5%. */
+  strengthChances: [0.5, 0.3, 0.15, 0.05],
   stealShare: 0.1,
   upgradesPerShortfall: 2,
   /** What they never take: coins (question 190) and tools. */
