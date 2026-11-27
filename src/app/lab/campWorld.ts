@@ -46,6 +46,7 @@ import {
   buildRefusal as engineBuildRefusal,
   fillSquareRefusal as engineFillSquareRefusal,
   digAreaRefusal as engineDigAreaRefusal,
+  digAreaPlan as engineDigAreaPlan,
   hireRefusal as engineHireRefusal,
   raidStrength as engineRaidStrength,
   foundationDepth as engineFoundationDepth,
@@ -783,6 +784,16 @@ export function buildCampBuilding(
 export function digAreaRefusal(world: CampWorld, x: number, y: number): string | null {
   if (world.turn.status !== 'active') return 'over';
   return engineDigAreaRefusal(toFrontier(world), x, y);
+}
+
+/** The squares a dig of the 3 x 3 round (x, y) would dig, and what it would cost, for the long-press preview. */
+export function digAreaPreview(
+  world: CampWorld,
+  x: number,
+  y: number,
+): { dug: { x: number; y: number }[]; cost: number } {
+  const plan = engineDigAreaPlan(toFrontier(world), x, y);
+  return { dug: plan.dug, cost: plan.cost };
 }
 
 /** Dig the 3 x 3 round (x, y), for its taps; the very same world if it cannot. */

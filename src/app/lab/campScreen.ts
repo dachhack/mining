@@ -105,6 +105,7 @@ import {
   plantRefusal,
   buildCampBuilding,
   buildRefusal,
+  digAreaPreview,
   digAreaRefusal,
   digCampArea,
   hireAtCamp,
@@ -737,6 +738,13 @@ export function mountCampLab(
 
   /** The squares a new camp on the tool's target would light: for the preview. */
   let preview: Set<number> = new Set();
+  /**
+   * A held long press (owner, after the 0.22.0 build: "Long press, it
+   * highlights squares that will get dug and tells you cost. Release and it
+   * digs."): the middle of the 3 x 3 under the finger, and the squares a dig
+   * there would dig. `null` when no press is held.
+   */
+  let held: { x: number; y: number; dug: { x: number; y: number }[] } | null = null;
 
   // The ground (fog, blocks, plants, greyed squares, the lit edge) is drawn
   // into `ground`, an offscreen canvas, and each frame copies it; only what
@@ -980,6 +988,7 @@ export function mountCampLab(
     if (mode.kind === 'placing' && mode.target !== null) {
       drawPlacePreview(ctx, mode.target, c, now);
     }
+    if (held !== null) drawDigPreview(ctx, held, c);
     for (const camp of world.camps) {
       if (sightOf(camp.x, camp.y) === 'shown') {
         const selected = mode.kind === 'camp' && mode.id === camp.id;
@@ -1542,6 +1551,58 @@ export function mountCampLab(
     ctx.beginPath();
     ctx.arc(px + c / 2, py + c / 2, r, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.restore();
+  }
+
+  /** A held long press: the squares it would dig washed orange, and the 3 x 3 outlined. */
+  function drawDigPreview(
+    ctx: CanvasRenderingContext2D,
+    at: { x: number; y: number; dug: { x: number; y: number }[] },
+    c: number,
+  ): void {
+    ctx.save();
+    ctx.fillStyle = CAMP_MARKS.digWash;
+    for (const sq of at.dug) {
+      const { px, py } = toPx(sq.x, sq.y);
+      ctx.fillRect(px, py, c, c);
+    }
+    const { px, py } = toPx(at.x - 1, at.y - 1);
+    ctx.strokeStyle = CAMP_MARKS.digOutline;
+    ctx.lineWidth = Math.max(2, c * 0.08);
+    ctx.setLineDash([c * 0.25, c * 0.15]);
+    ctx.strokeRect(
+      px + ctx.lineWidth / 2,
+      py + ctx.lineWidth / 2,
+      c * 3 - ctx.lineWidth,
+      c * 3 - ctx.lineWidth,
+    );
+    // The cost on the map, above the 3 x 3 (below it at the top edge), where
+    // the finger does not cover it: "⚡4", red if the shift has too few taps.
+    if (at.dug.length > 0) {
+      const cost = digAreaPreview(world, at.x, at.y).cost;
+      const label = `⚡${cost}`;
+      ctx.setLineDash([]);
+      ctx.font = `700 ${Math.max(11, Math.round(c * 0.42))}px system-ui, sans-serif`;
+      const w = ctx.measureText(label).width + c * 0.4;
+      const h = Math.max(16, c * 0.62);
+      const above = py - h - c * 0.12;
+      const top = above >= 0 ? above : py + c * 3 + c * 0.12;
+      const left = px + (c * 3 - w) / 2;
+      ctx.fillStyle = 'rgba(24, 19, 15, 0.92)';
+      ctx.strokeStyle =
+        cost > world.turn.tapsLeft ? CAMP_MARKS.notLevelWash : CAMP_MARKS.digOutline;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      // roundRect is newer (Chrome 99): an older WebView gets square corners.
+      if (typeof ctx.roundRect === 'function') ctx.roundRect(left, top, w, h, h / 2);
+      else ctx.rect(left, top, w, h);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = cost > world.turn.tapsLeft ? '#ff9a7f' : '#ffe2b0';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, left + w / 2, top + h / 2);
+    }
     ctx.restore();
   }
 
@@ -3631,41 +3692,83 @@ export function mountCampLab(
     setMode({ kind: 'placing', target: next });
   }
 
+  /** Mark the 3 x 3 a held press would dig (or none), for the drawing and the tests. */
+  function setHeld(next: typeof held): void {
+    held = next;
+    canvas.dataset['digPreview'] =
+      next === null ? '' : next.dug.map((d) => `${d.x},${d.y}`).join(' ');
+    draw();
+  }
+
+  /** "4 squares": a count and its noun. */
+  function many(n: number, noun: string): string {
+    return `${n} ${noun}${n === 1 ? '' : 's'}`;
+  }
+
   /**
-   * A long press on a lit square digs every diggable square of the 3 x 3
-   * round it (owner, after the 0.21.0 build: "Long press should always be
-   * mine everything possible in 3 by 3 at the expense of one move for each
-   * square dug unless you have hired miners"): a tap a square, or with 2 or
-   * more miners their cheaper cost. A camp is placed from ⊕ Place.
+   * A long press on a lit square (owner, after the 0.21.0 build: "Long press
+   * should always be mine everything possible in 3 by 3 at the expense of one
+   * move for each square dug unless you have hired miners"). Held, it marks
+   * the squares a dig would dig and the hint says the cost; the 3 x 3 follows
+   * the finger; letting go digs, and letting go off the map does not (owner,
+   * after the 0.22.0 build: "Long press, it highlights squares that will get
+   * dug and tells you cost. Release and it digs."). A camp is placed from ⊕ Place.
    */
   function hold(x: number, y: number): void {
-    if (sightOf(x, y) !== 'shown' || campAt(world, x, y) !== null) {
+    holdOver({ x, y });
+  }
+
+  /** The held finger is over `square` (or off the map): show what a dig there would do. */
+  function holdOver(square: { x: number; y: number } | null): void {
+    if (square === null) {
+      setHeld(null);
+      setHint('Let go here to dig nothing.', false);
       return;
     }
+    const { x, y } = square;
+    if (sightOf(x, y) !== 'shown' || campAt(world, x, y) !== null) {
+      setHeld({ x, y, dug: [] });
+      setHint('Nothing round there can be dug now.', true);
+      return;
+    }
+    const plan = digAreaPreview(world, x, y);
+    setHeld({ x, y, dug: plan.dug });
     const dig = digAreaRefusal(world, x, y);
     if (dig === null) {
-      const before = world.lab.mined;
-      const taps = world.turn.tapsLeft;
-      remember({ kind: 'digArea', x, y });
-      setWorld(digCampArea(world, x, y));
-      const dug = world.lab.mined - before;
-      const spent = taps - world.turn.tapsLeft;
-      const who = areaCost(world.lab.counts) === null ? 'You' : 'Your miners';
       setHint(
-        `${who} dug ${dug} ${dug === 1 ? 'square' : 'squares'} for ${spent} ${spent === 1 ? 'tap' : 'taps'}.`,
+        `Release to dig ${many(plan.dug.length, 'square')} for ${many(plan.cost, 'tap')}.`,
         false,
       );
-      return;
-    }
-    if (dig === 'noTaps') {
-      setHint('Not enough taps left to dig all of that: End shift.', true);
-      return;
-    }
-    if (dig === 'over') {
+    } else if (dig === 'noTaps') {
+      setHint(
+        `${many(plan.dug.length, 'square')} would take ${many(plan.cost, 'tap')}: only ${world.turn.tapsLeft} left.`,
+        true,
+      );
+    } else if (dig === 'over') {
       setHint(OVER_HINT, true);
+    } else {
+      setHint('Nothing round there can be dug now.', true);
+    }
+  }
+
+  /** The held finger lifted over `square` (or off the map): dig there, if it can. */
+  function holdEnd(square: { x: number; y: number } | null, cancelled: boolean): void {
+    setHeld(null);
+    if (square === null || cancelled) {
+      setHint('Nothing dug.', false);
       return;
     }
-    setHint('Nothing round there can be dug now.', true);
+    const { x, y } = square;
+    if (sightOf(x, y) !== 'shown' || campAt(world, x, y) !== null) return;
+    if (digAreaRefusal(world, x, y) !== null) return; // the hint already says why
+    const before = world.lab.mined;
+    const taps = world.turn.tapsLeft;
+    remember({ kind: 'digArea', x, y });
+    setWorld(digCampArea(world, x, y));
+    const dug = world.lab.mined - before;
+    const spent = taps - world.turn.tapsLeft;
+    const who = areaCost(world.lab.counts) === null ? 'You' : 'Your miners';
+    setHint(`${who} dug ${many(dug, 'square')} for ${many(spent, 'tap')}.`, false);
   }
 
   /** As the game, New run takes two taps: it throws the saved run away. */
@@ -3742,6 +3845,8 @@ export function mountCampLab(
     ground: () => world.lab.state.size,
     onTap: tap,
     onHold: hold,
+    onHoldMove: holdOver,
+    onHoldEnd: holdEnd,
     grab: grabTarget,
     onGrabMove: dragTarget,
   });
