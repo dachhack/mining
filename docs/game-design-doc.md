@@ -215,13 +215,13 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 
   | Miners | Taps a shift | Long press |
   |---|---|---|
-  | 0 | 100 | places a camp |
-  | 1 | 125 | places a camp |
+  | 0 | 100 | digs the 3 × 3 round the square: 1 tap a square dug |
+  | 1 | 125 | the same: 1 tap a square dug |
   | 2 | 135 | digs the 3 × 3 round the square: the lesser of 4 taps and the squares dug |
   | 3 | 150 | the same, the lesser of 3 and the squares dug |
   | 4 | 165 | the same, the lesser of 2 and the squares dug |
 
-  The long-press dig mines each square of the 3 × 3 whose tap would mine it, row by row, exactly as taps would (yields, water, gas, dragons); a square whose tap would do anything else is left alone. It needs as many taps as it costs. "Long press is no longer just for camp placement": with 2 or more miners a long press digs; where nothing round the square can be dug, or without the miners, it opens the camp tool as before.
+  The long-press dig mines each square of the 3 × 3 whose tap would mine it, row by row, exactly as taps would (yields, water, gas, dragons); a square whose tap would do anything else is left alone. It needs as many taps as it costs. A long press always digs (owner, after the 0.21.0 build: "Long press should always be mine everything possible in 3 by 3 at the expense of one move for each square dug unless you have hired miners"); a camp is placed from ⊕ Place.
 
 ### 5.1 How a run ends, and saving
 

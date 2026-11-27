@@ -75,10 +75,20 @@ describe('miners', () => {
 describe('the long-press dig of a 3 x 3', () => {
   const C = { x: MID + 4, y: MID };
 
-  it('needs 2 or more miners', () => {
+  it('works without miners too, for 1 tap a square dug (fewer than 2 miners)', () => {
+    // Owner, after the 0.21.0 build: "Long press should always be mine
+    // everything possible in 3 by 3 at the expense of one move for each square
+    // dug unless you have hired miners."
     expect(areaCost(new Map([['miner', 1]]))).toBe(null);
-    expect(digAreaRefusal(withMiners(1), C.x, C.y)).toBe('crew');
-    expect(frontierAct(withMiners(0), { kind: 'digArea', ...C }).refusal).toBe('crew');
+    for (const n of [0, 1]) {
+      const w = withMiners(n);
+      expect(digAreaRefusal(w, C.x, C.y), `${n} miners`).toBe(null);
+      const out = act(w, { kind: 'digArea', ...C });
+      expect(out.mined, `${n} miners`).toBe(9);
+      expect(out.tapsLeft, `${n} miners`).toBe(w.tapsLeft - 9);
+    }
+    // Too few taps for every square: refused, as with miners.
+    expect(digAreaRefusal({ ...withMiners(0), tapsLeft: 8 }, C.x, C.y)).toBe('noTaps');
   });
 
   it('digs every diggable square once, for the lesser of the crew cost and the squares dug', () => {

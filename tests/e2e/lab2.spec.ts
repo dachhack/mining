@@ -27,7 +27,9 @@ import {
   newCampWorld,
   newlyCovered,
   sightMap,
+  toFrontier,
 } from '../../src/app/lab/campWorld';
+import { digAreaPlan } from '../../src/engine';
 import type { CampStep, CampWorld } from '../../src/app/lab/campWorld';
 import { FRONTIER_RUN, FRONTIER_SHIFT } from '../../src/data/frontier';
 import { MOON_PHASES, moonPhase } from '../../src/app/lab/night';
@@ -698,21 +700,43 @@ test('the map never moves while the tool and the panels open and close', async (
   await unmoved();
 });
 
-test('holding a lit square opens the camp tool on it, and mines nothing', async ({ page }) => {
+test('holding a lit square digs the 3 x 3 round it, a tap a square without miners', async ({
+  page,
+}) => {
+  // Owner, after the 0.21.0 build: "Long press should always be mine
+  // everything possible in 3 by 3 at the expense of one move for each square
+  // dug unless you have hired miners." (It used to open the camp tool.)
   const canvas = await openLab2(page);
   const world = newCampWorld(SEED);
   const camp = world.camps[0] ?? { x: 0, y: 0 };
-  const square = { x: camp.x + 4, y: camp.y }; // the middle of a level, lit 3 x 3
+  // A lit square whose 3 x 3 has bare ground to dig.
+  const state = toFrontier(world);
+  let square: Square | null = null;
+  let most = 0;
+  for (let dy = -6; dy <= 6; dy += 1) {
+    for (let dx = -6; dx <= 6; dx += 1) {
+      const n = digAreaPlan(state, camp.x + dx, camp.y + dy).dug.length;
+      if (n > most) {
+        most = n;
+        square = { x: camp.x + dx, y: camp.y + dy };
+      }
+    }
+  }
+  if (square === null) throw new Error('a 3 x 3 with something to dig');
   const at = await pointOf(canvas, square);
   await page.mouse.move(at.x, at.y);
   await page.mouse.down();
   await page.clock.runFor(800); // the hold is a timer: the clock is paused, so run it
   await page.mouse.up();
-  await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'placing');
-  await expect(canvas).toHaveAttribute('data-target', `${square.x},${square.y}`);
-  // Nothing mined yet, so the line says what the camp still needs.
-  await expect(page.getByTestId('lab2-place-line')).toContainText(missingLine(world));
-  expect((await counts(page))['dug']).toBe(0);
+  await expect(page.getByTestId('lab2-tray')).not.toHaveAttribute('data-mode', 'placing');
+  expect((await counts(page))['dug']).toBe(most);
+  await expect(page.getByTestId('lab2-hud')).toHaveAttribute(
+    'data-taps',
+    String(FRONTIER_SHIFT.taps - most),
+  );
+  await expect(page.getByTestId('lab-hint')).toContainText(
+    `You dug ${most} squares for ${most} taps`,
+  );
 });
 
 /** "Need 5 more wood and 5 more grass": what `world`'s counts lack of a new camp's cost. */

@@ -53,6 +53,7 @@ import {
   SQUARE_STEPS,
   isBuildingKind,
   isWorkCamp,
+  areaCost,
   buildingFootprint,
   campReach,
   campUpkeep,
@@ -3648,11 +3649,11 @@ export function mountCampLab(
   }
 
   /**
-   * A long press on a lit square: with 2 or more miners, it digs every
-   * diggable square of the 3 x 3 round it (owner, after the 0.20.0 build:
-   * "Long press is no longer just for camp placement"); where nothing there
-   * can be dug, or without the miners, it opens the camp tool with that square
-   * chosen, as before.
+   * A long press on a lit square digs every diggable square of the 3 x 3
+   * round it (owner, after the 0.21.0 build: "Long press should always be
+   * mine everything possible in 3 by 3 at the expense of one move for each
+   * square dug unless you have hired miners"): a tap a square, or with 2 or
+   * more miners their cheaper cost. A camp is placed from ⊕ Place.
    */
   function hold(x: number, y: number): void {
     if (sightOf(x, y) !== 'shown' || campAt(world, x, y) !== null) {
@@ -3666,18 +3667,22 @@ export function mountCampLab(
       setWorld(digCampArea(world, x, y));
       const dug = world.lab.mined - before;
       const spent = taps - world.turn.tapsLeft;
+      const who = areaCost(world.lab.counts) === null ? 'You' : 'Your miners';
       setHint(
-        `Your miners dug ${dug} ${dug === 1 ? 'square' : 'squares'} for ${spent} ${spent === 1 ? 'tap' : 'taps'}.`,
+        `${who} dug ${dug} ${dug === 1 ? 'square' : 'squares'} for ${spent} ${spent === 1 ? 'tap' : 'taps'}.`,
         false,
       );
       return;
     }
     if (dig === 'noTaps') {
-      setHint('Not enough taps left for your miners to dig there: End shift.', true);
+      setHint('Not enough taps left to dig all of that: End shift.', true);
       return;
     }
-    setMode({ kind: 'placing', target: null });
-    tapWhilePlacing(x, y);
+    if (dig === 'over') {
+      setHint(OVER_HINT, true);
+      return;
+    }
+    setHint('Nothing round there can be dug now.', true);
   }
 
   /** As the game, New run takes two taps: it throws the saved run away. */

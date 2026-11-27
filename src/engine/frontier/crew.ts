@@ -8,7 +8,8 @@
 // - the taps of every shift after they are hired (`tapsPerShift`);
 // - the food the crew eats: FRONTIER_MINERS.foodEach more for each miner,
 //   whenever food is due (shift.ts, `upkeepDue`);
-// - from 2 miners, the long-press dig of a 3 x 3 (dig.ts, `areaCost`).
+// - from 2 miners, a cheaper long-press dig of a 3 x 3 (dig.ts, `areaCost`;
+//   without them it costs a tap a square).
 //
 // The numbers are in src/data/frontier.ts.
 
@@ -27,7 +28,7 @@ export function tapsPerShift(inventory: Map<string, number>): number {
     : (FRONTIER_MINERS.levels[n - 1]?.taps ?? FRONTIER_SHIFT.taps);
 }
 
-/** The most a long-press dig of a 3 x 3 costs with the miners in `inventory`, or `null` if it cannot be done. */
+/** The most a long-press dig of a 3 x 3 costs with the miners in `inventory`, or `null` for no cap (a tap a square). */
 export function areaCost(inventory: Map<string, number>): number | null {
   const n = minersHeld(inventory);
   return n === 0 ? null : (FRONTIER_MINERS.levels[n - 1]?.areaCost ?? null);

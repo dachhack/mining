@@ -1,7 +1,7 @@
 {
   "description": "The gatherer on another seed: places two more camps, brings all three to level 2, builds a smelter, never hungry",
   "recordedWith": "gatherer",
-  "engineVersion": "0.21.0",
+  "engineVersion": "0.22.0",
   "seed": 26,
   "stepCount": 1013,
   "expectedHash": "92af7b52fbeccf7e",

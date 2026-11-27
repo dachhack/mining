@@ -1,7 +1,7 @@
 {
   "description": "The careful policy on seed 8: keeps a pen whose animals breed by shift 8 (hazards PR 5: the other runs no longer show a birth)",
   "recordedWith": "careful",
-  "engineVersion": "0.21.0",
+  "engineVersion": "0.22.0",
   "seed": 8,
   "stepCount": 1012,
   "expectedHash": "8fe2ec9e056f0042",

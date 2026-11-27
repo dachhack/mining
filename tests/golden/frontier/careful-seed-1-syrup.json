@@ -1,7 +1,7 @@
 {
   "description": "The careful policy on seed 1 for a whole run: its maples grow, it builds a sugar shack and boils sap into syrup (after the 0.18.0 build no other run does)",
   "recordedWith": "careful",
-  "engineVersion": "0.21.0",
+  "engineVersion": "0.22.0",
   "seed": 1,
   "stepCount": 7322,
   "expectedHash": "82fc740bebd3d357",

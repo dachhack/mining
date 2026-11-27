@@ -133,10 +133,10 @@ export function checkStep(
   if (verb === 'digArea' && outcome.done) {
     const [cx, cy] = (step.split(' ')[1] ?? '').split(',').map(Number);
     const plan = digAreaPlan(before, cx ?? -1, cy ?? -1);
-    const most = areaCost(before.inventory);
-    if (most === null) say('dug a 3 x 3 with fewer than 2 miners');
+    // A tap a square, or with 2 or more miners their cap (crew.ts).
+    const most = areaCost(before.inventory) ?? Infinity;
     if (plan.dug.length === 0) say('dug a 3 x 3 that had nothing to dig');
-    if (plan.cost !== Math.min(most ?? 0, plan.dug.length)) say(`a dig cost ${plan.cost}`);
+    if (plan.cost !== Math.min(most, plan.dug.length)) say(`a dig cost ${plan.cost}`);
     if (after.tapsLeft !== before.tapsLeft - plan.cost)
       say(`taps went from ${before.tapsLeft} to ${after.tapsLeft} for a dig costing ${plan.cost}`);
     if (hashFrontier({ ...plan.state, tapsLeft: after.tapsLeft }) !== hashFrontier(after))
