@@ -26,7 +26,6 @@ import {
   FRONTIER_RECIPES,
   FRONTIER_PHASES,
   FRONTIER_RUN,
-  FRONTIER_SHIFT,
   FRONTIER_SMELTER,
 } from '../../src/data/frontier';
 import {
@@ -247,12 +246,12 @@ function itemName(item: string): string {
   return (item in ITEMS ? ITEMS[item as ItemId].name : item).toLowerCase();
 }
 
-/** What End shift (or rest) did, in one line. */
+/** What End shift did, in one line. */
 function shiftLine(report: ShiftReport, state: FrontierState): string {
   const paid = report.paid.length === 0 ? 'nothing paid' : `paid ${stacksText(report.paid)}`;
   const hunger =
-    report.healthLost > 0
-      ? `; no ${report.unpaid.map((s) => s.item).join(' or ')}: -${report.healthLost} health`
+    report.unpaid.length > 0
+      ? `; no ${report.unpaid.map((s) => s.item).join(' or ')}: the next shift has ${report.tapsLost} fewer taps`
       : '';
   const more = [
     report.regrown > 0 ? `${report.regrown} apple tree(s) regrew` : '',
@@ -278,13 +277,11 @@ function shiftLine(report: ShiftReport, state: FrontierState): string {
       : '',
   ].filter((t) => t !== '');
   const end =
-    state.status === 'lost'
-      ? ' The crew is lost: the run is over.'
-      : state.status === 'finished'
-        ? ` That was the last shift: the run is over. Score: ${coinsHeld(state)} coins.`
-        : report.marketOpens
-          ? ' Market day: the market is open this shift.'
-          : '';
+    state.status === 'finished'
+      ? ` That was the last shift: the run is over. Score: ${coinsHeld(state)} coins.`
+      : report.marketOpens
+        ? ' Market day: the market is open this shift.'
+        : '';
   return `Shift ${report.shift} over: ${paid}${hunger}.${more.length > 0 ? ` ${more.join('; ')}.` : ''}${end}`;
 }
 
@@ -313,10 +310,7 @@ export function act(session: FrontierSession, step: FrontierStep): StepResult {
   const steps = [...session.log.steps, step];
   // Closing the market starts a new undo log too (undo.ts).
   const newShift =
-    action.kind === 'endShift' ||
-    action.kind === 'rest' ||
-    action.kind === 'close' ||
-    action.kind === 'closeMarket';
+    action.kind === 'endShift' || action.kind === 'close' || action.kind === 'closeMarket';
   const next: FrontierSession = {
     log: { ...session.log, steps },
     state: outcome.state,
@@ -350,9 +344,7 @@ export function act(session: FrontierSession, step: FrontierStep): StepResult {
           : '';
     lines.push(`${step}: ${what}, ${gain}.${water}${gas}`);
   } else if (outcome.report !== null) {
-    lines.push(
-      `${action.kind === 'rest' ? 'Rested. ' : ''}${shiftLine(outcome.report, outcome.state)}`,
-    );
+    lines.push(shiftLine(outcome.report, outcome.state));
   } else if (action.kind === 'close') {
     lines.push('The mine is closed: the run is over.');
   } else {
@@ -396,7 +388,7 @@ function undo(session: FrontierSession): StepResult {
 /**
  * The step a typed choice stands for, or `null` if it is not one. Accepts
  * "tap 3,4" (or "t 3 4"), "place 3,4", "upgrade 2", "demolish 1", "end",
- * "rest 1" (or "rest" with one camp), "sell wood 3", "buy animal 1",
+ * "sell wood 3", "buy animal 1",
  * "plant 3,4 sapling", "saw 3,4", "shack 3,4", "dirt 3,4", "area 3,4", "take t1-coal", "fill t1-coal", "deliver t1-coal", "drop t1-coal", "deep 3,4",
  * "close", "undo", or the number of a listed choice.
  */
@@ -501,11 +493,6 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
     'leave market': 'closeMarket',
     undo: 'undo',
   };
-  if (text === 'rest') {
-    // Rest is at a camp: "rest" alone names one only when there is one choice.
-    const rests = listed.filter((s) => s.startsWith('rest '));
-    return rests.length === 1 ? (rests[0] ?? null) : null;
-  }
   return words[text] ?? null;
 }
 
@@ -515,7 +502,7 @@ const LISTED_PLACES = 5;
 /**
  * The choices listed under the view, numbered: every upgrade, demolish,
  * smelter, lantern and recipe that would work, the places for a new camp that light the most new ground
- * (if one can be paid for), then undo, end shift, rest at each camp, and close. Taps are
+ * (if one can be paid for), then undo, end shift, and close. Taps are
  * not listed one by one (there are hundreds): the view counts them, and
  * "tap X,Y" takes any of them.
  */
@@ -585,7 +572,7 @@ export function listedSteps(session: FrontierSession): FrontierStep[] {
     }
   }
   if (shiftUndoCount(session.shiftLog) > 0) steps.push('undo');
-  steps.push('endShift', ...state.camps.map((c): FrontierStep => `rest ${c.id}`), 'close');
+  steps.push('endShift', 'close');
   return steps;
 }
 
@@ -689,13 +676,11 @@ export function frontierView(session: FrontierSession): string {
   const status =
     state.status === 'active'
       ? ''
-      : state.status === 'lost'
-        ? ' · RUN OVER: the crew is lost'
-        : state.status === 'finished'
-          ? ' · RUN OVER: the last shift is done'
-          : ' · RUN OVER: mine closed';
+      : state.status === 'finished'
+        ? ' · RUN OVER: the last shift is done'
+        : ' · RUN OVER: mine closed';
   lines.push(
-    `Seed ${state.seed} · Shift ${state.shift}/${FRONTIER_RUN.shifts} · Coins ${coinsHeld(state)} · Taps ${state.tapsLeft}/${tapsPerShift(state.inventory)} · Health ${state.health}/${FRONTIER_SHIFT.startHealth} · Dug ${state.mined}${status}`,
+    `Seed ${state.seed} · Shift ${state.shift}/${FRONTIER_RUN.shifts} · Coins ${coinsHeld(state)} · Taps ${state.tapsLeft}/${tapsPerShift(state.inventory)} · Dug ${state.mined}${status}`,
   );
   const held = [...state.inventory.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
   lines.push(

@@ -450,7 +450,6 @@ export function createFrontier(seed: number): FrontierState {
     cropIn: new Array<number>(cube.size.x * cube.size.y).fill(-1),
     shift: 1,
     tapsLeft: FRONTIER_SHIFT.taps,
-    health: FRONTIER_SHIFT.startHealth,
     status: 'active',
   };
 }

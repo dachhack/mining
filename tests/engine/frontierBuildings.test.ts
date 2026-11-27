@@ -180,7 +180,6 @@ describe('maple trees', () => {
       w = act(
         {
           ...w,
-          health: 10,
           inventory: new Map([
             ['wood', 99],
             ['apple', 99],

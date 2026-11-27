@@ -46,7 +46,6 @@ function living(w: CampWorld, skip: Set<number> = new Set()): string {
     regrowIn: w.surface.regrowIn.filter((_, i) => !skip.has(i)),
     rng: w.surface.rng,
     shift: w.turn.shift,
-    health: w.turn.health,
     caught: w.lab.counts.get('animal') ?? 0,
     picked: w.lab.counts.get('apple') ?? 0,
   });
@@ -75,7 +74,7 @@ function player(start: CampWorld): {
     act: (step) => {
       const next = applyCampStep(world, step);
       if (next === world) return;
-      if (step.kind === 'endShift' || step.kind === 'rest' || step.kind === 'close') {
+      if (step.kind === 'endShift' || step.kind === 'close') {
         history = emptyHistory(next);
       } else {
         // Every action that did something is noted; catches and apple picks as not undoable.

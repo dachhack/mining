@@ -210,8 +210,12 @@ export const FRONTIER_SURFACE = {
 export const FRONTIER_SHIFT = {
   /** Taps a shift (owner: "Fixed number of taps"). Every tap that does something costs 1. */
   taps: 100,
-  /** The crew's health at the start, and what resting restores it to. */
-  startHealth: 10,
+  /**
+   * Taps the next shift loses for each item of upkeep that cannot be paid
+   * (owner, after the 0.21.0 build: "We don't need crew life anymore";
+   * asked, "Fewer taps next shift"). Until then each cost 1 of 10 health.
+   */
+  tapsLostPerUnpaid: 10,
   /** Upkeep: this much wood at the end of every shift (owner: "Food and wood")... */
   woodEveryShift: 1,
   /** ...1 food at the end of every this many shifts (FRONTIER_FOODS says what pays it)... */

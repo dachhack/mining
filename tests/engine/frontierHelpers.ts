@@ -103,7 +103,6 @@ export function world(options: WorldOptions = {}): FrontierState {
     cropIn: new Array<number>(SIDE * SIDE).fill(-1),
     shift: 1,
     tapsLeft: FRONTIER_SHIFT.taps,
-    health: FRONTIER_SHIFT.startHealth,
     status: 'active',
   };
 }

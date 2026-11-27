@@ -46,7 +46,6 @@ export function hashFrontier(state: FrontierState): string {
       cropIn: state.cropIn,
       shift: state.shift,
       tapsLeft: state.tapsLeft,
-      health: state.health,
       status: state.status,
     }),
   );

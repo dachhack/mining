@@ -21,6 +21,9 @@
 //    FRONTIER_MUSHROOM.nights. Squares are rolled row by row, with the
 //    state's generator.
 // A tap on a square with a mushroom picks it first (tap.ts, surface.ts).
+// The night reports only the mushrooms that came up in sight of a camp
+// (`seen`; owner, after the 0.22.0 build: "Only tell me about a mushroom if
+// it is in range of a camp"); the others come up all the same.
 //
 // The numbers are in src/data/frontier.ts.
 
@@ -30,7 +33,7 @@ import { nextFloat, nextInt } from '../rng';
 import type { RngState } from '../rng';
 import { blockAt } from '../state';
 import { buildingAt } from './buildings';
-import { campAt } from './camps';
+import { campAt, coverLevelAt } from './camps';
 import { TREE, isTree } from './state';
 import type { FrontierState } from './state';
 
@@ -62,6 +65,8 @@ export interface MushroomNight {
   state: FrontierState;
   /** Mushrooms that came up. */
   came: number;
+  /** Of those, the ones in sight of a camp (inside a camp's circle): the ones the night reports. */
+  seen: number;
   /** Mushrooms set coming by the rain. */
   coming: number;
 }
@@ -77,6 +82,7 @@ export function nightOfMushrooms(
   const mushrooms = [...state.mushrooms];
   const mushroomIn = [...state.mushroomIn];
   let came = 0;
+  let seen = 0;
   let counted = false;
   // 0. No tree, no mushroom: standing or coming, it is lost.
   for (let i = 0; i < mushrooms.length; i += 1) {
@@ -105,6 +111,7 @@ export function nightOfMushrooms(
     if (undug && campAt(state.camps, x, y) === null && buildingAt(state, x, y) === null) {
       mushrooms[i] = true;
       came += 1;
+      if (coverLevelAt(state.camps, x, y) > 0) seen += 1;
     }
   });
   // 2. The rain sets new ones coming under the plain trees.
@@ -122,8 +129,8 @@ export function nightOfMushrooms(
       coming += 1;
     }
   }
-  if (!counted && coming === 0) return { state, came, coming };
-  return { state: { ...state, mushrooms, mushroomIn }, came, coming };
+  if (!counted && coming === 0) return { state, came, seen, coming };
+  return { state: { ...state, mushrooms, mushroomIn }, came, seen, coming };
 }
 
 /** `state` with the mushroom on square index `i` picked or gone. */

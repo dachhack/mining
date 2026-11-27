@@ -16,20 +16,17 @@
 //             upgrades, places up to 3 camps, takes plants and animals,
 //             mines; spends everything as it comes.
 // - careful:  the gatherer, but it keeps wood and food back for upkeep (no
-//             camp, upgrade or wood-using recipe while short), and rests
-//             when the crew's health is low.
+//             camp, upgrade or wood-using recipe while short).
 // - digger:   digs a pit next to the first camp, as deep as the camps let
 //             it, gathering only to pay upkeep.
-// - idle:     gathers nothing: it ends every shift, rests at a camp when the
-//             crew is at half health or less until shift IDLE_RESTS_UNTIL,
-//             then lets the crew starve. The hunger path, start to end.
+// - idle:     gathers nothing: it ends every shift, going hungry once the
+//             store runs dry. The hunger path, start to end.
 
 import {
   FRONTIER_CROPS,
   FRONTIER_FOODS,
   FRONTIER_MARKET,
   FRONTIER_RECIPES,
-  FRONTIER_SHIFT,
 } from '../src/data/frontier';
 import {
   campAt,
@@ -60,7 +57,7 @@ import type { FrontierState } from '../src/engine';
 import { nextFloat } from '../src/engine/rng';
 import type { RngState } from '../src/engine/rng';
 import { NO_FEATURE } from '../src/engine/frontier/state';
-import { gathererStep, isBareAppleTree, restStep } from './frontierRun';
+import { gathererStep, isBareAppleTree } from './frontierRun';
 import type { FrontierStep } from './frontierRun';
 
 export const FRONTIER_POLICY_NAMES = ['random', 'gatherer', 'careful', 'digger', 'idle'] as const;
@@ -98,14 +95,10 @@ function withMarket(policy: FrontierPolicy): FrontierPolicy {
   };
 }
 
-/** The idle policy rests when the crew is low only before this shift; after it, the crew starves. */
-const IDLE_RESTS_UNTIL = 8;
-
 /** The idle policy (see the top of this file). */
 function idleStep(state: FrontierState): FrontierStep | null {
   if (state.status !== 'active') return null;
-  const low = state.health <= FRONTIER_SHIFT.startHealth / 2;
-  return low && state.shift < IDLE_RESTS_UNTIL ? restStep(state) : 'endShift';
+  return 'endShift';
 }
 
 /** Every lit square where a tap does something now, row by row. */
@@ -242,7 +235,7 @@ function spendsUpkeep(step: FrontierStep): boolean {
 }
 
 /**
- * The careful policy: before ending a shift, rest if the crew is low; never
+ * The careful policy: never
  * spend wood or food on a camp if that leaves too little for the next 4
  * shifts' upkeep; otherwise play as the gatherer, gathering for upkeep first.
  */
@@ -250,7 +243,7 @@ function carefulStep(state: FrontierState): FrontierStep | null {
   if (state.status !== 'active') return null;
   if (state.marketOpen) return gathererStep(state); // the market first, then the day
   if (state.tapsLeft === 0) {
-    return state.health <= FRONTIER_SHIFT.startHealth / 2 ? restStep(state) : 'endShift';
+    return 'endShift';
   }
   const woodNeed = upkeepAhead(state, 'wood', 4);
   const foodNeed = upkeepAhead(state, 'food', 4);
@@ -293,7 +286,7 @@ function carefulStep(state: FrontierState): FrontierStep | null {
 function diggerStep(state: FrontierState): FrontierStep | null {
   if (state.status !== 'active') return null;
   if (state.tapsLeft === 0) {
-    return state.health <= FRONTIER_SHIFT.startHealth / 2 ? restStep(state) : 'endShift';
+    return 'endShift';
   }
   const woodShort = (state.inventory.get('wood') ?? 0) < upkeepAhead(state, 'wood', 2);
   const foodShort = foodHeld(state) < upkeepAhead(state, 'food', 2);

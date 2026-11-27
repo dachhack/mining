@@ -102,7 +102,7 @@ export interface CampWorld {
   nextCampId: number;
   /** The surface (issue #121): grass, trees, apple trees and animals. */
   surface: Surface;
-  /** The shift being played, its taps left, the crew's health, and whether the run goes on (A4). */
+  /** The shift being played, its taps left, and whether the run goes on (A4). */
   turn: CampTurn;
   /** The hazards' marks: flooded squares, pumps (docs/plans/hazards.md). The engine's own record. */
   hazards: FrontierHazards;
@@ -122,9 +122,7 @@ export interface CampTurn {
   shift: number;
   /** Taps left in this shift. */
   tapsLeft: number;
-  /** The crew's health: 0 loses the run. */
-  health: number;
-  /** 'active', 'lost' (the crew's health reached 0), 'closed' (the mine was closed) or 'finished' (the last shift ended). */
+  /** 'active', 'closed' (the mine was closed) or 'finished' (the last shift ended). */
   status: FrontierStatus;
   /** The contracts held, oldest first (progression PR 5; several since the market-scene build). */
   contracts: FrontierHeldContract[];
@@ -134,12 +132,11 @@ export interface CampTurn {
   marketOpen: boolean;
 }
 
-/** A fresh run: shift 1, a full shift of taps, full health. */
+/** A fresh run: shift 1, a full shift of taps. */
 export function firstTurn(): CampTurn {
   return {
     shift: 1,
     tapsLeft: FRONTIER_SHIFT.taps,
-    health: FRONTIER_SHIFT.startHealth,
     status: 'active',
     contracts: [],
     contractsDone: [0, 0, 0],
@@ -220,7 +217,6 @@ export function toFrontier(world: CampWorld): FrontierState {
     treesFelled: world.surface.treesFelled,
     shift: world.turn.shift,
     tapsLeft: world.turn.tapsLeft,
-    health: world.turn.health,
     status: world.turn.status,
     contracts: world.turn.contracts,
     contractsDone: world.turn.contractsDone,
@@ -266,7 +262,6 @@ export function fromFrontier(world: CampWorld, state: FrontierState): CampWorld 
     turn: {
       shift: state.shift,
       tapsLeft: state.tapsLeft,
-      health: state.health,
       status: state.status,
       contracts: state.contracts,
       contractsDone: state.contractsDone,
@@ -849,25 +844,12 @@ export function demolishCamp(world: CampWorld, id: number): CampWorld {
 
 /**
  * End the shift: the animals step, apples regrow, upkeep is paid in wood
- * and food, hunger costs health for what cannot be paid, and the next shift
- * starts with a full set of taps. `report` says what happened; `null` if
+ * and food, each item that cannot be paid costs taps of the next shift,
+ * and the next shift starts. `report` says what happened; `null` if
  * the run has already ended (the world is then the same).
  */
 export function endShift(world: CampWorld): { world: CampWorld; report: ShiftReport | null } {
   const result = act(world, { kind: 'endShift' });
-  return { world: result.world, report: result.report };
-}
-
-/**
- * Rest at camp `id` (question 156: "Only at a camp"): the crew's health is
- * restored, then the shift ends as with `endShift`. `report` is `null` if
- * there is no such camp or the run has ended (the world is then the same).
- */
-export function restCrew(
-  world: CampWorld,
-  id: number,
-): { world: CampWorld; report: ShiftReport | null } {
-  const result = act(world, { kind: 'rest', id });
   return { world: result.world, report: result.report };
 }
 
@@ -950,9 +932,8 @@ export type CampStep =
   | { kind: 'digArea'; x: number; y: number }
   // Hire a worker or a horse at a work camp (owner, after the 0.20.0 build).
   | { kind: 'hire'; x: number; y: number; who: 'worker' | 'horse' }
-  // End the shift, rest at a camp, or close the mine (A4).
+  // End the shift or close the mine (A4).
   | { kind: 'endShift' }
-  | { kind: 'rest'; id: number }
   | { kind: 'close' };
 
 /** The world after one step. A step that is not allowed changes nothing, as on screen. */
@@ -968,9 +949,6 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   }
   if (step.kind === 'endShift') {
     return endShift(world).world;
-  }
-  if (step.kind === 'rest') {
-    return restCrew(world, step.id).world;
   }
   if (step.kind === 'close') {
     return closeMine(world);

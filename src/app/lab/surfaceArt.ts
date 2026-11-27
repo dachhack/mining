@@ -788,7 +788,11 @@ export function labItemIcon(item: string, className: string): HTMLCanvasElement 
     // A mushroom, as the map draws it, on dark ground.
     ctx.fillStyle = '#2a2420';
     ctx.fillRect(0, 0, s, s);
-    drawMushroom(ctx, { left: s * 0.22, top: -s * 0.1, inner: s * 1.1 });
+    drawMushroom(
+      ctx,
+      { left: -s * 0.3, top: -s * 0.55, inner: s * 1.6 },
+      { variant: 0, fx: 0.5, fy: 0.85 },
+    );
   } else if (item === 'axe') {
     // The axe (owner, after the 0.17.0 build): a wooden handle on the
     // diagonal and an iron blade on its top end.

@@ -92,6 +92,8 @@ test('deliver a contract held from the goals card during the day, for its coins'
   };
   await openGame(page, state);
   await expect(page.getByTestId('lab2-goals')).toHaveAttribute('data-deliverable', 'true');
+  // Lit gold, as the old tray button was (owner, after the 0.22.0 build).
+  await expect(page.getByTestId('lab2-goals')).toHaveCSS('background-image', /linear-gradient/);
   await page.getByTestId('lab2-goals').click();
   await expect(page.getByTestId('lab2-goal')).toHaveText(FRONTIER_PHASES[2]?.next ?? '');
   // As many contracts as the best camp's level (3) may be held.

@@ -55,17 +55,9 @@ describe('the length of a run (owner: "100 shifts or crew lost")', () => {
     expect(after.refusal).toBe('over');
   });
 
-  it('ends with resting on the last shift too', () => {
-    const rested = frontierAct(day(FRONTIER_RUN.shifts, 1, { wood: 10, grass: 30 }), {
-      kind: 'rest',
-      id: 1,
-    });
-    expect(rested.state.status).toBe('finished');
-  });
-
-  it('is lost, not finished, if the crew dies in the last End shift', () => {
-    const starving = { ...day(FRONTIER_RUN.shifts), health: 1 };
-    expect(frontierAct(starving, { kind: 'endShift' }).state.status).toBe('lost');
+  it('is finished even if the crew goes hungry in the last End shift (no crew life any more)', () => {
+    const starving = day(FRONTIER_RUN.shifts);
+    expect(frontierAct(starving, { kind: 'endShift' }).state.status).toBe('finished');
   });
 });
 

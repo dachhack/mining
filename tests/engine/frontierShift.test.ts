@@ -27,11 +27,10 @@ function shifts(state: FrontierState, n: number): FrontierState {
 }
 
 describe('taps (plan A4)', () => {
-  it('starts the run with a full shift of taps and full health', () => {
+  it('starts the run with a full shift of taps', () => {
     const w = createFrontier(7);
     expect(w.shift).toBe(1);
     expect(w.tapsLeft).toBe(FRONTIER_SHIFT.taps);
-    expect(w.health).toBe(FRONTIER_SHIFT.startHealth);
     expect(w.status).toBe('active');
   });
 
@@ -56,7 +55,11 @@ describe('taps (plan A4)', () => {
 
   it('refuses every tap once the shift has none left, until End shift', () => {
     // The last few taps of a shift (a full shift is FRONTIER_SHIFT.taps).
-    let w: FrontierState = { ...world({ top: 'C' }), tapsLeft: 8 };
+    // Wood and apples held, so the night's upkeep is paid and costs no taps.
+    let w: FrontierState = {
+      ...world({ top: 'C', inventory: { wood: 9, apple: 9 } }),
+      tapsLeft: 8,
+    };
     for (let i = 0; i < 8; i += 1) {
       const outcome = frontierAct(w, {
         kind: 'tap',
@@ -76,7 +79,7 @@ describe('taps (plan A4)', () => {
   });
 
   it('lets End shift be pressed with taps left: they are lost', () => {
-    const w = world();
+    const w = world({ inventory: { wood: 9, apple: 9 } });
     const next = frontierAct(w, { kind: 'endShift' }).state;
     expect(next.tapsLeft).toBe(FRONTIER_SHIFT.taps);
     expect(next.shift).toBe(2);
@@ -113,7 +116,7 @@ describe('upkeep and hunger (plan A4)', () => {
       { item: 'animal', count: 1 },
     ]);
     expect(four.state.inventory.get('wood')).toBe(1);
-    expect(four.state.health).toBe(FRONTIER_SHIFT.startHealth);
+    expect(four.state.tapsLeft).toBe(FRONTIER_SHIFT.taps); // all paid: a full shift
   });
 
   it('pays food with grass first, at its rate, then an apple, then an animal (questions 155, 158)', () => {
@@ -143,44 +146,32 @@ describe('upkeep and hunger (plan A4)', () => {
       { item: 'animal', count: 1 },
     ]);
     expect(six.state.inventory.get('grass')).toBe(1);
-    expect(six.state.health).toBe(FRONTIER_SHIFT.startHealth);
+    expect(six.state.tapsLeft).toBe(FRONTIER_SHIFT.taps);
   });
 
-  it('costs 1 health for each item it cannot pay, and loses the run at 0', () => {
+  it('costs taps of the next shift for each item it cannot pay, and never ends the run', () => {
+    // Owner, after the 0.21.0 build: "We don't need crew life anymore. Let's
+    // scrap that and the resting." Asked: "Fewer taps next shift".
     const w = world(); // holding nothing
     const one = endFrontierShift(w);
     expect(one.report?.unpaid).toEqual([{ item: 'wood', count: 1 }]);
-    expect(one.state.health).toBe(FRONTIER_SHIFT.startHealth - 1);
+    expect(one.report?.tapsLost).toBe(FRONTIER_SHIFT.tapsLostPerUnpaid);
+    expect(one.state.tapsLeft).toBe(FRONTIER_SHIFT.taps - FRONTIER_SHIFT.tapsLostPerUnpaid);
     const two = endFrontierShift(one.state);
-    expect(two.report?.healthLost).toBe(2); // wood and food
-    // With nothing, shifts 1 to 6 cost 1 + 2 + 1 + 2 + 1 + 2 = 9; shift 7 costs the last.
-    const six = shifts(w, 6);
-    expect(six.health).toBe(1);
-    expect(six.status).toBe('active');
-    const seven = endFrontierShift(six);
-    expect(seven.state.health).toBe(0);
-    expect(seven.state.status).toBe('lost');
-    expect(frontierAct(seven.state, { kind: 'tap', x: AT.x, y: AT.y }).refusal).toBe('over');
-    expect(endFrontierShift(seven.state).refusal).toBe('over');
+    expect(two.report?.tapsLost).toBe(2 * FRONTIER_SHIFT.tapsLostPerUnpaid); // wood and food
+    expect(two.state.tapsLeft).toBe(FRONTIER_SHIFT.taps - 2 * FRONTIER_SHIFT.tapsLostPerUnpaid);
+    // However long it goes hungry, the run goes on.
+    const many = shifts(w, 30);
+    expect(many.status).toBe('active');
+    expect(many.tapsLeft).toBeGreaterThan(0);
   });
 });
 
-describe('rest and closing the mine (plan A4)', () => {
-  it('rest at a camp restores the crew, then the shift ends', () => {
-    const hungry = shifts(world(), 4);
-    expect(hungry.health).toBe(FRONTIER_SHIFT.startHealth - 6);
-    const rested = frontierAct(hungry, { kind: 'rest', id: 1 });
-    expect(rested.state.shift).toBe(hungry.shift + 1);
-    // Full, less the 1 wood it could not pay at the end of shift 5.
-    expect(rested.state.health).toBe(FRONTIER_SHIFT.startHealth - 1);
-  });
-
-  it('rest only at a camp: refused for a camp that does not stand (owner, question 156)', () => {
-    const w = world();
-    const refused = frontierAct(w, { kind: 'rest', id: 99 });
-    expect(refused.done).toBe(false);
-    expect(refused.refusal).toBe('rest');
-    expect(refused.state).toBe(w);
+describe('closing the mine (plan A4)', () => {
+  it('there is no rest any more', () => {
+    // `as never`: 'rest' is no longer an action; an old step asking for it is refused.
+    const out = frontierAct(world(), { kind: 'rest', id: 1 } as never);
+    expect(out.done).toBe(false);
   });
 
   it('closing the mine ends the run, and nothing more can be done', () => {

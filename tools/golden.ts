@@ -404,12 +404,12 @@ const FRONTIER_RUNS: {
       'The careful policy on seed 1 for a whole run: its maples grow, it builds a sugar shack and boils sap into syrup (after the 0.18.0 build no other run does)',
   },
   {
-    name: 'idle-seed-2-lost',
+    name: 'idle-seed-2-hungry',
     seed: 2,
     policy: 'idle',
     maxShifts: 40,
     description:
-      'The idle policy: gathers nothing, rests at camp 1 once the crew is at half health, then starves at shift 11',
+      'The idle policy: gathers nothing and ends every shift; once the store runs dry, unpaid upkeep costs taps of every next shift, to the end of the run',
   },
 ];
 

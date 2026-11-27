@@ -40,7 +40,6 @@ import {
   FRONTIER_RUN,
   FRONTIER_SAPLINGS,
   FRONTIER_SAW_HOUSE,
-  FRONTIER_SHIFT,
   FRONTIER_SMELTER,
   FRONTIER_STEEL_DRILL,
   FRONTIER_CAMP_PLACE,
@@ -75,7 +74,6 @@ import {
   campWorldOf,
   toFrontier,
   endShift,
-  restCrew,
   turnRefusal,
   campAt,
   campRadius,
@@ -180,7 +178,13 @@ import {
   drawWater,
 } from './hazardArt';
 import { itemInfo } from './itemInfo';
-import { drawMushroom, drawSawHouse, drawSugarShack, drawWorkCamp } from './buildingArt';
+import {
+  drawMushroom,
+  drawSawHouse,
+  drawSugarShack,
+  drawWorkCamp,
+  mushroomLook,
+} from './buildingArt';
 import { drawCrop } from './cropArt';
 import { showNight } from './night';
 import type { Night } from './night';
@@ -327,15 +331,10 @@ const CLOSE_CONFIRM_MS = 3000;
 export const RUN_KEY = 'mining-game.run';
 
 /** What End shift did, in one short line for the hint. */
-function shiftText(report: ShiftReport, turn: CampTurn, rested: boolean): string {
+function shiftText(report: ShiftReport, turn: CampTurn): string {
   const paid = report.paid.map((s) => `${s.count} ${itemName(s.item).toLowerCase()}`).join(', ');
   const lacking = report.unpaid.map((s) => s.item).join(' or ');
-  const start = rested
-    ? `Rested. Shift ${report.shift} of ${FRONTIER_RUN.shifts} over`
-    : `Shift ${report.shift} of ${FRONTIER_RUN.shifts} over`;
-  if (turn.status === 'lost') {
-    return `${start}: no ${lacking}. The crew is lost.`;
-  }
+  const start = `Shift ${report.shift} of ${FRONTIER_RUN.shifts} over`;
   // The last shift (progression plan section 7): the coins held are the score.
   const born =
     report.born > 0
@@ -397,10 +396,10 @@ function shiftText(report: ShiftReport, turn: CampTurn, rested: boolean): string
   if (turn.status === 'finished') {
     return `${start}. That was the last shift: the run is over.`;
   }
-  if (report.healthLost > 0) {
+  if (report.unpaid.length > 0) {
+    // Upkeep not paid costs taps of the next shift (owner, after the 0.22.0 build).
     const part = paid === '' ? '' : `paid ${paid}; `;
-    // The crew rests only at a camp (question 156), so say where.
-    return `${start}: ${part}no ${lacking}, −${report.healthLost} health. Tap a camp to rest.${market}`;
+    return `${start}: ${part}no ${lacking}, so this shift has ${report.tapsLost} fewer taps.${market}`;
   }
   return `${start}: ${paid === '' ? 'nothing due' : `paid ${paid}`}.${market}`;
 }
@@ -638,10 +637,8 @@ export function mountCampLab(
   undoButton.addEventListener('click', undo);
   frame.append(undoButton);
 
-  // Shifts (plan A4): the HUD (shift, taps left, health) over the map's
-  // top-left corner; End shift over its bottom-left, by the thumb (Rest is
-  // in a camp's panel: the crew rests only at a camp, question 156);
-  // Close mine over its top-right. Like Undo, they sit over the map, so they
+  // Shifts (plan A4): the HUD (shift, taps left) over the map's
+  // top-left corner; End shift over its bottom-left, by the thumb. Like Undo, they sit over the map, so they
   // take no room from the tray and never move the map.
   const hud = element('div', 'lab2-hud');
   hud.dataset['testid'] = 'lab2-hud';
@@ -649,13 +646,11 @@ export function mountCampLab(
   const hudShift = element('span', 'lab2-hud-shift');
   const hudTaps = element('span', 'lab2-hud-taps');
   hudTaps.dataset['testid'] = 'lab2-hud-taps';
-  const hudHealth = element('span', 'lab2-hud-health');
-  hudHealth.dataset['testid'] = 'lab2-hud-health';
-  hud.append(hudShift, hudTaps, hudHealth);
+  hud.append(hudShift, hudTaps);
   const shiftButtons = element('div', 'lab2-shift-buttons');
   const endShiftButton = button('lab2-end-shift', 'End shift');
   endShiftButton.dataset['testid'] = 'lab2-end-shift';
-  endShiftButton.addEventListener('click', () => finishShift(null));
+  endShiftButton.addEventListener('click', () => finishShift());
   shiftButtons.append(endShiftButton);
   // Three small buttons over the map's top-right corner, where Close mine
   // was (owner, UI rework: "Don't need the close mine button. ... Three small
@@ -674,7 +669,8 @@ export function mountCampLab(
   placeButton.setAttribute('aria-label', 'Place: a camp, a building, dirt or a plant');
   placeButton.title = 'Place';
   placeButton.addEventListener('click', () => setMode({ kind: 'placeMenu' }));
-  mapButtons.append(goalsButton, bookButton, placeButton);
+  // Left to right as the owner named them: Place, the recipe book, Contracts.
+  mapButtons.append(placeButton, bookButton, goalsButton);
   const overBanner = element('div', 'lab2-over');
   overBanner.dataset['testid'] = 'lab2-over';
   frame.append(hud, shiftButtons, mapButtons, overBanner);
@@ -1131,8 +1127,9 @@ export function mountCampLab(
         // A crop (owner, after the 0.19.0 build): sprouts, or ripe.
         const sown = FRONTIER_CROPS[(world.crops[i] ?? 0) - 1];
         if (sown !== undefined) drawCrop(ctx, box, sown.crop, world.cropIn[i] === 0);
-        // A mushroom (owner, after the 0.17.0 build), at the foot of its tree.
-        if (world.mushrooms[i] === true) drawMushroom(ctx, box);
+        // A mushroom (owner, after the 0.17.0 build): one of 7 looks, at a
+        // spot of its square, both fixed by the square (mushroomLook).
+        if (world.mushrooms[i] === true) drawMushroom(ctx, box, mushroomLook(i));
         // A fire (hazards PR 3), drawn still: the ground is drawn once and kept.
         if (world.hazards.fires[i] === true) drawFire(ctx, box, x, y, 0);
         if (sight === 'greyed') {
@@ -2906,14 +2903,7 @@ export function mountCampLab(
       demolish.classList.add('lab2-pack-short');
     }
     demolish.addEventListener('click', () => confirmDemolish(camp.id));
-    // Rest (question 156: "Only at a camp"): the crew rests here, gets its
-    // health back, and the shift ends.
-    const rest = button('lab2-pack lab2-rest-here', 'Rest');
-    rest.dataset['testid'] = 'lab2-rest';
-    rest.setAttribute('aria-label', 'Rest here: the crew gets its health back, and the shift ends');
-    rest.disabled = world.turn.status !== 'active';
-    rest.addEventListener('click', () => finishShift(camp.id));
-    head.append(rest, demolish);
+    head.append(demolish);
     const close = button('lab2-close', '×');
     close.setAttribute('aria-label', 'Close');
     close.dataset['testid'] = 'lab2-camp-close';
@@ -3234,13 +3224,10 @@ export function mountCampLab(
       'aria-label',
       `${turn.tapsLeft} of ${tapsPerShift(world.lab.counts)} taps left`,
     );
-    hudHealth.textContent = `♥ ${turn.health}/${FRONTIER_SHIFT.startHealth}`;
     hud.dataset['shift'] = String(turn.shift);
     hud.dataset['taps'] = String(turn.tapsLeft);
-    hud.dataset['health'] = String(turn.health);
     hud.dataset['status'] = turn.status;
     hudTaps.classList.toggle('lab2-hud-empty', turn.tapsLeft === 0);
-    hudHealth.classList.toggle('lab2-hud-low', turn.health <= FRONTIER_SHIFT.startHealth * 0.3);
     const active = turn.status === 'active';
     endShiftButton.disabled = !active;
     placeButton.disabled = !active;
@@ -3256,24 +3243,20 @@ export function mountCampLab(
     overBanner.hidden = active;
     const score = world.lab.counts.get(FRONTIER_MARKET.coin) ?? 0;
     overBanner.textContent =
-      turn.status === 'lost'
-        ? `The crew is lost after ${turn.shift - 1} shifts. Tap New world to start again.`
-        : turn.status === 'finished'
-          ? `The run is over after ${FRONTIER_RUN.shifts} shifts: 🪙 ${score} coins. Tap New world to start again.`
-          : `Mine closed after ${turn.shift} shifts. Tap New world to start again.`;
+      turn.status === 'finished'
+        ? `The run is over after ${FRONTIER_RUN.shifts} shifts: 🪙 ${score} coins. Tap New world to start again.`
+        : `Mine closed after ${turn.shift} shifts. Tap New world to start again.`;
   }
 
   /**
-   * End the shift, or rest at camp `restAt` (the crew's health back to full,
-   * then the shift ends). The animals slide to where they stepped, the Undo history is
+   * End the shift. The animals slide to where they stepped, the Undo history is
    * emptied (it never crosses a shift, question 151), and the hint says what
-   * upkeep was paid and what hunger cost.
+   * upkeep was paid and what going short cost.
    */
-  function finishShift(restAt: number | null): void {
+  function finishShift(): void {
     const before = world.surface.animals;
     const dragonsBefore = world.hazards.dragons;
-    const rest = restAt !== null;
-    const result = restAt !== null ? restCrew(world, restAt) : endShift(world);
+    const result = endShift(world);
     if (result.report === null) {
       return;
     }
@@ -3286,8 +3269,8 @@ export function mountCampLab(
     if (asGame) {
       saveRun(result.world); // saved every shift (question 152)
     }
-    const text = shiftText(result.report, result.world.turn, rest);
-    setHint(text, result.report.healthLost > 0 ? true : false);
+    const text = shiftText(result.report, result.world.turn);
+    setHint(text, result.report.unpaid.length > 0);
     // Night (owner, after the playtest of PR #146): the state has moved on
     // already; the night only shows it. The animals slide to where they
     // stepped once it is morning.

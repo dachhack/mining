@@ -12,7 +12,7 @@
 //   tree too), placing, upgrading and demolishing a camp.
 // - Not undoable: catching an animal and picking an apple. They stay in the
 //   log and are played again, so they stay done; Undo steps past them.
-// - End shift, rest and closing the mine start a new history.
+// - End shift and closing the mine start a new history.
 //
 // No DOM code here, so the unit tests run it in plain Node.
 
@@ -38,11 +38,11 @@ export function undoCount(history: UndoHistory): number {
 
 /**
  * `history` with one more action that did something. `undoable` is false for
- * a catch or an apple pick (question 141). End shift, rest and closing the
+ * a catch or an apple pick (question 141). End shift and closing the
  * mine are not noted: they start a new history (`emptyHistory`).
  */
 export function noteAction(history: UndoHistory, step: CampStep, undoable: boolean): UndoHistory {
-  if (step.kind === 'endShift' || step.kind === 'rest' || step.kind === 'close') {
+  if (step.kind === 'endShift' || step.kind === 'close') {
     throw new Error(`${step.kind} starts a new history; it is not noted`);
   }
   return {

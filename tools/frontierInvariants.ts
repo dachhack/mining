@@ -167,9 +167,12 @@ export function checkStep(
     return problems;
   }
   if (endsShift) {
-    // A shift's taps, more with miners (crew.ts).
-    if (after.tapsLeft !== tapsPerShift(after.inventory) && after.status === 'active')
-      say(`a new shift has ${after.tapsLeft} taps`);
+    // A shift's taps, more with miners (crew.ts), less FRONTIER_SHIFT.tapsLostPerUnpaid
+    // for each item of upkeep the night could not pay (shift.ts).
+    const lost = (outcome.report?.unpaid.length ?? 0) * FRONTIER_SHIFT.tapsLostPerUnpaid;
+    const due = Math.max(0, tapsPerShift(after.inventory) - lost);
+    if (after.tapsLeft !== due && after.status === 'active')
+      say(`a new shift has ${after.tapsLeft} taps, not ${due}`);
   } else if (before.marketOpen) {
     // Market actions cost no taps (market.ts).
     if (after.tapsLeft !== before.tapsLeft) say(`a market action changed the taps`);
@@ -468,8 +471,6 @@ export function checkStep(
   if (endsShift && after.shift !== before.shift + 1)
     say(`the shift went from ${before.shift} to ${after.shift}`);
   if (!endsShift && after.shift !== before.shift) say('the shift changed without End shift');
-  if (after.health < 0 || after.health > FRONTIER_SHIFT.startHealth) say(`health ${after.health}`);
-  if (after.health === 0 && after.status !== 'lost') say('health 0 but the run is not lost');
   if (before.status !== 'active') say('an action was taken after the run ended');
 
   // The inventory.
