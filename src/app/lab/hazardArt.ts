@@ -156,6 +156,8 @@ export const DEFENSE_PAINT = [
   { face: '#9a6a3c', edge: '#4e3318' },
   { face: '#a9adb3', edge: '#4c5056' },
   { face: '#d9b45a', edge: '#5a4515' },
+  // The fortress (owner, after the 0.25.0 build): dark iron.
+  { face: '#7d8794', edge: '#262b33' },
 ];
 
 /**
@@ -251,6 +253,23 @@ export function drawCampWall(
         const tx = gx + side * c * 0.38 - c * 0.13;
         ctx.fillRect(tx, gy - t * 0.6, c * 0.26, t * 2.2);
         ctx.strokeRect(tx, gy - t * 0.6, c * 0.26, t * 2.2);
+      }
+    }
+    if (level >= 4) {
+      // The fortress: an iron tower at each corner.
+      const iron = DEFENSE_PAINT[3] ?? paint;
+      const side = Math.max(4, c * 0.34);
+      ctx.fillStyle = iron.face;
+      ctx.strokeStyle = iron.edge;
+      ctx.lineWidth = Math.max(1, c * 0.05);
+      for (const [cx, cy] of [
+        [box.x, box.y],
+        [box.x + box.size - side, box.y],
+        [box.x, box.y + box.size - side],
+        [box.x + box.size - side, box.y + box.size - side],
+      ] as const) {
+        ctx.fillRect(cx, cy, side, side);
+        ctx.strokeRect(cx, cy, side, side);
       }
     }
   }

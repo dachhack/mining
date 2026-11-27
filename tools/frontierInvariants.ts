@@ -62,7 +62,8 @@
 // - GAS AND FIRE: on a mining tap, squares other than the one mined change
 //   depth only if gas exploded, only within FRONTIER_GAS.blastRadius, by 1,
 //   and the level rule holds everywhere after; a fire starts only by a blast
-//   (within FRONTIER_GAS.fireRadius) or at night beside a fire or a dragon,
+//   (within FRONTIER_GAS.fireRadius), a dragon's attack in the day (on the square it
+//   lands on), or at night beside a fire or a dragon,
 //   and only on something that can burn; a tap puts out exactly the fire it is on; at
 //   night every fire burning before goes out, leaving nothing growing (a
 //   stump may wait to grow back).
@@ -73,7 +74,8 @@
 //   only by a tap on it with a sword held, and the sword stays.
 // - RAIDS AND DEFENSES: a camp's defenses stay between 0 and
 //   FRONTIER_DEFENSE.length, go up only by buildDefense, 1 level, and never
-//   come down; a camp loses a level only at night (fire or a raid); the
+//   come down; a camp loses a level only at night (fire or a raid), or in
+//   the day to a dragon's camp attack (one each); the
 //   night never takes coins.
 
 import { BLOCKS } from '../src/data';
@@ -108,6 +110,7 @@ import {
   topBlockAt,
 } from '../src/engine';
 import { areaCost, digAreaPlan, frontierAct, hashFrontier, tapsPerShift } from '../src/engine';
+import { dragonsOnTaps } from '../src/engine/frontier/dragons';
 import type { FrontierOutcome, FrontierState } from '../src/engine';
 import { NO_FEATURE, cropOf, isTree } from '../src/engine/frontier/state';
 import { fullCrop } from '../src/engine/frontier/surface';
@@ -139,7 +142,9 @@ export function checkStep(
     if (plan.cost !== Math.min(most, plan.dug.length)) say(`a dig cost ${plan.cost}`);
     if (after.tapsLeft !== before.tapsLeft - plan.cost)
       say(`taps went from ${before.tapsLeft} to ${after.tapsLeft} for a dig costing ${plan.cost}`);
-    if (hashFrontier({ ...plan.state, tapsLeft: after.tapsLeft }) !== hashFrontier(after))
+    // ...and then the dragons' turn for the taps it spent (dragons.ts).
+    const dragons = dragonsOnTaps({ ...plan.state, tapsLeft: after.tapsLeft }, plan.cost);
+    if (hashFrontier(dragons.state) !== hashFrontier(after))
       say('the dig is not the taps it stands for');
     let s = { ...before, tapsLeft: FRONTIER_SHIFT.taps };
     for (const sq of plan.dug) {
@@ -392,7 +397,11 @@ export function checkStep(
           const near =
             Math.abs(x - (tx ?? -99)) <= FRONTIER_GAS.fireRadius &&
             Math.abs(y - (ty ?? -99)) <= FRONTIER_GAS.fireRadius;
-          if (!exploded || !near) say(`a fire started on ${x},${y} by "${step}"`);
+          // A dragon's attack in the day sets fire to the square it lands on (dragons.ts).
+          const byDragon = (outcome.attacks ?? []).some(
+            (a) => (a.kind === 'burn' || a.kind === 'camp') && a.x === x && a.y === y,
+          );
+          if ((!exploded || !near) && !byDragon) say(`a fire started on ${x},${y} by "${step}"`);
         }
       }
       // A camp's ground can burn again: a dragon beside it may set it alight once more.
@@ -462,7 +471,12 @@ export function checkStep(
       !(verb === 'buildDefense' && camp.defense === was.defense + 1)
     )
       say(`camp ${camp.id}'s defenses went up by "${step}"`);
-    if (camp.level < was.level && !endsShift) say(`camp ${camp.id} lost a level by "${step}"`);
+    // In the day only a dragon's camp attack takes a level, and only one (dragons.ts).
+    const attacked = (outcome.attacks ?? []).filter(
+      (a) => a.kind === 'camp' && a.campId === camp.id,
+    ).length;
+    if (camp.level < was.level - attacked && !endsShift)
+      say(`camp ${camp.id} lost a level by "${step}"`);
   }
   if (endsShift && (after.inventory.get('coin') ?? 0) < (before.inventory.get('coin') ?? 0))
     say('the night took coins');

@@ -71,11 +71,12 @@ import {
   runPhase,
   saveFrontier,
 } from '../../engine';
-import type { BuildingKind, FrontierBuilding, TradeSide } from '../../engine';
+import type { BuildingKind, DragonAttack, FrontierBuilding, TradeSide } from '../../engine';
 import { randomSeed } from '../previewSession';
 import { CAMP_LOOK, CAMP_MARKS } from './campLook';
 import {
   campWorldOf,
+  takeDragonNews,
   toFrontier,
   endShift,
   turnRefusal,
@@ -333,6 +334,16 @@ const OVER_HINT = 'This run is over. Tap New world to start another.';
 const CLOSE_CONFIRM_MS = 3000;
 /** Where the game keeps its run (plan B1). */
 export const RUN_KEY = 'mining-game.run';
+
+/** A dragon's attack in the day (dragons.ts), in one short sentence for the hint. */
+function dragonText(attack: DragonAttack): string {
+  if (attack.kind === 'camp') {
+    const lost = attack.upgradesLost ?? 0;
+    return `🐉 A dragon set camp ${attack.campId ?? ''} on fire${lost > 0 ? ' and tore down an upgrade' : ''}! Tap the fire to put it out.`;
+  }
+  if (attack.kind === 'eat') return `🐉 A dragon ate an animal at ${attack.x}, ${attack.y}.`;
+  return `🐉 A dragon set ${attack.x}, ${attack.y} on fire.`;
+}
 
 /** What End shift did, in one short line for the hint. */
 function shiftText(report: ShiftReport, turn: CampTurn): string {
@@ -3149,6 +3160,17 @@ export function mountCampLab(
   /** Take a new world: work out what is shown again, and refresh the counter and tray. */
   function setWorld(next: CampWorld): void {
     world = next;
+    // Say a dragon's attack even if the action says nothing more.
+    const news = takeDragonNews();
+    if (news.length > 0) {
+      dragonLine = news.map(dragonText).join(' ');
+      hint.textContent = dragonLine;
+      hint.classList.toggle('lab-hint-warn', true);
+      // A hint set straight after (the action's own) carries it; later ones do not.
+      queueMicrotask(() => {
+        dragonLine = '';
+      });
+    }
     tops = topBlocksOf(world.lab.state);
     sights = sightMap(world);
     showHud();
@@ -3174,8 +3196,17 @@ export function mountCampLab(
     cues.start();
   }
 
+  /** The dragons' news from the last action, said with the next hint (cleared once said). */
+  let dragonLine = '';
+
   function setHint(text: string, warn: boolean | 'hard'): void {
-    hint.textContent = text;
+    // A dragon attacked with the taps just spent (owner, after the 0.25.0
+    // build): its news leads whatever the action itself says.
+    const news = takeDragonNews();
+    if (news.length > 0) dragonLine = news.map(dragonText).join(' ');
+    hint.textContent = dragonLine === '' ? text : `${dragonLine} ${text}`.trim();
+    if (dragonLine !== '') warn = true;
+    dragonLine = '';
     hint.classList.toggle('lab-hint-warn', warn === true);
     hint.classList.toggle('lab2-hint-hard', warn === 'hard');
   }
