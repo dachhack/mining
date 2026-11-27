@@ -68,6 +68,8 @@ test('switch the camp tool to a deep camp, place it, and open its panel', async 
     throw new Error('no place for a deep camp near the first camp');
   const canvas = await openGame(page, state);
 
+  await page.getByTestId('lab2-place-tool').click();
+
   await page.getByTestId('lab2-camp-tool').click();
   await page.getByTestId('lab2-place-deep').click();
   await expect(page.getByTestId('lab2-place-deep')).toHaveAttribute('aria-pressed', 'true');

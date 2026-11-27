@@ -4,6 +4,10 @@
 // with the square under the finger. If `onHold` is given, a press held still
 // for `PREVIEW_MAP.holdMs` calls it instead of `onTap` (Lab 2 uses that to
 // place a camp); without it, a long press is just a tap, as in Lab 1.
+// If `grab` says yes to the square a press starts on, a drag moves that
+// thing instead of panning: `onGrabMove` hears each square the finger
+// crosses (Lab 2 drags a new camp's 3 x 3 with it: owner, UI rework). A
+// grab that does not move is a tap.
 //
 // The same gestures as the game's map (map/mapView.ts).
 
@@ -23,13 +27,19 @@ export interface LabGestureHooks {
   onTap: (x: number, y: number) => void;
   /** A press held still on square (x, y). Optional. */
   onHold?: (x: number, y: number) => void;
+  /** True if a press starting on square (x, y) grabs something to drag. Optional. */
+  grab?: (x: number, y: number) => boolean;
+  /** The finger, dragging what it grabbed, is over square (x, y) now. */
+  onGrabMove?: (x: number, y: number) => void;
 }
 
 /** Listen for drags, pinches, the wheel and taps on `canvas`. */
 export function attachLabGestures(canvas: HTMLCanvasElement, hooks: LabGestureHooks): void {
   const pointers = new Map<number, { x: number; y: number }>();
   let gesture: {
-    kind: 'press' | 'drag' | 'pinch' | 'held';
+    kind: 'press' | 'drag' | 'pinch' | 'held' | 'grab';
+    /** For 'grab': true once the finger has moved past the drag threshold. */
+    moved: boolean;
     camera: LabCamera;
     startX: number;
     startY: number;
@@ -97,8 +107,11 @@ export function attachLabGestures(canvas: HTMLCanvasElement, hooks: LabGestureHo
     canvas.setPointerCapture(event.pointerId);
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pointers.size === 1) {
+      const start = squareAt(event.clientX, event.clientY);
+      const grabbed = start !== null && hooks.grab !== undefined && hooks.grab(start.x, start.y);
       gesture = {
-        kind: 'press',
+        kind: grabbed ? 'grab' : 'press',
+        moved: false,
         camera: { ...hooks.camera() },
         startX: event.clientX,
         startY: event.clientY,
@@ -107,7 +120,7 @@ export function attachLabGestures(canvas: HTMLCanvasElement, hooks: LabGestureHo
         pinchMidY: 0,
       };
       const onHold = hooks.onHold;
-      if (onHold !== undefined) {
+      if (onHold !== undefined && !grabbed) {
         const { clientX, clientY } = event;
         holdTimer = setTimeout(() => {
           holdTimer = null;
@@ -150,6 +163,14 @@ export function attachLabGestures(canvas: HTMLCanvasElement, hooks: LabGestureHo
     }
     const dx = event.clientX - gesture.startX;
     const dy = event.clientY - gesture.startY;
+    if (gesture.kind === 'grab') {
+      if (Math.hypot(dx, dy) > PREVIEW_MAP.dragThresholdPx) gesture.moved = true;
+      const square = squareAt(event.clientX, event.clientY);
+      if (gesture.moved && square !== null && hooks.onGrabMove !== undefined) {
+        hooks.onGrabMove(square.x, square.y);
+      }
+      return;
+    }
     if (gesture.kind === 'press' && Math.hypot(dx, dy) > PREVIEW_MAP.dragThresholdPx) {
       gesture.kind = 'drag';
       stopHoldTimer();
@@ -176,7 +197,7 @@ export function attachLabGestures(canvas: HTMLCanvasElement, hooks: LabGestureHo
     stopHoldTimer();
     const ended = gesture;
     gesture = null;
-    if (ended.kind === 'press' && !cancelled) {
+    if ((ended.kind === 'press' || (ended.kind === 'grab' && !ended.moved)) && !cancelled) {
       const square = squareAt(event.clientX, event.clientY);
       if (square !== null) {
         hooks.onTap(square.x, square.y);

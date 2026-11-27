@@ -63,6 +63,7 @@ test('a seed is sown from 🌱, left be while it grows, and harvested once ripe'
   const carrot = FRONTIER_CROPS.find((c) => c.crop === 'carrot');
   if (carrot === undefined) throw new Error('carrots in the data');
   const canvas = await openGame(page, { ...start, inventory: new Map([['carrotSeed', 2]]) });
+  await page.getByTestId('lab2-place-tool').click();
   await page.getByTestId('lab2-plant-tool').click();
   await expect(page.getByTestId('lab2-plant-carrotSeed')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('lab2-plant-line')).toContainText(`ripe in ${carrot.growShifts}`);

@@ -472,6 +472,7 @@ test('a second camp on level ground lifts the fog; then the first is demolished 
   await page.getByTestId('lab2-camp-close').click();
 
   // Before mining: the tool shows the cost as not yet affordable, and confirming is off.
+  await page.getByTestId('lab2-place-tool').click();
   await expect(page.getByTestId('lab2-camp-tool')).toHaveClass(/lab2-tool-short/);
   await page.getByTestId('lab2-camp-tool').click();
   await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'placing');
@@ -506,6 +507,7 @@ test('a second camp on level ground lifts the fog; then the first is demolished 
   played = await playStep(page, canvas, played, { kind: 'tap', x: bare.x, y: bare.y });
   const uneven = placeRefusal(played, bare.x, bare.y) === 'notLevel' ? bare : undefined;
   expect(uneven).toBeDefined();
+  await page.getByTestId('lab2-place-tool').click();
   await page.getByTestId('lab2-camp-tool').click();
   if (uneven !== undefined) {
     await tapSquare(page, canvas, uneven);
@@ -656,6 +658,8 @@ test('the map never moves while the tool and the panels open and close', async (
   await page.getByTestId('lab2-camp-close').click();
   await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'idle');
   await unmoved();
+
+  await page.getByTestId('lab2-place-tool').click();
 
   await page.getByTestId('lab2-camp-tool').click(); // the camp tool
   await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'placing');
@@ -814,6 +818,7 @@ for (const phone of PHONES) {
     await expectTidyTopBar(page, phone);
 
     // No spot yet: the button is off, and the line says to choose one.
+    await page.getByTestId('lab2-place-tool').click();
     await page.getByTestId('lab2-camp-tool').click();
     await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'placing');
     await expect(confirm).toBeDisabled();
@@ -877,6 +882,8 @@ for (const screen of SCREENS) {
     await expect(page.getByTestId('lab-seed')).toHaveText(`Seed ${SEED} · prepared`);
     await page.addStyleTag({ content: `html { font-size: ${screen.rootFont}; }` });
     const canvas = page.getByTestId('lab-map');
+
+    await page.getByTestId('lab2-place-tool').click();
 
     await page.getByTestId('lab2-camp-tool').click();
     await tapSquare(page, canvas, target);
@@ -982,6 +989,8 @@ for (const phone of PHONES_WITH_BARS) {
         await expectInside(entry, free);
       }
     }
+
+    await page.getByTestId('lab2-place-tool').click();
 
     await page.getByTestId('lab2-camp-tool').click();
     await expect(page.getByTestId('lab-hint')).toHaveText(
@@ -1201,25 +1210,53 @@ test('night between shifts, with reduced motion: a still moon, at once, until a 
   await expect(night).toHaveCount(0);
 });
 
-test('Close mine asks once, then ends the run: nothing more can be done', async ({ page }) => {
+test('the map has Contracts, Craft and Place buttons, and no Close mine (owner, UI rework)', async ({
+  page,
+}) => {
+  // Owner: "Don't need the close mine button. ... Three small buttons where
+  // close mine used to be: Contracts, Recipe book/Craft, Place button."
+  await openLab2(page);
+  await expect(page.getByTestId('lab2-close-mine')).toHaveCount(0);
+  const hud = await page.getByTestId('lab2-hud').boundingBox();
+  for (const id of ['lab2-goals', 'lab2-book', 'lab2-place-tool']) {
+    const box = await page.getByTestId(id).boundingBox();
+    expect(box, id).not.toBeNull();
+    if (box === null || hud === null) continue;
+    // Over the map's top-right, clear of the HUD.
+    expect(box.x, id).toBeGreaterThan(hud.x + hud.width);
+  }
+  await page.getByTestId('lab2-place-tool').click();
+  await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'placeMenu');
+  for (const id of ['lab2-camp-tool', 'lab2-place-sawHouse', 'lab2-place-dirt']) {
+    await expect(page.getByTestId(id)).toHaveCount(1);
+  }
+  await page.getByTestId('lab2-place-menu-close').click();
+  // The recipe book shows the inventory (owner: "When crafting, we need to show inventory").
+  await page.getByTestId('lab2-book').click();
+  await expect(page.getByTestId('lab2-book-inventory')).toBeVisible();
+  await expect(page.getByTestId('book-lab-dug')).toBeVisible();
+});
+
+test('placing a camp: press on the chosen 3 x 3 and drag it across the map', async ({ page }) => {
+  // Owner, UI rework: "When placing a camp, you should be able to drag the square around the map."
   const canvas = await openLab2(page);
-  const close = page.getByTestId('lab2-close-mine');
-  await close.click();
-  await expect(close).toHaveText('Tap to confirm');
-  await expect(page.getByTestId('lab2-over')).toBeHidden();
-  await close.click();
-  await expect(page.getByTestId('lab2-hud')).toHaveAttribute('data-status', 'closed');
-  await expect(page.getByTestId('lab2-over')).toBeVisible();
-  await expect(page.getByTestId('lab2-over')).toContainText('Mine closed');
-  await expect(page.getByTestId('lab2-end-shift')).toBeDisabled();
   const camp = newCampWorld(SEED).camps[0] ?? { x: 0, y: 0 };
-  const lit = { x: camp.x - 2, y: camp.y };
-  await tapSquare(page, canvas, lit);
-  await expect(canvas).toHaveAttribute('data-last-tap', `over ${lit.x},${lit.y}`);
-  // New world starts a fresh run.
-  await page.getByRole('button', { name: 'New world' }).click();
-  await expect(page.getByTestId('lab2-hud')).toHaveAttribute('data-status', 'active');
-  await expect(page.getByTestId('lab2-over')).toBeHidden();
+  const from = { x: camp.x + 4, y: camp.y };
+  await page.getByTestId('lab2-place-tool').click();
+  await page.getByTestId('lab2-camp-tool').click();
+  await tapSquare(page, canvas, from);
+  await expect(canvas).toHaveAttribute('data-target', `${from.x},${from.y}`);
+  const a = await pointOf(canvas, from);
+  const b = await pointOf(canvas, { x: from.x, y: from.y + 2 });
+  const camX = await canvas.getAttribute('data-cam-x');
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await page.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2, { steps: 4 });
+  await page.mouse.move(b.x, b.y, { steps: 4 });
+  await page.mouse.up();
+  await expect(canvas).toHaveAttribute('data-target', `${from.x},${from.y + 2}`);
+  // The map did not pan.
+  await expect(canvas).toHaveAttribute('data-cam-x', camX ?? '');
 });
 
 test('a felled tree leaves a stump ring, and mining its square takes the ring away', async ({
@@ -1298,6 +1335,8 @@ test('undo takes back a placed camp: the camp, its cost and its light', async ({
   const undo = page.getByTestId('lab2-undo');
   // The prepared steps are the world's start: nothing to undo yet.
   await expect(undo).toBeDisabled();
+
+  await page.getByTestId('lab2-place-tool').click();
 
   await page.getByTestId('lab2-camp-tool').click();
   await tapSquare(page, canvas, target);

@@ -1366,3 +1366,48 @@ body[data-screen='lab2'] {
 .lab2-actions.lab2-actions-scroll .lab2-button {
   flex: 0 0 auto;
 }
+
+/* The map's three small buttons, over its top-right corner where Close mine
+   was (owner, UI rework): contracts, the recipe book, and Place. Like Undo
+   and End shift they sit over the map, so they never move it. */
+.lab2-map-buttons {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  display: flex;
+  /* A column down the corner, so a 320 px phone's HUD never runs into them. */
+  flex-direction: column;
+  gap: 6px;
+}
+.lab .lab2-map-button {
+  width: 34px;
+  height: 34px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-radius: 17px;
+  font-size: 16px;
+  line-height: 1;
+  color: #f2e2c4;
+  background: rgba(24, 19, 15, 0.88);
+  border: 1px solid #7a6650;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+.lab .lab2-map-button:disabled {
+  opacity: 0.45;
+}
+.lab .lab2-map-button.lab2-market-open {
+  border-color: #e8b04a;
+  box-shadow: 0 0 10px rgba(232, 176, 74, 0.8);
+}
+
+/* What the store holds, inside the recipe book's card (owner, UI rework:
+   "When crafting, we need to show inventory"): one row that scrolls sideways. */
+.lab2-book-inventory {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 0 0 auto;
+  padding: 2px 0 6px;
+}
