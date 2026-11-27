@@ -211,7 +211,7 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 - **What hurts it:** hunger only, for now (owner, question 148). Each item of upkeep that cannot be paid costs 1 health.
 - **Rest**, only at a camp (owner, question 156: "Only at a camp"): the crew has no position, so it rests at the camp whose panel the player opens and taps Rest in. It restores full health, then the shift ends as with End shift, so that shift's upkeep is still paid.
 - **At 0 health** the crew is lost and the run ends.
-- **Miners** (owner, after the 0.20.0 build: "Let's add miners to the market. You can hire a miner to add to the crew. You just pay them a annual salary when you hire them. They just need food upkeep."): hired at the market for [Default] 80 coins each, the salary paid once, up to 4 (`FRONTIER_MINERS`); never sold or stolen. Each eats [Default] 1 food whenever the crew eats. The miners held set the crew's level, from the next shift:
+- **Miners** (owner, after the 0.20.0 build: "Let's add miners to the market. You can hire a miner to add to the crew. You just pay them a annual salary when you hire them. They just need food upkeep."): hired at the market for 200 coins each (owner, after the 0.21.0 build: "Miners should be expensive. Like 200."; they were 80), the salary paid once, up to 4 (`FRONTIER_MINERS`); never sold or stolen. Each eats [Default] 1 food whenever the crew eats. The miners held set the crew's level, from the next shift:
 
   | Miners | Taps a shift | Long press |
   |---|---|---|

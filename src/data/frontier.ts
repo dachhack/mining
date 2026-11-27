@@ -757,7 +757,9 @@ export const FRONTIER_MARKET = {
     { item: 'potatoSeed', count: 1, coins: 3 },
     // A miner, hired for a year's pay (owner, after the 0.20.0 build: "Let's
     // add miners to the market"): FRONTIER_MINERS.
-    { item: 'miner', count: 1, coins: 80 },
+    // 200 coins (owner, after the 0.21.0 build: "Miners should be expensive.
+    // Like 200."; they were 80).
+    { item: 'miner', count: 1, coins: 200 },
     { item: 'hay', count: 1, coins: 1 },
     // The pump drains a flood (hazards plan, section 2): from the start.
     { item: 'pump', count: 1, coins: 30 },
