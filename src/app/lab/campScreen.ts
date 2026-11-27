@@ -1869,6 +1869,7 @@ export function mountCampLab(
       'hay',
       'sap',
       'syrup',
+      'lumber',
       'mushroom',
       FRONTIER_MINERS.item,
       'wheatSeed',
@@ -2260,11 +2261,12 @@ export function mountCampLab(
         make.addEventListener('click', () => makeInBook(recipe));
         buttons.append(make);
         if (why === 'noSugarShack') {
-          const note = element(
-            'span',
-            'lab2-recipe-why',
-            'Needs a sugar shack: build one with 🔨.',
-          );
+          const note = element('span', 'lab2-recipe-why', 'Needs a sugar shack: build one with ⊕.');
+          note.dataset['testid'] = `lab2-recipe-why-${recipe.id}`;
+          text.append(note);
+        }
+        if (why === 'noSawHouse') {
+          const note = element('span', 'lab2-recipe-why', 'Needs a saw house: build one with ⊕.');
           note.dataset['testid'] = `lab2-recipe-why-${recipe.id}`;
           text.append(note);
         }
@@ -2585,6 +2587,9 @@ export function mountCampLab(
     }
     if (makes?.item === 'syrup') {
       return 'Sells well at the market. Needs a sugar shack.';
+    }
+    if (makes?.item === 'lumber') {
+      return 'For lumber contracts, or sell it at the market. Needs a saw house.';
     }
     if (makes?.item === 'hay') {
       return `Food for the crew, and ${FRONTIER_PEN.hayPerBirth} feeds a pen's new animal. No smelter needed.`;

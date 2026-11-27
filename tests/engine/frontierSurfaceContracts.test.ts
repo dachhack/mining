@@ -1,0 +1,167 @@
+// Surface contracts and lumber (owner, after the 0.22.0 build: "We need more
+// surface resource contracts especially early game. Wood, hay, sheep,
+// syrup, apples, mushrooms, crops. Let's make lumber productable if you
+// have a saw house."). Asked, the owner chose: surface contracts from the
+// first market day; one delivered opens tier 2 like any tier-1 contract;
+// lumber is 2 wood for 1, at a saw house.
+import { describe, expect, it } from 'vitest';
+import {
+  FRONTIER_BOARD,
+  FRONTIER_CONTRACTS,
+  FRONTIER_MARKET,
+  FRONTIER_RECIPES,
+} from '../../src/data/frontier';
+import { contractBoard, frontierAct, isMarketDay, makeRefusal, openTiers } from '../../src/engine';
+import type { FrontierState } from '../../src/engine';
+import { MID, world } from './frontierHelpers';
+
+/** A world on market day `shift` with its first camp at `level`, contracts done `done`, holding `inventory`. */
+function day(
+  level: number,
+  shift: number,
+  inventory: Record<string, number> = {},
+  done: number[] = [0, 0, 0],
+): FrontierState {
+  const w = world({ inventory });
+  const s = { ...w, shift, contractsDone: done, camps: w.camps.map((c) => ({ ...c, level })) };
+  return { ...s, marketOpen: isMarketDay(s) };
+}
+
+const SURFACE_ITEMS = [
+  'wood',
+  'hay',
+  'animal',
+  'syrup',
+  'apple',
+  'mushroom',
+  'wheat',
+  'corn',
+  'carrot',
+  'potato',
+  'lumber',
+];
+
+describe('surface contracts', () => {
+  it('ask for wood, hay, sheep, syrup, apples, mushrooms, crops and lumber, at tier 1', () => {
+    const surface = FRONTIER_CONTRACTS.filter((c) => c.surface === true);
+    for (const item of SURFACE_ITEMS) {
+      expect(
+        surface.some((c) => c.tier === 1 && c.asks.some((a) => a.item === item)),
+        item,
+      ).toBe(true);
+    }
+    // A surface contract asks only for what the surface gives.
+    for (const c of surface) {
+      for (const a of c.asks) expect(SURFACE_ITEMS, c.id).toContain(a.item);
+    }
+  });
+
+  it('are on the board from the first market day, before any level-3 camp; mining ones wait for it', () => {
+    expect(FRONTIER_BOARD.tier1Level).toBe(3);
+    expect(openTiers(day(1, 10))).toEqual([1]);
+    for (let shift = 10; shift <= 100; shift += 10) {
+      const board = contractBoard(day(1, shift));
+      expect(board.length, `shift ${shift}`).toBeGreaterThan(0);
+      for (const c of board) expect(c.surface, `${c.id} on shift ${shift}`).toBe(true);
+    }
+  });
+
+  it('are offered even when nothing of theirs stands yet: they grow back, or are bought and made', () => {
+    // The test world has no trees, maples or animals, and holds nothing.
+    const ids = new Set<string>();
+    for (let shift = 10; shift <= 300; shift += 10) {
+      for (const c of contractBoard(day(1, shift))) ids.add(c.id);
+    }
+    const offered = FRONTIER_CONTRACTS.filter((c) => ids.has(c.id));
+    for (const item of ['wood', 'syrup', 'animal', 'lumber']) {
+      expect(
+        offered.some((c) => c.asks.some((a) => a.item === item)),
+        item,
+      ).toBe(true);
+    }
+    // Mushrooms still need mushrooms standing or coming (stock.ts).
+    expect(offered.some((c) => c.asks.some((a) => a.item === 'mushroom'))).toBe(false);
+  });
+
+  it('open tier 2 when one is delivered, like any tier-1 contract', () => {
+    const wood = FRONTIER_CONTRACTS.find((c) => c.id === 't1-firewood');
+    if (wood === undefined) throw new Error('the firewood contract');
+    let shift = 10;
+    while (shift < 1000 && !contractBoard(day(1, shift)).some((c) => c.id === wood.id)) {
+      shift += 10;
+    }
+    expect(shift).toBeLessThan(1000);
+    const stock = Object.fromEntries(wood.asks.map((a) => [a.item, a.count]));
+    const out = frontierAct(day(1, shift, stock), { kind: 'fillContract', id: wood.id });
+    expect(out.done, out.refusal ?? '').toBe(true);
+    expect(out.state.contractsDone).toEqual([1, 0, 0]);
+    expect(openTiers(out.state)).toEqual([1, 2]);
+  });
+});
+
+describe('lumber', () => {
+  it('is made from 2 wood at a saw house, for 1 tap, and sells for 2 coins', () => {
+    const recipe = FRONTIER_RECIPES.find((r) => r.id === 'lumber');
+    expect(recipe?.inputs).toEqual([{ item: 'wood', count: 2 }]);
+    expect(recipe?.output).toEqual({ item: 'lumber', count: 1 });
+    expect(recipe?.needsSawHouse).toBe(true);
+    expect(FRONTIER_MARKET.sellPrices.find((l) => l.item === 'lumber')).toEqual({
+      item: 'lumber',
+      count: 1,
+      coins: 2,
+    });
+    const w = world({ inventory: { wood: 20, stone: 20 } });
+    expect(makeRefusal(w, 'lumber')).toBe('noSawHouse');
+    const sawed = frontierAct(w, { kind: 'build', building: 'sawHouse', x: MID + 3, y: MID });
+    expect(sawed.done, sawed.refusal ?? '').toBe(true);
+    const made = frontierAct(sawed.state, { kind: 'make', recipe: 'lumber' });
+    expect(made.done, made.refusal ?? '').toBe(true);
+    expect(made.state.inventory.get('lumber')).toBe(1);
+    expect(made.state.inventory.get('wood')).toBe((sawed.state.inventory.get('wood') ?? 0) - 2);
+    expect(made.state.tapsLeft).toBe(sawed.state.tapsLeft - 1);
+  });
+});
+
+describe('one of each a market day', () => {
+  it('leaves the board once filled or taken, until the next market day', () => {
+    // The simulator found it: buy wood, fill the firewood contract, buy wood,
+    // fill it again, all day long.
+    const wood = FRONTIER_CONTRACTS.find((c) => c.id === 't1-firewood');
+    if (wood === undefined) throw new Error('the firewood contract');
+    let shift = 10;
+    while (shift < 1000 && !contractBoard(day(1, shift)).some((c) => c.id === wood.id)) {
+      shift += 10;
+    }
+    const w = day(1, shift, { wood: 200 });
+    const once = frontierAct(w, { kind: 'fillContract', id: wood.id });
+    expect(once.done).toBe(true);
+    expect(once.state.boardUsed).toEqual([wood.id]);
+    expect(contractBoard(once.state).some((c) => c.id === wood.id)).toBe(false);
+    expect(frontierAct(once.state, { kind: 'fillContract', id: wood.id }).refusal).toBe('unknown');
+    // Taken, delivered, and not to be taken again that day.
+    const taken = frontierAct(w, { kind: 'takeContract', id: wood.id });
+    expect(taken.done).toBe(true);
+    const delivered = frontierAct(taken.state, { kind: 'deliver', id: wood.id });
+    expect(delivered.done).toBe(true);
+    expect(frontierAct(delivered.state, { kind: 'takeContract', id: wood.id }).refusal).toBe(
+      'unknown',
+    );
+    // The night clears it.
+    const closed = frontierAct(once.state, { kind: 'closeMarket' }).state;
+    const night = frontierAct(closed, { kind: 'endShift' }).state;
+    expect(night.boardUsed).toEqual([]);
+  });
+
+  it('never pays more than buying everything it asks for would cost', () => {
+    const cost = (item: string, count: number): number | null => {
+      const lot = FRONTIER_MARKET.buyPrices.find((l) => l.item === item);
+      return lot === undefined ? null : Math.ceil(count / lot.count) * lot.coins;
+    };
+    for (const c of FRONTIER_CONTRACTS) {
+      const costs = c.asks.map((a) => cost(a.item, a.count));
+      if (costs.some((k) => k === null)) continue; // something it asks is not sold
+      const total = costs.reduce((sum: number, k) => sum + (k ?? 0), 0);
+      expect(c.pays, c.id).toBeLessThanOrEqual(total);
+    }
+  });
+});

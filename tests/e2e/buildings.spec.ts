@@ -123,3 +123,30 @@ test('a sugar shack is built from the same tool, and the recipe book boils syrup
   await page.getByTestId('lab2-recipe-make-syrup').click();
   await expect(page.getByTestId('lab-res-syrup')).toHaveAttribute('data-count', '1');
 });
+
+test('the recipe book saws lumber once a saw house stands (owner, after the 0.22.0 build)', async ({
+  page,
+}) => {
+  const start = createFrontier(110);
+  const withSaw = {
+    ...start,
+    inventory: new Map([['wood', 4]]),
+  };
+  await openGame(page, withSaw);
+  await page.getByTestId('lab2-book').click();
+  await expect(page.getByTestId('lab2-recipe-why-lumber')).toContainText('saw house');
+  await expect(page.getByTestId('lab2-recipe-make-lumber')).toBeDisabled();
+  await page.getByTestId('lab2-book-close').click();
+  // With a saw house standing, lumber is made from 2 wood.
+  const camp = start.camps[0] ?? { x: 0, y: 0 };
+  const sawed: FrontierState = {
+    ...withSaw,
+    buildings: [{ kind: 'sawHouse', x: camp.x + 3, y: camp.y, workers: 0, horses: 0 }],
+  };
+  await openGame(page, sawed);
+  await page.getByTestId('lab2-book').click();
+  await expect(page.getByTestId('lab2-recipe-why-lumber')).toHaveCount(0);
+  await page.getByTestId('lab2-recipe-make-lumber').click();
+  await expect(page.getByTestId('lab-res-lumber')).toHaveAttribute('data-count', '1');
+  await expect(page.getByTestId('lab-res-wood')).toHaveAttribute('data-count', '2');
+});

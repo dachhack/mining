@@ -54,9 +54,13 @@ for (const c of FRONTIER_CONTRACTS) {
 }
 
 describe('the contract board (plan section 5)', () => {
-  it('opens tier 1 with a level-3 camp, tier 2 after a tier-1 contract, tier 3 after a tier-2', () => {
+  it('opens tier 1 at once (its mining contracts with a level-3 camp), tier 2 after a tier-1 contract, tier 3 after a tier-2', () => {
     expect(FRONTIER_BOARD.tier1Level).toBe(3);
-    expect(openTiers(at(2))).toEqual([]);
+    // Tier 1's surface contracts are on the board from the first market day
+    // (frontierSurfaceContracts.test.ts); the rest wait for a level-3 camp.
+    expect(openTiers(at(2))).toEqual([1]);
+    expect(contractBoard(at(2, PLENTY)).every((c) => c.surface === true)).toBe(true);
+    expect(contractBoard(at(3, PLENTY)).some((c) => c.surface !== true)).toBe(true);
     expect(openTiers(at(3))).toEqual([1]);
     expect(openTiers(at(3, {}, [1, 0, 0]))).toEqual([1, 2]);
     expect(openTiers(at(3, {}, [1, 1, 0]))).toEqual([1, 2, 3]);
@@ -318,8 +322,13 @@ describe('the board offers only what the world can fill (owner, on the hazards b
     expect(board.length).toBeGreaterThan(0);
     for (const c of board) expect(worldCanFill(worldStock(bare), c.asks)).toBe(true);
     expect(board.some((c) => c.asks.some((a) => a.item === 'coal'))).toBe(false);
+    // Holding plenty, every tier-1 kind is drawn in full: perTier surface and
+    // perTier mining contracts, up to the day's most.
     const rich = at(3, PLENTY);
-    expect(contractBoard(rich).length).toBe(FRONTIER_BOARD.perTier);
+    const coal = FRONTIER_CONTRACTS.find((c) => c.id === 't1-coal');
+    expect(worldCanFill(worldStock(rich), coal?.asks ?? [])).toBe(true);
+    expect(contractBoard(rich).some((c) => c.surface !== true)).toBe(true);
+    expect(contractBoard(rich).length).toBeGreaterThanOrEqual(FRONTIER_BOARD.perTier);
   });
 
   it('every world can fill every contract, of every tier (question 197)', () => {

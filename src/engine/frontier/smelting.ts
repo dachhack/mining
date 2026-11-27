@@ -67,19 +67,22 @@ export function frontierRecipe(id: string): FrontierRecipe | null {
  * - 'unknown': there is no such recipe;
  * - 'noSmelter': it needs a smelter, and no camp has one;
  * - 'noSugarShack': it needs a sugar shack, and none stands (buildings.ts);
+ * - 'noSawHouse': it needs a saw house, and none stands (lumber);
  * - 'owned': it makes an item a second of which adds nothing, and the store
  *   holds one (FRONTIER_MARKET.uselessWhenHeld; owner, after the 0.17.0
  *   build: "Recipe book can hide items where it doesn't help to have a
  *   second");
  * - 'cost': the store does not hold its inputs.
  */
-export type MakeRefusal = 'unknown' | 'noSmelter' | 'noSugarShack' | 'owned' | 'cost';
+export type MakeRefusal =
+  'unknown' | 'noSmelter' | 'noSugarShack' | 'noSawHouse' | 'owned' | 'cost';
 
 export function makeRefusal(state: FrontierState, id: string): MakeRefusal | null {
   const recipe = frontierRecipe(id);
   if (recipe === null) return 'unknown';
   if (recipe.needsSmelter && !hasSmelter(state)) return 'noSmelter';
   if (recipe.needsSugarShack === true && !hasBuilding(state, 'sugarShack')) return 'noSugarShack';
+  if (recipe.needsSawHouse === true && !hasBuilding(state, 'sawHouse')) return 'noSawHouse';
   if (ownsUseful(state, recipe.output.item)) return 'owned';
   if (!canAfford(state.inventory, recipe.inputs)) return 'cost';
   return null;
