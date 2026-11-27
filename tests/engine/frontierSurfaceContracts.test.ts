@@ -62,6 +62,8 @@ describe('surface contracts', () => {
     for (let shift = 10; shift <= 100; shift += 10) {
       const board = contractBoard(day(1, shift));
       expect(board.length, `shift ${shift}`).toBeGreaterThan(0);
+      // Surface contracts, and the early clay and stone ones (none here: the
+      // test world has no clay, and stone waits for a level-2 camp).
       for (const c of board) expect(c.surface, `${c.id} on shift ${shift}`).toBe(true);
     }
   });
@@ -163,5 +165,74 @@ describe('one of each a market day', () => {
       const total = costs.reduce((sum: number, k) => sum + (k ?? 0), 0);
       expect(c.pays, c.id).toBeLessThanOrEqual(total);
     }
+  });
+});
+
+describe('early clay and stone contracts', () => {
+  // Owner, after the 0.24.0 build: "Let's make sure we have some clay and
+  // stone contracts in the early mix." Asked: new small ones; at least one on
+  // every early board; stone once a level-2 camp stands.
+  const kiln = FRONTIER_CONTRACTS.find((c) => c.id === 't1-kiln');
+  const hearth = FRONTIER_CONTRACTS.find((c) => c.id === 't1-hearth');
+
+  it('are small tier-1 contracts: 20 clay for 20 coins, 30 stone for 20, stone from a level-2 camp', () => {
+    expect(kiln).toMatchObject({
+      tier: 1,
+      early: true,
+      asks: [{ item: 'clay', count: 20 }],
+      pays: 20,
+    });
+    expect(kiln?.fromLevel ?? 1).toBe(1);
+    expect(hearth).toMatchObject({
+      tier: 1,
+      early: true,
+      fromLevel: 2,
+      asks: [{ item: 'stone', count: 30 }],
+      pays: 20,
+    });
+  });
+
+  it('one is on every board before a level-3 camp, when one can be filled; the hearth only from a level-2 camp', () => {
+    // The test world has stone in the ground but no clay: the store holds some.
+    let hearths = 0;
+    for (let shift = 10; shift <= 200; shift += 10) {
+      const one = contractBoard(day(1, shift, { clay: 30 }));
+      expect(
+        one.some((c) => c.id === 't1-kiln'),
+        `level 1, shift ${shift}`,
+      ).toBe(true);
+      expect(
+        one.some((c) => c.id === 't1-hearth'),
+        `level 1, shift ${shift}`,
+      ).toBe(false);
+      for (const c of one) expect(c.surface === true || c.early === true, c.id).toBe(true);
+      const two = contractBoard(day(2, shift, { clay: 30 }));
+      if (two.length === 0) continue; // not a market day at level 2
+      expect(
+        two.some((c) => c.id === 't1-kiln' || c.id === 't1-hearth'),
+        `level 2, shift ${shift}`,
+      ).toBe(true);
+      if (two.some((c) => c.id === 't1-hearth')) hearths += 1;
+      // Still on the board with a tier-2 contract open.
+      const later = contractBoard(day(2, shift, { clay: 30 }, [1, 0, 0]));
+      expect(
+        later.some((c) => c.id === 't1-kiln' || c.id === 't1-hearth'),
+        `level 2, tier 2 open, shift ${shift}`,
+      ).toBe(true);
+    }
+    expect(hearths).toBeGreaterThan(0);
+  });
+
+  it('can be delivered, and one opens tier 2', () => {
+    let shift = 10;
+    while (
+      shift < 1000 &&
+      !contractBoard(day(1, shift, { clay: 20 })).some((c) => c.id === 't1-kiln')
+    )
+      shift += 10;
+    const out = frontierAct(day(1, shift, { clay: 20 }), { kind: 'fillContract', id: 't1-kiln' });
+    expect(out.done, out.refusal ?? '').toBe(true);
+    expect(out.state.inventory.get('clay') ?? 0).toBe(0);
+    expect(out.state.contractsDone).toEqual([1, 0, 0]);
   });
 });

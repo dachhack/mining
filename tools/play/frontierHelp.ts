@@ -142,7 +142,7 @@ export function frontierHelpText(): string {
     `  "penin N" / "penout N" moves an animal from the store into it or back (up to ${FRONTIER_PEN.capacity}). Penned animals are never eaten.`,
     `  A pen with 2 or more and room breeds one every ${FRONTIER_PEN.breedEveryShifts} shifts, eating ${FRONTIER_PEN.hayPerBirth} hay; "make hay" turns 3 grass into 1 hay.`,
     `- Contracts: while the market is open the board offers up to ${FRONTIER_BOARD.perTier} surface and ${FRONTIER_BOARD.perTier} other contracts of each open tier ("take ID").`,
-    `  Tier 1's surface contracts (wood, hay, animals, apples, syrup, lumber, crops, mushrooms) are offered from the first market day; the rest of tier 1 opens with a level ${FRONTIER_BOARD.tier1Level} camp,`,
+    `  Tier 1's surface contracts (wood, hay, animals, apples, syrup, lumber, crops, mushrooms) and a small clay and stone one (stone from a level-2 camp; one of these on every board until a level-3 camp) are offered from the first market day; the rest of tier 1 opens with a level ${FRONTIER_BOARD.tier1Level} camp,`,
     '  Only contracts the world can fill are offered: the ground, your store and smelting hold all they ask for (what grows back always counts).',
     "  tier 2 after a tier-1 contract is delivered, tier 3 after a tier-2. Hold as many as your best camp's level;",
     '  "deliver ID" on any shift once you hold everything it asks for pays its coins; "drop ID" gives it up (no tap, even with none left).',

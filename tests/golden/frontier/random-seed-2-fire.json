@@ -1,10 +1,10 @@
 {
   "description": "The random policy on seed 2 for 25 shifts: it leaves a fire burning overnight, which burns its square out (hazards PR 4: the other runs put every fire out; it has moved between seeds 1, 3 and 2 as the rules changed)",
   "recordedWith": "random",
-  "engineVersion": "0.24.0",
+  "engineVersion": "0.25.0",
   "seed": 2,
   "stepCount": 1945,
-  "expectedHash": "baacfb3bb5a11311",
+  "expectedHash": "711de3ce9eab96ce",
   "steps": [
     "tap 17,17",
     "tap 12,12",
@@ -730,7 +730,7 @@
     "tap 21,13",
     "tap 20,16",
     "endShift",
-    "sell wood 1",
+    "sell clay 1",
     "closeMarket",
     "tap 3,18",
     "tap 14,3",
