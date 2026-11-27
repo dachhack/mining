@@ -218,7 +218,7 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
   | 3 | 150 | the same, the lesser of 3 and the squares dug |
   | 4 | 165 | the same, the lesser of 2 and the squares dug |
 
-  The long-press dig mines each square of the 3 × 3 whose tap would mine it, row by row, exactly as taps would (yields, water, gas, dragons); a square whose tap would do anything else is left alone. It needs as many taps as it costs. A long press always digs (owner, after the 0.21.0 build: "Long press should always be mine everything possible in 3 by 3 at the expense of one move for each square dug unless you have hired miners"); a camp is placed from ⊕ Place.
+  The long-press dig mines each square of the 3 × 3 whose tap would mine it, row by row, exactly as taps would (yields, water, gas, dragons); a square whose tap would do anything else is left alone. It needs as many taps as it costs. A long press always digs (owner, after the 0.21.0 build: "Long press should always be mine everything possible in 3 by 3 at the expense of one move for each square dug unless you have hired miners"); a camp is placed from ⊕ Place. On screen the dig happens on release (owner, after the 0.22.0 build: "Long press, it highlights squares that will get dug and tells you cost. Release and it digs."): while held, the squares it would dig are washed orange, the 3 × 3 is outlined, its cost shows above it (⚡N, red if the shift has too few taps) and in the hint; the 3 × 3 follows the finger; letting go off the map, or a second finger, digs nothing.
 
 ### 5.1 How a run ends, and saving
 

@@ -726,7 +726,20 @@ test('holding a lit square digs the 3 x 3 round it, a tap a square without miner
   await page.mouse.move(at.x, at.y);
   await page.mouse.down();
   await page.clock.runFor(800); // the hold is a timer: the clock is paused, so run it
+  // Owner, after the 0.22.0 build: "Long press, it highlights squares that
+  // will get dug and tells you cost. Release and it digs." Held: nothing dug
+  // yet, the squares are marked, and the hint gives the cost.
+  const plan = digAreaPlan(state, square.x, square.y);
+  await expect(canvas).toHaveAttribute(
+    'data-dig-preview',
+    plan.dug.map((d) => `${d.x},${d.y}`).join(' '),
+  );
+  await expect(page.getByTestId('lab-hint')).toContainText(
+    `Release to dig ${most} squares for ${most} taps`,
+  );
+  expect((await counts(page))['dug'] ?? 0).toBe(0);
   await page.mouse.up();
+  await expect(canvas).toHaveAttribute('data-dig-preview', '');
   await expect(page.getByTestId('lab2-tray')).not.toHaveAttribute('data-mode', 'placing');
   expect((await counts(page))['dug']).toBe(most);
   await expect(page.getByTestId('lab2-hud')).toHaveAttribute(
@@ -735,6 +748,41 @@ test('holding a lit square digs the 3 x 3 round it, a tap a square without miner
   );
   await expect(page.getByTestId('lab-hint')).toContainText(
     `You dug ${most} squares for ${most} taps`,
+  );
+});
+
+test('a held dig follows the finger, and dragging off the map lets go without digging', async ({
+  page,
+}) => {
+  const canvas = await openLab2(page);
+  const world = newCampWorld(SEED);
+  const camp = world.camps[0] ?? { x: 0, y: 0 };
+  const state = toFrontier(world);
+  const first = { x: camp.x + 3, y: camp.y };
+  const second = { x: camp.x - 3, y: camp.y };
+  const a = await pointOf(canvas, first);
+  const b = await pointOf(canvas, second);
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await page.clock.runFor(800);
+  const keys = (sq: Square): string =>
+    digAreaPlan(state, sq.x, sq.y)
+      .dug.map((d) => `${d.x},${d.y}`)
+      .join(' ');
+  await expect(canvas).toHaveAttribute('data-dig-preview', keys(first));
+  // Slide: the 3 x 3 follows.
+  await page.mouse.move(b.x, b.y, { steps: 4 });
+  await expect(canvas).toHaveAttribute('data-dig-preview', keys(second));
+  // Off the map: nothing marked, and letting go digs nothing.
+  const box = await canvas.boundingBox();
+  if (box === null) throw new Error('no map');
+  await page.mouse.move(box.x + box.width / 2, box.y - 30, { steps: 4 });
+  await expect(canvas).toHaveAttribute('data-dig-preview', '');
+  await page.mouse.up();
+  expect((await counts(page))['dug'] ?? 0).toBe(0);
+  await expect(page.getByTestId('lab2-hud')).toHaveAttribute(
+    'data-taps',
+    String(FRONTIER_SHIFT.taps),
   );
 });
 

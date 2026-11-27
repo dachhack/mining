@@ -63,6 +63,9 @@ export const CAMP_MARKS = {
   ring: 'rgba(255, 204, 120, 0.95)',
   /** The wash over squares a new camp would light up. */
   previewWash: 'rgba(255, 214, 150, 0.22)',
+  /** A held long press: the squares it would dig, and the 3 x 3 round them. */
+  digWash: 'rgba(255, 176, 74, 0.45)',
+  digOutline: '#ffb04a',
   /** The square a new camp would go on. */
   target: '#ffd27a',
   /** "Needs a level 2 camp": the lock, its wash, and its label. */

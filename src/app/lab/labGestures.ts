@@ -3,7 +3,11 @@
 // Drag pans, pinch (or the mouse wheel) zooms, and a still tap calls `onTap`
 // with the square under the finger. If `onHold` is given, a press held still
 // for `PREVIEW_MAP.holdMs` calls it instead of `onTap` (Lab 2 uses that to
-// place a camp); without it, a long press is just a tap, as in Lab 1.
+// show the 3 x 3 a long press would dig); without it, a long press is just
+// a tap, as in Lab 1. While held, `onHoldMove` hears each square the finger
+// is over (`null` off the map), and `onHoldEnd` hears the finger lift
+// (`cancelled` if the press was cancelled or a second finger came): Lab 2
+// digs on the lift (owner, after the 0.22.0 build: "Release and it digs").
 // If `grab` says yes to the square a press starts on, a drag moves that
 // thing instead of panning: `onGrabMove` hears each square the finger
 // crosses (Lab 2 drags a new camp's 3 x 3 with it: owner, UI rework). A
@@ -27,6 +31,10 @@ export interface LabGestureHooks {
   onTap: (x: number, y: number) => void;
   /** A press held still on square (x, y). Optional. */
   onHold?: (x: number, y: number) => void;
+  /** The held finger is over square (x, y) now, or off the map (`null`). Optional. */
+  onHoldMove?: (square: { x: number; y: number } | null) => void;
+  /** The held finger lifted, over square (x, y) or off the map (`null`); `cancelled` if it did not lift cleanly. Optional. */
+  onHoldEnd?: (square: { x: number; y: number } | null, cancelled: boolean) => void;
   /** True if a press starting on square (x, y) grabs something to drag. Optional. */
   grab?: (x: number, y: number) => boolean;
   /** The finger, dragging what it grabbed, is over square (x, y) now. */
@@ -47,6 +55,8 @@ export function attachLabGestures(canvas: HTMLCanvasElement, hooks: LabGestureHo
     pinchMidX: number;
     pinchMidY: number;
   } | null = null;
+  /** The square the held finger was last over, so a move only reports a new one. */
+  let heldOver: string | null = null;
   /** The timer that turns a still press into a hold; `null` when none is running. */
   let holdTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -95,6 +105,8 @@ export function attachLabGestures(canvas: HTMLCanvasElement, hooks: LabGestureHo
     const fingers = twoFingers();
     if (gesture !== null && fingers !== null) {
       stopHoldTimer();
+      // A second finger lets go of a hold: nothing is dug.
+      if (gesture.kind === 'held') hooks.onHoldEnd?.(null, true);
       gesture.kind = 'pinch';
       gesture.camera = { ...hooks.camera() };
       gesture.pinchDistance = fingers.distance;
@@ -127,6 +139,7 @@ export function attachLabGestures(canvas: HTMLCanvasElement, hooks: LabGestureHo
           if (gesture !== null && gesture.kind === 'press') {
             gesture.kind = 'held';
             const square = squareAt(clientX, clientY);
+            heldOver = square === null ? null : `${square.x},${square.y}`;
             if (square !== null) {
               onHold(square.x, square.y);
             }
@@ -163,6 +176,15 @@ export function attachLabGestures(canvas: HTMLCanvasElement, hooks: LabGestureHo
     }
     const dx = event.clientX - gesture.startX;
     const dy = event.clientY - gesture.startY;
+    if (gesture.kind === 'held') {
+      const square = squareAt(event.clientX, event.clientY);
+      const key = square === null ? null : `${square.x},${square.y}`;
+      if (key !== heldOver) {
+        heldOver = key;
+        hooks.onHoldMove?.(square);
+      }
+      return;
+    }
     if (gesture.kind === 'grab') {
       if (Math.hypot(dx, dy) > PREVIEW_MAP.dragThresholdPx) gesture.moved = true;
       const square = squareAt(event.clientX, event.clientY);
@@ -197,6 +219,10 @@ export function attachLabGestures(canvas: HTMLCanvasElement, hooks: LabGestureHo
     stopHoldTimer();
     const ended = gesture;
     gesture = null;
+    if (ended.kind === 'held') {
+      hooks.onHoldEnd?.(squareAt(event.clientX, event.clientY), cancelled);
+      return;
+    }
     if ((ended.kind === 'press' || (ended.kind === 'grab' && !ended.moved)) && !cancelled) {
       const square = squareAt(event.clientX, event.clientY);
       if (square !== null) {
