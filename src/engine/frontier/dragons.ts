@@ -20,12 +20,21 @@
 //    FRONTIER_DRAGON.most are on the map, a new dragon flies in at a square
 //    of the map's edge with a chance of FRONTIER_DRAGON.chance. It does
 //    nothing until the next night.
-// In the day it keeps flying (owner: "Let's make the dragon fly every time
-// you mine. Or every 3-7 mines. So it stays put for a bit."): each mining tap
-// counts down its `restMines`; when it runs out the dragon flies
-// FRONTIER_DRAGON.stepsPerMine squares along its heading, bouncing off the
-// edge, and rests again for a count drawn from FRONTIER_DRAGON.restMines
-// (`dragonsFlyOnMine`).
+// In the day it attacks (owner, after the 0.25.0 build: "Let's make dragons
+// more dangerous. They fly to trees, grass, or animals and set them on fire
+// or eat them on every 1-3 taps. 1 of 20 attacks will be your camp."): each
+// tap spent on anything counts down its `restTaps`; when it runs out
+// (`dragonsOnTaps`), it attacks and rests again for a count drawn from
+// FRONTIER_DRAGON.restTaps:
+// - with a chance of FRONTIER_DRAGON.campChance, the nearest camp: it flies
+//   onto the camp's middle square, sets it on fire and the camp loses one
+//   upgrade at once (fire.ts, `stripCamp`), on top of what the fire does if
+//   it is left burning (owner, asked: "One and two");
+// - otherwise the nearest square, to the dragon, with a roaming animal, a
+//   tree of any kind or grass, not burning (owner, asked: "Nearest to it"),
+//   ties drawn: it flies there and eats the animal (the lowest id), or else
+//   sets the square on fire. With nothing left to attack it stays put.
+// The rolls use the state's generator.
 // "Beside" is the 8 squares round it. A tap on a dragon with a sword in the
 // store drives it off the map (tap.ts); without one it does nothing.
 //
@@ -35,8 +44,8 @@ import { FRONTIER_DRAGON, FRONTIER_SHIFT } from '../../data/frontier';
 import { nextFloat, nextInt } from '../rng';
 import type { RngState } from '../rng';
 import { campAt } from './camps';
-import { isCombustible, withFires } from './fire';
-import { APPLE_TREE } from './state';
+import { isCombustible, stripCamp, withFires } from './fire';
+import { APPLE_TREE, GRASS, NO_FEATURE, isTree } from './state';
 import type { FrontierDragon, FrontierState } from './state';
 
 /** The 8 directions a dragon can fly: the 4 sides and the 4 corners. */
@@ -71,29 +80,146 @@ export function flyDragon(
   return { ...dragon, x, y, dx, dy };
 }
 
-/** A new rest, in mining taps: a whole number in FRONTIER_DRAGON.restMines, drawn with `rng`. */
+/** A new rest, in taps: a whole number in FRONTIER_DRAGON.restTaps, drawn with `rng`. */
 export function drawRest(rng: RngState): number {
-  const [low, high] = FRONTIER_DRAGON.restMines;
+  const [low, high] = FRONTIER_DRAGON.restTaps;
   return low + nextInt(rng, high - low + 1);
 }
 
+/** One attack by a dragon in the day: what it did, and where. */
+export interface DragonAttack {
+  dragonId: number;
+  /** 'burn': set a tree or grass on fire; 'eat': ate an animal; 'camp': set a camp on fire and took an upgrade. */
+  kind: 'burn' | 'eat' | 'camp';
+  x: number;
+  y: number;
+  /** For 'camp': the camp, and the upgrades it lost (0 for a camp with none left). */
+  campId?: number;
+  upgradesLost?: number;
+}
+
 /**
- * `state` after a mining tap: each dragon's rest counts down; one whose rest
- * runs out flies FRONTIER_DRAGON.stepsPerMine squares along its heading and
- * rests again for a new count (drawn on a copy of the state's generator,
- * kept in the new state).
+ * The square nearest (cx, cy) that `wanted` says yes to, ties drawn with
+ * `rng`, or `null` if there is none. Nearest is by straight-line distance.
  */
-export function dragonsFlyOnMine(state: FrontierState): FrontierState {
-  if (state.hazards.dragons.length === 0) return state;
+function nearestSquare(
+  state: FrontierState,
+  cx: number,
+  cy: number,
+  wanted: (x: number, y: number) => boolean,
+  rng: RngState,
+): { x: number; y: number } | null {
+  let best: { x: number; y: number }[] = [];
+  let bestD = Infinity;
+  for (let y = 0; y < state.cube.size.y; y += 1) {
+    for (let x = 0; x < state.cube.size.x; x += 1) {
+      const d = (x - cx) ** 2 + (y - cy) ** 2;
+      if (d > bestD || !wanted(x, y)) continue;
+      if (d < bestD) {
+        bestD = d;
+        best = [];
+      }
+      best.push({ x, y });
+    }
+  }
+  if (best.length === 0) return null;
+  return best[best.length === 1 ? 0 : nextInt(rng, best.length)] ?? null;
+}
+
+/** `dragon`'s attack on `state` (see the top of this file), rolled with `rng`. */
+function attack(
+  state: FrontierState,
+  dragon: FrontierDragon,
+  rng: RngState,
+): { state: FrontierState; dragon: FrontierDragon; attack: DragonAttack | null } {
   const width = state.cube.size.x;
-  const height = state.cube.size.y;
+  if (state.camps.length > 0 && nextFloat(rng) < FRONTIER_DRAGON.campChance) {
+    const camp = [...state.camps].sort(
+      (a, b) =>
+        (a.x - dragon.x) ** 2 +
+          (a.y - dragon.y) ** 2 -
+          ((b.x - dragon.x) ** 2 + (b.y - dragon.y) ** 2) || a.id - b.id,
+    )[0];
+    if (camp !== undefined) {
+      const stripped = stripCamp(camp, 1);
+      const camps = state.camps.map((c) => (c.id === camp.id ? stripped.camp : c));
+      const next = withFires({ ...state, camps }, [{ x: camp.x, y: camp.y }]);
+      return {
+        state: next,
+        dragon: { ...dragon, x: camp.x, y: camp.y },
+        attack: {
+          dragonId: dragon.id,
+          kind: 'camp',
+          x: camp.x,
+          y: camp.y,
+          campId: camp.id,
+          upgradesLost: stripped.taken,
+        },
+      };
+    }
+  }
+  const animalAt = (x: number, y: number): boolean =>
+    state.animals.some((a) => a.x === x && a.y === y);
+  const target = nearestSquare(
+    state,
+    dragon.x,
+    dragon.y,
+    (x, y) => {
+      if (state.hazards.fires[x + width * y] === true) return false;
+      if (animalAt(x, y)) return true;
+      const f = state.features[x + width * y] ?? NO_FEATURE;
+      return isTree(f) || f === GRASS;
+    },
+    rng,
+  );
+  if (target === null) return { state, dragon, attack: null };
+  const moved = { ...dragon, x: target.x, y: target.y };
+  const prey = state.animals
+    .filter((a) => a.x === target.x && a.y === target.y)
+    .sort((a, b) => a.id - b.id)[0];
+  if (prey !== undefined) {
+    return {
+      state: { ...state, animals: state.animals.filter((a) => a.id !== prey.id) },
+      dragon: moved,
+      attack: { dragonId: dragon.id, kind: 'eat', ...target },
+    };
+  }
+  return {
+    state: withFires(state, [target]),
+    dragon: moved,
+    attack: { dragonId: dragon.id, kind: 'burn', ...target },
+  };
+}
+
+/**
+ * `state` after `taps` taps were spent on something: each tap counts every
+ * dragon's rest down, and a dragon whose rest runs out attacks and rests
+ * again (see the top of this file). The rolls are drawn on a copy of the
+ * state's generator, kept in the new state.
+ */
+export function dragonsOnTaps(
+  state: FrontierState,
+  taps: number,
+): { state: FrontierState; attacks: DragonAttack[] } {
+  if (state.hazards.dragons.length === 0 || taps <= 0) return { state, attacks: [] };
   const rng = { ...state.rng };
-  const dragons = state.hazards.dragons.map((d) => {
-    if (d.restMines > 1) return { ...d, restMines: d.restMines - 1 };
-    const flown = flyDragon(d, FRONTIER_DRAGON.stepsPerMine, width, height);
-    return { ...flown, restMines: drawRest(rng) };
-  });
-  return { ...state, rng, hazards: { ...state.hazards, dragons } };
+  let next = state;
+  const attacks: DragonAttack[] = [];
+  for (let k = 0; k < taps; k += 1) {
+    const dragons: FrontierDragon[] = [];
+    for (const d of next.hazards.dragons) {
+      if (d.restTaps > 1) {
+        dragons.push({ ...d, restTaps: d.restTaps - 1 });
+        continue;
+      }
+      const done = attack(next, d, rng);
+      next = done.state;
+      if (done.attack !== null) attacks.push(done.attack);
+      dragons.push({ ...done.dragon, restTaps: drawRest(rng) });
+    }
+    next = { ...next, hazards: { ...next.hazards, dragons } };
+  }
+  return { state: { ...next, rng }, attacks };
 }
 
 /** The dragon on square (x, y), or `null`. */
@@ -217,10 +343,7 @@ export function nightOfDragons(state: FrontierState, rng: RngState): DragonNight
     // It comes in heading across the map, away from the edge it came in at.
     const dx = at.x === 0 ? 1 : at.x === width - 1 ? -1 : 0;
     const dy = at.y === 0 ? 1 : at.y === height - 1 ? -1 : 0;
-    dragons = [
-      ...dragons,
-      { id: nextDragonId, x: at.x, y: at.y, dx, dy, restMines: drawRest(rng) },
-    ];
+    dragons = [...dragons, { id: nextDragonId, x: at.x, y: at.y, dx, dy, restTaps: drawRest(rng) }];
     nextDragonId += 1;
     came = true;
   }

@@ -1315,13 +1315,15 @@ export const FRONTIER_DRAGON = {
   most: 1,
   steps: 4,
   /**
-   * In the day a dragon rests for `restMines` mining taps (a whole number
-   * from the first to the second, drawn from the run's generator), then flies
-   * `stepsPerMine` squares along its heading (owner: "Let's make the dragon
-   * fly every time you mine. Or every 3-7 mines. So it stays put for a bit.").
+   * In the day a dragon rests for `restTaps` taps of any kind (a whole number
+   * from the first to the second, drawn from the run's generator), then
+   * attacks (owner, after the 0.25.0 build: "They fly to trees, grass, or
+   * animals and set them on fire or eat them on every 1-3 taps. 1 of 20
+   * attacks will be your camp."): with a chance of `campChance` the nearest
+   * camp, else the nearest tree, grass or animal (dragons.ts).
    */
-  stepsPerMine: 1,
-  restMines: [3, 7] as [number, number],
+  restTaps: [1, 3] as [number, number],
+  campChance: 1 / 20,
   fireChance: 1 / 3,
   sword: 'sword' as ItemId,
 };

@@ -68,8 +68,8 @@
 //   stump may wait to grow back).
 // - DRAGONS: never more than FRONTIER_DRAGON.most, always on the map; one
 //   comes only at night, at the edge, from FRONTIER_DRAGON.fromShift; they
-//   move at night (at most FRONTIER_DRAGON.steps squares) and on a mining tap
-//   (at most FRONTIER_DRAGON.stepsPerMine), never otherwise; one leaves
+//   move at night (at most FRONTIER_DRAGON.steps squares) and, in the day,
+//   only on a step that spent taps (an attack: to anywhere on the map); one leaves
 //   only by a tap on it with a sword held, and the sword stays.
 // - RAIDS AND DEFENSES: a camp's defenses stay between 0 and
 //   FRONTIER_DEFENSE.length, go up only by buildDefense, 1 level, and never
@@ -426,17 +426,15 @@ export function checkStep(
       } else {
         // Straight flights in 8 directions: at most `steps` squares each way.
         const moved = Math.max(Math.abs(d.x - was.x), Math.abs(d.y - was.y));
-        // At night a flight; on a mining tap a step along its heading; else still.
-        const mined = verb === 'tap' && after.mined > before.mined;
-        const most = endsShift ? FRONTIER_DRAGON.steps : mined ? FRONTIER_DRAGON.stepsPerMine : 0;
+        // At night a flight; in the day an attack, only on a step that spent taps; else still.
+        const spent = !endsShift && after.tapsLeft < before.tapsLeft;
+        const most = endsShift ? FRONTIER_DRAGON.steps : spent ? Infinity : 0;
         if (moved > most) say(`dragon ${d.id} flew ${moved} squares by "${step}"`);
         if (Math.abs(d.dx) > 1 || Math.abs(d.dy) > 1 || (d.dx === 0 && d.dy === 0))
           say(`dragon ${d.id} has heading ${d.dx},${d.dy}`);
-        const [restLow, restHigh] = FRONTIER_DRAGON.restMines;
-        if (d.restMines < 1 || d.restMines > restHigh || !Number.isInteger(d.restMines))
-          say(`dragon ${d.id} rests ${d.restMines} mines`);
-        if (moved > 0 && mined && d.restMines < restLow)
-          say(`dragon ${d.id} flew and rests only ${d.restMines}`);
+        const restHigh = FRONTIER_DRAGON.restTaps[1];
+        if (d.restTaps < 1 || d.restTaps > restHigh || !Number.isInteger(d.restTaps))
+          say(`dragon ${d.id} rests ${d.restTaps} taps`);
       }
     }
     for (const d of before.hazards.dragons) {

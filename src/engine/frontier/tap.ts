@@ -46,7 +46,7 @@ import { saplingOf, uproot } from './farming';
 import { isFlooded, pumpIndexAt, takeWaterOpened, withFlood } from './water';
 import { isBurning, putOut } from './fire';
 import { gasOpened } from './gas';
-import { dragonAt, dragonsFlyOnMine, driveOff } from './dragons';
+import { dragonAt, driveOff } from './dragons';
 import type { GasOutcome } from './gas';
 import type { HarvestKind } from './surface';
 import { GRASS, NO_FEATURE, cropOf, isTree } from './state';
@@ -248,8 +248,7 @@ export function frontierTap(state: FrontierState, x: number, y: number): Frontie
   const blast = gasOpened({ ...after, stumps, regrowIn, planted, grassIn }, x, y, wasDepth);
   return {
     ...nothing('mined'),
-    // Each mine moves the dragons on along their headings (dragons.ts).
-    state: dragonsFlyOnMine(blast.state),
+    state: blast.state,
     gain,
     block: mined.block,
     flooded,

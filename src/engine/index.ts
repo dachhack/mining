@@ -630,6 +630,7 @@ export type { TradeRefusal, TradeSide } from './frontier/market';
 // Shifts (plan A4).
 export { endFrontierShift, frontierAct, upkeepDue } from './frontier/shift';
 export type { FrontierAction, FrontierOutcome, ShiftReport } from './frontier/shift';
+export type { DragonAttack } from './frontier/dragons';
 export type { FrontierStatus } from './frontier/state';
 // Undo within a shift (plan A5).
 export {

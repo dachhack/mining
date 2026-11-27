@@ -9,7 +9,7 @@ import { nightOfDragons } from '../../src/engine/frontier/dragons';
 import { APPLE_TREE, GRASS } from '../../src/engine/frontier/state';
 import type { Feature, FrontierAnimal } from '../../src/engine/frontier/state';
 import { createRng } from '../../src/engine/rng';
-import { AT, MID, SIDE, world } from './frontierHelpers';
+import { MID, SIDE, world } from './frontierHelpers';
 
 /** `state` with a dragon on (x, y). */
 function withDragon(state: FrontierState, x: number, y: number): FrontierState {
@@ -17,7 +17,7 @@ function withDragon(state: FrontierState, x: number, y: number): FrontierState {
     ...state,
     hazards: {
       ...state.hazards,
-      dragons: [{ id: 1, x, y, dx: 1, dy: 0, restMines: 1 }],
+      dragons: [{ id: 1, x, y, dx: 1, dy: 0, restTaps: 1 }],
       nextDragonId: 2,
     },
   };
@@ -209,55 +209,105 @@ describe('the sword (hazards plan, section 4)', () => {
   });
 });
 
-describe('a dragon in the day (owner: "Let\'s make the dragon fly every time you mine")', () => {
-  it('rests for 3 to 7 mines, then flies a square along its heading, and rests again', () => {
-    expect(FRONTIER_DRAGON.restMines).toEqual([3, 7]);
-    const start = withDragon(world(), 3, 3);
-    const resting = {
-      ...start,
+describe('a dragon in the day (owner, after the 0.25.0 build: "Let\'s make dragons more dangerous")', () => {
+  // "They fly to trees, grass, or animals and set them on fire or eat them on
+  // every 1-3 taps. 1 of 20 attacks will be your camp." Asked: the nearest
+  // to it; a camp attack sets the camp on fire and takes an upgrade at once.
+  /** `state` with its dragon about to attack (1 tap of rest left) on (x, y), and generator seed `s`. */
+  const ready = (state: FrontierState, x: number, y: number, s = 1): FrontierState => {
+    const w = withDragon(state, x, y);
+    return { ...w, rng: { s } };
+  };
+
+  it('rests 1 to 3 taps, and attacks 1 time in 20 a camp', () => {
+    expect(FRONTIER_DRAGON.restTaps).toEqual([1, 3]);
+    expect(FRONTIER_DRAGON.campChance).toBe(1 / 20);
+  });
+
+  it('flies to the nearest grass or tree and sets it on fire, after any tap', () => {
+    const grass = { x: 6, y: 3 };
+    const base = world({
+      inventory: { grass: 9 },
+      features: [
+        { ...grass, feature: GRASS },
+        { x: 3, y: 12, feature: GRASS },
+      ],
+    });
+    let burns = 0;
+    let camps = 0;
+    for (let seed = 1; seed <= 400; seed += 1) {
+      // Making hay is a tap too: not only mining.
+      const out = frontierAct(ready(base, 3, 3, seed), { kind: 'make', recipe: 'hay' });
+      expect(out.done).toBe(true);
+      const attack = out.attacks?.[0];
+      if (attack === undefined) throw new Error('the dragon attacked');
+      if (attack.kind === 'camp') {
+        camps += 1;
+        continue;
+      }
+      burns += 1;
+      expect(attack).toMatchObject({ kind: 'burn', ...grass });
+      expect(out.state.hazards.fires[grass.x + SIDE * grass.y]).toBe(true);
+      expect(out.state.hazards.dragons[0]).toMatchObject(grass);
+      const rest = out.state.hazards.dragons[0]?.restTaps ?? 0;
+      expect(rest).toBeGreaterThanOrEqual(1);
+      expect(rest).toBeLessThanOrEqual(3);
+    }
+    // About 1 in 20 goes for a camp.
+    expect(camps).toBeGreaterThan(400 * 0.02);
+    expect(camps).toBeLessThan(400 * 0.1);
+    expect(burns + camps).toBe(400);
+  });
+
+  it('eats the nearest animal, if one is nearer than any grass or tree', () => {
+    const animal: FrontierAnimal = { id: 7, x: 4, y: 4 };
+    const base = {
+      ...world({ inventory: { grass: 9 }, features: [{ x: 9, y: 3, feature: GRASS }] }),
+      animals: [animal],
+    };
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const out = frontierAct(ready(base, 3, 3, seed), { kind: 'make', recipe: 'hay' });
+      const attack = out.attacks?.[0];
+      if (attack?.kind === 'camp') continue;
+      expect(attack).toMatchObject({ kind: 'eat', x: 4, y: 4 });
+      expect(out.state.animals).toEqual([]);
+    }
+  });
+
+  it('on a camp attack sets the camp on fire and takes an upgrade at once', () => {
+    const base = {
+      ...world({ inventory: { grass: 9 } }),
+      camps: world().camps.map((c) => ({ ...c, level: 2 })),
+    };
+    let seen = false;
+    for (let seed = 1; seed <= 400 && !seen; seed += 1) {
+      const out = frontierAct(ready(base, 3, 3, seed), { kind: 'make', recipe: 'hay' });
+      const attack = out.attacks?.[0];
+      if (attack?.kind !== 'camp') continue;
+      seen = true;
+      expect(attack).toMatchObject({ campId: 1, x: MID, y: MID, upgradesLost: 1 });
+      expect(out.state.camps[0]?.level).toBe(1);
+      expect(out.state.hazards.fires[MID + SIDE * MID]).toBe(true);
+      expect(out.state.hazards.dragons[0]).toMatchObject({ x: MID, y: MID });
+    }
+    expect(seen).toBe(true);
+  });
+
+  it('counts down 1 a tap, and not on what costs no tap', () => {
+    const base = world({ inventory: { grass: 9 } });
+    const waiting = {
+      ...withDragon(base, 3, 3),
       hazards: {
-        ...start.hazards,
-        dragons: start.hazards.dragons.map((d) => ({ ...d, restMines: 3 })),
+        ...withDragon(base, 3, 3).hazards,
+        dragons: [{ id: 1, x: 3, y: 3, dx: 1, dy: 0, restTaps: 3 }],
       },
     };
-    // Three dirt squares in the camp's ring to mine, one after another.
-    let s = resting;
-    const spots = [AT, { x: AT.x, y: AT.y + 1 }, { x: AT.x, y: AT.y - 1 }];
-    const xs: number[] = [];
-    for (const spot of spots) {
-      s = frontierAct(s, { kind: 'tap', x: spot.x, y: spot.y }).state;
-      xs.push(s.hazards.dragons[0]?.x ?? -1);
-    }
-    // It stays put for the first two mines and flies on the third.
-    expect(xs).toEqual([3, 3, 3 + FRONTIER_DRAGON.stepsPerMine]);
-    const rest = s.hazards.dragons[0]?.restMines ?? 0;
-    expect(rest).toBeGreaterThanOrEqual(3);
-    expect(rest).toBeLessThanOrEqual(7);
-  });
-
-  it('flies a square along its heading each time a block is mined, and not otherwise', () => {
-    const w = {
-      ...withDragon(world({ features: [{ x: AT.x, y: AT.y + 1, feature: GRASS }] }), 3, 3),
-    };
-    const mined = frontierAct(w, { kind: 'tap', x: AT.x, y: AT.y });
-    expect(mined.tap?.kind).toBe('mined');
-    expect(mined.state.hazards.dragons[0]).toMatchObject({
-      x: 3 + FRONTIER_DRAGON.stepsPerMine,
-      y: 3,
-    });
-    // Cutting grass is not mining: the dragon stays.
-    const cut = frontierAct(mined.state, { kind: 'tap', x: AT.x, y: AT.y + 1 });
-    expect(cut.tap?.kind).toBe('harvested');
-    expect(cut.state.hazards.dragons[0]).toMatchObject({
-      x: 3 + FRONTIER_DRAGON.stepsPerMine,
-      y: 3,
-    });
-  });
-
-  it('bounces off the edge: its heading turns back', () => {
-    const w = withDragon(world(), SIDE - 1, 3);
-    const mined = frontierAct(w, { kind: 'tap', x: AT.x, y: AT.y });
-    expect(mined.state.hazards.dragons[0]).toMatchObject({ x: SIDE - 2, y: 3, dx: -1, dy: 0 });
+    const once = frontierAct(waiting, { kind: 'make', recipe: 'hay' });
+    expect(once.attacks ?? []).toEqual([]);
+    expect(once.state.hazards.dragons[0]?.restTaps).toBe(2);
+    // Dropping nothing, or a refused action: no tap, no count.
+    const refused = frontierAct(once.state, { kind: 'make', recipe: 'nothing' });
+    expect(refused.done).toBe(false);
   });
 
   it('comes in at the edge heading across the map', () => {
@@ -273,8 +323,8 @@ describe('a dragon in the day (owner: "Let\'s make the dragon fly every time you
       if (d.y === 0) expect(d.dy).toBe(1);
       if (d.y === SIDE - 1) expect(d.dy).toBe(-1);
       expect(d.dx !== 0 || d.dy !== 0).toBe(true);
-      expect(d.restMines).toBeGreaterThanOrEqual(3);
-      expect(d.restMines).toBeLessThanOrEqual(7);
+      expect(d.restTaps).toBeGreaterThanOrEqual(1);
+      expect(d.restTaps).toBeLessThanOrEqual(3);
     }
   });
 });
