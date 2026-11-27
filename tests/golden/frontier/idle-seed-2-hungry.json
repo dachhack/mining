@@ -1,10 +1,10 @@
 {
   "description": "The idle policy: gathers nothing and ends every shift; once the store runs dry, unpaid upkeep costs taps of every next shift, to the end of the run",
   "recordedWith": "idle",
-  "engineVersion": "0.23.0",
+  "engineVersion": "0.24.0",
   "seed": 2,
   "stepCount": 44,
-  "expectedHash": "8209dd385de1e753",
+  "expectedHash": "c54e6d1d42c436bd",
   "steps": [
     "endShift",
     "endShift",

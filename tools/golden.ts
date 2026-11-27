@@ -388,20 +388,20 @@ const FRONTIER_RUNS: {
       'The careful policy on seed 1 for 30 shifts: it builds defenses, and a camp turns marauders away (the full run no longer does)',
   },
   {
-    name: 'careful-seed-4-finished',
-    seed: 4,
+    name: 'careful-seed-8-finished',
+    seed: 8,
     policy: 'careful',
     maxShifts: 100,
     description:
-      "The careful policy for a whole run of 100 shifts (docs/plans/progression-phases.md): it opens and closes the market after each market day's night, buys an iron and a steel drill, saplings, wood and a camp kit, smelts and makes a pickaxe and lanterns, brings three camps to level 4, flattens a patch 3 deep and places a deep camp, plants saplings, keeps a pen and makes hay, holds several contracts at once, fills some at the market at once and delivers others, meets every hazard, builds defenses, sells its surplus, and the run ends finished, scored in coins (the seed is chosen so the run reaches every step the coverage check asks for; it has moved between seeds 4 and 5 as the rules changed)",
+      "The careful policy for a whole run of 100 shifts (docs/plans/progression-phases.md): it opens and closes the market after each market day's night, buys an iron and a steel drill, saplings, wood and a camp kit, smelts and makes a pickaxe and lanterns, brings three camps to level 4, flattens a patch 3 deep and places a deep camp, plants saplings, keeps a pen and makes hay, holds several contracts at once, fills some at the market at once and delivers others, meets every hazard, builds defenses, sells its surplus, and the run ends finished, scored in coins (the seed is chosen so the run reaches every step the coverage check asks for; it has moved between seeds 4, 5 and 8 as the rules changed)",
   },
   {
-    name: 'careful-seed-1-syrup',
-    seed: 1,
+    name: 'careful-seed-16-syrup',
+    seed: 16,
     policy: 'careful',
     maxShifts: 100,
     description:
-      'The careful policy on seed 1 for a whole run: its maples grow, it builds a sugar shack and boils sap into syrup (after the 0.18.0 build no other run does)',
+      "The careful policy on seed 16 for a whole run: its maples grow, it builds a sugar shack and boils sap into syrup (after the 0.18.0 build no other run does; it was seed 1 until engine 0.24.0's apple trees moved that world)",
   },
   {
     name: 'idle-seed-2-hungry',

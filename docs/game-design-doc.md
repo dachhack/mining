@@ -61,7 +61,7 @@ The level rule, the cube, determinism and meta-progression rows are unchanged fr
 
 - **Plants grow only on dirt** at the surface: never on stone, coal or other rock (owner, after the PR #126 playtest).
   - **Trees** grow in clumps: 22 clumps of radius 2, a tree on each square of a clump with chance 0.55.
-  - **Apple trees:** 10 are scattered, each with 3 apples.
+  - **Apple trees:** [Default] 10 are scattered, each with 3 apples: every world has all 10 (owner, after the 0.23.0 build: "Let's do a floor of 10"), drawn until each stands on a free square of dirt off the first camp. Until engine 0.24.0, 10 draws placed one only where the square was free, so a world had 2 to 9.
   - **Grass** grows on most of what is left (chance 0.65).
 - **Animals:** 8 roam the open ground at the start. They never stand on a tree, in a pit, or on another animal. They move only at End shift (section 4.2).
 - **No timber-root and no coal at the surface:** timber-root became dirt (owner: "Let's get rid of the roots square"; "Wood is timber"), and the game places no coal in layer 0 (question 140).
