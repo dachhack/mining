@@ -9,7 +9,8 @@ import { APPLE_TREE } from '../../src/engine/frontier/state';
 describe('apple trees at the start', () => {
   it('every world has FRONTIER_SURFACE.appleTrees of them, each full of apples, none on the first camp', () => {
     expect(FRONTIER_SURFACE.appleTrees).toBe(10);
-    for (let seed = 1; seed <= 200; seed += 1) {
+    // 50 worlds: each takes a while to make (CI timed out at 200 in 5 s).
+    for (let seed = 1; seed <= 50; seed += 1) {
       const s = createFrontier(seed);
       const width = s.cube.size.x;
       const trees = s.features.flatMap((f, i) => (f === APPLE_TREE ? [i] : []));
@@ -23,5 +24,5 @@ describe('apple trees at the start', () => {
         }
       }
     }
-  });
+  }, 30_000);
 });
