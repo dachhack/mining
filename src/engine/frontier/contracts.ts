@@ -74,20 +74,40 @@ export function contractBoard(state: FrontierState): FrontierContractDef[] {
   // The rest of tier 1 waits for a level-3 camp, or a tier-1 contract done.
   const miningOpen =
     bestCampLevel(state) >= FRONTIER_BOARD.tier1Level || (state.contractsDone[0] ?? 0) > 0;
+  const level = bestCampLevel(state);
+  // While no camp is level 3, one early clay or stone contract leads tier 1's
+  // other draw, and that draw goes first, so one is on every board that can
+  // fill one (owner, after the 0.24.0 build: "Let's make sure we have some
+  // clay and stone contracts in the early mix").
+  const early = level < FRONTIER_BOARD.tier1Level;
   // Each open tier's draw: its surface and its other contracts drawn apart,
   // then taken in turn, surface first, so neither crowds the other out.
   const byTier: FrontierContractDef[][] = [];
   for (const tier of openTiers(state)) {
     const draws: FrontierContractDef[][] = [];
-    for (const surface of [true, false]) {
-      if (tier === 1 && !surface && !miningOpen) continue;
+    const leadEarly = tier === 1 && early;
+    for (const surface of leadEarly ? [false, true] : [true, false]) {
       const pool = FRONTIER_CONTRACTS.filter(
-        (c) => c.tier === tier && (c.surface === true) === surface && worldCanFill(stock, c.asks),
+        (c) =>
+          c.tier === tier &&
+          (c.surface === true) === surface &&
+          // The rest of tier 1 waits for a level-3 camp: until then, only the early ones.
+          (surface || tier !== 1 || miningOpen || c.early === true) &&
+          (c.fromLevel ?? 1) <= level &&
+          worldCanFill(stock, c.asks),
       );
-      // Draw without putting back: a few steps of a shuffle.
+      // Draw without putting back: a few steps of a shuffle. An early one first, if it leads.
       const left = [...pool];
       const drawn: FrontierContractDef[] = [];
-      for (let k = 0; k < FRONTIER_BOARD.perTier && left.length > 0; k += 1) {
+      if (leadEarly && !surface) {
+        const earlyOnes = left.filter((c) => c.early === true);
+        const lead = earlyOnes[nextInt(rng, Math.max(1, earlyOnes.length))];
+        if (lead !== undefined) {
+          drawn.push(lead);
+          left.splice(left.indexOf(lead), 1);
+        }
+      }
+      while (drawn.length < FRONTIER_BOARD.perTier && left.length > 0) {
         const [picked] = left.splice(nextInt(rng, left.length), 1);
         if (picked !== undefined) drawn.push(picked);
       }

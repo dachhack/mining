@@ -59,7 +59,9 @@ describe('the contract board (plan section 5)', () => {
     // Tier 1's surface contracts are on the board from the first market day
     // (frontierSurfaceContracts.test.ts); the rest wait for a level-3 camp.
     expect(openTiers(at(2))).toEqual([1]);
-    expect(contractBoard(at(2, PLENTY)).every((c) => c.surface === true)).toBe(true);
+    expect(contractBoard(at(2, PLENTY)).every((c) => c.surface === true || c.early === true)).toBe(
+      true,
+    );
     expect(contractBoard(at(3, PLENTY)).some((c) => c.surface !== true)).toBe(true);
     expect(openTiers(at(3))).toEqual([1]);
     expect(openTiers(at(3, {}, [1, 0, 0]))).toEqual([1, 2]);
@@ -142,7 +144,8 @@ describe('clay contracts (owner: bricks, pottery and roads)', () => {
     const clay = FRONTIER_CONTRACTS.filter(
       (c) => c.asks.length === 1 && c.asks[0]?.item === 'clay',
     );
-    expect(clay.map((c) => c.tier).sort()).toEqual([1, 1, 2, 2]);
+    // Tier 1: the early kiln (owner, after the 0.24.0 build), pottery and bricks; tier 2: a road and a town.
+    expect(clay.map((c) => c.tier).sort()).toEqual([1, 1, 1, 2, 2]);
     expect(Math.max(...clay.map((c) => c.asks[0]?.count ?? 0))).toBeGreaterThanOrEqual(400);
     const lot = FRONTIER_MARKET.sellPrices.find((l) => l.item === 'clay');
     for (const c of clay) {

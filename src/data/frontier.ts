@@ -818,6 +818,16 @@ export interface FrontierContractDef {
    * before a level-3 camp opens the rest of tier 1 (FRONTIER_BOARD.tier1Level).
    */
   surface?: boolean;
+  /**
+   * True for a small clay or stone contract that is on the board from the
+   * first market day too, with the surface ones (owner, after the 0.24.0
+   * build: "Let's make sure we have some clay and stone contracts in the
+   * early mix"): until a level-3 camp opens the rest of tier 1, one is on
+   * every board that can be filled.
+   */
+  early?: boolean;
+  /** The best camp's level the board needs before it offers this (1 if not given): stone is mined from level 2. */
+  fromLevel?: number;
 }
 
 /**
@@ -893,6 +903,28 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
     name: 'Clay for bricks',
     asks: [{ item: 'clay', count: 80 }],
     pays: 70,
+  },
+  // Small clay and stone contracts for the early board (owner, after the
+  // 0.24.0 build: "Let's make sure we have some clay and stone contracts in
+  // the early mix"; asked: new small ones, stone once a level-2 camp stands,
+  // as a level-1 camp mines only dirt and clay).
+  {
+    id: 't1-kiln',
+    tier: 1,
+    name: 'Clay for a kiln',
+    asks: [{ item: 'clay', count: 20 }],
+    // Clay is sold at the market at 1 coin each: no more, so buying to fill it pays nothing.
+    pays: 20,
+    early: true,
+  },
+  {
+    id: 't1-hearth',
+    tier: 1,
+    name: 'Stone for a hearth',
+    asks: [{ item: 'stone', count: 30 }],
+    pays: 20,
+    early: true,
+    fromLevel: 2,
   },
   // Surface contracts (owner, after the 0.22.0 build: "We need more surface
   // resource contracts especially early game. Wood, hay, sheep, syrup,
