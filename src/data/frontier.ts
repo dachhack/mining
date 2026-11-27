@@ -1358,18 +1358,30 @@ export const FRONTIER_DEFENSE: FrontierDefenseLevel[] = [
       { item: 'stone', count: 20 },
     ],
   },
+  // A 4th level, so a fully fortified camp turns away even the strongest
+  // marauders (owner, after the 0.25.0 build: "Even completely repelled if
+  // the camp is fortified enough"; asked, "Add a 4th defense level").
+  {
+    name: 'Fortress',
+    cost: [
+      { item: 'stone', count: 40 },
+      { item: 'wood', count: 20 },
+      { item: 'ironIngot', count: 10 },
+    ],
+  },
 ];
 
 /**
  * Marauders (hazards plan, section 5): "Marauders can come and steal things
  * from your camps and remove their upgrades and put them back to basic ...
- * The strength of the marauders depends on how far you have dug. The damage
- * they do depends on what level of defense your targeted camp has." From
- * shift `fromShift`, at End shift, with a chance of `chance`, they raid one
- * camp drawn at random (question 188). Their strength is the `strength` of
- * the last entry of `strengthFromDepth` whose `depth` the deepest square on
- * the map has reached. A camp whose defense level is at least that turns
- * them away. Otherwise the shortfall (strength minus defense) sets the
+ * The damage they do depends on what level of defense your targeted camp
+ * has." From shift `fromShift`, at End shift, with a chance of `chance`,
+ * they raid one camp drawn at random (question 188). Their strength is drawn
+ * from 1 to 4, with the chances in `strengthChances` (owner, after the 0.25.0
+ * build: "Let's get randomized strength back into marauders. 1-4 strength
+ * with declining probability as strength goes up"; until engine 0.26.0 it
+ * came from the deepest square dug). A camp whose defense level is at least
+ * that turns them away: with the Fortress, the 4th level, every raid. Otherwise the shortfall (strength minus defense) sets the
  * damage: `stealShare` of each goods stack in the store for each point of
  * shortfall, rounded down, never coins (question 190) or tools (`neverStolen`); and
  * `upgradesPerShortfall` of the camp's upgrades for each point, in the order
@@ -1378,15 +1390,8 @@ export const FRONTIER_DEFENSE: FrontierDefenseLevel[] = [
 export const FRONTIER_RAID = {
   fromShift: 15,
   chance: 0.1,
-  strengthFromDepth: [
-    { depth: 0, strength: 1 },
-    { depth: 4, strength: 2 },
-    { depth: 8, strength: 3 },
-    // No more: 3 is the most defense levels a camp can have, so a fully
-    // defended camp always turns them away (owner, after the 0.20.0 build:
-    // "Defneses don't seem to do anything"; asked, "Cap raids at strength 3".
-    // Until engine 0.21.0 they reached 4 at depth 16).
-  ],
+  /** The chance of each strength, 1 first: [Default] 50%, 30%, 15% and 5%. */
+  strengthChances: [0.5, 0.3, 0.15, 0.05],
   stealShare: 0.1,
   upgradesPerShortfall: 2,
   /** What they never take: coins (question 190) and tools. */

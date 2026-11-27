@@ -606,7 +606,8 @@ export {
   defenseRefusal,
   nextDefense,
   nightOfRaids,
-  raidStrength,
+  drawRaidStrength,
+  raidCamp,
 } from './frontier/raids';
 export type { DefenseRefusal, Raid } from './frontier/raids';
 export type { PenAction, PenRefusal } from './frontier/pens';

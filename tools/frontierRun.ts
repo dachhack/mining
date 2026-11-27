@@ -50,7 +50,6 @@ import {
   sightAt,
   defenseRefusal,
   nextDefense,
-  raidStrength,
   penRefusal,
   plantRefusal,
   sawHouseReach,
@@ -459,22 +458,20 @@ const GATHERER_DEFENSE_LEAD = 3;
 
 /**
  * Build defenses (hazards PR 5) at the camp with the fewest, while it has
- * fewer levels than marauders would come strong now, keeping
+ * fewer levels than the strongest marauders, keeping
  * GATHERER_DEFENSE_WOOD_KEPT wood, from GATHERER_DEFENSE_LEAD shifts before
  * raids can start; `null` if none is wanted or affordable.
  */
 function defendStep(state: FrontierState): FrontierStep | null {
   if (state.shift < FRONTIER_RAID.fromShift - GATHERER_DEFENSE_LEAD) return null;
   const camps = [...state.camps].sort((a, b) => a.defense - b.defense || a.id - b.id);
-  // The strength is worked out only once a camp could build (it reads every square).
-  let strength: number | null = null;
   for (const camp of camps) {
     const next = nextDefense(state, camp.id);
     if (next === null || defenseRefusal(state, camp.id) !== null) continue;
     const wood = next.cost.find((st) => st.item === 'wood')?.count ?? 0;
     if ((state.inventory.get('wood') ?? 0) - wood < GATHERER_DEFENSE_WOOD_KEPT) continue;
-    strength ??= raidStrength(state); // `??=` sets it only while it is still null
-    if (camp.defense < strength) return `buildDefense ${camp.id}`;
+    // Up to the strongest marauders (random now, 1 to 4).
+    if (camp.defense < FRONTIER_RAID.strengthChances.length) return `buildDefense ${camp.id}`;
   }
   return null;
 }

@@ -48,7 +48,6 @@ import {
   digAreaRefusal as engineDigAreaRefusal,
   digAreaPlan as engineDigAreaPlan,
   hireRefusal as engineHireRefusal,
-  raidStrength as engineRaidStrength,
   foundationDepth as engineFoundationDepth,
   plantRefusal as enginePlantRefusal,
   nextMarketShift as engineNextMarketShift,
@@ -664,11 +663,6 @@ export function defenseRefusal(world: CampWorld, id: number): string | null {
 /** The depth a deep camp's concrete foundation would level the 3 x 3 on (x, y) to. */
 export function foundationDepthOf(world: CampWorld, x: number, y: number): number {
   return engineFoundationDepth(world.lab.state, x, y);
-}
-
-/** How strong marauders would come now: from the deepest square dug (hazards PR 5). */
-export function raidStrengthOf(world: CampWorld): number {
-  return engineRaidStrength(toFrontier(world));
 }
 
 /** Build camp `id`'s next level of defenses (hazards PR 5), for 1 tap; the very same world if it cannot. */

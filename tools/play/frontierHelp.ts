@@ -104,7 +104,7 @@ export function frontierHelpText(): string {
     '  It stays until "tap X,Y" on it with a sword drives it off ("make sword" at a smelter,',
     '  or buy one at the market from a level-3 camp). The sword is kept.',
     `  Marauders: from shift ${FRONTIER_RAID.fromShift}, about ${Math.round(FRONTIER_RAID.chance * 100)}% of nights they raid one camp at random. Their strength is`,
-    `  ${FRONTIER_RAID.strengthFromDepth.map((st) => `${st.strength} from depth ${st.depth}`).join(', ')} (your deepest square). A camp with that many`,
+    `  drawn: ${FRONTIER_RAID.strengthChances.map((p, k) => `${k + 1} (${Math.round(p * 100)}%)`).join(', ')}. A camp with that many`,
     '  levels of defenses turns them away. Otherwise each point short steals ' +
       `${Math.round(FRONTIER_RAID.stealShare * 100)}% of each stack (never coins or tools)`,
     `  and tears down ${FRONTIER_RAID.upgradesPerShortfall} upgrades (lantern, pen and its animals, smelter, then levels). "defend N" builds camp N's`,

@@ -37,6 +37,7 @@ import {
   FRONTIER_PHASES,
   FRONTIER_PICKAXE,
   FRONTIER_PUMP,
+  FRONTIER_RAID,
   FRONTIER_RUN,
   FRONTIER_SAPLINGS,
   FRONTIER_SAW_HOUSE,
@@ -99,7 +100,6 @@ import {
   foundationDepthOf,
   buildCampDefense,
   defenseRefusal,
-  raidStrengthOf,
   closeCampMarket,
   plantCamp,
   plantRefusal,
@@ -3083,7 +3083,7 @@ export function mountCampLab(
         'lab2-panel-line',
         `🛡 ${have} · ${camp.defense}/${FRONTIER_DEFENSE.length}`,
       );
-      line.title = `Marauders now come ${raidStrengthOf(world)} strong: a camp with that many levels of defenses turns them away.`;
+      line.title = `Marauders come 1 to ${FRONTIER_RAID.strengthChances.length} strong, the stronger the rarer: a camp with that many levels of defenses turns them away, and each level short lets them take less.`;
       line.dataset['testid'] = 'lab2-camp-defense';
       row.append(line);
       if (next !== undefined) {
