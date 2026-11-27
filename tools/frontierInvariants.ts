@@ -169,7 +169,9 @@ export function checkStep(
   if (endsShift) {
     // A shift's taps, more with miners (crew.ts), less FRONTIER_SHIFT.tapsLostPerUnpaid
     // for each item of upkeep the night could not pay (shift.ts).
-    const lost = (outcome.report?.unpaid.length ?? 0) * FRONTIER_SHIFT.tapsLostPerUnpaid;
+    // (`unpaid` merges like items: 2 wood unpaid is one stack of 2.)
+    const unpaidItems = (outcome.report?.unpaid ?? []).reduce((n, st) => n + st.count, 0);
+    const lost = unpaidItems * FRONTIER_SHIFT.tapsLostPerUnpaid;
     const due = Math.max(0, tapsPerShift(after.inventory) - lost);
     if (after.tapsLeft !== due && after.status === 'active')
       say(`a new shift has ${after.tapsLeft} taps, not ${due}`);
