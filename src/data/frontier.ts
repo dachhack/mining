@@ -153,7 +153,7 @@ export const FRONTIER_SURFACE = {
   /** ...and puts a tree on each square within this many squares of it, with this chance. */
   treeClumpRadius: 2,
   treeChance: 0.55,
-  /** Apple trees, scattered one by one. */
+  /** Apple trees, scattered one by one: every world has this many (owner, after the 0.23.0 build: "a floor of 10"). */
   appleTrees: 10,
   /** Each square left over is grass with this chance; the rest is bare ground. */
   grassChance: 0.65,

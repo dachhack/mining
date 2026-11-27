@@ -229,13 +229,21 @@ function drawSurface(
       }
     }
   }
-  // Apple trees, one by one, on squares with nothing yet.
-  for (let i = 0; i < s.appleTrees; i += 1) {
+  // Apple trees, one by one, on fertile squares with nothing yet and off the
+  // first camp's 3 x 3, drawn until there are `appleTrees` of them (owner,
+  // after the 0.23.0 build: "Let's do a floor of 10"; until engine 0.24.0
+  // each of 10 draws placed one only if its square was free, 2 to 9 in all).
+  // The cap on draws only guards a map with too little free dirt.
+  const cleared = new Set(clear.map((sq) => sq.x + width * sq.y));
+  let appleTrees = 0;
+  for (let tries = 0; appleTrees < s.appleTrees && tries < width * height * 4; tries += 1) {
     const x = between(rng, 0, width - 1);
     const y = between(rng, 0, height - 1);
-    if (features[x + width * y] === NO_FEATURE && fertile(x, y)) {
-      features[x + width * y] = APPLE_TREE;
-      apples[x + width * y] = s.applesPerTree;
+    const i = x + width * y;
+    if (features[i] === NO_FEATURE && fertile(x, y) && !cleared.has(i)) {
+      features[i] = APPLE_TREE;
+      apples[i] = s.applesPerTree;
+      appleTrees += 1;
     }
   }
   // Grass on most of what is left.

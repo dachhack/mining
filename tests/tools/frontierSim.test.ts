@@ -66,9 +66,9 @@ describe('the new game’s simulator (plan B3)', { timeout: 60_000 }, () => {
 
   it('records the shift each step of smelting and crafting is first reached in', () => {
     // The gatherer builds a smelter, buys a drill, smelts, and makes the
-    // tools (smelting PR 5). Seed 7: on seed 3 the hazards (raids) now keep
+    // tools (smelting PR 5). Seed 8 (seed 7 until engine 0.24.0's apple trees moved its world): on seed 3 the hazards (raids) keep
     // the gatherer from smelting by shift 30 (hazards PR 6).
-    const run = playFrontierRun(7, 'gatherer', 30, true);
+    const run = playFrontierRun(8, 'gatherer', 30, true);
     expect(run.problems).toEqual([]);
     const f = run.metrics.firsts;
     expect(f.level2).toBeGreaterThan(0);

@@ -571,10 +571,17 @@ describe('water and the pump on the screen (hazards PR 2)', () => {
     const base = newCampWorld(3);
     const camp = base.camps[0];
     if (camp === undefined) throw new Error('a new world has a camp');
-    // A square in the camp's ring, flooded by hand.
-    const x = camp.x + 3;
-    const y = camp.y;
+    // A bare square in the camp's ring (no plant on it: a tap would take that
+    // first), flooded by hand.
     const width = base.lab.state.size.x;
+    const spot = [3, -3, 4, -4]
+      .flatMap((d) => [
+        { x: camp.x + d, y: camp.y },
+        { x: camp.x, y: camp.y + d },
+      ])
+      .find((sq) => (base.surface.features[sq.x + width * sq.y] ?? 0) === 0);
+    if (spot === undefined) throw new Error('a bare square near the camp');
+    const { x, y } = spot;
     const flooded = base.hazards.flooded.map((_, i) => i === x + width * y);
     const wet: CampWorld = { ...base, hazards: { ...base.hazards, flooded, pumps: [] } };
     expect(campTap(wet, x, y).kind).toBe('flooded');
