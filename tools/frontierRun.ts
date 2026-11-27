@@ -73,7 +73,7 @@ import { APPLE_TREE, MAPLE_TREE, NO_FEATURE, TREE, cropOf } from '../src/engine/
 
 /**
  * One step of the new game, as a short text: "tap X,Y", "place X,Y",
- * "upgrade ID", "demolish ID", "endShift", "rest ID" (at camp ID), "close",
+ * "upgrade ID", "demolish ID", "endShift", "close",
  * "buildSmelter ID" (a smelter at camp ID), "make RECIPE" (a recipe id,
  * such as "smelt-iron"), "hangLantern ID" (a lantern at camp ID), or
  * "sell ITEM LOTS" / "buy ITEM LOTS" at the market (an item id, such as
@@ -116,12 +116,6 @@ function squareOf(text: string): { x: number; y: number } {
   return { x, y };
 }
 
-/** Rest at the first camp (question 156: rest only at a camp); End shift if no camp stands. */
-export function restStep(state: FrontierState): FrontierStep {
-  const camp = state.camps[0];
-  return camp === undefined ? 'endShift' : `rest ${camp.id}`;
-}
-
 /** The engine's action for a step. Throws for text that is not a step. */
 export function actionOf(step: FrontierStep): FrontierAction {
   const [verb, arg, third] = step.split(' ');
@@ -146,7 +140,6 @@ export function actionOf(step: FrontierStep): FrontierAction {
   if (
     (verb === 'upgrade' ||
       verb === 'demolish' ||
-      verb === 'rest' ||
       verb === 'buildSmelter' ||
       verb === 'hangLantern' ||
       verb === 'buildPen' ||
@@ -211,9 +204,6 @@ export function isBareAppleTree(state: FrontierState, x: number, y: number): boo
   const i = x + state.cube.size.x * y;
   return cropOf(state.features[i]) !== null && (state.apples[i] ?? 0) === 0;
 }
-
-/** The gatherer rests at the end of a shift when the crew's health is this or lower. */
-const GATHERER_REST_AT = 4;
 
 /** The gatherer stops placing camps once it has this many. */
 const GATHERER_CAMPS = 3;
@@ -772,8 +762,7 @@ export function workCampStep(state: FrontierState): FrontierStep | null {
 
 /**
  * The gatherer: a plain policy for recording golden runs. In order:
- * 0. with no taps left, end the shift, or rest if the crew's health is at
- *    GATHERER_REST_AT or below (plan A4);
+ * 0. with no taps left, end the shift;
  * 1. take and deliver contracts (`contractStep`), smelt and craft what it
  *    can (`craftStep`), keep a pen and make hay
  *    (`farmStep`), trade on a market day (`marketStep`), plant the
@@ -793,7 +782,7 @@ export function workCampStep(state: FrontierState): FrontierStep | null {
 export function gathererStep(state: FrontierState): FrontierStep | null {
   if (state.status !== 'active') return null;
   if (state.tapsLeft === 0) {
-    return state.health <= GATHERER_REST_AT ? restStep(state) : 'endShift';
+    return 'endShift';
   }
   // While the market is open (after a market day's night): trade and take a
   // contract, then close it and start the day.

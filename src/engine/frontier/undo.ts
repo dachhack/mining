@@ -37,12 +37,7 @@ export function startLog(state: FrontierState): ShiftLog {
 /** True if Undo may take back an action with this outcome: anything that did something but a catch or an apple pick. */
 export function isUndoable(action: FrontierAction, outcome: FrontierOutcome): boolean {
   if (!outcome.done) return false;
-  if (
-    action.kind === 'endShift' ||
-    action.kind === 'rest' ||
-    action.kind === 'close' ||
-    action.kind === 'closeMarket'
-  )
+  if (action.kind === 'endShift' || action.kind === 'close' || action.kind === 'closeMarket')
     return false;
   const harvest = outcome.tap?.harvest ?? null;
   return harvest !== 'caught' && harvest !== 'apple';
@@ -63,12 +58,7 @@ export function actLogged(
     return { outcome, log };
   }
   // Closing the market starts the day: the market's trades cannot be undone after it.
-  if (
-    action.kind === 'endShift' ||
-    action.kind === 'rest' ||
-    action.kind === 'close' ||
-    action.kind === 'closeMarket'
-  ) {
+  if (action.kind === 'endShift' || action.kind === 'close' || action.kind === 'closeMarket') {
     return { outcome, log: startLog(outcome.state) };
   }
   const entry = { action, undoable: isUndoable(action, outcome) };

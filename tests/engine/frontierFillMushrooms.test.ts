@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { BLOCKS } from '../../src/data';
 import { FRONTIER_CONTRACTS, FRONTIER_MARKET, FRONTIER_MUSHROOM } from '../../src/data/frontier';
 import {
+  coverLevelAt,
   fillSquareRefusal,
   frontierAct,
   makeRefusal,
@@ -193,6 +194,31 @@ describe('mushrooms', () => {
     const out = frontierAct(w, { kind: 'endShift' });
     expect(out.report?.mushroomsCame).toBe(1);
     expect(out.state.mushrooms[at(T.x, T.y)]).toBe(true);
+  });
+
+  it('are reported only where a camp sees them', () => {
+    // Owner, after the 0.22.0 build: "Only tell me about a mushroom if it is in range of a camp."
+    const far = { x: 1, y: 1 };
+    expect(coverLevelAt(world().camps, far.x, far.y)).toBe(0);
+    let w = world({
+      features: [
+        { ...T, feature: TREE },
+        { ...far, feature: TREE },
+      ],
+      inventory: { wood: 99, apple: 99 },
+    });
+    w = {
+      ...w,
+      mushroomIn: w.mushroomIn.map((n, i) =>
+        i === at(T.x, T.y) || i === at(far.x, far.y) ? 1 : n,
+      ),
+    };
+    const night = nightOfMushrooms(w, false, { s: 1 });
+    expect(night.came).toBe(2);
+    expect(night.seen).toBe(1);
+    const out = frontierAct(w, { kind: 'endShift' });
+    expect(out.report?.mushroomsCame).toBe(1);
+    expect(out.state.mushrooms[at(far.x, far.y)]).toBe(true); // it came up all the same
   });
 
   it('sell at the market, and mushroom contracts are offered once the world has enough', () => {

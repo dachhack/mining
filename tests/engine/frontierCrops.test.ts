@@ -24,7 +24,7 @@ function nights(state: FrontierState, n: number): FrontierState {
   let w = state;
   for (let k = 0; k < n; k += 1) {
     w = act(
-      { ...w, health: 10, inventory: new Map([...w.inventory, ['wood', 99], ['grass', 99]]) },
+      { ...w, inventory: new Map([...w.inventory, ['wood', 99], ['grass', 99]]) },
       {
         kind: 'endShift',
       },

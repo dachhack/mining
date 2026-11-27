@@ -36,11 +36,11 @@ v0.2 is in the git history, as v0.1 is.
 | Visibility | **Fog of war** (owner: "Lab 2 becomes the game"). Camps light a circle around them. A square once lit and now outside every circle is shown greyed and cannot be mined; a square never lit is dark (section 3.4) |
 | Genre | Resource gathering and management; roguelike |
 | Pacing | **Turn-based, in shifts of [Default] 100 taps.** Every tap that does something costs 1 (owner, questions 145 and 146: "Fixed number of taps"). End shift moves the world on (section 4) |
-| Player | No avatar. A tap on a lit square takes what is on it (an animal, grass, an apple, a tree) or mines its top block. An abstract **crew** with a health bar does the work (section 5) |
+| Player | No avatar. A tap on a lit square takes what is on it (an animal, grass, an apple, a tree) or mines its top block. An abstract **crew** does the work (section 5) |
 | Hazards | **Coming back** (owner, 2026-11-24; plan `docs/plans/hazards.md`, decision note 0064): rain fills low spots, water and gas from depth 4 (a pump drains water; gas blasts and starts fires, put out with a tap), dragons (a sword drives them off), marauders (camp defenses turn them away). Until each is built, none is in play. Wall slumps and supports stay retired (question 153, section 10) |
-| Harm | **Hunger only** (owner, question 148): each item of upkeep that cannot be paid costs the crew 1 health (section 5) |
+| Harm | **Going short only**: each item of upkeep that cannot be paid costs [Default] 10 taps of the next shift (owner, after the 0.22.0 build: "We don't need crew life anymore"; section 5). There is no crew health |
 | Base | **Camps** (Lab 2's): placed on a level 3×3 of lit ground **in the top three levels** (depth 0 to 2; owner, 2026-11-23), upgraded to see further and dig harder rock, demolished once other camps cover them. A base camp mines only dirt and clay; ore, crystal and relics need tools (section 6). The recipe book shows what each costs |
-| Win condition | **A run lasts 100 shifts** (owner, 2026-11-23: "100 shifts or crew lost"), or ends sooner when the crew is lost or the player closes the mine (question 152). The coins held at the end are the score [Default; question 170]; contracts in three tiers pay most of them (section 8) |
+| Win condition | **A run lasts 100 shifts** (owner, 2026-11-23: "100 shifts or crew lost"), or ends sooner when the player closes the mine (question 152); the crew is never lost (owner, after the 0.22.0 build). The coins held at the end are the score [Default; question 170]; contracts in three tiers pay most of them (section 8) |
 | Meta-progression | Unlocks only (new options between runs); no permanent stat upgrades |
 | Platforms | Android and iOS |
 
@@ -145,7 +145,7 @@ In this order:
    - 1 food every 2nd shift: 3 grass, else 1 hay, else an apple, else an animal from the store, never one in a pen (questions 155, 158 and 175; decision note 0057);
    - 1 more wood every 4th shift for each camp after the first.
 7. **Pens breed** (section 7b), once the upkeep is paid: the crew eats first.
-8. **Hunger:** each item of upkeep that cannot be paid costs 1 health (section 5).
+8. **Going short:** each item of upkeep that cannot be paid costs [Default] 10 taps of the next shift (`FRONTIER_SHIFT.tapsLostPerUnpaid`; section 5).
 9. **Fires** spread and burn out their squares (section 4.6).
 10. **Pumps** drain [Default] up to 12 squares of their flood each: a whole flood (section 4.5).
 11. **Dragons** fly, eat and set fires; a new one may come (section 4.7).
@@ -164,7 +164,7 @@ In this order:
 
 ### 4.4 Undo
 
-Undo takes back the player's own actions within the current shift, newest first, and gives each one's tap back (question 151). Catching an animal and picking an apple cannot be undone (owner, question 141: "animal and apple harvest cannot be undone"). End shift, rest and closing the mine cannot be undone, and nothing before them can.
+Undo takes back the player's own actions within the current shift, newest first, and gives each one's tap back (question 151). Catching an animal and picking an apple cannot be undone (owner, question 141: "animal and apple harvest cannot be undone"). End shift and closing the mine cannot be undone, and nothing before them can.
 
 ### 4.5 Water and the pump [Decided: depth 4; numbers Default]
 
@@ -207,25 +207,22 @@ The owner (2026-11-24): "Marauders can come and steal things from your camps and
 
 There is no avatar. The crew is abstract: it has no position, and it does the work the player taps.
 
-- **Health:** [Default] 10.
-- **What hurts it:** hunger only, for now (owner, question 148). Each item of upkeep that cannot be paid costs 1 health.
-- **Rest**, only at a camp (owner, question 156: "Only at a camp"): the crew has no position, so it rests at the camp whose panel the player opens and taps Rest in. It restores full health, then the shift ends as with End shift, so that shift's upkeep is still paid.
-- **At 0 health** the crew is lost and the run ends.
-- **Miners** (owner, after the 0.20.0 build: "Let's add miners to the market. You can hire a miner to add to the crew. You just pay them a annual salary when you hire them. They just need food upkeep."): hired at the market for [Default] 80 coins each, the salary paid once, up to 4 (`FRONTIER_MINERS`); never sold or stolen. Each eats [Default] 1 food whenever the crew eats. The miners held set the crew's level, from the next shift:
+- **No health, no rest** (owner, after the 0.22.0 build: "We don't need crew life anymore. Let's scrap that and the resting."): the crew cannot be lost. Each item of upkeep that cannot be paid costs [Default] 10 taps of the next shift (`FRONTIER_SHIFT.tapsLostPerUnpaid`; owner's choice, "Fewer taps next shift"), never below 0. (Until engine 0.22.0 the crew had 10 health, lost 1 for each unpaid item, rested at a camp to heal, and at 0 the run was lost.)
+- **Miners** (owner, after the 0.20.0 build: "Let's add miners to the market. You can hire a miner to add to the crew. You just pay them a annual salary when you hire them. They just need food upkeep."): hired at the market for 200 coins each (owner, after the 0.21.0 build: "Miners should be expensive. Like 200."; they were 80), the salary paid once, up to 4 (`FRONTIER_MINERS`); never sold or stolen. Each eats [Default] 1 food whenever the crew eats. The miners held set the crew's level, from the next shift:
 
   | Miners | Taps a shift | Long press |
   |---|---|---|
-  | 0 | 100 | places a camp |
-  | 1 | 125 | places a camp |
+  | 0 | 100 | digs the 3 × 3 round the square: 1 tap a square dug |
+  | 1 | 125 | the same: 1 tap a square dug |
   | 2 | 135 | digs the 3 × 3 round the square: the lesser of 4 taps and the squares dug |
   | 3 | 150 | the same, the lesser of 3 and the squares dug |
   | 4 | 165 | the same, the lesser of 2 and the squares dug |
 
-  The long-press dig mines each square of the 3 × 3 whose tap would mine it, row by row, exactly as taps would (yields, water, gas, dragons); a square whose tap would do anything else is left alone. It needs as many taps as it costs. "Long press is no longer just for camp placement": with 2 or more miners a long press digs; where nothing round the square can be dug, or without the miners, it opens the camp tool as before.
+  The long-press dig mines each square of the 3 × 3 whose tap would mine it, row by row, exactly as taps would (yields, water, gas, dragons); a square whose tap would do anything else is left alone. It needs as many taps as it costs. A long press always digs (owner, after the 0.21.0 build: "Long press should always be mine everything possible in 3 by 3 at the expense of one move for each square dug unless you have hired miners"); a camp is placed from ⊕ Place.
 
 ### 5.1 How a run ends, and saving
 
-- A run ends after its last shift, [Default] 100 (`FRONTIER_RUN.shifts`; owner, 2026-11-23): when the End shift or rest of that shift is done, the run is **finished**. It ends sooner when the crew is lost (in the last shift too: a lost crew counts first) or when the player closes the mine (question 152).
+- A run ends after its last shift, [Default] 100 (`FRONTIER_RUN.shifts`; owner, 2026-11-23): when the End shift of that shift is done, the run is **finished**, short of upkeep or not. It ends sooner only when the player closes the mine (question 152).
 - **The score** is the coins held when the run ends [Default; question 170]. The end banner shows it.
 - **Saving:** the run is saved at the start of every shift and carried on when the app opens again. Taps within a shift are not saved.
 
@@ -301,8 +298,8 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 Owner, after the 0.17.0 build: "If a (non-maple) tree is standing when rain happens, 3-7 days later a mushroom has a chance of emerging. The chance increases for every adjacent space where there is another tree. Contracts for mushrooms in the market and mushrooms sell for gold."
 
 - **When:** on a night it rains, every plain tree (not a maple, nor an apple tree: owner, after the 0.18.0 build: "Let's omit apple trees from mushroom generation") with no mushroom on it or coming gets one coming with a chance of [Default] 2%, plus [Default] 3% for each of the 8 squares round it with a tree of any kind, at most [Default] 30% (`FRONTIER_MUSHROOM`).
-- **Where and when it comes up:** on the tree's square, after [Default] 3 to 7 nights (drawn), if the tree still stands there (owner, after the 0.20.0 build: "Mushrooms need uncut trees to grow and appear"); otherwise it is lost. A standing mushroom whose tree is gone (burnt, or cleared for a camp) is lost at the next night too. The night's news says how many came up.
-- **Picking:** a tap on the square picks the mushroom (1 mushroom) before anything else there; the tree is untouched. On the map it is a small red-capped mushroom at the tree's foot.
+- **Where and when it comes up:** on the tree's square, after [Default] 3 to 7 nights (drawn), if the tree still stands there (owner, after the 0.20.0 build: "Mushrooms need uncut trees to grow and appear"); otherwise it is lost. A standing mushroom whose tree is gone (burnt, or cleared for a camp) is lost at the next night too. The night's news says how many came up in sight of a camp (inside a camp's circle); those out of sight come up untold (owner, after the 0.22.0 build: "Only tell me about a mushroom if it is in range of a camp").
+- **Picking:** a tap on the square picks the mushroom (1 mushroom) before anything else there; the tree is untouched. On the map it is a small mushroom with a short stalk, in one of 7 looks (red with white spots, brown bolete, golden funnel, white button, violet, orange cone, a little yellow pair), at a spot of its square; the look and spot are fixed by the square, so they never change from frame to frame (owner, after the 0.22.0 build).
 - **Use:** sold at the market for [Default] 3 coins each; contracts ask for them: tier 1, 10 mushrooms for 60 coins; tier 2, 30 for 220. The board offers them only once the mushrooms standing, coming and held add up to what they ask.
 
 ## 7d. Grains and vegetables [Decided; numbers Default]
@@ -376,13 +373,13 @@ Each rule that comes back is its own small batch, playtested before the next.
 ## 11. Interface (mobile first)
 
 - **Primary view:** the ground from above. Lit squares show their top block and what grows on them, shaded by depth so the terraces read at a glance. Greyed squares are drained of colour, and the fog is dark. Animals slide to their new squares when a shift ends.
-- **Tap:** a tap on a lit square takes or mines (one action, no menu). A tap on a camp opens its panel (rest, upgrade, demolish). A refused tap says why.
-- **Three small buttons over the map's top-right corner** (owner, UI rework: "Don't need the close mine button. ... Three small buttons where close mine used to be: Contracts, Recipe book/Craft, Place button"), in a column so a narrow phone's HUD never runs into them: 🎯 **Contracts** (the goals card; it glows when a contract held can be delivered), 📖 **Craft** (the recipe book), ⊕ **Place**. There is no Close mine button any more; a run ends after its last shift or when the crew is lost.
+- **Tap:** a tap on a lit square takes or mines (one action, no menu). A tap on a camp opens its panel (upgrade, demolish). A refused tap says why.
+- **Three buttons along the map's top-right edge** (owner, UI rework: "Don't need the close mine button. ... Three small buttons where close mine used to be: Contracts, Recipe book/Craft, Place button"; after the 0.22.0 build: "horizontal across the top and a bit larger"), in a row, 42 px each, left to right: ⊕ **Place**, 📖 **Craft** (the recipe book), 🎯 **Contracts** (the goals card; lit gold, as the old tray button was, when a contract held can be delivered). There is no Close mine button any more; a run ends after its last shift.
 - **Place** opens a tray of everything that can be placed (owner's choice): ⛺ Camp, 🌱 Plant (while a sapling or a seed is held), each building, and 🟫 Dirt, in a row that scrolls sideways. Each opens its own tray. **The camp tool** previews the ring and the squares it would light, says what is missing, and shows the cost; a press on the chosen 3 × 3 **drags it** across the map (owner: "When placing a camp, you should be able to drag the square around the map"); a press anywhere else still pans.
 - **The recipe book** opens as a card over the whole screen, inside the system bars; × or the phone's back button closes it (owner, after the playtest of PR #146). It shows what the store holds, in a row under its title (owner: "When crafting, we need to show inventory").
 - **The tray under the map:** the pinned recipes' bar, then the square legend at the bottom (owner: "Square Legend at bottom", the pinned bar above it).
-- **HUD**, over the map so it never moves it: shift, taps left, health. **End shift** at the bottom-left, by the thumb (Rest is in a camp's panel); **Undo** at the bottom-right.
-- **Night** (owner, after the playtest of PR #146): when a shift ends (End shift or Rest), the screen fades to black and white, then to dark, and shows the moon, whose phase steps once a shift through 8 phases from the shift number, with a line on what the shift's end paid and cost. About 2.6 s; a tap skips it; with reduced motion it is a still moon and a quick fade. The game has already moved on when it starts.
+- **HUD**, over the map so it never moves it: shift and taps left. **End shift** at the bottom-left, by the thumb; **Undo** at the bottom-right.
+- **Night** (owner, after the playtest of PR #146): when a shift ends, the screen fades to black and white, then to dark, and shows the moon, whose phase steps once a shift through 8 phases from the shift number, with a line on what the shift's end paid and cost. About 2.6 s; a tap skips it; with reduced motion it is a still moon and a quick fade. The game has already moved on when it starts.
 - **The resource counter** is one row above the map (owner, UI rework: "Inventory scroll bar - still at top").
 - **Orientation:** portrait, with a landscape layout for phones on their side. One-handed play should be possible.
 

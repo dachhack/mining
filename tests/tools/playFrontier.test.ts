@@ -61,17 +61,15 @@ describe('the new game’s play interface (plan B2)', () => {
   });
 
   it('reads choices: numbers of listed choices, taps in a few spellings, and words', () => {
-    const listed = ['endShift', 'rest 1', 'close'];
+    const listed = ['endShift', 'close'];
     expect(stepOf('1', listed)).toBe('endShift');
     expect(stepOf('tap 3,4', listed)).toBe('tap 3,4');
     expect(stepOf('t 3 4', listed)).toBe('tap 3,4');
     expect(stepOf('place 5, 6', listed)).toBe('place 5,6');
     expect(stepOf('Upgrade 2', listed)).toBe('upgrade 2');
     expect(stepOf('end shift', listed)).toBe('endShift');
-    // Rest is at a camp (question 156): "rest" alone only when one camp stands.
-    expect(stepOf('rest 1', listed)).toBe('rest 1');
-    expect(stepOf('rest', listed)).toBe('rest 1');
-    expect(stepOf('rest', ['endShift', 'rest 1', 'rest 2', 'close'])).toBeNull();
+    // There is no rest any more (owner, after the 0.22.0 build).
+    expect(stepOf('rest', listed)).toBeNull();
     expect(stepOf('smelter 2', listed)).toBe('buildSmelter 2');
     expect(stepOf('make iron-pickaxe', listed)).toBe('make iron-pickaxe');
     expect(stepOf('lantern 2', listed)).toBe('hangLantern 2');
@@ -90,10 +88,10 @@ describe('the new game’s play interface (plan B2)', () => {
       seed: SEED,
       steps: [tap, 'endShift'],
     });
-    const second = runFrontierCli(['--log', path, '--do', 'rest']);
+    const second = runFrontierCli(['--log', path, '--do', 'end']);
     expect(second.output).toContain('Carrying on the run');
     const log = readLog(path);
-    expect(log.steps).toEqual([tap, 'endShift', 'rest 1']);
+    expect(log.steps).toEqual([tap, 'endShift', 'endShift']);
     const replay = runFrontierCli(['--replay', path]);
     expect(replay.output).toContain(`Hash ${hashFrontier(replayFrontier(SEED, log.steps))}`);
   });

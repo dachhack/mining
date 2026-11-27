@@ -52,14 +52,13 @@ import type { FrontierStep } from './frontierRun';
 /** What one run did. */
 export interface FrontierRunMetrics {
   seed: number;
-  /** 'lost' (the crew), 'closed' (the mine), 'finished' (the run's last shift), or 'unfinished' (the shift cap). */
-  outcome: 'lost' | 'closed' | 'finished' | 'unfinished';
+  /** 'closed' (the mine), 'finished' (the run's last shift), or 'unfinished' (the shift cap). */
+  outcome: 'closed' | 'finished' | 'unfinished';
   shifts: number;
   steps: number;
-  health: number;
-  /** Health lost to hunger over the whole run. */
-  healthLost: number;
-  /** The first shift whose end cost health, or -1. */
+  /** Taps lost to unpaid upkeep over the whole run. */
+  tapsLost: number;
+  /** The first shift whose upkeep went unpaid, or -1. */
   firstHunger: number;
   camps: number;
   topCampLevel: number;
@@ -150,7 +149,7 @@ export function playFrontierRun(
   let state = createFrontier(seed);
   const steps: FrontierStep[] = [];
   const problems: string[] = [];
-  let healthLost = 0;
+  let tapsLost = 0;
   let firstHunger = -1;
   const firsts = Object.fromEntries(FIRST_NAMES.map((n) => [n, -1])) as Record<FirstName, number>;
   const mined = { coal: 0, rawIronOre: 0, rawCopperOre: 0, crystal: 0 };
@@ -167,8 +166,8 @@ export function playFrontierRun(
       problems.push(`seed ${seed}, ${policyName}: the policy chose "${step}", which did nothing`);
       break;
     }
-    if (outcome.report !== null && outcome.report.healthLost > 0) {
-      healthLost += outcome.report.healthLost;
+    if (outcome.report !== null && outcome.report.unpaid.length > 0) {
+      tapsLost += outcome.report.tapsLost;
       if (firstHunger < 0) firstHunger = outcome.report.shift;
     }
     steps.push(step);
@@ -202,8 +201,7 @@ export function playFrontierRun(
       outcome: state.status === 'active' ? 'unfinished' : state.status,
       shifts: state.shift - 1,
       steps: steps.length,
-      health: state.health,
-      healthLost,
+      tapsLost,
       firstHunger,
       camps: state.camps.length,
       topCampLevel: Math.max(...state.camps.map((c) => c.level)),
@@ -228,13 +226,11 @@ function median(values: number[]): number {
 
 /** One line of the summary for a policy's runs. */
 export function summaryLine(policy: string, runs: FrontierRunMetrics[]): string {
-  const lost = runs.filter((r) => r.outcome === 'lost').length;
   const hungry = runs.filter((r) => r.firstHunger >= 0);
   return [
     `${policy.padEnd(9)} ${runs.length} runs`,
-    `lost ${lost}`,
     `shifts ${median(runs.map((r) => r.shifts))}`,
-    `health ${median(runs.map((r) => r.health))}`,
+    `taps lost ${median(runs.map((r) => r.tapsLost))}`,
     `hungry ${hungry.length} (first at shift ${median(hungry.map((r) => r.firstHunger))})`,
     `camps ${median(runs.map((r) => r.camps))}`,
     `top level ${median(runs.map((r) => r.topCampLevel))}`,

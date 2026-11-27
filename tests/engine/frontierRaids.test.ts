@@ -162,7 +162,7 @@ describe('marauders (hazards plan, section 5)', () => {
         seen = true;
         expect(out.report.raid.campId).toBe(1);
       }
-      state = { ...out.state, health: 10, marketOpen: false };
+      state = { ...out.state, marketOpen: false };
     }
     expect(seen).toBe(true);
   });

@@ -59,3 +59,20 @@ Gatherer simulator, 40 runs of 100 shifts, before and after:
 The smaller board offers fewer contracts, and two miners eat twice as much
 again as the crew alone. The gatherer's scripted choices do not make up for
 either. The policy, not the rules, may be what needs tuning.
+
+## A long press always digs
+
+After the 0.21.0 build the owner said: "Long press should always be mine
+everything possible in 3 by 3 at the expense of one move for each square dug
+unless you have hired miners."
+
+- The long press digs the 3 × 3 for everyone. With fewer than 2 miners it
+  costs 1 tap for each square dug (`areaCost` is `null`: no cap). With 2, 3
+  or 4 miners it costs the lesser of 4, 3 or 2 and the squares dug, as before.
+- One miner gives no discount. The owner's table starts the discount at 2,
+  and 1 miner gives only more taps.
+- A long press no longer places a camp. That is done from ⊕ Place, where a
+  chosen 3 × 3 can be dragged.
+- Engine 0.22.0. The policies still only long-press dig with miners, so the
+  golden runs' steps are as they were; their hashes changed with the
+  engine version.

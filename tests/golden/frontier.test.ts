@@ -7,7 +7,13 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ENGINE_VERSION, createFrontier, frontierAct, hashFrontier } from '../../src/engine';
+import {
+  ENGINE_VERSION,
+  createFrontier,
+  frontierAct,
+  hashFrontier,
+  tapsPerShift,
+} from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
 import { FRONTIER_AXE, FRONTIER_SURFACE } from '../../src/data/frontier';
 import { actionOf, applyFrontierStep, replayFrontier } from '../../tools/frontierRun';
@@ -43,7 +49,7 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
     });
   }
 
-  it('between them, they place camps, upgrade one, build a smelter, smelt, make a pickaxe, make or buy the drills, mine with them, hang a lantern, reach level 4, catch animals, take plants, mine clay, rest, sell and buy at the market, plant saplings, make hay, keep a pen that breeds, take and deliver contracts, place a deep camp, buy an axe, build a saw house and fell trees for more wood, grow maples, tap their sap and boil it into syrup at a sugar shack, pick mushrooms, fill a square with dirt, sow seeds and harvest the crops, hire miners and dig a 3 x 3 with them, build a work camp and hire a worker, see rain fill a pit, hit water and pump it out, set off gas and put out its fires, let a fire burn, meet a dragon and drive one off, build defenses, be raided and turn raiders away, finish a run, and lose a crew', () => {
+  it('between them, they place camps, upgrade one, build a smelter, smelt, make a pickaxe, make or buy the drills, mine with them, hang a lantern, reach level 4, catch animals, take plants, mine clay, sell and buy at the market, plant saplings, make hay, keep a pen that breeds, take and deliver contracts, place a deep camp, buy an axe, build a saw house and fell trees for more wood, grow maples, tap their sap and boil it into syrup at a sugar shack, pick mushrooms, fill a square with dirt, sow seeds and harvest the crops, hire miners and dig a 3 x 3 with them, build a work camp and hire a worker, see rain fill a pit, hit water and pump it out, set off gas and put out its fires, let a fire burn, meet a dragon and drive one off, build defenses, be raided and turn raiders away, finish a run, and go short of upkeep, so a shift has fewer taps', () => {
     const seen = new Set<string>();
     const fireCount = (x: FrontierState): number => x.hazards.fires.filter((f) => f).length;
     for (const name of files) {
@@ -76,23 +82,22 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
           if (step === 'buy steelDrill 1') seen.add('steelDrill');
           if (verb === 'plant') seen.add('planting');
           const penned = (x: typeof state): number => x.camps.reduce((n, c) => n + c.penned, 0);
-          if ((verb === 'endShift' || verb === 'rest') && penned(next) > penned(state))
-            seen.add('born');
+          if (verb === 'endShift' && penned(next) > penned(state)) seen.add('born');
           if (step === 'make hay') seen.add('hay');
           // Rain filled a square: the cube changed at the night (hazards PR 1).
-          if ((verb === 'endShift' || verb === 'rest') && next.cube !== state.cube)
-            seen.add('rain');
-          const ends = verb === 'endShift' || verb === 'rest';
+          if (verb === 'endShift' && next.cube !== state.cube) seen.add('rain');
+          const ends = verb === 'endShift';
           // Raids (hazards PR 5): only the engine's report says one came.
           const raid = ends ? frontierAct(state, actionOf(step)).report?.raid : null;
+          // Upkeep not paid: the next shift has fewer taps (owner, after the 0.22.0 build).
+          if (ends && next.tapsLeft < tapsPerShift(next.inventory)) seen.add('hungry');
           if (raid !== null && raid !== undefined)
             seen.add(raid.turnedAway ? 'turnedAway' : 'raided');
           if (ends && fireCount(state) > 0) seen.add('burned');
           if (ends && next.hazards.dragons.length > state.hazards.dragons.length)
             seen.add('dragonCame');
           const pumps = (x: typeof state): number => x.hazards.pumps.length;
-          if ((verb === 'endShift' || verb === 'rest') && pumps(next) < pumps(state))
-            seen.add('pumpBack');
+          if (verb === 'endShift' && pumps(next) < pumps(state)) seen.add('pumpBack');
           if (verb === 'upgrade' && next.camps.some((c) => c.level === 4)) seen.add('level4');
         } else if (next.hazards.pumps.length > state.hazards.pumps.length) {
           seen.add('pumpSet');
@@ -116,7 +121,6 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
         }
         state = next;
       }
-      if (state.status === 'lost') seen.add('lost');
       if (state.status === 'finished') seen.add('finished');
     }
     expect([...seen]).toEqual(
@@ -146,7 +150,7 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
         'endShift',
         'finished',
         'hangLantern',
-        'lost',
+        'hungry',
         'make',
         'mine',
         'mineWithDrill',
@@ -158,7 +162,6 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
         'place',
         'plant',
         'planting',
-        'rest',
         'sell',
         'upgrade',
         'axe',

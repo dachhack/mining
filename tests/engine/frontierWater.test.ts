@@ -164,7 +164,7 @@ describe('the pump (hazards plan, section 2)', () => {
     // The farthest went first: what is left is still joined to the pump, its own square last.
     expect(flooded(one)).toEqual([`${x0},${PY}`, `${x0 + 1},${PY}`, `${x0 + 2},${PY}`]);
     expect(one.hazards.pumps).toEqual([{ x: x0, y: PY }]);
-    const two = frontierAct({ ...one, health: 10 }, { kind: 'endShift' }).state;
+    const two = frontierAct({ ...one }, { kind: 'endShift' }).state;
     expect(flooded(two)).toEqual([]);
     expect(two.inventory.get(FRONTIER_PUMP.item)).toBe(1);
   });

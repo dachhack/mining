@@ -1,6 +1,5 @@
 // The new game's simulator and its acceptance check (plan B3).
 import { describe, expect, it } from 'vitest';
-import { FRONTIER_SHIFT } from '../../src/data/frontier';
 import { createFrontier, frontierAct, frontierTap, previewTap } from '../../src/engine';
 import { checkStep } from '../../tools/frontierInvariants';
 import { FRONTIER_POLICY_NAMES, makeFrontierPolicy } from '../../tools/frontierPolicies';
@@ -49,14 +48,10 @@ describe('the new game’s simulator (plan B3)', { timeout: 60_000 }, () => {
     const step = `tap ${camp.x + 2},${camp.y}`;
     const outcome = frontierAct(state, actionOf(step));
     expect(checkStep(state, step, outcome)).toEqual([]);
-    // The same step, as if it had cost no tap and left health above full.
-    const broken = {
-      ...outcome,
-      state: { ...outcome.state, tapsLeft: state.tapsLeft, health: FRONTIER_SHIFT.startHealth + 1 },
-    };
+    // The same step, as if it had cost no tap.
+    const broken = { ...outcome, state: { ...outcome.state, tapsLeft: state.tapsLeft } };
     const problems = checkStep(state, step, broken);
     expect(problems.some((p) => p.includes('taps went from'))).toBe(true);
-    expect(problems.some((p) => p.includes('health 11'))).toBe(true);
   });
 
   it('reads its arguments, and refuses a bad one', () => {

@@ -1,10 +1,10 @@
 {
   "description": "The careful policy on seed 1 for 30 shifts: it builds defenses, and a camp turns marauders away (the full run no longer does)",
   "recordedWith": "careful",
-  "engineVersion": "0.21.0",
+  "engineVersion": "0.22.0",
   "seed": 1,
   "stepCount": 3063,
-  "expectedHash": "2f2988040d6b40d0",
+  "expectedHash": "f02dda29e66141fb",
   "steps": [
     "tap 14,10",
     "tap 12,12",

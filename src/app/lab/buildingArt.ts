@@ -98,44 +98,129 @@ export function drawSugarShack(ctx: CanvasRenderingContext2D, box: SquareBox): v
   ctx.restore();
 }
 
+/** How many looks a mushroom has (owner, after the 0.22.0 build: "Let's have like 7 versions"). */
+export const MUSHROOM_LOOKS = 7;
+
+/** Where a mushroom stands in its square, and which look it has: see `mushroomLook`. */
+export interface MushroomLook {
+  /** Which of the MUSHROOM_LOOKS looks: 0 is the red one with white spots. */
+  variant: number;
+  /** The foot of its stalk, as fractions of the square (0 = left or top, 1 = right or bottom). */
+  fx: number;
+  fy: number;
+}
+
 /**
- * A mushroom (owner, after the 0.17.0 build): a red cap with white spots on
- * a pale stalk, small, at the bottom-left of its square, so the tree over it
- * still shows.
+ * The look and spot of the mushroom on square `i` (owner, after the 0.22.0
+ * build: "place it at random positions in the square"). Drawn from the
+ * square's number, so a mushroom keeps its look and spot from frame to frame
+ * and run to run; nothing here touches the game's state or its generator.
  */
-export function drawMushroom(ctx: CanvasRenderingContext2D, box: SquareBox): void {
+export function mushroomLook(i: number): MushroomLook {
+  // A small integer hash (multiply, xor-shift), kept to 32 bits with `>>> 0`.
+  let h = Math.imul(i + 1, 2654435761) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0;
+  h = (h ^ (h >>> 13)) >>> 0;
+  const variant = h % MUSHROOM_LOOKS;
+  const fx = 0.22 + (((h >>> 8) & 0xff) / 255) * 0.56;
+  const fy = 0.5 + (((h >>> 16) & 0xff) / 255) * 0.42;
+  return { variant, fx, fy };
+}
+
+/** The colours of each look: cap, cap edge, spots (or `null` for none), stalk. */
+const MUSHROOM_COLOURS: { cap: string; edge: string; spots: string | null; stalk: string }[] = [
+  { cap: '#d23a2c', edge: '#5b2a22', spots: '#ffffff', stalk: '#efe6d2' }, // red, white spots
+  { cap: '#8a5a32', edge: '#4a321c', spots: null, stalk: '#e8d9b8' }, // brown bolete
+  { cap: '#e8a93a', edge: '#7a5418', spots: null, stalk: '#f2d58a' }, // golden funnel
+  { cap: '#f1ece2', edge: '#7d7466', spots: null, stalk: '#f7f3ea' }, // white button
+  { cap: '#7c4fa8', edge: '#3e2756', spots: '#d9c8ee', stalk: '#e6def0' }, // violet
+  { cap: '#e0662a', edge: '#6e2e12', spots: null, stalk: '#f0dcc4' }, // orange cone
+  { cap: '#c9b24a', edge: '#5e5220', spots: null, stalk: '#efe6c2' }, // a little yellow pair
+];
+
+/**
+ * A mushroom (owner, after the 0.17.0 build), small, with a short stalk
+ * (owner, after the 0.22.0 build: "Make the stem of the mushroom shorter").
+ * `look` says which of the MUSHROOM_LOOKS it is and where in its square its
+ * stalk stands; the default is the red one, at the bottom-left.
+ */
+export function drawMushroom(
+  ctx: CanvasRenderingContext2D,
+  box: SquareBox,
+  look: MushroomLook = { variant: 0, fx: 0.3, fy: 0.9 },
+): void {
   const s = box.inner;
-  const cx = box.left + s * 0.3;
-  const base = box.top + s * 0.94;
-  const r = s * 0.24;
+  const colours = MUSHROOM_COLOURS[look.variant % MUSHROOM_LOOKS] ?? MUSHROOM_COLOURS[0];
+  if (colours === undefined) return;
   ctx.save();
-  // The stalk.
-  ctx.fillStyle = '#efe6d2';
-  ctx.strokeStyle = '#5b4a36';
+  ctx.strokeStyle = colours.edge;
   ctx.lineWidth = Math.max(1, s * 0.03);
-  ctx.beginPath();
-  ctx.rect(cx - r * 0.35, base - r * 1.1, r * 0.7, r * 1.1);
-  ctx.fill();
-  ctx.stroke();
-  // The cap.
-  ctx.fillStyle = '#d23a2c';
-  ctx.beginPath();
-  ctx.arc(cx, base - r * 1.05, r, Math.PI, 0);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  // Its spots.
-  ctx.fillStyle = '#ffffff';
-  for (const [dx, dy] of [
-    [-0.45, -0.35],
-    [0.3, -0.55],
-    [0.05, -0.2],
-  ] as const) {
-    ctx.beginPath();
-    ctx.arc(cx + dx * r, base - r * 1.05 + dy * r, r * 0.14, 0, Math.PI * 2);
-    ctx.fill();
+  if (look.variant === 6) {
+    // Two small ones side by side.
+    one(ctx, box.left + s * (look.fx - 0.08), box.top + s * look.fy, s * 0.14, 0, colours);
+    one(ctx, box.left + s * (look.fx + 0.1), box.top + s * (look.fy - 0.02), s * 0.11, 0, colours);
+  } else {
+    one(ctx, box.left + s * look.fx, box.top + s * look.fy, s * 0.2, look.variant, colours);
   }
   ctx.restore();
+}
+
+/** One mushroom whose stalk stands on (cx, base), with cap radius r, in the shape of `variant`. */
+function one(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  base: number,
+  r: number,
+  variant: number,
+  colours: { cap: string; spots: string | null; stalk: string },
+): void {
+  // A short stalk: about half the cap's radius tall.
+  const stalkH = r * 0.55;
+  const stalkW = variant === 1 ? r * 0.9 : r * 0.6; // the bolete is stout
+  ctx.fillStyle = colours.stalk;
+  ctx.beginPath();
+  ctx.rect(cx - stalkW / 2, base - stalkH, stalkW, stalkH);
+  ctx.fill();
+  ctx.stroke();
+  const capY = base - stalkH;
+  ctx.fillStyle = colours.cap;
+  ctx.beginPath();
+  if (variant === 5) {
+    // A cone.
+    ctx.moveTo(cx - r * 0.85, capY);
+    ctx.lineTo(cx, capY - r * 1.5);
+    ctx.lineTo(cx + r * 0.85, capY);
+    ctx.closePath();
+  } else if (variant === 2) {
+    // A funnel: wide at the top, narrow where it meets the stalk.
+    ctx.moveTo(cx - r * 0.3, capY);
+    ctx.lineTo(cx - r, capY - r * 0.7);
+    ctx.quadraticCurveTo(cx, capY - r * 0.95, cx + r, capY - r * 0.7);
+    ctx.lineTo(cx + r * 0.3, capY);
+    ctx.closePath();
+  } else if (variant === 1 || variant === 3) {
+    // A flat-bottomed dome, fatter than half a circle.
+    ctx.ellipse(cx, capY, r, r * (variant === 1 ? 0.8 : 0.65), 0, Math.PI, 0);
+    ctx.closePath();
+  } else {
+    // Half a circle.
+    ctx.arc(cx, capY, r, Math.PI, 0);
+    ctx.closePath();
+  }
+  ctx.fill();
+  ctx.stroke();
+  if (colours.spots !== null) {
+    ctx.fillStyle = colours.spots;
+    for (const [dx, dy] of [
+      [-0.45, -0.35],
+      [0.3, -0.55],
+      [0.05, -0.2],
+    ] as const) {
+      ctx.beginPath();
+      ctx.arc(cx + dx * r, capY + dy * r, r * 0.14, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 }
 
 /**

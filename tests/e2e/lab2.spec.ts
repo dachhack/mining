@@ -16,7 +16,6 @@ import { LAB_NEW_CAMP_COST, LAB_SURFACE } from '../../src/data/labCamps';
 import {
   PREPARED_LAB2_KEY,
   endShift,
-  restCrew,
   upgradeCostFrom,
   campRadius,
   demolishCamp,
@@ -27,7 +26,9 @@ import {
   newCampWorld,
   newlyCovered,
   sightMap,
+  toFrontier,
 } from '../../src/app/lab/campWorld';
+import { digAreaPlan } from '../../src/engine';
 import type { CampStep, CampWorld } from '../../src/app/lab/campWorld';
 import { FRONTIER_RUN, FRONTIER_SHIFT } from '../../src/data/frontier';
 import { MOON_PHASES, moonPhase } from '../../src/app/lab/night';
@@ -698,21 +699,43 @@ test('the map never moves while the tool and the panels open and close', async (
   await unmoved();
 });
 
-test('holding a lit square opens the camp tool on it, and mines nothing', async ({ page }) => {
+test('holding a lit square digs the 3 x 3 round it, a tap a square without miners', async ({
+  page,
+}) => {
+  // Owner, after the 0.21.0 build: "Long press should always be mine
+  // everything possible in 3 by 3 at the expense of one move for each square
+  // dug unless you have hired miners." (It used to open the camp tool.)
   const canvas = await openLab2(page);
   const world = newCampWorld(SEED);
   const camp = world.camps[0] ?? { x: 0, y: 0 };
-  const square = { x: camp.x + 4, y: camp.y }; // the middle of a level, lit 3 x 3
+  // A lit square whose 3 x 3 has bare ground to dig.
+  const state = toFrontier(world);
+  let square: Square | null = null;
+  let most = 0;
+  for (let dy = -6; dy <= 6; dy += 1) {
+    for (let dx = -6; dx <= 6; dx += 1) {
+      const n = digAreaPlan(state, camp.x + dx, camp.y + dy).dug.length;
+      if (n > most) {
+        most = n;
+        square = { x: camp.x + dx, y: camp.y + dy };
+      }
+    }
+  }
+  if (square === null) throw new Error('a 3 x 3 with something to dig');
   const at = await pointOf(canvas, square);
   await page.mouse.move(at.x, at.y);
   await page.mouse.down();
   await page.clock.runFor(800); // the hold is a timer: the clock is paused, so run it
   await page.mouse.up();
-  await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'placing');
-  await expect(canvas).toHaveAttribute('data-target', `${square.x},${square.y}`);
-  // Nothing mined yet, so the line says what the camp still needs.
-  await expect(page.getByTestId('lab2-place-line')).toContainText(missingLine(world));
-  expect((await counts(page))['dug']).toBe(0);
+  await expect(page.getByTestId('lab2-tray')).not.toHaveAttribute('data-mode', 'placing');
+  expect((await counts(page))['dug']).toBe(most);
+  await expect(page.getByTestId('lab2-hud')).toHaveAttribute(
+    'data-taps',
+    String(FRONTIER_SHIFT.taps - most),
+  );
+  await expect(page.getByTestId('lab-hint')).toContainText(
+    `You dug ${most} squares for ${most} taps`,
+  );
 });
 
 /** "Need 5 more wood and 5 more grass": what `world`'s counts lack of a new camp's cost. */
@@ -1081,7 +1104,6 @@ test('End shift: the HUD counts taps down, End shift refills them, moves the ani
   const start = newCampWorld(SEED);
   await expect(hud).toHaveAttribute('data-shift', '1');
   await expect(hud).toHaveAttribute('data-taps', String(FRONTIER_SHIFT.taps));
-  await expect(hud).toHaveAttribute('data-health', String(FRONTIER_SHIFT.startHealth));
   const camp = start.camps[0] ?? { x: 0, y: 0 };
   const lit = { x: camp.x - 2, y: camp.y }; // just outside the camp's 3 x 3
   const dug = await digOnce(page, canvas, start, lit);
@@ -1094,8 +1116,7 @@ test('End shift: the HUD counts taps down, End shift refills them, moves the ani
   await page.getByTestId('lab2-end-shift').click();
   await skipNight(page);
   await expect(hud).toHaveAttribute('data-shift', '2');
-  await expect(hud).toHaveAttribute('data-taps', String(FRONTIER_SHIFT.taps));
-  await expect(hud).toHaveAttribute('data-health', String(next.turn.health));
+  await expect(hud).toHaveAttribute('data-taps', String(next.turn.tapsLeft));
   await expect(canvas).toHaveAttribute(
     'data-animals',
     next.surface.animals.map((a) => `${a.x},${a.y}`).join(' '),
@@ -1189,9 +1210,10 @@ test('night between shifts: a tap skips it, and the tap does nothing else', asyn
   await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
   await expect(night).toHaveCount(0);
   expect(await canvas.getAttribute('data-last-tap')).toBe(lastTap);
+  // The new shift's taps, as End shift left them (fewer if upkeep went unpaid).
   await expect(page.getByTestId('lab2-hud')).toHaveAttribute(
     'data-taps',
-    String(FRONTIER_SHIFT.taps),
+    String(endShift(newCampWorld(SEED)).world.turn.tapsLeft),
   );
 });
 
@@ -1217,13 +1239,26 @@ test('the map has Contracts, Craft and Place buttons, and no Close mine (owner, 
   // close mine used to be: Contracts, Recipe book/Craft, Place button."
   await openLab2(page);
   await expect(page.getByTestId('lab2-close-mine')).toHaveCount(0);
-  const hud = await page.getByTestId('lab2-hud').boundingBox();
-  for (const id of ['lab2-goals', 'lab2-book', 'lab2-place-tool']) {
-    const box = await page.getByTestId(id).boundingBox();
-    expect(box, id).not.toBeNull();
-    if (box === null || hud === null) continue;
-    // Over the map's top-right, clear of the HUD.
-    expect(box.x, id).toBeGreaterThan(hud.x + hud.width);
+  // After the 0.22.0 build: "make the place, recipe, contract buttons
+  // horizontal across the top and a bit larger". In a row, left to right, at
+  // least 40 px, clear of the HUD, even on a 320 px phone.
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 700 });
+    const hud = await page.getByTestId('lab2-hud').boundingBox();
+    let last: { x: number; y: number; width: number } | null = null;
+    for (const id of ['lab2-place-tool', 'lab2-book', 'lab2-goals']) {
+      const box = await page.getByTestId(id).boundingBox();
+      expect(box, id).not.toBeNull();
+      if (box === null || hud === null) continue;
+      expect(box.width, id).toBeGreaterThanOrEqual(40);
+      expect(box.x, `${id} at ${width}`).toBeGreaterThan(hud.x + hud.width);
+      expect(box.x + box.width, `${id} at ${width}`).toBeLessThanOrEqual(width);
+      if (last !== null) {
+        expect(Math.abs(box.y - last.y), id).toBeLessThan(1);
+        expect(box.x, id).toBeGreaterThan(last.x + last.width);
+      }
+      last = box;
+    }
   }
   await page.getByTestId('lab2-place-tool').click();
   await expect(page.getByTestId('lab2-tray')).toHaveAttribute('data-mode', 'placeMenu');
@@ -1292,28 +1327,26 @@ test('a felled tree leaves a stump ring, and mining its square takes the ring aw
   await expect(canvas).not.toHaveAttribute('data-stumps', new RegExp(`(^| )${key}( |$)`));
 });
 
-test('Rest is in a camp’s panel: the crew rests there, then the shift ends', async ({ page }) => {
-  // Owner, question 156: "Only at a camp". The End shift bar has no Rest.
+test('no crew life and no Rest: unpaid upkeep costs taps of the next shift', async ({ page }) => {
+  // Owner, after the 0.22.0 build: "We don't need crew life anymore. Let's
+  // scrap that and the resting." Unpaid upkeep: fewer taps next shift.
   const canvas = await openLab2(page);
   const hud = page.getByTestId('lab2-hud');
-  await expect(page.locator('.lab2-shift-buttons').getByTestId('lab2-rest')).toHaveCount(0);
+  await expect(page.getByTestId('lab2-hud-health')).toHaveCount(0);
   const start = newCampWorld(SEED);
   const camp = start.camps[0] ?? { id: 1, x: 0, y: 0, level: 1 };
-  // A shift with nothing held: upkeep goes unpaid and the crew is hurt.
-  const hungry = endShift(start).world;
+  // A shift with nothing held: upkeep goes unpaid.
+  const hungry = endShift(start);
+  expect(hungry.report?.unpaid.length ?? 0).toBeGreaterThan(0);
   await page.getByTestId('lab2-end-shift').click();
   await skipNight(page);
-  await expect(hud).toHaveAttribute('data-health', String(hungry.turn.health));
-  expect(hungry.turn.health).toBeLessThan(FRONTIER_SHIFT.startHealth);
-  // Tap the camp, then Rest here.
+  await expect(hud).toHaveAttribute('data-taps', String(hungry.world.turn.tapsLeft));
+  expect(hungry.world.turn.tapsLeft).toBeLessThan(FRONTIER_SHIFT.taps);
+  await expect(page.getByTestId('lab-hint')).toContainText('fewer taps');
+  // A camp's panel has no Rest.
   await tapSquare(page, canvas, camp);
   await expect(page.getByTestId('lab2-camp-title')).toContainText(`Camp ${camp.id}`);
-  const rested = restCrew(hungry, camp.id);
-  await page.getByTestId('lab2-rest').click();
-  await skipNight(page);
-  await expect(hud).toHaveAttribute('data-shift', String(rested.world.turn.shift));
-  await expect(hud).toHaveAttribute('data-health', String(rested.world.turn.health));
-  await expect(page.getByTestId('lab-hint')).toContainText('Rested.');
+  await expect(page.getByTestId('lab2-rest')).toHaveCount(0);
 });
 
 test('undo takes back a placed camp: the camp, its cost and its light', async ({ page }) => {

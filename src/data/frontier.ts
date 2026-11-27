@@ -210,8 +210,12 @@ export const FRONTIER_SURFACE = {
 export const FRONTIER_SHIFT = {
   /** Taps a shift (owner: "Fixed number of taps"). Every tap that does something costs 1. */
   taps: 100,
-  /** The crew's health at the start, and what resting restores it to. */
-  startHealth: 10,
+  /**
+   * Taps the next shift loses for each item of upkeep that cannot be paid
+   * (owner, after the 0.21.0 build: "We don't need crew life anymore";
+   * asked, "Fewer taps next shift"). Until then each cost 1 of 10 health.
+   */
+  tapsLostPerUnpaid: 10,
   /** Upkeep: this much wood at the end of every shift (owner: "Food and wood")... */
   woodEveryShift: 1,
   /** ...1 food at the end of every this many shifts (FRONTIER_FOODS says what pays it)... */
@@ -757,7 +761,9 @@ export const FRONTIER_MARKET = {
     { item: 'potatoSeed', count: 1, coins: 3 },
     // A miner, hired for a year's pay (owner, after the 0.20.0 build: "Let's
     // add miners to the market"): FRONTIER_MINERS.
-    { item: 'miner', count: 1, coins: 80 },
+    // 200 coins (owner, after the 0.21.0 build: "Miners should be expensive.
+    // Like 200."; they were 80).
+    { item: 'miner', count: 1, coins: 200 },
     { item: 'hay', count: 1, coins: 1 },
     // The pump drains a flood (hazards plan, section 2): from the start.
     { item: 'pump', count: 1, coins: 30 },

@@ -826,17 +826,6 @@ body[data-screen='lab2'] {
 }
 
 /* Demolish while no other camp covers this one: still tappable (it says why), but quieter. */
-.lab .lab2-pack.lab2-rest-here {
-  margin-left: 0;
-  flex: 0 0 auto;
-  white-space: nowrap;
-  color: #f2e2c4;
-}
-
-.lab .lab2-pack.lab2-rest-here:disabled {
-  opacity: 0.45;
-}
-
 .lab .lab2-pack.lab2-pack-short {
   color: #8f8578;
   border-style: dashed;
@@ -980,10 +969,6 @@ body[data-screen='lab2'] {
 
 .lab2-hud-taps.lab2-hud-empty {
   color: #ffcf4a;
-}
-
-.lab2-hud-health.lab2-hud-low {
-  color: #ff7a5c;
 }
 
 .lab2-shift-buttons {
@@ -1367,26 +1352,27 @@ body[data-screen='lab2'] {
   flex: 0 0 auto;
 }
 
-/* The map's three small buttons, over its top-right corner where Close mine
-   was (owner, UI rework): contracts, the recipe book, and Place. Like Undo
-   and End shift they sit over the map, so they never move it. */
+/* The map's three buttons, in a row along its top-right edge, where Close
+   mine was (owner, UI rework; after the 0.22.0 build: "horizontal across
+   the top and a bit larger"): contracts, the recipe book, and Place. Like
+   Undo and End shift they sit over the map, so they never move it. With no
+   crew health in the HUD any more, a row fits beside it on a 320 px phone. */
 .lab2-map-buttons {
   position: absolute;
   right: 8px;
   top: 8px;
   display: flex;
-  /* A column down the corner, so a 320 px phone's HUD never runs into them. */
-  flex-direction: column;
+  flex-direction: row;
   gap: 6px;
 }
 .lab .lab2-map-button {
-  width: 34px;
-  height: 34px;
+  width: 42px;
+  height: 42px;
   min-width: 0;
   min-height: 0;
   padding: 0;
-  border-radius: 17px;
-  font-size: 16px;
+  border-radius: 12px;
+  font-size: 20px;
   line-height: 1;
   color: #f2e2c4;
   background: rgba(24, 19, 15, 0.88);
@@ -1396,9 +1382,12 @@ body[data-screen='lab2'] {
 .lab .lab2-map-button:disabled {
   opacity: 0.45;
 }
+/* A contract can be delivered: lit gold, as the old tray button was on a market day. */
 .lab .lab2-map-button.lab2-market-open {
-  border-color: #e8b04a;
-  box-shadow: 0 0 10px rgba(232, 176, 74, 0.8);
+  color: #1b1510;
+  background: linear-gradient(180deg, #f2c983, #cf9550);
+  border-color: #f3d29c;
+  box-shadow: 0 0 10px rgba(242, 201, 131, 0.55);
 }
 
 /* What the store holds, inside the recipe book's card (owner, UI rework:

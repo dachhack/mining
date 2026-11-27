@@ -133,10 +133,10 @@ export function checkStep(
   if (verb === 'digArea' && outcome.done) {
     const [cx, cy] = (step.split(' ')[1] ?? '').split(',').map(Number);
     const plan = digAreaPlan(before, cx ?? -1, cy ?? -1);
-    const most = areaCost(before.inventory);
-    if (most === null) say('dug a 3 x 3 with fewer than 2 miners');
+    // A tap a square, or with 2 or more miners their cap (crew.ts).
+    const most = areaCost(before.inventory) ?? Infinity;
     if (plan.dug.length === 0) say('dug a 3 x 3 that had nothing to dig');
-    if (plan.cost !== Math.min(most ?? 0, plan.dug.length)) say(`a dig cost ${plan.cost}`);
+    if (plan.cost !== Math.min(most, plan.dug.length)) say(`a dig cost ${plan.cost}`);
     if (after.tapsLeft !== before.tapsLeft - plan.cost)
       say(`taps went from ${before.tapsLeft} to ${after.tapsLeft} for a dig costing ${plan.cost}`);
     if (hashFrontier({ ...plan.state, tapsLeft: after.tapsLeft }) !== hashFrontier(after))
@@ -167,9 +167,14 @@ export function checkStep(
     return problems;
   }
   if (endsShift) {
-    // A shift's taps, more with miners (crew.ts).
-    if (after.tapsLeft !== tapsPerShift(after.inventory) && after.status === 'active')
-      say(`a new shift has ${after.tapsLeft} taps`);
+    // A shift's taps, more with miners (crew.ts), less FRONTIER_SHIFT.tapsLostPerUnpaid
+    // for each item of upkeep the night could not pay (shift.ts).
+    // (`unpaid` merges like items: 2 wood unpaid is one stack of 2.)
+    const unpaidItems = (outcome.report?.unpaid ?? []).reduce((n, st) => n + st.count, 0);
+    const lost = unpaidItems * FRONTIER_SHIFT.tapsLostPerUnpaid;
+    const due = Math.max(0, tapsPerShift(after.inventory) - lost);
+    if (after.tapsLeft !== due && after.status === 'active')
+      say(`a new shift has ${after.tapsLeft} taps, not ${due}`);
   } else if (before.marketOpen) {
     // Market actions cost no taps (market.ts).
     if (after.tapsLeft !== before.tapsLeft) say(`a market action changed the taps`);
@@ -468,8 +473,6 @@ export function checkStep(
   if (endsShift && after.shift !== before.shift + 1)
     say(`the shift went from ${before.shift} to ${after.shift}`);
   if (!endsShift && after.shift !== before.shift) say('the shift changed without End shift');
-  if (after.health < 0 || after.health > FRONTIER_SHIFT.startHealth) say(`health ${after.health}`);
-  if (after.health === 0 && after.status !== 'lost') say('health 0 but the run is not lost');
   if (before.status !== 'active') say('an action was taken after the run ended');
 
   // The inventory.

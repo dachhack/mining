@@ -12,8 +12,11 @@
 //    - upkeep is paid in wood and food (question 147): food is an apple,
 //      else 2 grass, else an animal (questions 155 and 158);
 //    - animals in pens breed, eating hay (pens.ts; plan section 6.3);
-//    - each item of upkeep that cannot be paid costs the crew 1 health
-//      (question 148: "Hunger only"); at 0 health the run is lost;
+//    - each item of upkeep that cannot be paid costs FRONTIER_SHIFT.
+//      tapsLostPerUnpaid taps of the next shift (owner, after the 0.21.0
+//      build: "We don't need crew life anymore. Let's scrap that and the
+//      resting"; asked, "Fewer taps next shift"). Until then it cost 1 health,
+//      and at 0 health the run was lost;
 //    - fires spread and burn out their squares (fire.ts; hazards plan section 3);
 //    - pumps drain their floods (water.ts; hazards plan section 2);
 //    - dragons fly, eat and set fires, and a new one may come (dragons.ts;
@@ -21,12 +24,11 @@
 //    - marauders may raid a camp (raids.ts; hazards plan section 5);
 //    - it may rain, filling low spots (rain.ts; hazards plan section 1).
 //
-// Resting, at a camp (question 156: "Only at a camp"), restores the crew's
-// health and takes the rest of the shift. Closing the mine ends the run.
+// There is no resting any more (it restored the crew's health). Closing the
+// mine ends the run (no button does it now; saved runs and the tools may).
 //
-// A run lasts FRONTIER_RUN.shifts shifts (owner: "100 shifts or crew
-// lost"): when the last one ends, the run is 'finished', unless the crew was
-// lost in that same End shift. On a market day (market.ts) the player may
+// A run lasts FRONTIER_RUN.shifts shifts: when the last one ends, the run
+// is 'finished'. On a market day (market.ts) the player may
 // sell and buy, 1 tap a trade. The numbers are in src/data/frontier.ts.
 
 import { BLOCKS } from '../../data';
@@ -93,8 +95,6 @@ export type FrontierAction =
   | { kind: 'upgrade'; id: number }
   | { kind: 'demolish'; id: number }
   | { kind: 'endShift' }
-  // Rest at the camp named `id` (question 156: "Only at a camp").
-  | { kind: 'rest'; id: number }
   // Build a smelter at camp `id`; make recipe `recipe` (smelting.ts).
   | { kind: 'buildSmelter'; id: number }
   | { kind: 'make'; recipe: string }
@@ -129,16 +129,16 @@ export type FrontierAction =
   | { kind: 'buy'; item: string; lots: number }
   | { kind: 'close' };
 
-/** What End shift did: the upkeep paid and unpaid, and the health it cost. */
+/** What End shift did: the upkeep paid and unpaid, and the taps it cost the next shift. */
 export interface ShiftReport {
   /** The shift that ended. */
   shift: number;
   /** Upkeep paid, item by item. */
   paid: ItemStack[];
-  /** Upkeep that could not be paid: each one cost 1 health. */
+  /** Upkeep that could not be paid: each one cost FRONTIER_SHIFT.tapsLostPerUnpaid taps of the next shift. */
   unpaid: ItemStack[];
-  /** Health lost to hunger. */
-  healthLost: number;
+  /** Taps the next shift loses to upkeep not paid. */
+  tapsLost: number;
   /** Apple trees whose apples came back. */
   regrown: number;
   /** Felled trees that grew back, and planted saplings that grew into trees. */
@@ -155,7 +155,7 @@ export interface ShiftReport {
   rained: boolean;
   /** Squares the rain filled. */
   rainFilled: number;
-  /** Mushrooms that came up in the night (mushrooms.ts). */
+  /** Mushrooms that came up in the night in sight of a camp (mushrooms.ts): those out of sight are not told. */
   mushroomsCame: number;
   /** Crops that ripened in the night (crops.ts). */
   cropsRipened: number;
@@ -199,7 +199,7 @@ export interface FrontierOutcome {
   refusal: string | null;
   /** For a tap: the engine's whole answer. */
   tap: FrontierTap | null;
-  /** For End shift and rest: what the end of the shift did. */
+  /** For End shift: what the end of the shift did. */
   report: ShiftReport | null;
 }
 
@@ -251,9 +251,9 @@ function stepAnimals(state: FrontierState): { animals: FrontierAnimal[]; rng: { 
 }
 
 /**
- * End the shift: the world moves on (see the top of this file), the next
- * shift starts with a full set of taps, and the run is lost if the crew's
- * health reaches 0. Refused once the run has ended.
+ * End the shift: the world moves on (see the top of this file), and the next
+ * shift starts with its taps, less FRONTIER_SHIFT.tapsLostPerUnpaid for each
+ * item of upkeep that could not be paid. Refused once the run has ended.
  */
 export function endFrontierShift(state: FrontierState): FrontierOutcome {
   if (state.status !== 'active') {
@@ -287,7 +287,7 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
   }
   // Apples come back on trees whose wait is over, and felled trees on their stumps.
   const grown = regrow({ ...state, animals }, rng);
-  // Upkeep, item by item; what cannot be paid costs 1 health each.
+  // Upkeep, item by item; what cannot be paid costs taps of the next shift.
   const inventory = new Map(state.inventory);
   const paid: ItemStack[] = [];
   const unpaid: ItemStack[] = [];
@@ -306,8 +306,7 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
   }
   // Breeding, after upkeep: the crew eats first (pens.ts).
   const bred = breedPens(state.camps, inventory);
-  const healthLost = unpaid.length;
-  const health = Math.max(0, state.health - healthLost);
+  const tapsLost = unpaid.length * FRONTIER_SHIFT.tapsLostPerUnpaid;
   // Fires spread and burn out their squares (fire.ts).
   const fire = burnFires({
     ...state,
@@ -356,13 +355,13 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
     grassIn: burnt.grassIn,
     camps: dragon.state.camps,
     inventory: pumping.inventory,
-    health,
     shift: state.shift + 1,
     // More taps with miners in the crew (crew.ts).
-    tapsLeft: tapsPerShift(pumping.inventory),
+    // Unpaid upkeep costs taps of this new shift (never below 0).
+    tapsLeft: Math.max(0, tapsPerShift(pumping.inventory) - tapsLost),
     marketOpen: false,
     // A lost crew ends the run first; otherwise the run is over once its last shift has ended.
-    status: health <= 0 ? 'lost' : state.shift >= FRONTIER_RUN.shifts ? 'finished' : 'active',
+    status: state.shift >= FRONTIER_RUN.shifts ? 'finished' : 'active',
   };
   // Mushrooms, after the rain that sets them coming (mushrooms.ts).
   const mushroomed = nightOfMushrooms(beforeMushrooms, rain.rained, rng);
@@ -382,7 +381,7 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
       shift: state.shift,
       paid: merge(paid),
       unpaid: merge(unpaid),
-      healthLost,
+      tapsLost,
       regrown: grown.regrown,
       treesRegrown: grown.treesRegrown,
       grassRegrown: grown.grassRegrown,
@@ -391,7 +390,7 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
       marketOpens: next.marketOpen,
       rained: rain.rained,
       rainFilled: rain.filled.length,
-      mushroomsCame: mushroomed.came,
+      mushroomsCame: mushroomed.seen,
       cropsRipened: grownCrops.ripened,
       workerWood: worked.wood,
       workerCrops: worked.crops,
@@ -598,14 +597,6 @@ export function frontierAct(state: FrontierState, action: FrontierAction): Front
   }
   if (action.kind === 'endShift') {
     return endFrontierShift(state);
-  }
-  if (action.kind === 'rest') {
-    // The crew rests at a camp: refused unless camp `id` stands.
-    if (!state.camps.some((c) => c.id === action.id)) {
-      return refused(state, 'rest');
-    }
-    // Rest restores the crew, then the shift ends (the rest of it is spent resting).
-    return endFrontierShift({ ...state, health: FRONTIER_SHIFT.startHealth });
   }
   if (action.kind === 'close') {
     return {

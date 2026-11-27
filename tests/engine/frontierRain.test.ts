@@ -146,7 +146,7 @@ describe('rain fills low spots (hazards plan, section 1)', () => {
         return;
       }
       if (!report.rained) expect(out.state.cube).toBe(state.cube);
-      state = { ...out.state, health: 10 };
+      state = { ...out.state };
     }
     throw new Error('no rain in 60 nights');
   });

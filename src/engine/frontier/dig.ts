@@ -7,8 +7,11 @@
 // would mine its top block, row by row, each once, exactly as a tap would
 // (tap.ts: its yields, the pickaxe, water, gas, the dragons' flight). A
 // square whose tap would do anything else (take a plant, catch an animal,
-// put out a fire, ...) is left alone. It costs the lesser of the crew's
-// `areaCost` (crew.ts) and the squares mined, and needs that many taps.
+// put out a fire, ...) is left alone. It needs as many taps as it costs:
+// 1 for each square mined, or with 2 or more miners the lesser of the crew's
+// `areaCost` (crew.ts) and the squares mined (owner, after the 0.21.0 build:
+// "Long press should always be mine everything possible in 3 by 3 at the
+// expense of one move for each square dug unless you have hired miners").
 //
 // The numbers are in src/data/frontier.ts.
 
@@ -31,7 +34,8 @@ export function digAreaPlan(
   x: number,
   y: number,
 ): { state: FrontierState; dug: { x: number; y: number }[]; cost: number } {
-  const most = areaCost(state.inventory) ?? 0;
+  // Without the miners' discount, a tap a square.
+  const most = areaCost(state.inventory) ?? Infinity;
   let next = state;
   const dug: { x: number; y: number }[] = [];
   for (const sq of threeByThree(x, y)) {
@@ -46,14 +50,12 @@ export function digAreaPlan(
 
 /**
  * Why the 3 x 3 round (x, y) cannot be dug now, or `null` if it can:
- * - 'crew': fewer than 2 miners (crew.ts);
  * - 'nothing': no square of it can be mined now;
  * - 'noTaps': fewer taps are left than it would cost.
  */
-export type DigAreaRefusal = 'crew' | 'nothing' | 'noTaps';
+export type DigAreaRefusal = 'nothing' | 'noTaps';
 
 export function digAreaRefusal(state: FrontierState, x: number, y: number): DigAreaRefusal | null {
-  if (areaCost(state.inventory) === null) return 'crew';
   const plan = digAreaPlan(state, x, y);
   if (plan.dug.length === 0) return 'nothing';
   return state.tapsLeft < plan.cost ? 'noTaps' : null;

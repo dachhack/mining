@@ -17,7 +17,7 @@ import type { RngState } from '../rng';
  * not loaded into a new shape. Separate from the old game's STATE_VERSION
  * while the two rule sets live side by side.
  */
-export const FRONTIER_STATE_VERSION = 24; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`; 12: `marketOpen`; 13: `contracts` (several held) for `contract`; 14: `hazards` (flooded squares, pumps); 15: `hazards.fires`; 16: `hazards.dragons`, `nextDragonId`; 17: a camp's `defense`; 18: a dragon's heading (`dx`, `dy`); 19: a dragon's `restMines`; 20: `sawHouses`; 21: `buildings` for `sawHouses`, and maple trees; 22: `mushrooms`, `mushroomIn`; 23: `crops`, `cropIn`; 24: a building's `workers` and `horses`, and work camps
+export const FRONTIER_STATE_VERSION = 25; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`; 12: `marketOpen`; 13: `contracts` (several held) for `contract`; 14: `hazards` (flooded squares, pumps); 15: `hazards.fires`; 16: `hazards.dragons`, `nextDragonId`; 17: a camp's `defense`; 18: a dragon's heading (`dx`, `dy`); 19: a dragon's `restMines`; 20: `sawHouses`; 21: `buildings` for `sawHouses`, and maple trees; 22: `mushrooms`, `mushroomIn`; 23: `crops`, `cropIn`; 24: a building's `workers` and `horses`, and work camps; 25: no `health`
 
 /** What grows on a square: nothing, grass, a tree, an apple tree or a maple tree. */
 export const NO_FEATURE = 0;
@@ -201,11 +201,8 @@ export interface FrontierState {
   shift: number;
   /** Taps left in this shift (src/data/frontier.ts, FRONTIER_SHIFT.taps a shift). */
   tapsLeft: number;
-  /** The crew's health: 0 loses the run. */
-  health: number;
   /**
-   * 'active' while the run goes on; 'lost' when the crew's health reached 0;
-   * 'closed' when the player closed the mine; 'finished' when the last
+   * 'active' while the run goes on; 'closed' when the mine was closed; 'finished' when the last
    * shift of the run (FRONTIER_RUN.shifts) ended.
    */
   status: FrontierStatus;
@@ -217,8 +214,12 @@ export interface FrontierHeldContract {
   takenOn: number;
 }
 
-/** How a run stands: going on, lost, ended by closing the mine, or played to its last shift. */
-export type FrontierStatus = 'active' | 'lost' | 'closed' | 'finished';
+/**
+ * How a run stands: going on, ended by closing the mine, or played to its
+ * last shift. ('lost' went with the crew's health, owner after the 0.21.0
+ * build: "We don't need crew life anymore".)
+ */
+export type FrontierStatus = 'active' | 'closed' | 'finished';
 
 /**
  * The hazards' marks on the world (docs/plans/hazards.md). Rain (section 1)
