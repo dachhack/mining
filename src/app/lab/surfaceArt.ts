@@ -753,6 +753,20 @@ export function labItemIcon(item: string, className: string): HTMLCanvasElement 
     ctx.beginPath();
     ctx.arc(s * 0.5, s * 0.42, s * 0.08, 0, Math.PI * 2);
     ctx.fill();
+  } else if (item === 'lumber') {
+    // Lumber (owner, after the 0.22.0 build): three sawn planks, stacked.
+    ctx.fillStyle = '#2a2420';
+    ctx.fillRect(0, 0, s, s);
+    for (const [k, top] of [0.28, 0.46, 0.64].entries()) {
+      ctx.fillStyle = k % 2 === 0 ? '#d7a866' : '#c8954f';
+      ctx.fillRect(s * 0.14, s * top, s * 0.72, s * 0.15);
+      ctx.strokeStyle = '#6b4a24';
+      ctx.lineWidth = Math.max(1, s * 0.03);
+      ctx.strokeRect(s * 0.14, s * top, s * 0.72, s * 0.15);
+      // The sawn end grain.
+      ctx.fillStyle = '#efd3a0';
+      ctx.fillRect(s * 0.78, s * top + s * 0.02, s * 0.06, s * 0.11);
+    }
   } else if (item === 'sap' || item === 'syrup') {
     // Sap: a pale drop. Syrup: a small jug of amber syrup.
     ctx.fillStyle = '#2a2420';

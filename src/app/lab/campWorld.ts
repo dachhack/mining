@@ -129,6 +129,8 @@ export interface CampTurn {
   contracts: FrontierHeldContract[];
   /** Contracts delivered, by tier: [tier 1, tier 2, tier 3]. */
   contractsDone: number[];
+  /** The contracts taken or filled from today's board: gone from it until the next market day. */
+  boardUsed: string[];
   /** True while the market is open, after a market day's night (progression, market scene). */
   marketOpen: boolean;
 }
@@ -141,6 +143,7 @@ export function firstTurn(): CampTurn {
     status: 'active',
     contracts: [],
     contractsDone: [0, 0, 0],
+    boardUsed: [],
     marketOpen: false,
   };
 }
@@ -221,6 +224,7 @@ export function toFrontier(world: CampWorld): FrontierState {
     status: world.turn.status,
     contracts: world.turn.contracts,
     contractsDone: world.turn.contractsDone,
+    boardUsed: world.turn.boardUsed,
     marketOpen: world.turn.marketOpen,
     hazards: world.hazards,
     buildings: world.buildings,
@@ -266,6 +270,7 @@ export function fromFrontier(world: CampWorld, state: FrontierState): CampWorld 
       status: state.status,
       contracts: state.contracts,
       contractsDone: state.contractsDone,
+      boardUsed: state.boardUsed,
       marketOpen: state.marketOpen,
     },
     hazards: state.hazards,

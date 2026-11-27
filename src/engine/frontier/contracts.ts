@@ -6,9 +6,16 @@
 //   drawn from the run's seed and the shift with a generator of its own,
 //   so the board is never stored and the world's own generator is never
 //   touched: the same seed and shift always show the same board.
-// - Tiers open in turn: tier 1 while the best camp is at least
-//   FRONTIER_BOARD.tier1Level; tier 2 once a tier-1 contract is done; tier 3
-//   once a tier-2 contract is done.
+// - Tiers open in turn: tier 1's surface contracts from the first market
+//   day, and the rest of tier 1 while the best camp is at least
+//   FRONTIER_BOARD.tier1Level (owner, after the 0.22.0 build: "We need more
+//   surface resource contracts especially early game"); tier 2 once any
+//   tier-1 contract is done (surface ones too: owner's choice); tier 3 once a
+//   tier-2 contract is done.
+// - Surface contracts and the others are drawn apart, FRONTIER_BOARD.perTier
+//   of each kind a tier, so neither crowds the other off the board. What a
+//   surface contract asks for is always to be had (FRONTIER_BOARD.renewable),
+//   except mushrooms, which are counted.
 // - Up to `contractLimit` (the best camp's level) are held at once.
 // - Filling one from the board (`fillContract`; owner, on the hazards build:
 //   "Should be able to immediately fill contracts if you have the
@@ -37,11 +44,8 @@ import { gained } from './surface';
 import { deepestDug } from './raids';
 import type { FrontierState } from './state';
 
-/** The tiers whose contracts the board offers now: [1], [1, 2] or [1, 2, 3], or none. */
+/** The tiers whose contracts the board offers now: [1], [1, 2] or [1, 2, 3]. Tier 1 is always open, for its surface contracts at least. */
 export function openTiers(state: FrontierState): number[] {
-  if (bestCampLevel(state) < FRONTIER_BOARD.tier1Level && (state.contractsDone[0] ?? 0) === 0) {
-    return [];
-  }
   const tiers = [1];
   if ((state.contractsDone[0] ?? 0) > 0) tiers.push(2);
   if ((state.contractsDone[1] ?? 0) > 0) tiers.push(3);
@@ -67,17 +71,36 @@ export function contractBoard(state: FrontierState): FrontierContractDef[] {
   // Only what is within reach of the deepest square dug counts (owner, after
   // the 0.20.0 build: "no keystone or relics etc if they are still far away").
   const stock = worldStock(state, deepestDug(state) + FRONTIER_BOARD.reachBelowDeepest);
+  // The rest of tier 1 waits for a level-3 camp, or a tier-1 contract done.
+  const miningOpen =
+    bestCampLevel(state) >= FRONTIER_BOARD.tier1Level || (state.contractsDone[0] ?? 0) > 0;
+  // Each open tier's draw: its surface and its other contracts drawn apart,
+  // then taken in turn, surface first, so neither crowds the other out.
   const byTier: FrontierContractDef[][] = [];
   for (const tier of openTiers(state)) {
-    const pool = FRONTIER_CONTRACTS.filter((c) => c.tier === tier && worldCanFill(stock, c.asks));
-    // Draw without putting back: a few steps of a shuffle.
-    const left = [...pool];
-    const drawn: FrontierContractDef[] = [];
-    for (let k = 0; k < FRONTIER_BOARD.perTier && left.length > 0; k += 1) {
-      const [picked] = left.splice(nextInt(rng, left.length), 1);
-      if (picked !== undefined) drawn.push(picked);
+    const draws: FrontierContractDef[][] = [];
+    for (const surface of [true, false]) {
+      if (tier === 1 && !surface && !miningOpen) continue;
+      const pool = FRONTIER_CONTRACTS.filter(
+        (c) => c.tier === tier && (c.surface === true) === surface && worldCanFill(stock, c.asks),
+      );
+      // Draw without putting back: a few steps of a shuffle.
+      const left = [...pool];
+      const drawn: FrontierContractDef[] = [];
+      for (let k = 0; k < FRONTIER_BOARD.perTier && left.length > 0; k += 1) {
+        const [picked] = left.splice(nextInt(rng, left.length), 1);
+        if (picked !== undefined) drawn.push(picked);
+      }
+      draws.push(drawn);
     }
-    byTier.push(drawn);
+    const merged: FrontierContractDef[] = [];
+    for (let k = 0; k < FRONTIER_BOARD.perTier; k += 1) {
+      for (const drawn of draws) {
+        const pick = drawn[k];
+        if (pick !== undefined) merged.push(pick);
+      }
+    }
+    byTier.push(merged);
   }
   // At most 3 to 7 a day (owner: "Only 3-7 available to take"): taken in
   // turn from each tier, highest first, so every open tier is offered; then
@@ -96,7 +119,8 @@ export function contractBoard(state: FrontierState): FrontierContractDef[] {
     }
     if (!any) break;
   }
-  return FRONTIER_CONTRACTS.filter((c) => chosen.includes(c));
+  // One taken or filled today has left the board (`boardUsed`).
+  return FRONTIER_CONTRACTS.filter((c) => chosen.includes(c) && !state.boardUsed.includes(c.id));
 }
 
 /** The contract with this id, or `null`. */
@@ -159,7 +183,11 @@ export function anyDeliverable(state: FrontierState): boolean {
 /** Take contract `id` from today's board. If `takeRefusal` says no, the very same state comes back. */
 export function takeContract(state: FrontierState, id: string): FrontierState {
   if (takeRefusal(state, id) !== null) return state;
-  return { ...state, contracts: [...state.contracts, { id, takenOn: state.shift }] };
+  return {
+    ...state,
+    contracts: [...state.contracts, { id, takenOn: state.shift }],
+    boardUsed: [...state.boardUsed, id],
+  };
 }
 
 /**
@@ -178,8 +206,9 @@ export function fillRefusal(state: FrontierState, id: string): ContractRefusal |
 /** Fill contract `id` from today's board at once. If `fillRefusal` says no, the very same state comes back. */
 export function fillContract(state: FrontierState, id: string): FrontierState {
   if (fillRefusal(state, id) !== null) return state;
-  // Taken and delivered in one go: it is never held.
-  return deliverContract(takeAnyway(state, id), id);
+  // Taken and delivered in one go: it is never held. It leaves today's board.
+  const done = deliverContract(takeAnyway(state, id), id);
+  return { ...done, boardUsed: [...done.boardUsed, id] };
 }
 
 /** `state` holding contract `id` too, whatever the limit (only for filling it at once). */

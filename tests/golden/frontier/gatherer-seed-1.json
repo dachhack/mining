@@ -1,10 +1,10 @@
 {
   "description": "The gatherer for 10 shifts of 100 taps: takes plants and animals, places two more camps where they light the most new ground, mines 541 blocks, upgrades three times, builds a smelter and a pen, makes hay, and is never hungry",
   "recordedWith": "gatherer",
-  "engineVersion": "0.22.0",
+  "engineVersion": "0.23.0",
   "seed": 1,
-  "stepCount": 1012,
-  "expectedHash": "5441f0789c53a4f1",
+  "stepCount": 1014,
+  "expectedHash": "fdf82698fc688b0e",
   "steps": [
     "tap 14,8",
     "tap 19,17",
@@ -916,6 +916,8 @@
     "tap 7,15",
     "endShift",
     "sell stone 1",
+    "takeContract t1-sheep",
+    "takeContract t1-apples",
     "closeMarket",
     "tap 8,12",
     "tap 8,13",

@@ -15,7 +15,7 @@ import {
   tapsPerShift,
 } from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
-import { FRONTIER_AXE, FRONTIER_SURFACE } from '../../src/data/frontier';
+import { FRONTIER_AXE, FRONTIER_CONTRACTS, FRONTIER_SURFACE } from '../../src/data/frontier';
 import { actionOf, applyFrontierStep, replayFrontier } from '../../tools/frontierRun';
 import type { FrontierGolden } from '../../tools/frontierRun';
 
@@ -49,7 +49,7 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
     });
   }
 
-  it('between them, they place camps, upgrade one, build a smelter, smelt, make a pickaxe, make or buy the drills, mine with them, hang a lantern, reach level 4, catch animals, take plants, mine clay, sell and buy at the market, plant saplings, make hay, keep a pen that breeds, take and deliver contracts, place a deep camp, buy an axe, build a saw house and fell trees for more wood, grow maples, tap their sap and boil it into syrup at a sugar shack, pick mushrooms, fill a square with dirt, sow seeds and harvest the crops, hire miners and dig a 3 x 3 with them, build a work camp and hire a worker, see rain fill a pit, hit water and pump it out, set off gas and put out its fires, let a fire burn, meet a dragon and drive one off, build defenses, be raided and turn raiders away, finish a run, and go short of upkeep, so a shift has fewer taps', () => {
+  it('between them, they place camps, upgrade one, build a smelter, smelt, make a pickaxe, make or buy the drills, mine with them, hang a lantern, reach level 4, catch animals, take plants, mine clay, sell and buy at the market, plant saplings, make hay, keep a pen that breeds, take and deliver contracts, place a deep camp, buy an axe, build a saw house and fell trees for more wood, grow maples, tap their sap and boil it into syrup at a sugar shack, saw lumber, deliver a surface contract, pick mushrooms, fill a square with dirt, sow seeds and harvest the crops, hire miners and dig a 3 x 3 with them, build a work camp and hire a worker, see rain fill a pit, hit water and pump it out, set off gas and put out its fires, let a fire burn, meet a dragon and drive one off, build defenses, be raided and turn raiders away, finish a run, and go short of upkeep, so a shift has fewer taps', () => {
     const seen = new Set<string>();
     const fireCount = (x: FrontierState): number => x.hazards.fires.filter((f) => f).length;
     for (const name of files) {
@@ -68,6 +68,14 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
         if (/^build (lumberCamp|farmCamp|hermitCamp) /.test(step)) seen.add('workCamp');
         if (step.startsWith('build sugarShack')) seen.add('sugarShack');
         if (step === 'make syrup') seen.add('syrup');
+        if (step === 'make lumber') seen.add('lumber');
+        // A surface contract delivered (owner, after the 0.22.0 build).
+        const [cVerb, cId] = step.split(' ');
+        if (
+          (cVerb === 'fillContract' || cVerb === 'deliver') &&
+          FRONTIER_CONTRACTS.some((c) => c.id === cId && c.surface === true)
+        )
+          seen.add('surfaceContract');
         const sap = (x: typeof state): number => x.inventory.get('sap') ?? 0;
         if (verb === 'tap' && sap(next) > sap(state)) seen.add('sap');
         const mushroom = (x: typeof state): number => x.inventory.get('mushroom') ?? 0;
@@ -169,6 +177,8 @@ describe('the new game’s golden runs (plan A3)', { timeout: 30000 }, () => {
         'sugarShack',
         'sap',
         'syrup',
+        'lumber',
+        'surfaceContract',
         'mushroom',
         'fillSquare',
         'sow',

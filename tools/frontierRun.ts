@@ -433,13 +433,20 @@ export function hazardStep(state: FrontierState): FrontierStep | null {
   const litDragon = dragons.find((d) => sightAt(state, d.x, d.y) === 'shown');
   if (litDragon !== undefined && sword) return `tap ${litDragon.x},${litDragon.y}`;
   if (dragons.length > 0 && !sword && makeRefusal(state, 'sword') === null) return 'make sword';
+  // A tap on a square a dragon stands on meets the dragon first: without a
+  // sword it does nothing, so fires and floods under a dragon wait for it to go.
+  const underDragon = (x: number, y: number): boolean =>
+    dragons.some((d) => d.x === x && d.y === y);
   const fire = state.hazards.fires.findIndex(
-    (burning, i) => burning && sightAt(state, i % width, Math.floor(i / width)) === 'shown',
+    (burning, i) =>
+      burning &&
+      sightAt(state, i % width, Math.floor(i / width)) === 'shown' &&
+      !underDragon(i % width, Math.floor(i / width)),
   );
   if (fire >= 0) return `tap ${fire % width},${Math.floor(fire / width)}`;
   if ((state.inventory.get(FRONTIER_PUMP.item) ?? 0) > 0) {
     const flood = unpumpedFlood(state);
-    if (flood !== null) return `tap ${flood.x},${flood.y}`;
+    if (flood !== null && !underDragon(flood.x, flood.y)) return `tap ${flood.x},${flood.y}`;
   }
   return defendStep(state);
 }

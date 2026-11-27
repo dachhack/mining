@@ -363,6 +363,8 @@ export interface FrontierRecipe {
   needsSmelter: boolean;
   /** True if it is made only while a sugar shack stands somewhere (FRONTIER_SUGAR_SHACK). */
   needsSugarShack?: boolean;
+  /** True if it is made only while a saw house stands somewhere (FRONTIER_SAW_HOUSE). */
+  needsSawHouse?: boolean;
 }
 
 /**
@@ -461,6 +463,16 @@ export const FRONTIER_RECIPES: FrontierRecipe[] = [
     output: { item: 'syrup', count: 1 },
     needsSmelter: false,
     needsSugarShack: true,
+  },
+  // Lumber, sawn from wood at a saw house (owner, after the 0.22.0 build:
+  // "Let's make lumber productable if you have a saw house"; asked, 2 wood a lumber).
+  {
+    id: 'lumber',
+    name: 'Lumber',
+    inputs: [{ item: 'wood', count: 2 }],
+    output: { item: 'lumber', count: 1 },
+    needsSmelter: false,
+    needsSawHouse: true,
   },
 ];
 
@@ -720,6 +732,8 @@ export const FRONTIER_MARKET = {
     // Maple sap and the syrup boiled from it (owner, after the 0.17.0 build).
     { item: 'sap', count: 2, coins: 1 },
     { item: 'syrup', count: 1, coins: 8 },
+    // Lumber (owner, after the 0.22.0 build): twice what its 2 wood fetch.
+    { item: 'lumber', count: 1, coins: 2 },
     // Mushrooms (owner, after the 0.17.0 build: "mushrooms sell for gold").
     { item: 'mushroom', count: 1, coins: 3 },
     // Grains and vegetables (owner, after the 0.19.0 build).
@@ -797,6 +811,13 @@ export interface FrontierContractDef {
   name: string;
   asks: ItemStack[];
   pays: number;
+  /**
+   * True for a surface contract (owner, after the 0.22.0 build: "We need more
+   * surface resource contracts especially early game"): it asks only for
+   * what the surface gives, and is on the board from the first market day,
+   * before a level-3 camp opens the rest of tier 1 (FRONTIER_BOARD.tier1Level).
+   */
+  surface?: boolean;
 }
 
 /**
@@ -804,6 +825,9 @@ export interface FrontierContractDef {
  * fetch at the market (FRONTIER_MARKET.sellPrices), and each tier pays
  * more than the one below. Every number is a [Default] (plan section 5:
  * tier 1 pays 50 to 150 coins, tier 2 200 to 500, tier 3 600 to 2,000).
+ * Where the market sells everything a contract asks for, it pays no more
+ * than buying it would cost, so the market is no money pump (the surface
+ * contracts of the 0.23.0 build pay less than plan section 5 for that).
  */
 export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
   // Tier 1: coal, stone, raw ore, or ingots for more.
@@ -870,6 +894,9 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
     asks: [{ item: 'clay', count: 80 }],
     pays: 70,
   },
+  // Surface contracts (owner, after the 0.22.0 build: "We need more surface
+  // resource contracts especially early game. Wood, hay, sheep, syrup,
+  // apples, mushrooms, crops."): on the board from the first market day.
   // Mushrooms (owner, after the 0.17.0 build: "Contracts for mushrooms in the market").
   {
     id: 't1-mushrooms',
@@ -877,6 +904,83 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
     name: 'Mushrooms for the cook',
     asks: [{ item: 'mushroom', count: 10 }],
     pays: 60,
+    surface: true,
+  },
+  {
+    id: 't1-firewood',
+    tier: 1,
+    name: 'Firewood for the winter',
+    asks: [{ item: 'wood', count: 30 }],
+    // No more than 30 wood cost at the market (24 coins), so buying to fill it pays nothing.
+    pays: 22,
+    surface: true,
+  },
+  {
+    id: 't1-hay',
+    tier: 1,
+    name: 'Hay for the stables',
+    asks: [{ item: 'hay', count: 20 }],
+    pays: 20,
+    surface: true,
+  },
+  {
+    id: 't1-sheep',
+    tier: 1,
+    name: 'Sheep for a farm',
+    asks: [{ item: 'animal', count: 3 }],
+    pays: 20,
+    surface: true,
+  },
+  {
+    id: 't1-apples',
+    tier: 1,
+    name: 'Apples for the market',
+    asks: [{ item: 'apple', count: 20 }],
+    pays: 18,
+    surface: true,
+  },
+  {
+    id: 't1-syrup',
+    tier: 1,
+    name: 'Syrup for pancakes',
+    asks: [{ item: 'syrup', count: 5 }],
+    pays: 60,
+    surface: true,
+  },
+  {
+    id: 't1-grain',
+    tier: 1,
+    name: 'Grain for the mill',
+    asks: [{ item: 'wheat', count: 20 }],
+    pays: 25,
+    surface: true,
+  },
+  {
+    id: 't1-corn',
+    tier: 1,
+    name: 'Corn for the fair',
+    asks: [{ item: 'corn', count: 15 }],
+    pays: 30,
+    surface: true,
+  },
+  {
+    id: 't1-stew',
+    tier: 1,
+    name: 'Vegetables for a stew',
+    asks: [
+      { item: 'carrot', count: 10 },
+      { item: 'potato', count: 10 },
+    ],
+    pays: 40,
+    surface: true,
+  },
+  {
+    id: 't1-lumber',
+    tier: 1,
+    name: 'Lumber for a shed',
+    asks: [{ item: 'lumber', count: 10 }],
+    pays: 40,
+    surface: true,
   },
   // Tier 2: bulk stone, ore, ingots and clay.
   {
@@ -939,6 +1043,43 @@ export const FRONTIER_CONTRACTS: FrontierContractDef[] = [
     name: 'Mushrooms for a feast',
     asks: [{ item: 'mushroom', count: 30 }],
     pays: 220,
+    surface: true,
+  },
+  {
+    id: 't2-lumber',
+    tier: 2,
+    name: 'Lumber for a barn',
+    asks: [{ item: 'lumber', count: 40 }],
+    pays: 220,
+    surface: true,
+  },
+  {
+    id: 't2-syrup',
+    tier: 2,
+    name: 'Syrup for the town',
+    asks: [{ item: 'syrup', count: 20 }],
+    pays: 260,
+    surface: true,
+  },
+  {
+    id: 't2-provisions',
+    tier: 2,
+    name: 'Provisions for a camp',
+    asks: [
+      { item: 'apple', count: 30 },
+      { item: 'corn', count: 20 },
+      { item: 'hay', count: 10 },
+    ],
+    pays: 200,
+    surface: true,
+  },
+  {
+    id: 't2-flock',
+    tier: 2,
+    name: 'A flock',
+    asks: [{ item: 'animal', count: 10 }],
+    pays: 80,
+    surface: true,
   },
   // Tier 3: crystal, rare ore and relics.
   { id: 't3-crystal', tier: 3, name: 'Crystal', asks: [{ item: 'crystal', count: 10 }], pays: 700 },
@@ -987,6 +1128,24 @@ export const FRONTIER_BOARD = {
    * many levels below the deepest square counts, with the store and smelting.
    */
   reachBelowDeepest: 4,
+  /**
+   * What a surface contract may ask for that the board counts as always to
+   * be had (owner, after the 0.22.0 build): trees and grass grow back,
+   * animals walk in, saplings and seeds are sold, and hay, syrup and lumber
+   * are made from those. Mushrooms are not here: they are counted (stock.ts).
+   */
+  renewable: [
+    'wood',
+    'hay',
+    'animal',
+    'apple',
+    'syrup',
+    'lumber',
+    'wheat',
+    'corn',
+    'carrot',
+    'potato',
+  ] as string[],
 };
 
 /**

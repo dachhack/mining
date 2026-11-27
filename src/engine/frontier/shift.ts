@@ -360,6 +360,8 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
     // Unpaid upkeep costs taps of this new shift (never below 0).
     tapsLeft: Math.max(0, tapsPerShift(pumping.inventory) - tapsLost),
     marketOpen: false,
+    // Today's board is gone: the next market day's is a new one.
+    boardUsed: [],
     // A lost crew ends the run first; otherwise the run is over once its last shift has ended.
     status: state.shift >= FRONTIER_RUN.shifts ? 'finished' : 'active',
   };

@@ -8,6 +8,9 @@
 //   pickaxe's doubling is not counted);
 // - what the store holds;
 // - the mushrooms standing and coming (mushrooms.ts);
+// - as much as anyone could ask of what grows back, or is bought and made
+//   (FRONTIER_BOARD.renewable: wood, hay, animals, apples, syrup, lumber,
+//   crops; owner, after the 0.22.0 build): Infinity;
 // - the ingots that ore and coal could be smelted into (FRONTIER_RECIPES:
 //   'smelt-iron' and 'smelt-copper'), on top of any held: each smelting
 //   recipe counted alone, as if the coal went to it only.
@@ -20,7 +23,7 @@
 
 import type { ItemStack } from '../../data';
 import { blockDefByCode } from '../../data';
-import { FRONTIER_RECIPES } from '../../data/frontier';
+import { FRONTIER_BOARD, FRONTIER_RECIPES } from '../../data/frontier';
 import { depthAt } from '../heightmap';
 import { blockAt } from '../state';
 import type { GameState } from '../state';
@@ -67,6 +70,8 @@ export function worldStock(state: FrontierState, maxDepth = Infinity): Map<strin
   const mushrooms =
     state.mushrooms.filter((m) => m).length + state.mushroomIn.filter((n) => n >= 0).length;
   if (mushrooms > 0) stock.set('mushroom', (stock.get('mushroom') ?? 0) + mushrooms);
+  // What grows back, or is bought and made, is always to be had.
+  for (const item of FRONTIER_BOARD.renewable) stock.set(item, Infinity);
   // Ingots from smelting: as many times as the scarcest input allows.
   for (const recipe of FRONTIER_RECIPES) {
     if (!recipe.id.startsWith('smelt-')) continue;

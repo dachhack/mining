@@ -46,6 +46,8 @@ export type ItemId =
   | 'mapleSapling'
   | 'sap'
   | 'syrup'
+  // Lumber, sawn from wood at a saw house (owner, after the 0.22.0 build).
+  | 'lumber'
   // Picked where a tree stood in the rain (owner, after the 0.17.0 build).
   | 'mushroom'
   // Grains and vegetables, grown from seeds (owner, after the 0.19.0 build).
@@ -105,6 +107,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   mapleSapling: { name: 'Maple saplings' },
   sap: { name: 'Sap' },
   syrup: { name: 'Syrup' },
+  lumber: { name: 'Lumber' },
   mushroom: { name: 'Mushrooms' },
   wheatSeed: { name: 'Wheat seeds' },
   cornSeed: { name: 'Corn seeds' },
