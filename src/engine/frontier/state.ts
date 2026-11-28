@@ -17,7 +17,7 @@ import type { RngState } from '../rng';
  * not loaded into a new shape. Separate from the old game's STATE_VERSION
  * while the two rule sets live side by side.
  */
-export const FRONTIER_STATE_VERSION = 28; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`; 12: `marketOpen`; 13: `contracts` (several held) for `contract`; 14: `hazards` (flooded squares, pumps); 15: `hazards.fires`; 16: `hazards.dragons`, `nextDragonId`; 17: a camp's `defense`; 18: a dragon's heading (`dx`, `dy`); 19: a dragon's `restMines`; 20: `sawHouses`; 21: `buildings` for `sawHouses`, and maple trees; 22: `mushrooms`, `mushroomIn`; 23: `crops`, `cropIn`; 24: a building's `workers` and `horses`, and work camps; 25: no `health`; 26: `boardUsed`; 27: a dragon's `restTaps` for `restMines`; 28: `feats`
+export const FRONTIER_STATE_VERSION = 29; // 2: `inventory` (A2); 3: `mined` (A3); 4: shifts (A4); 5: `stumps`; 6: a camp's `smelter`; 7: a camp's `lantern`; 8: `grassIn`, `planted`, `treesFelled` (farming); 9: a camp's pen; 10: `contract`, `contractsDone`; 11: a camp's `deep`; 12: `marketOpen`; 13: `contracts` (several held) for `contract`; 14: `hazards` (flooded squares, pumps); 15: `hazards.fires`; 16: `hazards.dragons`, `nextDragonId`; 17: a camp's `defense`; 18: a dragon's heading (`dx`, `dy`); 19: a dragon's `restMines`; 20: `sawHouses`; 21: `buildings` for `sawHouses`, and maple trees; 22: `mushrooms`, `mushroomIn`; 23: `crops`, `cropIn`; 24: a building's `workers` and `horses`, and work camps; 25: no `health`; 26: `boardUsed`; 27: a dragon's `restTaps` for `restMines`; 28: `feats`; 29: a camp's `smelterLevel`, `smeltIron`, `smeltCopper`, `smeltCoal`
 
 /** What grows on a square: nothing, grass, a tree, an apple tree or a maple tree. */
 export const NO_FEATURE = 0;
@@ -120,6 +120,12 @@ export interface FrontierCamp {
    * 2 animals and room for one more); 0 while it may not, or waits for hay.
    */
   breedIn: number;
+  /** The smelter's level, 1 to 3 (FRONTIER_SMELTER.levels); 0 with no smelter. */
+  smelterLevel: number;
+  /** What is loaded in the smelter (smelting.ts): raw iron ore, raw copper ore, and coal. */
+  smeltIron: number;
+  smeltCopper: number;
+  smeltCoal: number;
 }
 
 export interface FrontierState {

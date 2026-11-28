@@ -154,3 +154,30 @@ export const TUTORIAL_TIPS: TutorialTipDef[] = [
 export function tipsDue(facts: TutorialFacts, seen: string[]): string[] {
   return TUTORIAL_TIPS.filter((t) => !seen.includes(t.id) && t.when(facts)).map((t) => t.id);
 }
+
+/**
+ * The tips the ? button turns through once the tutorial is over (owner,
+ * after the 0.27.0 build: "It becomes just a tip rotation after the
+ * tutorial"): general advice, one at a time, in this order, round and round.
+ */
+export const ROTATING_TIPS: string[] = [
+  'Press and hold a square to dig the 3×3 round it. With 2 or more miners the whole dig costs only a few taps.',
+  'Each night costs wood, and food every other night. Going short costs taps the next shift, so keep a little of both.',
+  'A better camp brings the market more often, and you can hold as many contracts as your best camp’s level.',
+  'Contracts open in stages: build up your camps and deliver contracts to see ore, farm goods and then treasure.',
+  'You can only dig one level below a square’s neighbours. Dig wide to go deep.',
+  'A saw house gives 1 more wood from every tree near it, and lets you saw lumber in the recipe book.',
+  'Apple trees and maples fill again a few shifts after you pick them bare. Leave them standing.',
+  'Put spare animals in a pen: with 2 or more and some hay, they breed.',
+  'Rain fills low spots with dirt and clay, and brings mushrooms up under trees a few nights later.',
+  'A dragon only attacks what your camps light. A sword drives it off for good.',
+  'Marauders come 1 to 4 strong. Each level of defenses takes a point off what they do; a fortress stops them all.',
+  'A deep camp can stand at the bottom of a pit, 3 or more down. It needs a camp kit from the market.',
+  'Holding all 8 of the family’s relics at once is worth the most glory. Think before you sell them.',
+];
+
+/** The tip after tip `at` in the rotation (the first after the last; any number lands on a tip). */
+export function nextTip(at: number): number {
+  const n = ROTATING_TIPS.length;
+  return (((Math.floor(at) + 1) % n) + n) % n;
+}

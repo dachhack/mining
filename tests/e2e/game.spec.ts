@@ -5,6 +5,7 @@ import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { FRONTIER_SHIFT } from '../../src/data/frontier';
 import { STORY_PAGES } from '../../src/app/lab/story';
+import { ROTATING_TIPS } from '../../src/app/lab/tutorial';
 import { campTap, newCampWorld, sightMap } from '../../src/app/lab/campWorld';
 import { createFrontier, saveFrontier } from '../../src/engine';
 
@@ -230,4 +231,51 @@ test('a later thing gets a one-time tip: a dragon', async ({ page }) => {
   await page.reload();
   await expect(page.getByTestId('lab-map')).toHaveAttribute('data-camps', '1');
   await expect(card).toBeHidden();
+});
+
+test('the tutorial card minimizes into a ? above End shift; after the tutorial the ? turns through tips', async ({
+  page,
+}) => {
+  // Owner, after the 0.27.0 build: "Need to be able to minimize the tutorial
+  // card into a ? above the end shift button. It becomes just a tip rotation
+  // after the tutorial."
+  await page.goto('/');
+  await page.getByTestId('lab2-story-skip').click();
+  const card = page.getByTestId('lab2-tutorial');
+  const help = page.getByTestId('lab2-help');
+  await expect(card).toBeVisible();
+  await expect(help).toBeHidden();
+  // Minimize: the card goes, the ? shows, just above End shift.
+  await page.getByTestId('lab2-tutorial-min').click();
+  await expect(card).toBeHidden();
+  await expect(help).toBeVisible();
+  const q = await help.boundingBox();
+  const end = await page.getByTestId('lab2-end-shift').boundingBox();
+  if (q === null || end === null) throw new Error('the ? and End shift are on screen');
+  expect(q.y + q.height).toBeLessThanOrEqual(end.y);
+  expect(end.y - (q.y + q.height)).toBeLessThan(24);
+  expect(Math.abs(q.x - end.x)).toBeLessThan(12);
+  // It stays minimized over a reload; the ? brings the step back.
+  await page.reload();
+  await expect(help).toBeVisible();
+  await expect(card).toBeHidden();
+  await help.click();
+  await expect(card).toHaveAttribute('data-step', 'gather');
+  await expect(help).toBeHidden();
+  // Skip: the tutorial is over, and the ? is what is left.
+  await page.getByTestId('lab2-tutorial-button').click();
+  await expect(card).toBeHidden();
+  await expect(help).toBeVisible();
+  // Now the ? turns through the tips, round and round.
+  await help.click();
+  await expect(card).toHaveAttribute('data-kind', 'rotate');
+  const text = page.getByTestId('lab2-tutorial-text');
+  await expect(text).toHaveText(ROTATING_TIPS[0] ?? '');
+  await page.getByTestId('lab2-tutorial-button').click();
+  await expect(text).toHaveText(ROTATING_TIPS[1] ?? '');
+  // Minimize closes it; the next time it opens on the tip it was on.
+  await page.getByTestId('lab2-tutorial-min').click();
+  await expect(card).toBeHidden();
+  await help.click();
+  await expect(text).toHaveText(ROTATING_TIPS[1] ?? '');
 });

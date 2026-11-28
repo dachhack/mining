@@ -33,6 +33,10 @@ function revealedWorld(): FrontierState {
     pen: false,
     penned: 0,
     breedIn: 0,
+    smelterLevel: 0,
+    smeltIron: 0,
+    smeltCopper: 0,
+    smeltCoal: 0,
     deep: false,
     defense: 0,
   };
@@ -48,6 +52,10 @@ function revealedWorld(): FrontierState {
       pen: false,
       penned: 0,
       breedIn: 0,
+      smelterLevel: 0,
+      smeltIron: 0,
+      smeltCopper: 0,
+      smeltCoal: 0,
       deep: false,
       defense: 0,
     },
@@ -61,6 +69,10 @@ function revealedWorld(): FrontierState {
       pen: false,
       penned: 0,
       breedIn: 0,
+      smelterLevel: 0,
+      smeltIron: 0,
+      smeltCopper: 0,
+      smeltCoal: 0,
       deep: false,
       defense: 0,
     },
@@ -74,6 +86,10 @@ function revealedWorld(): FrontierState {
       pen: false,
       penned: 0,
       breedIn: 0,
+      smelterLevel: 0,
+      smeltIron: 0,
+      smeltCopper: 0,
+      smeltCoal: 0,
       deep: false,
       defense: 0,
     },
@@ -87,6 +103,10 @@ function revealedWorld(): FrontierState {
       pen: false,
       penned: 0,
       breedIn: 0,
+      smelterLevel: 0,
+      smeltIron: 0,
+      smeltCopper: 0,
+      smeltCoal: 0,
       deep: false,
       defense: 0,
     },
@@ -182,7 +202,10 @@ test('a fully revealed map: drawing the ground around a tap gives the same pictu
     // The same tap in the model, so the next one is chosen from the world as it is now.
     world = frontierAct(world, { kind: 'tap', x: square.x, y: square.y }).state;
   }
-  await page.waitForTimeout(1500); // the cues end
+  // The cues end: wait for the map to say so (a fixed wait was too short on
+  // a busy machine, and the two pictures then differed by a fading cue).
+  await expect(canvas).toHaveAttribute('data-effects', '0');
+  await page.waitForTimeout(300);
   // Keep the canvas's pixels in the page, to compare them there.
   const keep = (): Promise<void> =>
     canvas.evaluate((el) => {

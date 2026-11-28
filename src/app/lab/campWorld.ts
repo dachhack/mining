@@ -58,6 +58,9 @@ import {
   isLevelPatch as engineIsLevelPatch,
   makeRefusal as engineMakeRefusal,
   smelterRefusal as engineSmelterRefusal,
+  loadRefusal as engineLoadRefusal,
+  loadPlan as engineLoadPlan,
+  smelterUpgradeRefusal as engineSmelterUpgradeRefusal,
   lanternRefusal as engineLanternRefusal,
   newlyCovered as engineNewlyCovered,
   placeRefusal as enginePlaceRefusal,
@@ -382,6 +385,10 @@ export function campWorldFromLab(
       pen: false,
       penned: 0,
       breedIn: 0,
+      smelterLevel: 0,
+      smeltIron: 0,
+      smeltCopper: 0,
+      smeltCoal: 0,
       deep: false,
       defense: 0,
     },
@@ -640,6 +647,35 @@ export function upgradeCamp(world: CampWorld, id: number): CampWorld {
 /** Why a smelter cannot be built at camp `id` now ('noTaps', 'over', or the engine's reason), or `null` if it can. */
 export function smelterRefusal(world: CampWorld, id: number): string | null {
   return turnRefusal(world) ?? engineSmelterRefusal(toFrontier(world), id);
+}
+
+/** Why camp `id`'s smelter cannot be loaded with `ore` now ('noTaps', 'over', or the engine's reason), or `null`. */
+export function loadSmelterRefusal(world: CampWorld, id: number, ore: string): string | null {
+  return turnRefusal(world) ?? engineLoadRefusal(toFrontier(world), id, ore);
+}
+
+/** What loading `ore` into camp `id`'s smelter would take from the store. */
+export function loadSmelterPlan(
+  world: CampWorld,
+  id: number,
+  ore: string,
+): { ore: number; coal: number } {
+  return engineLoadPlan(toFrontier(world), id, ore);
+}
+
+/** Load camp `id`'s smelter with `ore` and coal, for 1 tap; the very same world if it cannot. */
+export function loadCampSmelter(world: CampWorld, id: number, ore: string): CampWorld {
+  return act(world, { kind: 'loadSmelter', id, ore }).world;
+}
+
+/** Why camp `id`'s smelter cannot be upgraded now ('noTaps', 'over', or the engine's reason), or `null`. */
+export function smelterKitRefusal(world: CampWorld, id: number): string | null {
+  return turnRefusal(world) ?? engineSmelterUpgradeRefusal(toFrontier(world), id);
+}
+
+/** Upgrade camp `id`'s smelter with its kit, for 1 tap; the very same world if it cannot. */
+export function upgradeCampSmelter(world: CampWorld, id: number): CampWorld {
+  return act(world, { kind: 'upgradeSmelter', id }).world;
 }
 
 /** Build a smelter at camp `id`, for its cost and 1 tap; the very same world if it cannot. */
@@ -935,6 +971,9 @@ export type CampStep =
   | { kind: 'demolish'; id: number }
   // Build a smelter at a camp; make a recipe (smelting and crafting, PR 1).
   | { kind: 'buildSmelter'; id: number }
+  // Load a smelter with ore and coal; upgrade it with a kit (owner, after the 0.27.0 build).
+  | { kind: 'loadSmelter'; id: number; ore: string }
+  | { kind: 'upgradeSmelter'; id: number }
   | { kind: 'make'; recipe: string }
   // Hang a lantern at a camp (PR 3).
   | { kind: 'hangLantern'; id: number }
@@ -987,6 +1026,12 @@ export function applyCampStep(world: CampWorld, step: CampStep): CampWorld {
   }
   if (step.kind === 'buildSmelter') {
     return buildCampSmelter(world, step.id);
+  }
+  if (step.kind === 'loadSmelter') {
+    return loadCampSmelter(world, step.id, step.ore);
+  }
+  if (step.kind === 'upgradeSmelter') {
+    return upgradeCampSmelter(world, step.id);
   }
   if (step.kind === 'make') {
     return makeCampRecipe(world, step.recipe);

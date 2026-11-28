@@ -1,10 +1,10 @@
 {
   "description": "The careful policy: keeps wood and food back for upkeep, places two more camps, builds a smelter and brings one to level 3; short only at the end of the first shift",
   "recordedWith": "careful",
-  "engineVersion": "0.27.0",
+  "engineVersion": "0.28.0",
   "seed": 3,
   "stepCount": 1014,
-  "expectedHash": "38cad0131d181cb6",
+  "expectedHash": "39631d84949a6364",
   "steps": [
     "tap 15,11",
     "tap 17,13",

@@ -23,6 +23,7 @@ import { FRONTIER_MARKET, FRONTIER_MINERS } from '../../data/frontier';
 import type { FrontierLot } from '../../data/frontier';
 import { canAfford, pay } from './camps';
 import { gained } from './surface';
+import { contractStage } from './contracts';
 import type { FrontierState } from './state';
 
 /** The highest level of any camp standing; 1 if none stands. */
@@ -101,6 +102,7 @@ export function tradeRefusal(
   if (lot === null) return 'unknown';
   if (bestCampLevel(state) < (lot.fromLevel ?? 1)) return 'notYet';
   if (lot.afterTier1 === true && (state.contractsDone[0] ?? 0) === 0) return 'notYet';
+  if (contractStage(state) < (lot.fromStage ?? 1)) return 'notYet';
   if (!Number.isInteger(lots) || lots < 1) return 'lots';
   if (side === 'buy' && ownsUseful(state, item)) return 'owned';
   if (side === 'buy' && item in FRONTIER_MARKET.uselessWhenHeld && lots > 1) return 'lots';

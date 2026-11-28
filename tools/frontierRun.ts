@@ -16,6 +16,7 @@ import {
   FRONTIER_NEW_CAMP_COST,
   FRONTIER_PEN,
   FRONTIER_PICKAXE,
+  FRONTIER_SMELTER,
   FRONTIER_PUMP,
   FRONTIER_RAID,
   FRONTIER_SAW_HOUSE,
@@ -43,7 +44,9 @@ import {
   mostLots,
   tradeRefusal,
   lanternRefusal,
+  loadPlan,
   makeRefusal,
+  smelterUpgradeRefusal,
   previewTap,
   newlyCovered,
   placeRefusal,
@@ -140,6 +143,7 @@ export function actionOf(step: FrontierStep): FrontierAction {
     (verb === 'upgrade' ||
       verb === 'demolish' ||
       verb === 'buildSmelter' ||
+      verb === 'upgradeSmelter' ||
       verb === 'hangLantern' ||
       verb === 'buildPen' ||
       verb === 'penIn' ||
@@ -151,6 +155,10 @@ export function actionOf(step: FrontierStep): FrontierAction {
   }
   if (verb === 'make' && arg !== undefined) {
     return { kind: 'make', recipe: arg };
+  }
+  // "loadSmelter ID ORE": load camp ID's smelter with raw ore ORE (and coal).
+  if (verb === 'loadSmelter' && arg !== undefined && third !== undefined) {
+    return { kind: 'loadSmelter', id: Number(arg), ore: third };
   }
   if (
     (verb === 'tap' ||
@@ -238,9 +246,19 @@ export function craftStep(state: FrontierState): FrontierStep | null {
   ) {
     return 'make copper-lantern';
   }
-  for (const recipe of ['smelt-iron', 'smelt-copper', 'syrup']) {
-    if (makeRefusal(state, recipe) === null) return `make ${recipe}`;
+  // Smelting (owner, after the 0.27.0 build): upgrade a smelter with a kit
+  // held; load one when a whole batch of ore and its coal would go in.
+  for (const camp of state.camps) {
+    if (smelterUpgradeRefusal(state, camp.id) === null) return `upgradeSmelter ${camp.id}`;
+    for (const pair of FRONTIER_SMELTER.smelts) {
+      const plan = loadPlan(state, camp.id, pair.ore);
+      const coalIn = camp.smeltCoal + plan.coal;
+      if (plan.ore >= FRONTIER_SMELTER.orePerBatch && coalIn >= FRONTIER_SMELTER.coalPerBatch) {
+        return `loadSmelter ${camp.id} ${pair.ore}`;
+      }
+    }
   }
+  if (makeRefusal(state, 'syrup') === null) return 'make syrup';
   return null;
 }
 

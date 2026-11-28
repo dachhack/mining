@@ -27,6 +27,7 @@ import {
   FRONTIER_FOODS,
   FRONTIER_MARKET,
   FRONTIER_RECIPES,
+  FRONTIER_SMELTER,
 } from '../src/data/frontier';
 import {
   campAt,
@@ -47,6 +48,8 @@ import {
   lanternRefusal,
   makeRefusal,
   smelterRefusal,
+  smelterUpgradeRefusal,
+  loadRefusal,
   upkeepDue,
   fillSquareRefusal,
   buildRefusal,
@@ -125,6 +128,11 @@ function randomPolicy(rng: RngState): FrontierPolicy {
       if (upgradeRefusal(state, camp.id) === null) options.push(`upgrade ${camp.id}`);
       if (demolishRefusal(state, camp.id) === null) options.push(`demolish ${camp.id}`);
       if (smelterRefusal(state, camp.id) === null) options.push(`buildSmelter ${camp.id}`);
+      if (smelterUpgradeRefusal(state, camp.id) === null) options.push(`upgradeSmelter ${camp.id}`);
+      for (const pair of FRONTIER_SMELTER.smelts) {
+        if (loadRefusal(state, camp.id, pair.ore) === null)
+          options.push(`loadSmelter ${camp.id} ${pair.ore}`);
+      }
       if (lanternRefusal(state, camp.id) === null) options.push(`hangLantern ${camp.id}`);
       for (const kind of ['buildPen', 'penIn', 'penOut'] as const) {
         if (penRefusal(state, kind, camp.id) === null) options.push(`${kind} ${camp.id}`);

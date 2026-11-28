@@ -93,6 +93,11 @@ import {
   newCampWorld,
   newlyCovered,
   buildCampSmelter,
+  loadCampSmelter,
+  loadSmelterPlan,
+  loadSmelterRefusal,
+  smelterKitRefusal,
+  upgradeCampSmelter,
   hangCampLantern,
   lanternRefusal,
   demolishCamp,
@@ -197,7 +202,14 @@ import {
 import { drawCrop } from './cropArt';
 import { showNight } from './night';
 import { showStory } from './story';
-import { TUTORIAL_STEPS, TUTORIAL_TIPS, tipsDue, tutorialStep } from './tutorial';
+import {
+  ROTATING_TIPS,
+  TUTORIAL_STEPS,
+  TUTORIAL_TIPS,
+  nextTip,
+  tipsDue,
+  tutorialStep,
+} from './tutorial';
 import type { TutorialFacts, TutorialTarget } from './tutorial';
 import type { Night } from './night';
 
@@ -341,6 +353,8 @@ const OVER_HINT = 'This run is over. Tap New world to start another.';
 const CLOSE_CONFIRM_MS = 3000;
 /** Where the tutorial's step is kept (tutorial.ts): {"step": 2, "dugArea": false}, or nothing before it starts. */
 const TUTORIAL_KEY = 'mining-game.tutorial';
+/** Where the tip the ? is on is kept (tutorial.ts, ROTATING_TIPS): a number. */
+const TIP_AT_KEY = 'mining-game.tipAt';
 /** Where the ids of the tips already shown are kept (tutorial.ts). */
 const TIPS_KEY = 'mining-game.tips';
 
@@ -348,6 +362,8 @@ const TIPS_KEY = 'mining-game.tips';
 interface TutorialState {
   step: number;
   dugArea: boolean;
+  /** True while the card is minimized into the ? (owner, after the 0.27.0 build). */
+  min?: boolean;
 }
 
 /** `key`'s JSON from the phone's storage, or `null` (nothing kept, bad JSON, or no storage). */
@@ -373,8 +389,8 @@ function saveJson(key: string, value: unknown): void {
 function loadTutorial(): TutorialState | null {
   const kept = loadJson(TUTORIAL_KEY);
   if (typeof kept !== 'object' || kept === null) return null;
-  const { step, dugArea } = kept as { step?: unknown; dugArea?: unknown };
-  return typeof step === 'number' ? { step, dugArea: dugArea === true } : null;
+  const { step, dugArea, min } = kept as { step?: unknown; dugArea?: unknown; min?: unknown };
+  return typeof step === 'number' ? { step, dugArea: dugArea === true, min: min === true } : null;
 }
 
 /** The ids of the tips already shown. */
@@ -471,6 +487,9 @@ function shiftText(report: ShiftReport, turn: CampTurn): string {
       : '';
   // The work camps (owner, after the 0.20.0 build).
   const work = [
+    report.smelted.length > 0
+      ? ` The smelters 🔥 made ${report.smelted.map((s) => `${s.count} ${itemName(s.item).toLowerCase()}`).join(' and ')}.`
+      : '',
     report.workerWood > 0 ? ` Lumberjacks 🪓 brought in ${report.workerWood} wood.` : '',
     report.workerCrops > 0
       ? ` Farmers 🚜 harvested ${report.workerCrops} ${report.workerCrops === 1 ? 'crop' : 'crops'}.`
@@ -783,10 +802,23 @@ export function mountCampLab(
   const tutorialCount = element('span', 'lab2-tutorial-count');
   const tutorialButton = button('lab2-tutorial-button', 'Skip');
   tutorialButton.dataset['testid'] = 'lab2-tutorial-button';
+  // Minimize: the card folds into the ? above End shift.
+  const tutorialMin = button('lab2-tutorial-min', '–');
+  tutorialMin.dataset['testid'] = 'lab2-tutorial-min';
+  tutorialMin.setAttribute('aria-label', 'Minimize');
+  tutorialMin.title = 'Minimize';
+  const tutorialButtons = element('div', 'lab2-tutorial-buttons');
+  tutorialButtons.append(tutorialMin, tutorialButton);
   const tutorialFoot = element('div', 'lab2-tutorial-foot');
-  tutorialFoot.append(tutorialCount, tutorialButton);
+  tutorialFoot.append(tutorialCount, tutorialButtons);
   tutorialCard.append(tutorialText, tutorialFoot);
-  frame.append(hud, shiftButtons, mapButtons, overBanner, featToast, tutorialCard);
+  // The ? above End shift: the card minimized, and after the tutorial the tips.
+  const helpButton = button('lab2-help', '?');
+  helpButton.dataset['testid'] = 'lab2-help';
+  helpButton.setAttribute('aria-label', 'Tips');
+  helpButton.title = 'Tips';
+  helpButton.hidden = true;
+  frame.append(hud, shiftButtons, mapButtons, overBanner, featToast, tutorialCard, helpButton);
 
   const hint = element('p', 'lab-hint', HINT);
   hint.dataset['testid'] = 'lab-hint';
@@ -1823,6 +1855,10 @@ export function mountCampLab(
         pen: false,
         penned: 0,
         breedIn: 0,
+        smelterLevel: 0,
+        smeltIron: 0,
+        smeltCopper: 0,
+        smeltCoal: 0,
         deep: false,
         defense: 0,
       },
@@ -1891,6 +1927,8 @@ export function mountCampLab(
   const cues = cueLoop((now) => {
     effects = effects.filter((e) => now - e.start < effectMs(e.kind));
     draw(now);
+    // For the tests: how many cues are still playing (0 once the map is still).
+    canvas.dataset['effects'] = String(effects.length);
     // While the camp tool has a target, keep drawing: its square pulses. So
     // too while an animal is still sliding to where End shift moved it.
     const sliding =
@@ -3211,13 +3249,49 @@ export function mountCampLab(
 
     // The smelter (smelting and crafting): built here from level 2, or here already.
     if (camp.smelter) {
+      // Loaded here, it smelts overnight (owner, after the 0.27.0 build).
+      const data = FRONTIER_SMELTER.levels[Math.max(1, camp.smelterLevel) - 1];
+      const ore = camp.smeltIron + camp.smeltCopper;
       const has = element(
         'p',
         'lab2-panel-line',
-        '🔥 Smelter here · smelt ore in the recipe book 📖',
+        `🔥 Smelter L${camp.smelterLevel} · ore ${ore}/${data?.ore ?? 0} (${camp.smeltIron} iron, ${camp.smeltCopper} copper) · coal ${camp.smeltCoal}/${data?.coal ?? 0} · makes ${data?.perNight ?? 0} ingots a night`,
       );
       has.dataset['testid'] = 'lab2-camp-smelter';
+      has.dataset['level'] = String(camp.smelterLevel);
+      has.dataset['iron'] = String(camp.smeltIron);
+      has.dataset['copper'] = String(camp.smeltCopper);
+      has.dataset['coal'] = String(camp.smeltCoal);
       tray.append(has);
+      const row = element('div', 'lab2-actions');
+      for (const [oreItem, label] of [
+        ['rawIronOre', 'Load iron'],
+        ['rawCopperOre', 'Load copper'],
+      ] as const) {
+        const load = button('lab2-button', label);
+        load.dataset['testid'] = `lab2-smelter-load-${oreItem}`;
+        const plan = loadSmelterPlan(world, camp.id, oreItem);
+        // Off when no ore of this kind would go in (coal alone goes with either).
+        load.disabled =
+          loadSmelterRefusal(world, camp.id, oreItem) !== null ||
+          (plan.ore === 0 && plan.coal === 0);
+        load.title = `Loads ${plan.ore} ore and ${plan.coal} coal from your store, for 1 tap`;
+        load.addEventListener('click', () => confirmLoad(camp.id, oreItem));
+        row.append(load);
+      }
+      const kit = FRONTIER_SMELTER.kits[camp.smelterLevel - 1];
+      if (kit !== undefined && camp.smelterLevel < FRONTIER_SMELTER.levels.length) {
+        const up = button('lab2-button', `⬆ Level ${camp.smelterLevel + 1} kit`);
+        up.dataset['testid'] = 'lab2-smelter-upgrade';
+        up.disabled = smelterKitRefusal(world, camp.id) !== null;
+        up.title =
+          (world.lab.counts.get(kit) ?? 0) > 0
+            ? `Use your ${itemName(kit)}, for 1 tap`
+            : `Needs a ${itemName(kit)} from the market 🏪`;
+        up.addEventListener('click', () => confirmSmelterKit(camp.id));
+        row.append(up);
+      }
+      tray.append(row);
     } else if (camp.level >= FRONTIER_SMELTER.minLevel) {
       const row = element('div', 'lab2-actions');
       row.append(costRow(FRONTIER_SMELTER.cost, 'lab2-smelter-cost'));
@@ -3410,7 +3484,35 @@ export function mountCampLab(
     };
   }
 
-  /** The card: a tip due, else the tutorial's step; and the pulse on the button a step points at. */
+  /** True while the ? has the tips open, once the tutorial is over (not kept: it opens shut). */
+  let helpOpen = false;
+  helpButton.addEventListener('click', () => {
+    // The ? brings the card back: the tutorial's step, or the tips after it.
+    if (tutorialGoing() && tutorial !== null) setTutorial({ ...tutorial, min: false });
+    else helpOpen = true;
+    showTutorial();
+  });
+  tutorialMin.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (tutorialGoing() && tutorial !== null) setTutorial({ ...tutorial, min: true });
+    else helpOpen = false;
+    showTutorial();
+  });
+
+  /** True while the tutorial's steps are still going (started, and not finished or skipped). */
+  function tutorialGoing(): boolean {
+    return tutorial !== null && tutorial.step <= TUTORIAL_STEPS.length;
+  }
+
+  /**
+   * The card and the ? (owner, after the 0.27.0 build: "Need to be able to
+   * minimize the tutorial card into a ? above the end shift button. It
+   * becomes just a tip rotation after the tutorial"):
+   * - a one-time tip due (a dragon, a fire ...) opens the card until "Got it";
+   * - else, while the tutorial goes on, its step, or the ? if it is minimized;
+   * - else the ?, which opens the tips: one at a time, round and round.
+   * The button a step points at pulses while its step shows.
+   */
   function showTutorial(): void {
     if (!asGame) return;
     const facts = tutorialFacts();
@@ -3420,16 +3522,23 @@ export function mountCampLab(
       goals: goalsButton,
     };
     for (const el of Object.values(targets)) el.classList.remove('lab2-tutorial-target');
+    /** Show the card (and not the ?), or the ? (and not the card). */
+    const open = (isOpen: boolean): void => {
+      tutorialCard.hidden = !isOpen;
+      helpButton.hidden = isOpen;
+    };
+    tutorialMin.hidden = false;
     // A tip first: one sentence, once ever, until "Got it".
     const tipId = world.turn.status === 'active' ? tipsDue(facts, loadTips())[0] : undefined;
     const tip = TUTORIAL_TIPS.find((t) => t.id === tipId);
     if (tip !== undefined) {
-      tutorialCard.hidden = false;
+      open(true);
       tutorialCard.dataset['kind'] = 'tip';
       tutorialCard.dataset['step'] = tip.id;
       tutorialText.textContent = tip.text;
       tutorialCount.textContent = 'Tip';
       tutorialButton.textContent = 'Got it';
+      tutorialMin.hidden = true;
       tutorialPress = () => {
         saveJson(TIPS_KEY, [...loadTips(), tip.id]);
         if (tip.id === 'raid') raidedLastNight = false;
@@ -3437,32 +3546,55 @@ export function mountCampLab(
       };
       return;
     }
-    if (tutorial === null || tutorial.step > TUTORIAL_STEPS.length) {
-      tutorialCard.hidden = true;
+    if (tutorial !== null && tutorialGoing()) {
+      const at = tutorialStep(tutorial.step, facts);
+      if (at !== tutorial.step) setTutorial({ ...tutorial, step: at });
+      const step = TUTORIAL_STEPS[at];
+      helpButton.dataset['kind'] = 'step';
+      if (tutorial.min === true) {
+        open(false);
+        return;
+      }
+      open(true);
+      tutorialCard.dataset['kind'] = 'step';
+      if (step === undefined) {
+        // Every step done: one last card, then it is over for good.
+        tutorialCard.dataset['step'] = 'done';
+        tutorialText.textContent =
+          'That’s the basics. The rest is yours to find: reclaim your family’s heritage! The ? has more tips.';
+        tutorialCount.textContent = '';
+        tutorialButton.textContent = 'Done';
+      } else {
+        tutorialCard.dataset['step'] = step.id;
+        tutorialText.textContent = step.text;
+        tutorialCount.textContent = `Tutorial ${at + 1} / ${TUTORIAL_STEPS.length}`;
+        tutorialButton.textContent = 'Skip';
+        if (step.target !== undefined) targets[step.target].classList.add('lab2-tutorial-target');
+      }
+      tutorialPress = () => {
+        // Skip, or Done: the tutorial is over (Replay in the contracts card brings it back).
+        setTutorial({ step: TUTORIAL_STEPS.length + 1, dugArea: true });
+        helpOpen = false;
+        showTutorial();
+      };
       return;
     }
-    const at = tutorialStep(tutorial.step, facts);
-    if (at !== tutorial.step) setTutorial({ ...tutorial, step: at });
-    const step = TUTORIAL_STEPS[at];
-    tutorialCard.hidden = false;
-    tutorialCard.dataset['kind'] = 'step';
-    if (step === undefined) {
-      // Every step done: one last card, then it is over for good.
-      tutorialCard.dataset['step'] = 'done';
-      tutorialText.textContent =
-        'That’s the basics. The rest is yours to find: reclaim your family’s heritage!';
-      tutorialCount.textContent = '';
-      tutorialButton.textContent = 'Done';
-    } else {
-      tutorialCard.dataset['step'] = step.id;
-      tutorialText.textContent = step.text;
-      tutorialCount.textContent = `Tutorial ${at + 1} / ${TUTORIAL_STEPS.length}`;
-      tutorialButton.textContent = 'Skip';
-      if (step.target !== undefined) targets[step.target].classList.add('lab2-tutorial-target');
+    // After the tutorial (or without one): the ? turns through the tips.
+    helpButton.dataset['kind'] = 'tips';
+    if (!helpOpen) {
+      open(false);
+      return;
     }
+    open(true);
+    const kept = loadJson(TIP_AT_KEY);
+    const at = typeof kept === 'number' && ROTATING_TIPS[kept] !== undefined ? kept : 0;
+    tutorialCard.dataset['kind'] = 'rotate';
+    tutorialCard.dataset['step'] = String(at);
+    tutorialText.textContent = ROTATING_TIPS[at] ?? '';
+    tutorialCount.textContent = `Tip ${at + 1} / ${ROTATING_TIPS.length}`;
+    tutorialButton.textContent = 'Next tip';
     tutorialPress = () => {
-      // Skip, or Done: the tutorial is over (Replay in the contracts card brings it back).
-      setTutorial({ step: TUTORIAL_STEPS.length + 1, dugArea: true });
+      saveJson(TIP_AT_KEY, nextTip(at));
       showTutorial();
     };
   }
@@ -3589,7 +3721,37 @@ export function mountCampLab(
     }
     remember({ kind: 'buildSmelter', id });
     setWorld(next);
-    setHint(`A smelter at camp ${id}: smelt ore into ingots in the recipe book 📖.`, false);
+    setHint(
+      `A smelter at camp ${id}: load it with raw ore and coal here, and it smelts overnight.`,
+      false,
+    );
+  }
+
+  /** Load camp `id`'s smelter with `ore` and coal from the store (owner, after the 0.27.0 build). */
+  function confirmLoad(id: number, ore: string): void {
+    const plan = loadSmelterPlan(world, id, ore);
+    const next = loadCampSmelter(world, id, ore);
+    if (next === world) return; // the button is off whenever this would happen
+    remember({ kind: 'loadSmelter', id, ore });
+    setWorld(next);
+    setHint(
+      `Loaded ${plan.ore} ${itemName(ore).toLowerCase()} and ${plan.coal} coal: the smelter works tonight.`,
+      false,
+    );
+  }
+
+  /** Upgrade camp `id`'s smelter with its kit. */
+  function confirmSmelterKit(id: number): void {
+    const next = upgradeCampSmelter(world, id);
+    if (next === world) return;
+    remember({ kind: 'upgradeSmelter', id });
+    setWorld(next);
+    const level = next.camps.find((c) => c.id === id)?.smelterLevel ?? 0;
+    const data = FRONTIER_SMELTER.levels[level - 1];
+    setHint(
+      `Smelter level ${level}: it holds ${data?.ore ?? 0} ore and ${data?.coal ?? 0} coal, and makes ${data?.perNight ?? 0} ingots a night.`,
+      false,
+    );
   }
 
   /** Build a pen at camp `id`, or move an animal into or out of it (progression PR 4). */

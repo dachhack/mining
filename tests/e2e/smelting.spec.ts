@@ -64,18 +64,19 @@ const count = async (page: Page, item: string): Promise<number> => {
   return (await chip.count()) === 0 ? 0 : Number(await chip.getAttribute('data-count'));
 };
 
-test('a smelter from a level-2 camp, then smelting iron in the recipe book, then undo', async ({
+test('a smelter from a level-2 camp is loaded with ore and coal, smelts overnight, and a load can be undone', async ({
   page,
 }) => {
-  const state = levelTwoWorld({ stone: 25, clay: 12, rawIronOre: 3, coal: 2 });
+  // Owner, after the 0.27.0 build: "you can load up to 20 ore and 10 coal
+  // into a smelter and each smelter produces 10 ingots per turn."
+  const state = levelTwoWorld({ stone: 25, clay: 12, rawIronOre: 6, coal: 4, wood: 9, apple: 9 });
   const canvas = await openGame(page, state);
   const hud = page.getByTestId('lab2-hud');
   const camp = state.camps[0] ?? { x: 0, y: 0 };
 
-  // Without a smelter, the book says why smelting is off.
+  // The recipe book has no smelting any more.
   await page.getByTestId('lab2-book').click();
-  await expect(page.getByTestId('lab2-recipe-make-smelt-iron')).toBeDisabled();
-  await expect(page.getByTestId('lab2-recipe-why-smelt-iron')).toContainText('Needs a smelter');
+  await expect(page.getByTestId('lab2-recipe-make-smelt-iron')).toHaveCount(0);
   await page.getByTestId('lab2-book-close').click();
 
   // The camp's panel: Build smelter, with its cost.
@@ -84,30 +85,43 @@ test('a smelter from a level-2 camp, then smelting iron in the recipe book, then
   const build = page.getByTestId('lab2-build-smelter');
   await expect(build).toBeEnabled();
   await build.click();
-  await expect(page.getByTestId('lab2-camp-smelter')).toBeVisible();
+  const smelter = page.getByTestId('lab2-camp-smelter');
+  await expect(smelter).toBeVisible();
+  await expect(smelter).toHaveAttribute('data-level', '1');
   await expect(hud).toHaveAttribute('data-taps', String(FRONTIER_SHIFT.taps - 1));
   const stoneCost = FRONTIER_SMELTER.cost.find((s) => s.item === 'stone')?.count ?? 0;
   await expect.poll(() => count(page, 'stone')).toBe(25 - stoneCost);
 
-  // The book: smelt iron (2 raw iron + 1 coal -> 2 iron ingots), 1 tap.
-  await page.getByTestId('lab2-camp-close').click();
-  await page.getByTestId('lab2-book').click();
-  const make = page.getByTestId('lab2-recipe-make-smelt-iron');
-  await expect(make).toBeEnabled();
-  await expect(page.getByTestId('lab2-recipe-make-smelt-copper')).toBeDisabled(); // no copper ore
-  await make.click();
-  await expect(page.getByTestId('lab2-book-note')).toHaveText('Made 2 iron ingots.');
+  // Load iron: all 6 ore and all 4 coal go in, for 1 tap. No copper to load.
+  const load = page.getByTestId('lab2-smelter-load-rawIronOre');
+  await expect(load).toBeEnabled();
+  await load.click();
+  await expect(smelter).toHaveAttribute('data-iron', '6');
+  await expect(smelter).toHaveAttribute('data-coal', '4');
+  await expect(smelter).toContainText('ore 6/20');
   await expect(hud).toHaveAttribute('data-taps', String(FRONTIER_SHIFT.taps - 2));
-  await expect(make).toBeDisabled(); // 1 raw iron left: not enough for another batch
-  await page.getByTestId('lab2-book-close').click();
-  await expect.poll(() => count(page, 'ironIngot')).toBe(2);
-  await expect.poll(() => count(page, 'rawIronOre')).toBe(1);
+  await expect.poll(() => count(page, 'rawIronOre')).toBe(0);
+  await expect(page.getByTestId('lab2-smelter-load-rawCopperOre')).toBeDisabled();
+  // The level-2 kit is not held: the upgrade is off.
+  await expect(page.getByTestId('lab2-smelter-upgrade')).toBeDisabled();
 
-  // Undo takes the smelting back: the ore, the coal and the tap.
+  // Undo takes the load back: the ore, the coal and the tap.
   await page.getByTestId('lab2-undo').click();
-  await expect.poll(() => count(page, 'ironIngot')).toBe(0);
-  await expect.poll(() => count(page, 'rawIronOre')).toBe(3);
+  await expect.poll(() => count(page, 'rawIronOre')).toBe(6);
   await expect(hud).toHaveAttribute('data-taps', String(FRONTIER_SHIFT.taps - 1));
+  // (Undo closes the panel: open it again.)
+  await tapSquare(page, canvas, camp.x, camp.y);
+  await expect(smelter).toHaveAttribute('data-iron', '0');
+
+  // Load again and end the shift: 6 iron ingots in the morning, 3 coal burnt.
+  await page.getByTestId('lab2-smelter-load-rawIronOre').click();
+  await page.getByTestId('lab2-camp-close').click();
+  await page.getByTestId('lab2-end-shift').click();
+  const night = page.getByTestId('lab2-night');
+  await expect(night).toBeVisible();
+  await expect(page.getByTestId('lab2-night-summary')).toContainText('The smelters 🔥 made 6');
+  await night.click();
+  await expect.poll(() => count(page, 'ironIngot')).toBe(6);
 });
 
 test('an iron pickaxe doubles a mining tap; a copper lantern hung at a camp widens its ring', async ({

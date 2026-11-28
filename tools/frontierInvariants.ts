@@ -555,6 +555,18 @@ export function checkStep(
   for (const camp of after.camps) {
     if (camp.smelter && camp.level < FRONTIER_SMELTER.minLevel)
       say(`a smelter at camp ${camp.id}, of level ${camp.level}`);
+    // SMELTERS (smelting.ts): a level from 1 to the top with a smelter, 0
+    // without; a load only in a smelter, whole, and within its level's room.
+    const data = camp.smelter ? FRONTIER_SMELTER.levels[camp.smelterLevel - 1] : undefined;
+    if (camp.smelter !== (data !== undefined))
+      say(`camp ${camp.id}'s smelter is level ${camp.smelterLevel}`);
+    if (!camp.smelter && camp.smelterLevel !== 0)
+      say(`camp ${camp.id} has no smelter but smelter level ${camp.smelterLevel}`);
+    const loads = [camp.smeltIron, camp.smeltCopper, camp.smeltCoal];
+    if (loads.some((n) => n < 0 || !Number.isInteger(n)))
+      say(`camp ${camp.id}'s smelter holds ${loads.join(', ')}`);
+    if (camp.smeltIron + camp.smeltCopper > (data?.ore ?? 0) || camp.smeltCoal > (data?.coal ?? 0))
+      say(`camp ${camp.id}'s smelter holds more than it has room for: ${loads.join(', ')}`);
   }
 
   // Lanterns: each one newly hung left the store.
