@@ -113,6 +113,8 @@ export function frontierHelpText(): string {
     `  next defenses (1 tap; camp level ${FRONTIER_DEFENSE_MIN_LEVEL} or more): ${FRONTIER_DEFENSE.map((d) => `${d.name} (${cost(d.cost)})`).join(', ')}.`,
     '- "close" closes the mine: the run ends.',
     `- "smelter N" builds a smelter at camp N (level ${FRONTIER_SMELTER.minLevel} or more; ${cost(FRONTIER_SMELTER.cost)}; one a camp, lost with it).`,
+    `  "load N iron" or "load N copper" loads camp N's smelter from your store (1 tap): up to ${FRONTIER_SMELTER.levels[0]?.ore ?? 0} raw ore and ${FRONTIER_SMELTER.levels[0]?.coal ?? 0} coal. Each night it makes up to ${FRONTIER_SMELTER.levels[0]?.perNight ?? 0} ingots`,
+    `  (${FRONTIER_SMELTER.orePerBatch} ore and ${FRONTIER_SMELTER.coalPerBatch} coal for ${FRONTIER_SMELTER.ingotsPerBatch}), iron first. "kit N" upgrades it with a smelter kit from the market: level 2 holds ${FRONTIER_SMELTER.levels[1]?.ore ?? 0} / ${FRONTIER_SMELTER.levels[1]?.coal ?? 0} and makes ${FRONTIER_SMELTER.levels[1]?.perNight ?? 0}, level 3 ${FRONTIER_SMELTER.levels[2]?.ore ?? 0} / ${FRONTIER_SMELTER.levels[2]?.coal ?? 0} and ${FRONTIER_SMELTER.levels[2]?.perNight ?? 0}.`,
     `  With a smelter anywhere, "make R" makes recipe R: ${FRONTIER_RECIPES.filter(
       (r) => r.needsSmelter,
     )

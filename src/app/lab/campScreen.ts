@@ -93,6 +93,11 @@ import {
   newCampWorld,
   newlyCovered,
   buildCampSmelter,
+  loadCampSmelter,
+  loadSmelterPlan,
+  loadSmelterRefusal,
+  smelterKitRefusal,
+  upgradeCampSmelter,
   hangCampLantern,
   lanternRefusal,
   demolishCamp,
@@ -482,6 +487,9 @@ function shiftText(report: ShiftReport, turn: CampTurn): string {
       : '';
   // The work camps (owner, after the 0.20.0 build).
   const work = [
+    report.smelted.length > 0
+      ? ` The smelters 🔥 made ${report.smelted.map((s) => `${s.count} ${itemName(s.item).toLowerCase()}`).join(' and ')}.`
+      : '',
     report.workerWood > 0 ? ` Lumberjacks 🪓 brought in ${report.workerWood} wood.` : '',
     report.workerCrops > 0
       ? ` Farmers 🚜 harvested ${report.workerCrops} ${report.workerCrops === 1 ? 'crop' : 'crops'}.`
@@ -1847,6 +1855,10 @@ export function mountCampLab(
         pen: false,
         penned: 0,
         breedIn: 0,
+        smelterLevel: 0,
+        smeltIron: 0,
+        smeltCopper: 0,
+        smeltCoal: 0,
         deep: false,
         defense: 0,
       },
@@ -3235,13 +3247,49 @@ export function mountCampLab(
 
     // The smelter (smelting and crafting): built here from level 2, or here already.
     if (camp.smelter) {
+      // Loaded here, it smelts overnight (owner, after the 0.27.0 build).
+      const data = FRONTIER_SMELTER.levels[Math.max(1, camp.smelterLevel) - 1];
+      const ore = camp.smeltIron + camp.smeltCopper;
       const has = element(
         'p',
         'lab2-panel-line',
-        '🔥 Smelter here · smelt ore in the recipe book 📖',
+        `🔥 Smelter L${camp.smelterLevel} · ore ${ore}/${data?.ore ?? 0} (${camp.smeltIron} iron, ${camp.smeltCopper} copper) · coal ${camp.smeltCoal}/${data?.coal ?? 0} · makes ${data?.perNight ?? 0} ingots a night`,
       );
       has.dataset['testid'] = 'lab2-camp-smelter';
+      has.dataset['level'] = String(camp.smelterLevel);
+      has.dataset['iron'] = String(camp.smeltIron);
+      has.dataset['copper'] = String(camp.smeltCopper);
+      has.dataset['coal'] = String(camp.smeltCoal);
       tray.append(has);
+      const row = element('div', 'lab2-actions');
+      for (const [oreItem, label] of [
+        ['rawIronOre', 'Load iron'],
+        ['rawCopperOre', 'Load copper'],
+      ] as const) {
+        const load = button('lab2-button', label);
+        load.dataset['testid'] = `lab2-smelter-load-${oreItem}`;
+        const plan = loadSmelterPlan(world, camp.id, oreItem);
+        // Off when no ore of this kind would go in (coal alone goes with either).
+        load.disabled =
+          loadSmelterRefusal(world, camp.id, oreItem) !== null ||
+          (plan.ore === 0 && plan.coal === 0);
+        load.title = `Loads ${plan.ore} ore and ${plan.coal} coal from your store, for 1 tap`;
+        load.addEventListener('click', () => confirmLoad(camp.id, oreItem));
+        row.append(load);
+      }
+      const kit = FRONTIER_SMELTER.kits[camp.smelterLevel - 1];
+      if (kit !== undefined && camp.smelterLevel < FRONTIER_SMELTER.levels.length) {
+        const up = button('lab2-button', `⬆ Level ${camp.smelterLevel + 1} kit`);
+        up.dataset['testid'] = 'lab2-smelter-upgrade';
+        up.disabled = smelterKitRefusal(world, camp.id) !== null;
+        up.title =
+          (world.lab.counts.get(kit) ?? 0) > 0
+            ? `Use your ${itemName(kit)}, for 1 tap`
+            : `Needs a ${itemName(kit)} from the market 🏪`;
+        up.addEventListener('click', () => confirmSmelterKit(camp.id));
+        row.append(up);
+      }
+      tray.append(row);
     } else if (camp.level >= FRONTIER_SMELTER.minLevel) {
       const row = element('div', 'lab2-actions');
       row.append(costRow(FRONTIER_SMELTER.cost, 'lab2-smelter-cost'));
@@ -3671,7 +3719,37 @@ export function mountCampLab(
     }
     remember({ kind: 'buildSmelter', id });
     setWorld(next);
-    setHint(`A smelter at camp ${id}: smelt ore into ingots in the recipe book 📖.`, false);
+    setHint(
+      `A smelter at camp ${id}: load it with raw ore and coal here, and it smelts overnight.`,
+      false,
+    );
+  }
+
+  /** Load camp `id`'s smelter with `ore` and coal from the store (owner, after the 0.27.0 build). */
+  function confirmLoad(id: number, ore: string): void {
+    const plan = loadSmelterPlan(world, id, ore);
+    const next = loadCampSmelter(world, id, ore);
+    if (next === world) return; // the button is off whenever this would happen
+    remember({ kind: 'loadSmelter', id, ore });
+    setWorld(next);
+    setHint(
+      `Loaded ${plan.ore} ${itemName(ore).toLowerCase()} and ${plan.coal} coal: the smelter works tonight.`,
+      false,
+    );
+  }
+
+  /** Upgrade camp `id`'s smelter with its kit. */
+  function confirmSmelterKit(id: number): void {
+    const next = upgradeCampSmelter(world, id);
+    if (next === world) return;
+    remember({ kind: 'upgradeSmelter', id });
+    setWorld(next);
+    const level = next.camps.find((c) => c.id === id)?.smelterLevel ?? 0;
+    const data = FRONTIER_SMELTER.levels[level - 1];
+    setHint(
+      `Smelter level ${level}: it holds ${data?.ore ?? 0} ore and ${data?.coal ?? 0} coal, and makes ${data?.perNight ?? 0} ingots a night.`,
+      false,
+    );
   }
 
   /** Build a pen at camp `id`, or move an animal into or out of it (progression PR 4). */

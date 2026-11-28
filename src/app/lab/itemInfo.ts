@@ -104,6 +104,10 @@ export function itemInfo(item: string): string | null {
       return `Every mining tap gives ${FRONTIER_PICKAXE.yieldTimes}×, while you have one.`;
     case FRONTIER_LANTERN.item:
       return `Hang it at a camp from its panel: its ring grows by ${FRONTIER_LANTERN.ringBonus}.`;
+    case 'smelterKit2':
+      return 'Upgrades a smelter to level 2 from its camp’s panel: it holds twice the load and makes twice the ingots a night.';
+    case 'smelterKit3':
+      return 'Upgrades a level-2 smelter to level 3: three times the load and the ingots a night.';
     case 'campKit':
       return `Builds a deep camp (with ${FRONTIER_DEEP_CAMP.cost
         .filter((c) => c.item !== 'campKit')

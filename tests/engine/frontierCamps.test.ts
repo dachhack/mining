@@ -108,6 +108,10 @@ describe('placing a camp (plan A2)', () => {
       pen: false,
       penned: 0,
       breedIn: 0,
+      smelterLevel: 0,
+      smeltIron: 0,
+      smeltCopper: 0,
+      smeltCoal: 0,
       deep: false,
       defense: 0,
     });

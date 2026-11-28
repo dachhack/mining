@@ -11,9 +11,10 @@
 // - as much as anyone could ask of what grows back, or is bought and made
 //   (FRONTIER_BOARD.renewable: wood, hay, animals, apples, syrup, lumber,
 //   crops; owner, after the 0.22.0 build): Infinity;
-// - the ingots that ore and coal could be smelted into (FRONTIER_RECIPES:
-//   'smelt-iron' and 'smelt-copper'), on top of any held: each smelting
-//   recipe counted alone, as if the coal went to it only.
+// - what is loaded in the smelters (smelting.ts);
+// - the ingots that ore and coal could be smelted into (FRONTIER_SMELTER's
+//   ratio), on top of any held: each ore counted alone, as if the coal went
+//   to it only.
 // The contract board (contracts.ts) offers only contracts whose every ask
 // is within this stock, so every contract offered can be filled from what
 // the world holds. Nothing is bought at the market in the count.
@@ -23,7 +24,7 @@
 
 import type { ItemStack } from '../../data';
 import { blockDefByCode } from '../../data';
-import { FRONTIER_BOARD, FRONTIER_RECIPES } from '../../data/frontier';
+import { FRONTIER_BOARD, FRONTIER_SMELTER } from '../../data/frontier';
 import { depthAt } from '../heightmap';
 import { blockAt } from '../state';
 import type { GameState } from '../state';
@@ -72,14 +73,22 @@ export function worldStock(state: FrontierState, maxDepth = Infinity): Map<strin
   if (mushrooms > 0) stock.set('mushroom', (stock.get('mushroom') ?? 0) + mushrooms);
   // What grows back, or is bought and made, is always to be had.
   for (const item of FRONTIER_BOARD.renewable) stock.set(item, Infinity);
-  // Ingots from smelting: as many times as the scarcest input allows.
-  for (const recipe of FRONTIER_RECIPES) {
-    if (!recipe.id.startsWith('smelt-')) continue;
-    const times = Math.min(
-      ...recipe.inputs.map((input) => Math.floor((stock.get(input.item) ?? 0) / input.count)),
+  // What is loaded in the smelters is still the world's.
+  for (const camp of state.camps) {
+    const add = (item: string, n: number): void => {
+      if (n > 0) stock.set(item, (stock.get(item) ?? 0) + n);
+    };
+    add('rawIronOre', camp.smeltIron);
+    add('rawCopperOre', camp.smeltCopper);
+    add('coal', camp.smeltCoal);
+  }
+  // Ingots from smelting: as many batches as the scarcer of ore and coal allows.
+  for (const pair of FRONTIER_SMELTER.smelts) {
+    const batches = Math.min(
+      Math.floor((stock.get(pair.ore) ?? 0) / FRONTIER_SMELTER.orePerBatch),
+      Math.floor((stock.get('coal') ?? 0) / FRONTIER_SMELTER.coalPerBatch),
     );
-    const out = recipe.output;
-    stock.set(out.item, (stock.get(out.item) ?? 0) + times * out.count);
+    stock.set(pair.ingot, (stock.get(pair.ingot) ?? 0) + batches * FRONTIER_SMELTER.ingotsPerBatch);
   }
   return stock;
 }

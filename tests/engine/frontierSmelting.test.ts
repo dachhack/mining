@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   FRONTIER_LANTERN,
+  FRONTIER_MARKET,
   FRONTIER_PICKAXE,
   FRONTIER_RECIPES,
   FRONTIER_SHIFT,
@@ -64,57 +65,155 @@ describe('the smelter (owner, question 161)', () => {
     const demolished = frontierAct(w, { kind: 'demolish', id: 1 });
     expect(demolished.done).toBe(true);
     expect(hasSmelter(demolished.state)).toBe(false);
-    expect(frontierAct(demolished.state, { kind: 'make', recipe: 'smelt-iron' }).refusal).toBe(
+    expect(frontierAct(demolished.state, { kind: 'make', recipe: 'iron-pickaxe' }).refusal).toBe(
       'noSmelter',
     );
   });
 });
 
-describe('smelting (owner, question 162: 2 raw ore + 1 coal make 2 ingots)', () => {
-  it('turns raw ore and coal into ingots, for 1 tap', () => {
-    // Syrup needs a sugar shack, not a smelter (frontierBuildings.test.ts).
-    // Lumber needs a saw house (frontierSurfaceContracts.test.ts).
-    for (const recipe of FRONTIER_RECIPES.filter(
-      (r) => r.needsSugarShack !== true && r.needsSawHouse !== true,
-    )) {
-      const have: Record<string, number> = {};
-      for (const stack of recipe.inputs) have[stack.item] = stack.count + 1;
-      const w = withSmelter(have);
-      const made = frontierAct(w, { kind: 'make', recipe: recipe.id });
-      expect(made.done).toBe(true);
-      expect(made.state.tapsLeft).toBe(w.tapsLeft - 1);
-      for (const stack of recipe.inputs) expect(made.state.inventory.get(stack.item)).toBe(1);
-      expect(made.state.inventory.get(recipe.output.item)).toBe(recipe.output.count);
-    }
-    const iron = FRONTIER_RECIPES.find((r) => r.id === 'smelt-iron');
-    expect(iron?.inputs).toEqual([
-      { item: 'rawIronOre', count: 2 },
-      { item: 'coal', count: 1 },
+describe('loading a smelter (owner, after the 0.27.0 build)', () => {
+  // "Let's have you can load up to 20 ore and 10 coal into a smelter and each
+  // smelter produces 10 ingots per turn. Smelters can be upgraded with level
+  // 2 and 3 kits you purchase at the market." Asked: the tap-to-smelt recipe
+  // goes; the ratio stays (2 ore + 1 coal make 2 ingots); loading is 1 tap.
+  const L1 = FRONTIER_SMELTER.levels[0];
+  if (L1 === undefined) throw new Error('the smelter has a first level');
+
+  it('holds 20 ore and 10 coal and makes 10 ingots a night at level 1; 40/20/20 and 60/30/30 above', () => {
+    expect(FRONTIER_SMELTER.levels).toEqual([
+      { ore: 20, coal: 10, perNight: 10 },
+      { ore: 40, coal: 20, perNight: 20 },
+      { ore: 60, coal: 30, perNight: 30 },
     ]);
-    expect(iron?.output).toEqual({ item: 'ironIngot', count: 2 });
+    // The tap-to-smelt recipes are gone.
+    expect(FRONTIER_RECIPES.some((r) => r.id.startsWith('smelt-'))).toBe(false);
+    expect(
+      frontierAct(withSmelter({ rawIronOre: 9, coal: 9 }), { kind: 'make', recipe: 'smelt-iron' })
+        .refusal,
+    ).toBe('unknown');
   });
 
-  it('is refused with no smelter, short of an input, or for a recipe that does not exist', () => {
-    const noSmelter = holding(world(), { rawIronOre: 9, coal: 9 });
-    expect(frontierAct(noSmelter, { kind: 'make', recipe: 'smelt-iron' }).refusal).toBe(
+  it('is loaded from the store, as far as it holds, for 1 tap', () => {
+    const w = withSmelter({ rawIronOre: 50, rawCopperOre: 5, coal: 50 });
+    const loaded = frontierAct(w, { kind: 'loadSmelter', id: 1, ore: 'rawIronOre' });
+    expect(loaded.done, loaded.refusal ?? '').toBe(true);
+    expect(loaded.state.tapsLeft).toBe(w.tapsLeft - 1);
+    expect(loaded.state.camps[0]).toMatchObject({ smeltIron: 20, smeltCopper: 0, smeltCoal: 10 });
+    expect(loaded.state.inventory.get('rawIronOre')).toBe(30);
+    expect(loaded.state.inventory.get('coal')).toBe(40);
+    // Full: nothing more goes in.
+    expect(
+      frontierAct(loaded.state, { kind: 'loadSmelter', id: 1, ore: 'rawCopperOre' }).refusal,
+    ).toBe('full');
+    // Iron and copper share the ore's room.
+    const some = withSmelter({ rawIronOre: 12, rawCopperOre: 30, coal: 3 });
+    const iron = frontierAct(some, { kind: 'loadSmelter', id: 1, ore: 'rawIronOre' }).state;
+    expect(iron.camps[0]).toMatchObject({ smeltIron: 12, smeltCopper: 0, smeltCoal: 3 });
+    const both = frontierAct(iron, { kind: 'loadSmelter', id: 1, ore: 'rawCopperOre' }).state;
+    expect(both.camps[0]).toMatchObject({ smeltIron: 12, smeltCopper: 8, smeltCoal: 3 });
+    expect(both.inventory.get('rawCopperOre')).toBe(22);
+  });
+
+  it('is refused with no smelter there, nothing to load, or no such camp', () => {
+    const none = holding(world(), { rawIronOre: 9, coal: 9 });
+    expect(frontierAct(none, { kind: 'loadSmelter', id: 1, ore: 'rawIronOre' }).refusal).toBe(
       'noSmelter',
     );
-    const short = withSmelter({ rawIronOre: 1, coal: 9 });
-    const refused = frontierAct(short, { kind: 'make', recipe: 'smelt-iron' });
-    expect(refused.refusal).toBe('cost');
-    expect(refused.state).toBe(short);
-    expect(frontierAct(short, { kind: 'make', recipe: 'gold' }).refusal).toBe('unknown');
+    expect(frontierAct(none, { kind: 'loadSmelter', id: 9, ore: 'rawIronOre' }).refusal).toBe(
+      'missing',
+    );
+    const empty = withSmelter({});
+    const refused = frontierAct(empty, { kind: 'loadSmelter', id: 1, ore: 'rawIronOre' });
+    expect(refused.refusal).toBe('nothing');
+    expect(refused.state).toBe(empty);
   });
 
-  it('can be undone, giving back the ore, the coal and the tap', () => {
+  it('makes up to 10 ingots a night: 2 ore and 1 coal for 2 ingots, iron first', () => {
+    const w = withSmelter({ rawIronOre: 6, rawCopperOre: 14, coal: 10, wood: 9, apple: 9 });
+    let s = frontierAct(w, { kind: 'loadSmelter', id: 1, ore: 'rawIronOre' }).state;
+    s = frontierAct(s, { kind: 'loadSmelter', id: 1, ore: 'rawCopperOre' }).state;
+    expect(s.camps[0]).toMatchObject({ smeltIron: 6, smeltCopper: 14, smeltCoal: 10 });
+    const night = frontierAct(s, { kind: 'endShift' });
+    expect(night.report?.smelted).toEqual([
+      { item: 'ironIngot', count: 6 },
+      { item: 'copperIngot', count: 4 },
+    ]);
+    expect(night.state.inventory.get('ironIngot')).toBe(6);
+    expect(night.state.inventory.get('copperIngot')).toBe(4);
+    expect(night.state.camps[0]).toMatchObject({ smeltIron: 0, smeltCopper: 10, smeltCoal: 5 });
+    // The second night finishes the load.
+    const two = frontierAct({ ...night.state, marketOpen: false }, { kind: 'endShift' });
+    expect(two.report?.smelted).toEqual([{ item: 'copperIngot', count: 10 }]);
+    expect(two.state.camps[0]).toMatchObject({ smeltIron: 0, smeltCopper: 0, smeltCoal: 0 });
+    // Nothing loaded: nothing made.
+    const three = frontierAct({ ...two.state, marketOpen: false }, { kind: 'endShift' });
+    expect(three.report?.smelted).toEqual([]);
+  });
+
+  it('makes only what its coal allows', () => {
+    const w = withSmelter({ rawIronOre: 20, coal: 2, wood: 9, apple: 9 });
+    const s = frontierAct(w, { kind: 'loadSmelter', id: 1, ore: 'rawIronOre' }).state;
+    const night = frontierAct(s, { kind: 'endShift' });
+    expect(night.report?.smelted).toEqual([{ item: 'ironIngot', count: 4 }]);
+    expect(night.state.camps[0]).toMatchObject({ smeltIron: 16, smeltCoal: 0 });
+  });
+
+  it('is upgraded with a kit from the market, for 1 tap: bigger and faster', () => {
+    // The kits are sold: level 2 from a level-3 camp, level 3 from contract stage 4.
+    const lots = FRONTIER_MARKET.buyPrices;
+    expect(lots.find((l) => l.item === 'smelterKit2')).toMatchObject({ coins: 150, fromLevel: 3 });
+    expect(lots.find((l) => l.item === 'smelterKit3')).toMatchObject({ coins: 400, fromStage: 4 });
+    const w = withSmelter({
+      smelterKit2: 1,
+      smelterKit3: 1,
+      rawIronOre: 99,
+      coal: 99,
+      wood: 9,
+      apple: 9,
+    });
+    expect(w.camps[0]?.smelterLevel).toBe(1);
+    const two = frontierAct(w, { kind: 'upgradeSmelter', id: 1 });
+    expect(two.done, two.refusal ?? '').toBe(true);
+    expect(two.state.tapsLeft).toBe(w.tapsLeft - 1);
+    expect(two.state.camps[0]?.smelterLevel).toBe(2);
+    expect(two.state.inventory.get('smelterKit2') ?? 0).toBe(0);
+    const three = frontierAct(two.state, { kind: 'upgradeSmelter', id: 1 }).state;
+    expect(three.camps[0]?.smelterLevel).toBe(3);
+    expect(frontierAct(three, { kind: 'upgradeSmelter', id: 1 }).refusal).toBe('max');
+    // Level 3 holds 60 ore and 30 coal, and makes 30 a night.
+    const loaded = frontierAct(three, { kind: 'loadSmelter', id: 1, ore: 'rawIronOre' }).state;
+    expect(loaded.camps[0]).toMatchObject({ smeltIron: 60, smeltCoal: 30 });
+    const night = frontierAct(loaded, { kind: 'endShift' });
+    expect(night.report?.smelted).toEqual([{ item: 'ironIngot', count: 30 }]);
+    // Without the kit: refused. The level-3 kit is no use to a level-1 smelter.
+    expect(frontierAct(withSmelter({}), { kind: 'upgradeSmelter', id: 1 }).refusal).toBe('cost');
+    expect(
+      frontierAct(withSmelter({ smelterKit3: 1 }), { kind: 'upgradeSmelter', id: 1 }).refusal,
+    ).toBe('cost');
+    expect(
+      frontierAct(holding(world(), { smelterKit2: 1 }), { kind: 'upgradeSmelter', id: 1 }).refusal,
+    ).toBe('noSmelter');
+  });
+
+  it('loses its load and its upgrades with the smelter', () => {
+    let w = withSmelter({ ...rich(), smelterKit2: 1, rawIronOre: 30, coal: 30 });
+    w = frontierAct(w, { kind: 'upgradeSmelter', id: 1 }).state;
+    w = frontierAct(w, { kind: 'loadSmelter', id: 1, ore: 'rawIronOre' }).state;
+    w = frontierAct(w, { kind: 'place', x: MID + NEXT, y: MID }).state;
+    const demolished = frontierAct(w, { kind: 'demolish', id: 1 });
+    expect(demolished.done).toBe(true);
+    expect(hasSmelter(demolished.state)).toBe(false);
+  });
+
+  it('a load can be undone, giving back the ore, the coal and the tap', () => {
     const w = withSmelter({ rawCopperOre: 2, coal: 1 });
-    const logged = actLogged(w, startLog(w), { kind: 'make', recipe: 'smelt-copper' });
-    expect(logged.outcome.state.inventory.get('copperIngot')).toBe(2);
+    const logged = actLogged(w, startLog(w), { kind: 'loadSmelter', id: 1, ore: 'rawCopperOre' });
+    expect(logged.outcome.state.camps[0]?.smeltCopper).toBe(2);
     const undone = undoLast(logged.log);
     expect(undone !== null && 'state' in undone).toBe(true);
     if (undone === null || !('state' in undone)) return;
-    expect(undone.state.inventory.get('copperIngot') ?? 0).toBe(0);
     expect(undone.state.inventory.get('rawCopperOre')).toBe(2);
+    expect(undone.state.camps[0]?.smeltCopper).toBe(0);
     expect(undone.state.tapsLeft).toBe(w.tapsLeft);
     expect(undone.state.tapsLeft).toBeLessThanOrEqual(FRONTIER_SHIFT.taps);
   });

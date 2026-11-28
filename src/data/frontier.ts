@@ -349,6 +349,35 @@ export const FRONTIER_SMELTER = {
     { item: 'stone', count: 20 },
     { item: 'clay', count: 10 },
   ] as ItemStack[],
+  /**
+   * What a smelter holds and makes at each level, level 1 first (owner, after
+   * the 0.27.0 build: "you can load up to 20 ore and 10 coal into a smelter
+   * and each smelter produces 10 ingots per turn. Smelters can be upgraded
+   * with level 2 and 3 kits you purchase at the market"; asked, the kits
+   * make it bigger and faster): up to `ore` raw ore (iron and copper share
+   * the room) and `coal` coal are loaded from the store, for 1 tap a load;
+   * each night up to `perNight` ingots are made.
+   */
+  levels: [
+    { ore: 20, coal: 10, perNight: 10 },
+    { ore: 40, coal: 20, perNight: 20 },
+    { ore: 60, coal: 30, perNight: 30 },
+  ],
+  /**
+   * The ratio (owner, question 162; kept: "Same as today"): `orePerBatch`
+   * raw ore and `coalPerBatch` coal make `ingotsPerBatch` ingots. An odd
+   * last ingot still burns a whole coal.
+   */
+  orePerBatch: 2,
+  coalPerBatch: 1,
+  ingotsPerBatch: 2,
+  /** What each raw ore smelts into, in the order a night smelts them. */
+  smelts: [
+    { ore: 'rawIronOre', ingot: 'ironIngot' },
+    { ore: 'rawCopperOre', ingot: 'copperIngot' },
+  ] as { ore: ItemId; ingot: ItemId }[],
+  /** The kit that takes a smelter to level 2, then to level 3: bought at the market, used from the camp's panel for 1 tap. */
+  kits: ['smelterKit2', 'smelterKit3'] as ItemId[],
 };
 
 /** Something made from the recipe book: what it takes and what it gives. */
@@ -368,31 +397,11 @@ export interface FrontierRecipe {
 }
 
 /**
- * What can be made, each for 1 tap, while a smelter stands somewhere
- * (owner, question 162: 2 raw ore + 1 coal make 2 ingots, the old game's
- * ratio, decision note 0014).
+ * What can be made from the recipe book, each for 1 tap. (Ingots are not
+ * made here any more: a smelter is loaded and smelts overnight,
+ * FRONTIER_SMELTER; owner, after the 0.27.0 build.)
  */
 export const FRONTIER_RECIPES: FrontierRecipe[] = [
-  {
-    id: 'smelt-iron',
-    name: 'Smelt iron',
-    inputs: [
-      { item: 'rawIronOre', count: 2 },
-      { item: 'coal', count: 1 },
-    ],
-    output: { item: 'ironIngot', count: 2 },
-    needsSmelter: true,
-  },
-  {
-    id: 'smelt-copper',
-    name: 'Smelt copper',
-    inputs: [
-      { item: 'rawCopperOre', count: 2 },
-      { item: 'coal', count: 1 },
-    ],
-    output: { item: 'copperIngot', count: 2 },
-    needsSmelter: true,
-  },
   // What ingots are for (owner, question 163), PR 3: a tool and a lantern.
   {
     id: 'iron-pickaxe',
@@ -694,6 +703,8 @@ export interface FrontierLot {
   fromLevel?: number;
   /** True for a lot traded only once a tier-1 contract is done (progression plan section 3). */
   afterTier1?: boolean;
+  /** The contract stage (FRONTIER_STAGES) from which the lot is traded; 1 if not given. */
+  fromStage?: number;
 }
 
 /**
@@ -791,6 +802,10 @@ export const FRONTIER_MARKET = {
     { item: 'axe', count: 1, coins: 25 },
     // From the first tier-1 contract (phase 4): the deep camp's kit.
     { item: 'campKit', count: 1, coins: 150, afterTier1: true },
+    // Smelter kits (owner, after the 0.27.0 build): level 2 from a level-3
+    // camp, level 3 from contract stage 4.
+    { item: 'smelterKit2', count: 1, coins: 150, fromLevel: 3 },
+    { item: 'smelterKit3', count: 1, coins: 400, fromStage: 4 },
     // Wood and food in bulk, from the start (owner, after the 0.17.0 build:
     // "Apples and wood can be in sale at the start"; until then they came
     // with the first tier-1 contract).
@@ -1497,6 +1512,8 @@ export const FRONTIER_RAID = {
     'miner',
     'copperLantern',
     'campKit',
+    'smelterKit2',
+    'smelterKit3',
   ] as ItemId[],
 };
 

@@ -62,6 +62,8 @@ import {
   shiftUndoCount,
   sightMap,
   smelterRefusal,
+  smelterUpgradeRefusal,
+  loadRefusal,
   startLog,
   topBlockAt,
   undoLastAction,
@@ -254,6 +256,7 @@ function shiftLine(report: ShiftReport, state: FrontierState): string {
       ? `; no ${report.unpaid.map((s) => s.item).join(' or ')}: the next shift has ${report.tapsLost} fewer taps`
       : '';
   const more = [
+    report.smelted.length > 0 ? `the smelters made ${stacksText(report.smelted)}` : '',
     report.regrown > 0 ? `${report.regrown} apple tree(s) regrew` : '',
     report.treesRegrown > 0 ? `${report.treesRegrown} felled tree(s) grew back` : '',
     report.newAnimals > 0 ? 'an animal walked in' : '',
@@ -411,6 +414,16 @@ export function stepOf(typed: string, listed: FrontierStep[]): FrontierStep | nu
   if (smelter !== null) {
     return `buildSmelter ${smelter[2] ?? ''}`;
   }
+  // "load 1 iron" / "load 1 copper": load camp 1's smelter; "kit 1": upgrade it with a kit.
+  const load = /^(load|loadsmelter) (\d+) (iron|copper|rawironore|rawcopperore)$/.exec(text);
+  if (load !== null) {
+    const ore = (load[3] ?? '').includes('copper') ? 'rawCopperOre' : 'rawIronOre';
+    return `loadSmelter ${load[2] ?? ''} ${ore}`;
+  }
+  const kit = /^(kit|upgradesmelter|smelterkit) (\d+)$/.exec(text);
+  if (kit !== null) {
+    return `upgradeSmelter ${kit[2] ?? ''}`;
+  }
   const pen = /^(pen|buildpen|penin|penout) (\d+)$/.exec(text);
   if (pen !== null) {
     const verbs: Record<string, string> = {
@@ -528,6 +541,11 @@ export function listedSteps(session: FrontierSession): FrontierStep[] {
       if (act(session, `upgrade ${camp.id}`).refused === null) steps.push(`upgrade ${camp.id}`);
       if (act(session, `demolish ${camp.id}`).refused === null) steps.push(`demolish ${camp.id}`);
       if (smelterRefusal(state, camp.id) === null) steps.push(`buildSmelter ${camp.id}`);
+      if (smelterUpgradeRefusal(state, camp.id) === null) steps.push(`upgradeSmelter ${camp.id}`);
+      for (const pair of FRONTIER_SMELTER.smelts) {
+        if (loadRefusal(state, camp.id, pair.ore) === null)
+          steps.push(`loadSmelter ${camp.id} ${pair.ore}`);
+      }
       if (lanternRefusal(state, camp.id) === null) steps.push(`hangLantern ${camp.id}`);
       if (defenseRefusal(state, camp.id) === null) steps.push(`buildDefense ${camp.id}`);
       for (const kind of ['buildPen', 'penIn', 'penOut'] as const) {
@@ -696,7 +714,7 @@ export function frontierView(session: FrontierSession): string {
     const cost = upgradeCostFrom(camp.level);
     const up = cost === null ? 'top level' : `upgrade costs ${stacksText(cost)}`;
     const smelter = camp.smelter
-      ? '; a smelter'
+      ? `; a smelter level ${camp.smelterLevel} (${camp.smeltIron} iron ore, ${camp.smeltCopper} copper ore, ${camp.smeltCoal} coal loaded)`
       : camp.level >= FRONTIER_SMELTER.minLevel
         ? `; a smelter costs ${stacksText(FRONTIER_SMELTER.cost)}`
         : '';

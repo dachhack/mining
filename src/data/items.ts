@@ -20,6 +20,9 @@ export type ItemId =
   | 'sealant'
   | 'explosive'
   | 'campKit'
+  // Smelter upgrade kits, from the market (owner, after the 0.27.0 build).
+  | 'smelterKit2'
+  | 'smelterKit3'
   // The new game's surface and clay (Lab 2 becomes the game, plan A1).
   | 'wood'
   | 'grass'
@@ -90,6 +93,8 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   sealant: { name: 'Sealant' },
   explosive: { name: 'Explosive' },
   campKit: { name: 'Camp kit' },
+  smelterKit2: { name: 'Smelter kit II' },
+  smelterKit3: { name: 'Smelter kit III' },
   // The new game's surface and clay (plan A1).
   wood: { name: 'Wood' },
   grass: { name: 'Grass' },

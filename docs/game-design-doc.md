@@ -276,8 +276,22 @@ There is no avatar. The crew is abstract: it has no position, and it does the wo
 
 - **The deep camp** (progression plan section 2.4; owner: "New camp type can be placed down in deeper areas so now the entire depth is unlocked") is placed on any lit 3×3 and comes with a **concrete foundation** that digs the 3×3 level, down to its deepest square (owner, on the hazards build: "The deep mine should come with a concrete foundation that levels any spot you place it into 3by3"; the dug blocks give nothing, and it is not placed where an animal stands on a square it would dig). That depth must be [Default] **3 or more**, deeper than any other camp may stand (owner, question 178: "min depth required on the deep camp"), for [Default] a camp kit, 20 wood and 20 stone (`FRONTIER_DEEP_CAMP`); only the market sells the kit, after a tier-1 contract. Its ring is [Default] 12; it mines what a level-3 camp mines and counts as level 3 for the market; it is never upgraded (question 168). It can be demolished, and have a smelter, a pen and a lantern, as any camp. On the map its tag says D. The camp tool switches to it ("⛏ Deep") while a kit is held. The recipe book lists it as a camp of its own, after the new camp and not among the upgrades, with its cost (owner: "The deep camp isn't an upgrade. It's a stand alone camp but it still takes advanced resources to build"); its pin opens the camp tool switched to it.
 - **Demolishing** a camp needs other camps' circles to cover its whole 3×3 (question 134). It gives nothing back; its ground can then be mined, and what only it lit turns grey.
-- **A smelter** (owner, question 161) can be built at a camp of level 2 or more, from its panel, for [Default] 20 stone and 10 clay and 1 tap. One per camp; it is lost with the camp. While one stands anywhere, the recipe book can smelt: [Default] 2 raw ore + 1 coal make 2 ingots, 1 tap (question 162). (`docs/plans/smelting-and-crafting.md`.)
-- **Made from ingots** (question 163), in the recipe book while a smelter stands, 1 tap each:
+- **A smelter** (owner, question 161) can be built at a camp of level 2 or more, from its panel, for [Default] 20 stone and 10 clay and 1 tap. One per camp; it is lost with the camp. (`docs/plans/smelting-and-crafting.md`.)
+- **Smelting** (owner, after the 0.27.0 build: "Let's have you can load up to 20 ore and 10 coal into a smelter and each smelter produces 10 ingots per turn. Smelters can be upgraded with level 2 and 3 kits you purchase at the market."; `FRONTIER_SMELTER`):
+  - **Loading:** from the camp's panel, "Load iron" or "Load copper" moves as much of that raw ore as the smelter has room for, and as much coal as it has room for, from the store into it, for 1 tap (owner's choice). Iron and copper share the ore's room.
+  - **Each night** a smelter makes up to its level's number of ingots from its load, iron first, at the old ratio (owner: "Same as today"; question 162): 2 raw ore and 1 coal for 2 ingots (an odd last ingot burns a whole coal). The ingots go to the store, and the night says so.
+  - **Levels** (owner's choice, "Bigger and faster"):
+
+    | Level | Holds | Makes a night | Kit |
+    |---|---|---|---|
+    | 1 | 20 ore, 10 coal | 10 ingots | built |
+    | 2 | 40 ore, 20 coal | 20 ingots | Smelter kit II: [Default] 150 coins, from a level-3 camp |
+    | 3 | 60 ore, 30 coal | 30 ingots | Smelter kit III: [Default] 400 coins, from contract stage 4 |
+
+    A kit is used from the camp's panel, for 1 tap. Marauders never take kits.
+  - The smelter's load and its upgrades are lost with it (a camp demolished, a fire or a raid that takes the smelter).
+  - The tap-to-smelt recipes are gone (owner's choice, "Remove it"): until engine 0.28.0 the recipe book smelted 2 ore and 1 coal into 2 ingots for 1 tap.
+- **Made from ingots** (question 163), in the recipe book while a smelter stands anywhere, 1 tap each:
   - **The iron pickaxe**, [Default] 3 iron ingots + 2 wood. While the store holds one, every mining tap yields [Default] twice as much. Taking from the surface is unchanged. It does not wear out, and a second one adds nothing.
   - **The copper lantern**, [Default] 2 copper ingots + 1 coal (coal, not crystal: question 165). Hung at a camp from its panel (1 tap), it widens that camp's ring by [Default] 3 squares on top of its level. One per camp; it is lost with the camp.
   - **The iron drill**, [Default] 4 iron ingots + 2 copper ingots + 2 wood, or bought at the market. While the store holds one, iron and copper ore can be mined on any camp's lit ground (progression plan section 4; until engine 0.9.0 it lifted every camp one level). The first one has to be bought: ingots need ore. It does not wear out, and a second one adds nothing.

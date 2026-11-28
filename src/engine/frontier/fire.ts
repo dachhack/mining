@@ -90,7 +90,15 @@ export function stripCamp(
       animalsLost += next.penned;
       next = { ...next, pen: false, penned: 0, breedIn: 0 };
     } else if (next.smelter) {
-      next = { ...next, smelter: false };
+      // Its load and its upgrades go with it (smelting.ts).
+      next = {
+        ...next,
+        smelter: false,
+        smelterLevel: 0,
+        smeltIron: 0,
+        smeltCopper: 0,
+        smeltCoal: 0,
+      };
     } else if (!next.deep && next.level > 1) {
       next = { ...next, level: next.level - 1 };
     } else {

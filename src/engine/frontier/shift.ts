@@ -71,9 +71,14 @@ import {
   buildSmelter,
   hangLantern,
   lanternRefusal,
+  loadRefusal,
+  loadSmelter,
   makeRecipe,
   makeRefusal,
+  nightOfSmelters,
   smelterRefusal,
+  smelterUpgradeRefusal,
+  upgradeSmelter,
 } from './smelting';
 import { build, buildRefusal, buildingAt } from './buildings';
 import { fillSquare, fillSquareRefusal } from './fill';
@@ -99,6 +104,9 @@ export type FrontierAction =
   | { kind: 'endShift' }
   // Build a smelter at camp `id`; make recipe `recipe` (smelting.ts).
   | { kind: 'buildSmelter'; id: number }
+  // Load camp `id`'s smelter with raw ore `ore` and coal; upgrade it with a kit (smelting.ts).
+  | { kind: 'loadSmelter'; id: number; ore: string }
+  | { kind: 'upgradeSmelter'; id: number }
   | { kind: 'make'; recipe: string }
   // Hang a lantern from the store at camp `id` (smelting.ts).
   | { kind: 'hangLantern'; id: number }
@@ -167,6 +175,8 @@ export interface ShiftReport {
   workerGathered: number;
   /** Work camps whose upkeep could not be paid: their workers skipped the night. */
   workCampsIdle: number;
+  /** The ingots the smelters made in the night (smelting.ts), one stack an ingot; empty if none. */
+  smelted: ItemStack[];
   /** Flooded squares the pumps drained (water.ts). */
   drained: number;
   /** Pumps whose flood is dry: back in the store. */
@@ -380,7 +390,9 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
   const grownCrops = growCrops(mushroomed.state);
   // The work camps' workers work (workers.ts), after the crops ripen.
   const worked = nightOfWorkers(grownCrops.state, rng);
-  const next: FrontierState = { ...worked.state, rng };
+  // The smelters smelt what is loaded in them (smelting.ts).
+  const smelting = nightOfSmelters(worked.state);
+  const next: FrontierState = { ...smelting.state, rng };
   // A market day's market opens now, after the night, before the day (market.ts).
   next.marketOpen = isMarketDay(next);
   return {
@@ -407,6 +419,7 @@ export function endFrontierShift(state: FrontierState): FrontierOutcome {
       workerCrops: worked.crops,
       workerGathered: worked.gathered,
       workCampsIdle: worked.idle,
+      smelted: smelting.smelted,
       drained: pumping.drained,
       pumpsBack: pumping.pumpsBack,
       burned: fire.burned,
@@ -665,6 +678,14 @@ function actAlone(state: FrontierState, action: FrontierAction): FrontierOutcome
   if (action.kind === 'buildSmelter') {
     const why = smelterRefusal(state, action.id);
     return why === null ? spent(buildSmelter(state, action.id)) : refused(state, why);
+  }
+  if (action.kind === 'loadSmelter') {
+    const why = loadRefusal(state, action.id, action.ore);
+    return why === null ? spent(loadSmelter(state, action.id, action.ore)) : refused(state, why);
+  }
+  if (action.kind === 'upgradeSmelter') {
+    const why = smelterUpgradeRefusal(state, action.id);
+    return why === null ? spent(upgradeSmelter(state, action.id)) : refused(state, why);
   }
   if (action.kind === 'make') {
     const why = makeRefusal(state, action.recipe);

@@ -80,6 +80,8 @@ import type { GameState } from './state';
  * 0.16.0: after the 0.15.0 build: tier 2's coal contract asks for 40 coal,
  *        not 80 (question 197).
  * 0.17.0: after the 0.16.0 build: about three times the coal in every world.
+ * 0.28.0: after the 0.27.0 build: smelters are loaded and smelt overnight, and are
+ *        upgraded with kits; the tap-to-smelt recipes are gone; state version 29.
  * 0.27.0: after the 0.26.0 build: dragons attack only in the camps' light; a clay and a
  *        stone contract on every board through stage 4.
  * 0.26.0: after the 0.25.0 build: contract stages; dragons attack every 1-3 taps;
@@ -96,7 +98,7 @@ import type { GameState } from './state';
  * 0.18.0: after the 0.17.0 build: the axe (3 wood a tree) and the saw house
  *        (1 more wood from each tree in its reach); state version 20.
  */
-export const ENGINE_VERSION = '0.27.0';
+export const ENGINE_VERSION = '0.28.0';
 
 /** What `applyAction` and `endShift` return: the new state and what happened. */
 export interface StepResult {
@@ -543,6 +545,9 @@ export {
   makeRecipe,
   makeRefusal,
   smelterRefusal,
+  loadPlan,
+  loadRefusal,
+  smelterUpgradeRefusal,
 } from './frontier/smelting';
 export type { LanternRefusal, MakeRefusal, SmelterRefusal } from './frontier/smelting';
 export type { FrontierTap, FrontierTapKind } from './frontier/tap';

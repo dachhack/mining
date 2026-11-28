@@ -86,6 +86,10 @@ describe('when the market opens (owner: every 10, 5 or 3 shifts by the best camp
       pen: false,
       penned: 0,
       breedIn: 0,
+      smelterLevel: 0,
+      smeltIron: 0,
+      smeltCopper: 0,
+      smeltCoal: 0,
       deep: false,
       defense: 0,
     };
