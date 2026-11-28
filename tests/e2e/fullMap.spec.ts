@@ -278,3 +278,53 @@ test('a fully revealed map: a short pan draws no ground until it stops, then dra
   await page.waitForTimeout(500);
   expect(await groundDraws(canvas)).toBe(before + 1);
 });
+
+test('a tap on a full map updates the counter in place: no chip is built again', async ({
+  page,
+}) => {
+  // Owner, after the 0.28.0 build: "The game still slows down when the map is
+  // full. There is a delay from when you tap to the message and the block
+  // disappears." Building every chip and drawing every icon again on each tap
+  // was a large part of a tap's time; now only the numbers change.
+  const state: FrontierState = {
+    ...revealedWorld(),
+    inventory: new Map([
+      ['wood', 5],
+      ['grass', 5],
+      ['apple', 5],
+      ['stone', 5],
+      ['clay', 5],
+    ]),
+  };
+  const canvas = await openRevealed(page, state);
+  // Mark every chip that stands.
+  const counter = page.getByTestId('lab-counter');
+  await counter.evaluate((el) => {
+    for (const chip of Array.from(el.children)) (chip as HTMLElement).dataset['kept'] = 'yes';
+  });
+  const before = await counter.evaluate((el) => el.children.length);
+  // A tap that gathers or digs: something the store already holds.
+  let world = state;
+  for (let k = 0; k < 3; k += 1) {
+    const square = usefulSquare(world);
+    const draws = await groundDraws(canvas);
+    await tapSquare(page, canvas, square.x, square.y);
+    await expect.poll(() => groundDraws(canvas)).toBe(draws + 1);
+    world = frontierAct(world, { kind: 'tap', x: square.x, y: square.y }).state;
+  }
+  // The same chips, with the new numbers.
+  const after = await counter.evaluate((el) => ({
+    n: el.children.length,
+    kept: Array.from(el.children).filter((c) => (c as HTMLElement).dataset['kept'] === 'yes')
+      .length,
+  }));
+  expect(after.n).toBe(before);
+  expect(after.kept).toBe(before);
+  await expect(page.getByTestId('lab-dug')).toHaveAttribute('data-count', String(world.mined));
+  for (const item of ['wood', 'grass', 'apple', 'stone', 'clay']) {
+    await expect(page.getByTestId(`lab-res-${item}`)).toHaveAttribute(
+      'data-count',
+      String(world.inventory.get(item) ?? 0),
+    );
+  }
+});

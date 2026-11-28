@@ -859,8 +859,14 @@ export function mountCampLab(
   });
 
   // ----- Drawing -----
+  /**
+   * The map's size on screen. While a frame is being drawn it is read once
+   * and kept (`viewInDraw`): `toPx` asks for it for every square, and each
+   * read of the page's layout has a cost.
+   */
+  let viewInDraw: ViewSize | null = null;
   function view(): ViewSize {
-    return { width: canvas.clientWidth, height: canvas.clientHeight };
+    return viewInDraw ?? { width: canvas.clientWidth, height: canvas.clientHeight };
   }
   function cellPixels(): number {
     return view().width / camera.cells;
@@ -1087,10 +1093,25 @@ export function mountCampLab(
   }
 
   function draw(now: number = performance.now(), settle = false): void {
+    viewInDraw = null;
     const ready = prepareCanvas(canvas);
     if (ready === null) {
       return;
     }
+    viewInDraw = { width: ready.width, height: ready.height };
+    try {
+      drawFrame(ready, now, settle);
+    } finally {
+      viewInDraw = null;
+    }
+  }
+
+  /** One frame of the map, into the canvas `prepareCanvas` made ready. */
+  function drawFrame(
+    ready: { ctx: CanvasRenderingContext2D; width: number; height: number },
+    now: number,
+    settle: boolean,
+  ): void {
     const { ctx } = ready;
     const c = cellPixels();
     const ratio = window.devicePixelRatio || 1;
@@ -1320,21 +1341,40 @@ export function mountCampLab(
     }
   }
 
+  /** The canvas's data attributes as last written, and the world they were worked out for: see `writeCanvasData`. */
+  const canvasData = new Map<string, string>();
+  let canvasDataWorld: CampWorld | null = null;
+  let canvasDataSights: Sight[] | null = null;
+
   /** What the map shows, as data attributes on the canvas, for the e2e tests. */
   function writeCanvasData(c: number): void {
-    canvas.dataset['groundDraws'] = String(groundDraws);
-    canvas.dataset['groundDrawn'] = groundDrawn;
-    canvas.dataset['camX'] = String(camera.x);
-    canvas.dataset['camY'] = String(camera.y);
-    canvas.dataset['cells'] = String(camera.cells);
-    canvas.dataset['cellPx'] = String(c);
+    // Every frame calls this: write an attribute only when its value changed
+    // (each write makes the browser look at the page's styles again), and
+    // work out the world's part only when the world changed (owner, after the
+    // 0.28.0 build: "The game still slows down when the map is full").
+    const put = (key: string, value: string): void => {
+      if (canvasData.get(key) === value) return;
+      canvasData.set(key, value);
+      canvas.dataset[key] = value;
+    };
+    put('groundDraws', String(groundDraws));
+    put('groundDrawn', groundDrawn);
+    put('camX', String(camera.x));
+    put('camY', String(camera.y));
+    put('cells', String(camera.cells));
+    put('cellPx', String(c));
+    put('mode', mode.kind);
+    // The square a new camp would go on, while placing: '' if none yet.
+    put(
+      'target',
+      mode.kind === 'placing' && mode.target !== null ? `${mode.target.x},${mode.target.y}` : '',
+    );
+    if (canvasDataWorld === world && canvasDataSights === sights) return;
+    canvasDataWorld = world;
+    canvasDataSights = sights;
     canvas.dataset['shown'] = String(sights.filter((s) => s === 'shown').length);
     canvas.dataset['greyed'] = String(sights.filter((s) => s === 'greyed').length);
     canvas.dataset['camps'] = String(world.camps.length);
-    canvas.dataset['mode'] = mode.kind;
-    // The square a new camp would go on, while placing: '' if none yet.
-    canvas.dataset['target'] =
-      mode.kind === 'placing' && mode.target !== null ? `${mode.target.x},${mode.target.y}` : '';
     // For the e2e tests: the shift, and where the animals are.
     canvas.dataset['shift'] = String(world.turn.shift);
     canvas.dataset['animals'] = world.surface.animals.map((a) => `${a.x},${a.y}`).join(' ');
@@ -1962,8 +2002,42 @@ export function mountCampLab(
    * One row at a fixed height, as in Lab 1, so the map never moves.
    */
   function showCampCounter(): void {
-    counter.replaceChildren(...counterChips(''));
+    // Which chips there are, and their order, depend only on which items are
+    // held and on the lowest camp's level (the next upgrade's cost comes
+    // first). While those stay the same, only the numbers change: they are
+    // written into the chips that stand, and nothing is built again (owner,
+    // after the 0.28.0 build: "The game still slows down when the map is
+    // full": building every chip and drawing every icon on each tap was a
+    // large part of a tap's time).
+    const counts = world.lab.counts;
+    const held = [...counts.entries()]
+      .filter(([, n]) => n > 0)
+      .map(([item]) => item)
+      .sort()
+      .join(',');
+    const shape = `${Math.min(...world.camps.map((c) => c.level))}|${held}`;
+    if (shape !== counterShape || counter.children.length === 0) {
+      counterShape = shape;
+      counter.replaceChildren(...counterChips(''));
+      return;
+    }
+    for (const chip of Array.from(counter.children) as HTMLElement[]) {
+      const id = chip.dataset['testid'] ?? '';
+      const count =
+        id === 'lab-dug'
+          ? world.lab.mined
+          : id === 'lab-coins'
+            ? (counts.get(FRONTIER_MARKET.coin) ?? 0)
+            : (counts.get(id.replace('lab-res-', '')) ?? 0);
+      const text = String(count);
+      if (chip.dataset['count'] === text) continue;
+      chip.dataset['count'] = text;
+      const label = chip.querySelector('.lab-chip-count');
+      if (label !== null) label.textContent = text;
+    }
   }
+  /** What the counter's chips were last built for: see `showCampCounter`. */
+  let counterShape = '';
 
   /**
    * The counter's chips: Dug, Coins, then every item held. `prefix` is put
