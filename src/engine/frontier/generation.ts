@@ -450,6 +450,7 @@ export function createFrontier(seed: number): FrontierState {
     contracts: [],
     contractsDone: [0, 0, 0],
     boardUsed: [],
+    feats: [],
     marketOpen: false,
     hazards: noHazards(cube.size.x * cube.size.y),
     buildings: [],

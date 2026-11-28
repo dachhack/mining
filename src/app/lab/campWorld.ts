@@ -131,6 +131,8 @@ export interface CampTurn {
   contractsDone: number[];
   /** The contracts taken or filled from today's board: gone from it until the next market day. */
   boardUsed: string[];
+  /** The accomplishments earned in the run (the engine's feats.ts), by id. */
+  feats: string[];
   /** True while the market is open, after a market day's night (progression, market scene). */
   marketOpen: boolean;
 }
@@ -144,6 +146,7 @@ export function firstTurn(): CampTurn {
     contracts: [],
     contractsDone: [0, 0, 0],
     boardUsed: [],
+    feats: [],
     marketOpen: false,
   };
 }
@@ -225,6 +228,7 @@ export function toFrontier(world: CampWorld): FrontierState {
     contracts: world.turn.contracts,
     contractsDone: world.turn.contractsDone,
     boardUsed: world.turn.boardUsed,
+    feats: world.turn.feats,
     marketOpen: world.turn.marketOpen,
     hazards: world.hazards,
     buildings: world.buildings,
@@ -271,6 +275,7 @@ export function fromFrontier(world: CampWorld, state: FrontierState): CampWorld 
       contracts: state.contracts,
       contractsDone: state.contractsDone,
       boardUsed: state.boardUsed,
+      feats: state.feats,
       marketOpen: state.marketOpen,
     },
     hazards: state.hazards,

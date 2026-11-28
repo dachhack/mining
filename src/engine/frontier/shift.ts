@@ -61,6 +61,7 @@ import { drainPumps, isFlooded } from './water';
 import { burnFires } from './fire';
 import { nightOfDragons, dragonsOnTaps } from './dragons';
 import type { DragonAttack } from './dragons';
+import { earnFeats } from './feats';
 import { buildDefense, defenseRefusal, nightOfRaids } from './raids';
 import type { Raid } from './raids';
 import { breedPens, penAct, penRefusal } from './pens';
@@ -207,6 +208,8 @@ export interface FrontierOutcome {
    * `dragonsOnTaps`): empty or missing when it spent none or none attacked.
    */
   attacks?: DragonAttack[];
+  /** The accomplishments this action earned (feats.ts), by id; missing when none. */
+  feats?: string[];
 }
 
 /**
@@ -571,14 +574,33 @@ function spent(next: FrontierState, tap: FrontierTap | null = null): FrontierOut
  * Nothing can be done once the run has ended.
  */
 export function frontierAct(state: FrontierState, action: FrontierAction): FrontierOutcome {
-  const outcome = actAlone(state, action);
+  const alone = actAlone(state, action);
+  if (!alone.done) return alone;
   // Every tap spent on the day's work counts the dragons down; one whose
   // rest runs out attacks (dragons.ts; owner, after the 0.25.0 build). End
   // shift starts the next shift's taps: its night is the dragons' own.
-  const taps = state.tapsLeft - outcome.state.tapsLeft;
-  if (!outcome.done || action.kind === 'endShift' || taps <= 0) return outcome;
-  const dragons = dragonsOnTaps(outcome.state, taps);
-  return { ...outcome, state: dragons.state, attacks: dragons.attacks };
+  const taps = state.tapsLeft - alone.state.tapsLeft;
+  let outcome = alone;
+  if (action.kind !== 'endShift' && taps > 0) {
+    const dragons = dragonsOnTaps(alone.state, taps);
+    outcome = { ...alone, state: dragons.state, attacks: dragons.attacks };
+  }
+  // The accomplishments the action earned (feats.ts).
+  const at = action.kind === 'tap' || action.kind === 'digArea' ? action : null;
+  const dug: { x: number; y: number }[] = [];
+  if (at !== null) {
+    const reach = action.kind === 'digArea' ? 1 : 0;
+    for (let dy = -reach; dy <= reach; dy += 1) {
+      for (let dx = -reach; dx <= reach; dx += 1) dug.push({ x: at.x + dx, y: at.y + dy });
+    }
+  }
+  const feats = earnFeats(outcome.state, {
+    dragonDriven: outcome.tap?.kind === 'dragon',
+    raidTurnedAway: outcome.report?.raid?.turnedAway === true,
+    dug,
+  });
+  if (feats.earned.length === 0) return outcome;
+  return { ...outcome, state: feats.state, feats: feats.earned };
 }
 
 /** `frontierAct` without the dragons' attacks: the action alone. */

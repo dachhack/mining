@@ -72,6 +72,8 @@
 //   move at night (at most FRONTIER_DRAGON.steps squares) and, in the day,
 //   only on a step that spent taps (an attack: to anywhere on the map); one leaves
 //   only by a tap on it with a sword held, and the sword stays.
+// - ACCOMPLISHMENTS: only ever added, each once, each from the list, and
+//   exactly those the outcome names.
 // - RAIDS AND DEFENSES: a camp's defenses stay between 0 and
 //   FRONTIER_DEFENSE.length, go up only by buildDefense, 1 level, and never
 //   come down; a camp loses a level only at night (fire or a raid), or in
@@ -93,6 +95,7 @@ import {
   FRONTIER_PEN,
   FRONTIER_PUMP,
   FRONTIER_RUN,
+  FRONTIER_FEATS,
   FRONTIER_SHIFT,
   FRONTIER_SMELTER,
   FRONTIER_WATER,
@@ -144,7 +147,8 @@ export function checkStep(
       say(`taps went from ${before.tapsLeft} to ${after.tapsLeft} for a dig costing ${plan.cost}`);
     // ...and then the dragons' turn for the taps it spent (dragons.ts).
     const dragons = dragonsOnTaps({ ...plan.state, tapsLeft: after.tapsLeft }, plan.cost);
-    if (hashFrontier(dragons.state) !== hashFrontier(after))
+    // (The accomplishments it may have earned are checked on their own, below.)
+    if (hashFrontier({ ...dragons.state, feats: after.feats }) !== hashFrontier(after))
       say('the dig is not the taps it stands for');
     let s = { ...before, tapsLeft: FRONTIER_SHIFT.taps };
     for (const sq of plan.dug) {
@@ -166,6 +170,20 @@ export function checkStep(
     if (said !== did) say(`previewTap said "${said}", the tap did "${did}"`);
   }
 
+  // ACCOMPLISHMENTS (feats.ts): only ever added, each once, each from the
+  // list, and exactly those the outcome names.
+  if (outcome.done) {
+    const known = new Set(FRONTIER_FEATS.map((f) => f.id));
+    if (new Set(after.feats).size !== after.feats.length) say('an accomplishment was earned twice');
+    if (after.feats.some((id) => !known.has(id))) say('an unknown accomplishment was earned');
+    const kept = after.feats.slice(0, before.feats.length).join() === before.feats.join();
+    if (!kept) say('an accomplishment was lost');
+    const added = after.feats.slice(before.feats.length);
+    if (added.join() !== (outcome.feats ?? []).join())
+      say(
+        `earned ${added.join() || 'nothing'}, but the outcome names ${(outcome.feats ?? []).join() || 'nothing'}`,
+      );
+  }
   // Taps.
   if (!outcome.done) {
     if (after !== before) say('a refused action changed the state');
