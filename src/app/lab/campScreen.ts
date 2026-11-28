@@ -159,7 +159,7 @@ import {
 } from './labDraw';
 import type { SquareBox } from './labDraw';
 import { attachLabGestures } from './labGestures';
-import { LAB_LOOK } from './labLook';
+import { LAB_LOOK, LAB_MARKS } from './labLook';
 import { topBlocksOf } from './labWorld';
 import { APPLE_TREE, GRASS, MAPLE_TREE, NO_FEATURE, TREE, isTree } from './surface';
 import type { Animal } from './surface';
@@ -201,6 +201,7 @@ import {
 } from './buildingArt';
 import { drawCrop } from './cropArt';
 import { showNight } from './night';
+import { raidText } from './raidText';
 import { showStory } from './story';
 import {
   ROTATING_TIPS,
@@ -470,12 +471,8 @@ function shiftText(report: ShiftReport, turn: CampTurn): string {
     report.dragonFires > 0 ? ' A dragon set a fire 🔥.' : '',
   ].join('');
   const raid = report.raid;
-  const raided =
-    raid === null
-      ? ''
-      : raid.turnedAway
-        ? ` Marauders 🏴 came for camp ${raid.campId}, but its defenses turned them away.`
-        : ` Marauders 🏴 raided camp ${raid.campId}${raid.stolen.length > 0 ? `, stole ${raid.stolen.map((st) => `${st.count} ${itemName(st.item).toLowerCase()}`).join(', ')}` : ''}${raid.upgradesLost > 0 ? `, and tore down ${raid.upgradesLost === 1 ? 'an upgrade' : `${raid.upgradesLost} upgrades`}` : ''}. Build defenses 🛡 at your camps.`;
+  // Strength against the camp's defense (raidText.ts).
+  const raided = raid === null ? '' : raidText(raid);
   // Mushrooms (owner, after the 0.17.0 build) come up some nights after rain.
   const mushrooms =
     report.mushroomsCame > 0
@@ -862,8 +859,14 @@ export function mountCampLab(
   });
 
   // ----- Drawing -----
+  /**
+   * The map's size on screen. While a frame is being drawn it is read once
+   * and kept (`viewInDraw`): `toPx` asks for it for every square, and each
+   * read of the page's layout has a cost.
+   */
+  let viewInDraw: ViewSize | null = null;
   function view(): ViewSize {
-    return { width: canvas.clientWidth, height: canvas.clientHeight };
+    return viewInDraw ?? { width: canvas.clientWidth, height: canvas.clientHeight };
   }
   function cellPixels(): number {
     return view().width / camera.cells;
@@ -903,6 +906,15 @@ export function mountCampLab(
   const ground = document.createElement('canvas');
   /** How far, in css pixels, the ground reaches past each side of the view. */
   const GROUND_MARGIN = 160;
+  /**
+   * When a square changes, the ground is drawn again only within GROUND_REACH
+   * squares of it (clipped to that), and to fill that clip rightly every
+   * square within GROUND_SPILL more is drawn, since each may paint into it.
+   * (Until the 0.28.0 build both were 3: a tap drew 13 x 13 squares again;
+   * now 7 x 7. Owner: "just redrawing things that change between taps".)
+   */
+  const GROUND_REACH = 2;
+  const GROUND_SPILL = 1;
   /** How long after the camera last moved the ground is drawn again for where it stopped, in ms. */
   const GROUND_SETTLE_MS = 150;
   /** The camera the ground was drawn for. */
@@ -1054,7 +1066,11 @@ export function mountCampLab(
     }
     groundDraws += 1;
     groundDrawn = 'part';
-    const reach = 3;
+    // A changed square changes how its neighbours look (a shadow along the
+    // edge they share, a forest's edge), and a square paints less than one
+    // square past its own (the lit edge's glow, a canopy): so the pixels that
+    // can change lie within GROUND_REACH squares of it.
+    const reach = GROUND_REACH;
     const part = {
       x0: area.x0 - reach,
       y0: area.y0 - reach,
@@ -1080,24 +1096,156 @@ export function mountCampLab(
       ctx.clip();
       ctx.setTransform(ratio, 0, 0, ratio, GROUND_MARGIN * ratio, GROUND_MARGIN * ratio);
       drawGroundOn(ctx, {
-        x0: part.x0 - 3,
-        y0: part.y0 - 3,
-        x1: part.x1 + 3,
-        y1: part.y1 + 3,
+        x0: part.x0 - GROUND_SPILL,
+        y0: part.y0 - GROUND_SPILL,
+        x1: part.x1 + GROUND_SPILL,
+        y1: part.y1 + GROUND_SPILL,
       });
       ctx.restore();
     });
   }
 
   function draw(now: number = performance.now(), settle = false): void {
+    viewInDraw = null;
+    if (mapHeld) {
+      // Night: the map keeps the evening's picture (see `mapHeld`). The data
+      // attributes still follow the world, which has moved on.
+      writeCanvasData(cellPixels());
+      return;
+    }
     const ready = prepareCanvas(canvas);
     if (ready === null) {
       return;
     }
+    viewInDraw = { width: ready.width, height: ready.height };
+    try {
+      drawFrame(ready, now, settle);
+    } finally {
+      viewInDraw = null;
+    }
+  }
+
+  /**
+   * True from End shift until the night is over: the map is not drawn, so it
+   * shows the evening as it was, and what the night changed is seen in the
+   * morning (owner, after the 0.28.0 build: "the map redraws between shifts
+   * before the night scene ... It should redraw after the night scene").
+   */
+  let mapHeld = false;
+  function holdMap(on: boolean): void {
+    mapHeld = on;
+    canvas.dataset['held'] = String(on);
+  }
+
+  /** One frame of the map, into the canvas `prepareCanvas` made ready. */
+  function drawFrame(
+    ready: { ctx: CanvasRenderingContext2D; width: number; height: number },
+    now: number,
+    settle: boolean,
+  ): void {
     const { ctx } = ready;
     const c = cellPixels();
     const ratio = window.devicePixelRatio || 1;
     drawGround(ready.width, ready.height, ratio, settle);
+    if (groundCamera.x !== camera.x || groundCamera.y !== camera.y) {
+      // Panning: once the camera stops, draw the ground for where it stopped.
+      window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(() => draw(performance.now(), true), GROUND_SETTLE_MS);
+    }
+    // What stands still (the ground, the animals, the dragons, the camps) is
+    // kept as one picture, `still`, and a frame of a cue's animation copies
+    // it and draws only what moves on top (owner, after the 0.28.0 build:
+    // "just redrawing things that change between taps"). It is not used
+    // while something in it moves (an animal sliding, a dragon flying, the
+    // camera), nor while a preview is drawn under the camps (placing, a held
+    // dig): those frames are drawn in full, as before.
+    const moving =
+      [...lastStep.values()].some((step) => now - step.at < CAMP_LOOK.animalSlideMs) ||
+      [...lastFlight.values()].some((f) => now - f.at < f.ms);
+    const preview = (mode.kind === 'placing' && mode.target !== null) || held !== null;
+    const stillKey: unknown[] = [
+      world,
+      sights,
+      camera.x,
+      camera.y,
+      camera.cells,
+      ready.width,
+      ready.height,
+      ratio,
+      groundDraws,
+      mode.kind === 'camp' ? mode.id : -1,
+    ];
+    const canKeep = !moving && !preview && !settle;
+    if (canKeep && stillKey.every((k, i) => k === stillFor[i])) {
+      // The same picture as last frame: copy it.
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(still, 0, 0);
+      ctx.restore();
+      stillCopies += 1;
+    } else if (canKeep && stillKey.every((k, i) => k === stillSeen[i])) {
+      // The camera and the canvas are as they were last frame, so this
+      // picture will be wanted again: draw it into `still`, then copy it.
+      if (still.width !== canvas.width || still.height !== canvas.height) {
+        still.width = canvas.width;
+        still.height = canvas.height;
+      }
+      const sctx = still.getContext('2d');
+      if (sctx === null) {
+        drawStill(ctx, c, ratio, now);
+      } else {
+        sctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        sctx.imageSmoothingEnabled = true;
+        sctx.fillStyle = LAB_MARKS.gap;
+        sctx.fillRect(0, 0, ready.width, ready.height);
+        drawStill(sctx, c, ratio, now);
+        stillFor = stillKey;
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.drawImage(still, 0, 0);
+        ctx.restore();
+      }
+    } else {
+      // Something moves, or the camera has just moved: draw it all, keep nothing.
+      stillFor = [];
+      drawStill(ctx, c, ratio, now, preview);
+    }
+    stillSeen = stillKey;
+    if (canvas.dataset['stillCopies'] !== String(stillCopies)) {
+      canvas.dataset['stillCopies'] = String(stillCopies);
+    }
+    // Fires on a camp's ground go over its marker, so a burning camp shows (hazards PR 3).
+    const across = world.lab.state.size.x;
+    world.hazards.fires.forEach((burning, i) => {
+      const fx = i % across;
+      const fy = Math.floor(i / across);
+      if (!burning || campAt(world, fx, fy) === null || sightOf(fx, fy) !== 'shown') return;
+      const { px, py } = toPx(fx, fy);
+      drawFire(ctx, squareBox(px, py, c), fx, fy, now);
+    });
+    drawEffects(ctx, now, c);
+    writeCanvasData(c);
+  }
+
+  /** The picture of what stands still, as last drawn; what it was drawn for; and what the last frame was drawn for. */
+  const still = document.createElement('canvas');
+  let stillFor: unknown[] = [];
+  let stillSeen: unknown[] = [];
+  /** How many frames copied `still` instead of drawing it: for the e2e tests. */
+  let stillCopies = 0;
+
+  /**
+   * The ground, the animals, the dragons, the previews (if `withPreviews`)
+   * and the camps, onto `ctx`: everything of a frame but the fires on camps
+   * and the cues, in the order a frame draws them.
+   */
+  function drawStill(
+    ctx: CanvasRenderingContext2D,
+    c: number,
+    ratio: number,
+    now: number,
+    withPreviews = false,
+  ): void {
     // The ground, shifted by however far the camera has moved since it was
     // drawn (in whole device pixels, so it is copied, not resampled).
     const shiftX = Math.round(((groundCamera.x - camera.x) * c - GROUND_MARGIN) * ratio);
@@ -1106,11 +1254,6 @@ export function mountCampLab(
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(ground, shiftX, shiftY);
     ctx.restore();
-    if (groundCamera.x !== camera.x || groundCamera.y !== camera.y) {
-      // Panning: once the camera stops, draw the ground for where it stopped.
-      window.clearTimeout(settleTimer);
-      settleTimer = window.setTimeout(() => draw(performance.now(), true), GROUND_SETTLE_MS);
-    }
 
     drawAnimals(ctx, c);
     // Dragons (hazards PR 4), on lit squares only. In the morning one glides
@@ -1151,10 +1294,12 @@ export function mountCampLab(
     if (canvas.dataset['dragonPointers'] !== String(pointers)) {
       canvas.dataset['dragonPointers'] = String(pointers);
     }
-    if (mode.kind === 'placing' && mode.target !== null) {
-      drawPlacePreview(ctx, mode.target, c, now);
+    if (withPreviews) {
+      if (mode.kind === 'placing' && mode.target !== null) {
+        drawPlacePreview(ctx, mode.target, c, now);
+      }
+      if (held !== null) drawDigPreview(ctx, held, c);
     }
-    if (held !== null) drawDigPreview(ctx, held, c);
     for (const camp of world.camps) {
       if (sightOf(camp.x, camp.y) === 'shown') {
         const selected = mode.kind === 'camp' && mode.id === camp.id;
@@ -1164,17 +1309,6 @@ export function mountCampLab(
         drawCampMarker(ctx, camp, c, selected);
       }
     }
-    // Fires on a camp's ground go over its marker, so a burning camp shows (hazards PR 3).
-    const across = world.lab.state.size.x;
-    world.hazards.fires.forEach((burning, i) => {
-      const fx = i % across;
-      const fy = Math.floor(i / across);
-      if (!burning || campAt(world, fx, fy) === null || sightOf(fx, fy) !== 'shown') return;
-      const { px, py } = toPx(fx, fy);
-      drawFire(ctx, squareBox(px, py, c), fx, fy, now);
-    });
-    drawEffects(ctx, now, c);
-    writeCanvasData(c);
   }
 
   /** True if square (x, y), or one within 2 squares of it, is fog. */
@@ -1323,21 +1457,40 @@ export function mountCampLab(
     }
   }
 
+  /** The canvas's data attributes as last written, and the world they were worked out for: see `writeCanvasData`. */
+  const canvasData = new Map<string, string>();
+  let canvasDataWorld: CampWorld | null = null;
+  let canvasDataSights: Sight[] | null = null;
+
   /** What the map shows, as data attributes on the canvas, for the e2e tests. */
   function writeCanvasData(c: number): void {
-    canvas.dataset['groundDraws'] = String(groundDraws);
-    canvas.dataset['groundDrawn'] = groundDrawn;
-    canvas.dataset['camX'] = String(camera.x);
-    canvas.dataset['camY'] = String(camera.y);
-    canvas.dataset['cells'] = String(camera.cells);
-    canvas.dataset['cellPx'] = String(c);
+    // Every frame calls this: write an attribute only when its value changed
+    // (each write makes the browser look at the page's styles again), and
+    // work out the world's part only when the world changed (owner, after the
+    // 0.28.0 build: "The game still slows down when the map is full").
+    const put = (key: string, value: string): void => {
+      if (canvasData.get(key) === value) return;
+      canvasData.set(key, value);
+      canvas.dataset[key] = value;
+    };
+    put('groundDraws', String(groundDraws));
+    put('groundDrawn', groundDrawn);
+    put('camX', String(camera.x));
+    put('camY', String(camera.y));
+    put('cells', String(camera.cells));
+    put('cellPx', String(c));
+    put('mode', mode.kind);
+    // The square a new camp would go on, while placing: '' if none yet.
+    put(
+      'target',
+      mode.kind === 'placing' && mode.target !== null ? `${mode.target.x},${mode.target.y}` : '',
+    );
+    if (canvasDataWorld === world && canvasDataSights === sights) return;
+    canvasDataWorld = world;
+    canvasDataSights = sights;
     canvas.dataset['shown'] = String(sights.filter((s) => s === 'shown').length);
     canvas.dataset['greyed'] = String(sights.filter((s) => s === 'greyed').length);
     canvas.dataset['camps'] = String(world.camps.length);
-    canvas.dataset['mode'] = mode.kind;
-    // The square a new camp would go on, while placing: '' if none yet.
-    canvas.dataset['target'] =
-      mode.kind === 'placing' && mode.target !== null ? `${mode.target.x},${mode.target.y}` : '';
     // For the e2e tests: the shift, and where the animals are.
     canvas.dataset['shift'] = String(world.turn.shift);
     canvas.dataset['animals'] = world.surface.animals.map((a) => `${a.x},${a.y}`).join(' ');
@@ -1965,8 +2118,42 @@ export function mountCampLab(
    * One row at a fixed height, as in Lab 1, so the map never moves.
    */
   function showCampCounter(): void {
-    counter.replaceChildren(...counterChips(''));
+    // Which chips there are, and their order, depend only on which items are
+    // held and on the lowest camp's level (the next upgrade's cost comes
+    // first). While those stay the same, only the numbers change: they are
+    // written into the chips that stand, and nothing is built again (owner,
+    // after the 0.28.0 build: "The game still slows down when the map is
+    // full": building every chip and drawing every icon on each tap was a
+    // large part of a tap's time).
+    const counts = world.lab.counts;
+    const held = [...counts.entries()]
+      .filter(([, n]) => n > 0)
+      .map(([item]) => item)
+      .sort()
+      .join(',');
+    const shape = `${Math.min(...world.camps.map((c) => c.level))}|${held}`;
+    if (shape !== counterShape || counter.children.length === 0) {
+      counterShape = shape;
+      counter.replaceChildren(...counterChips(''));
+      return;
+    }
+    for (const chip of Array.from(counter.children) as HTMLElement[]) {
+      const id = chip.dataset['testid'] ?? '';
+      const count =
+        id === 'lab-dug'
+          ? world.lab.mined
+          : id === 'lab-coins'
+            ? (counts.get(FRONTIER_MARKET.coin) ?? 0)
+            : (counts.get(id.replace('lab-res-', '')) ?? 0);
+      const text = String(count);
+      if (chip.dataset['count'] === text) continue;
+      chip.dataset['count'] = text;
+      const label = chip.querySelector('.lab-chip-count');
+      if (label !== null) label.textContent = text;
+    }
   }
+  /** What the counter's chips were last built for: see `showCampCounter`. */
+  let counterShape = '';
 
   /**
    * The counter's chips: Dug, Coins, then every item held. `prefix` is put
@@ -2167,9 +2354,22 @@ export function mountCampLab(
     // The row's height never changes.
     const head = element('div', 'lab2-tray-head');
     head.append(pinStrip());
-    const key = labKey();
     // The key lists the kinds you can see: lit and greyed squares, never what is under the fog.
     const seenTops = tops.filter((_, i) => (sights[i] ?? 'fog') !== 'fog');
+    // The legend changes only when a kind comes into sight or leaves it:
+    // until then the one built last is kept, icons and all (most taps).
+    const kinds = [...new Set(seenTops)].sort((x, y) => x - y).join(',');
+    const featuresSeen = [
+      ...new Set(world.surface.features.filter((_, i) => (sights[i] ?? 'fog') !== 'fog')),
+    ]
+      .sort((x, y) => x - y)
+      .join(',');
+    const keyShape = kinds + '|' + featuresSeen;
+    if (keyKept !== null && keyShape === keyKeptFor) {
+      tray.replaceChildren(head, keyKept);
+      return;
+    }
+    const key = labKey();
     // Clay is listed below with its texture as the swatch, not with the blocks' plain icon.
     showKey(
       key,
@@ -2212,8 +2412,13 @@ export function mountCampLab(
         key.append(entry);
       }
     }
+    keyKept = key;
+    keyKeptFor = keyShape;
     tray.replaceChildren(head, key);
   }
+  /** The legend as last built, and the kinds in sight it was built for: see `showIdleTray`. */
+  let keyKept: HTMLElement | null = null;
+  let keyKeptFor = '';
 
   /** A recipe's icon: a tent, with the camp level it makes for an upgrade. */
   function recipeIcon(recipe: Recipe): HTMLElement {
@@ -3839,6 +4044,8 @@ export function mountCampLab(
     effects = [];
     mode = { kind: 'idle' };
     preview = new Set();
+    // The map keeps the evening's picture until the night is over.
+    holdMap(true);
     setWorld(result.world);
     if (asGame) {
       saveRun(result.world); // saved every shift (question 152)
@@ -3861,8 +4068,10 @@ export function mountCampLab(
       reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
       onDone: () => {
         night = null;
+        holdMap(false);
         noteSteps(before);
         noteFlights(dragonsBefore);
+        draw(); // the morning: the map as the night left it
         cues.start();
         // A market day: the market opens now, after the night, before the day.
         openMarket();

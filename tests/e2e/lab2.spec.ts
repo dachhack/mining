@@ -1246,6 +1246,29 @@ test('night between shifts: End shift shows the night, with the moon of the shif
   await expect(canvas).toBeVisible();
 });
 
+test('night between shifts: the map keeps the evening picture until the night is over', async ({
+  page,
+}) => {
+  // Owner, after the 0.28.0 build: "the map redraws between shifts before
+  // the night scene so you see the map changes before the day begins. It
+  // should redraw after the night scene."
+  const canvas = await openLab2(page);
+  const night = page.getByTestId('lab2-night');
+  const picture = (): Promise<string> =>
+    canvas.evaluate((el) => (el as HTMLCanvasElement).toDataURL());
+  const evening = await picture();
+  await page.getByTestId('lab2-end-shift').click();
+  await expect(night).toBeVisible();
+  // While it is night the map is not drawn: the very same pixels.
+  await expect(canvas).toHaveAttribute('data-held', 'true');
+  await page.clock.runFor(2000);
+  expect(await picture()).toBe(evening);
+  await night.click();
+  await expect(night).toHaveCount(0);
+  // Morning: the map is drawn for the new day.
+  await expect(canvas).toHaveAttribute('data-held', 'false');
+});
+
 test('night between shifts: a tap skips it, and the tap does nothing else', async ({ page }) => {
   const canvas = await openLab2(page);
   const night = page.getByTestId('lab2-night');

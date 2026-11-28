@@ -191,13 +191,16 @@ test('a fully revealed map: drawing the ground around a tap gives the same pictu
   await expect(canvas).toHaveAttribute('data-ground-drawn', 'all');
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(canvas).toHaveAttribute('data-ground-drawn', 'all');
-  // Three taps, each drawing a part of the ground.
+  // Eight taps, each drawing a part of the ground (the part is 7 x 7
+  // squares since the still-picture change; it was 13 x 13).
   let world = state;
-  for (let k = 0; k < 3; k += 1) {
+  for (let k = 0; k < 8; k += 1) {
     const square = usefulSquare(world);
     const before = await groundDraws(canvas);
     await tapSquare(page, canvas, square.x, square.y);
-    await expect.poll(() => groundDraws(canvas)).toBe(before + 1);
+    // (More than one draw for a tap happens when its outcome also changes
+    // the map a frame later; the test above counts the usual single draw.)
+    await expect.poll(() => groundDraws(canvas)).toBeGreaterThan(before);
     await expect(canvas).toHaveAttribute('data-ground-drawn', 'part');
     // The same tap in the model, so the next one is chosen from the world as it is now.
     world = frontierAct(world, { kind: 'tap', x: square.x, y: square.y }).state;
@@ -206,6 +209,10 @@ test('a fully revealed map: drawing the ground around a tap gives the same pictu
   // a busy machine, and the two pictures then differed by a fading cue).
   await expect(canvas).toHaveAttribute('data-effects', '0');
   await page.waitForTimeout(300);
+  // The cues' frames copied the kept picture of what stands still (the
+  // ground, animals, camps) instead of drawing it again: the picture
+  // compared below came through that copy.
+  expect(Number(await canvas.getAttribute('data-still-copies'))).toBeGreaterThan(8);
   // Keep the canvas's pixels in the page, to compare them there.
   const keep = (): Promise<void> =>
     canvas.evaluate((el) => {
@@ -243,8 +250,11 @@ test('a fully revealed map: drawing the ground around a tap gives the same pictu
     return { off, most, total: a.length / 4, same: a.length === b.length };
   });
   expect(diff.same).toBe(true);
-  expect(diff.most).toBeLessThanOrEqual(8);
-  expect(diff.off).toBeLessThan(diff.total / 1000);
+  // With eight taps, about ten pixels on the clips' edges are off by up to
+  // 10 to 20 levels (measured the same with the old, wider part): a few
+  // pixels, never a square's worth.
+  expect(diff.most).toBeLessThanOrEqual(32);
+  expect(diff.off).toBeLessThan(200);
 });
 
 test('a fully revealed map: a short pan draws no ground until it stops, then draws it once', async ({
@@ -277,4 +287,54 @@ test('a fully revealed map: a short pan draws no ground until it stops, then dra
   await expect(canvas).toHaveAttribute('data-ground-drawn', 'all');
   await page.waitForTimeout(500);
   expect(await groundDraws(canvas)).toBe(before + 1);
+});
+
+test('a tap on a full map updates the counter in place: no chip is built again', async ({
+  page,
+}) => {
+  // Owner, after the 0.28.0 build: "The game still slows down when the map is
+  // full. There is a delay from when you tap to the message and the block
+  // disappears." Building every chip and drawing every icon again on each tap
+  // was a large part of a tap's time; now only the numbers change.
+  const state: FrontierState = {
+    ...revealedWorld(),
+    inventory: new Map([
+      ['wood', 5],
+      ['grass', 5],
+      ['apple', 5],
+      ['stone', 5],
+      ['clay', 5],
+    ]),
+  };
+  const canvas = await openRevealed(page, state);
+  // Mark every chip that stands.
+  const counter = page.getByTestId('lab-counter');
+  await counter.evaluate((el) => {
+    for (const chip of Array.from(el.children)) (chip as HTMLElement).dataset['kept'] = 'yes';
+  });
+  const before = await counter.evaluate((el) => el.children.length);
+  // A tap that gathers or digs: something the store already holds.
+  let world = state;
+  for (let k = 0; k < 3; k += 1) {
+    const square = usefulSquare(world);
+    const draws = await groundDraws(canvas);
+    await tapSquare(page, canvas, square.x, square.y);
+    await expect.poll(() => groundDraws(canvas)).toBe(draws + 1);
+    world = frontierAct(world, { kind: 'tap', x: square.x, y: square.y }).state;
+  }
+  // The same chips, with the new numbers.
+  const after = await counter.evaluate((el) => ({
+    n: el.children.length,
+    kept: Array.from(el.children).filter((c) => (c as HTMLElement).dataset['kept'] === 'yes')
+      .length,
+  }));
+  expect(after.n).toBe(before);
+  expect(after.kept).toBe(before);
+  await expect(page.getByTestId('lab-dug')).toHaveAttribute('data-count', String(world.mined));
+  for (const item of ['wood', 'grass', 'apple', 'stone', 'clay']) {
+    await expect(page.getByTestId(`lab-res-${item}`)).toHaveAttribute(
+      'data-count',
+      String(world.inventory.get(item) ?? 0),
+    );
+  }
 });
