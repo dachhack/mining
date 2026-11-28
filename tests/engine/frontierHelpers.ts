@@ -95,6 +95,7 @@ export function world(options: WorldOptions = {}): FrontierState {
     contracts: [],
     contractsDone: [0, 0, 0],
     boardUsed: [],
+    feats: [],
     marketOpen: false,
     hazards: noHazards(SIDE * SIDE),
     buildings: [],

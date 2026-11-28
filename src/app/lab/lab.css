@@ -1400,3 +1400,205 @@ body[data-screen='lab2'] {
   flex: 0 0 auto;
   padding: 2px 0 6px;
 }
+
+/* The back story (story.ts): a few pages over the whole screen when a new run
+   starts. A tap turns the page; Skip ends it. */
+.lab2-story {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: calc(var(--inset-top, 0px) + 24px) calc(var(--inset-right, 0px) + 24px)
+    calc(var(--inset-bottom, 0px) + 24px) calc(var(--inset-left, 0px) + 24px);
+  background: rgba(10, 8, 6, 0.97);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.lab2-story-title {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 650;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #cf9550;
+}
+
+.lab2-story-text {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 340px;
+  /* A fixed height, so the page count and Skip do not move from page to page. */
+  min-height: 14em;
+  justify-content: center;
+}
+
+.lab2-story-line {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  color: #f2e2c4;
+  text-align: center;
+}
+
+.lab2-story-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  max-width: 340px;
+  font-size: 0.8rem;
+  color: #a89a84;
+}
+
+.lab .lab2-story-skip,
+.lab2-story-skip {
+  min-width: 64px;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  color: #f2e2c4;
+  background: rgba(24, 19, 15, 0.88);
+  border: 1px solid #7a6650;
+}
+
+/* Accomplishments (owner, after the 0.26.0 build): the toast over the map
+   when one is earned, and the list in the contracts card. */
+.lab2-feat-toast {
+  position: absolute;
+  left: 50%;
+  top: 58px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 24px);
+  padding: 8px 14px;
+  border-radius: 14px;
+  color: #1b1510;
+  background: linear-gradient(180deg, #f2c983, #cf9550);
+  border: 1px solid #f3d29c;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+
+.lab2-feat-toast[hidden] {
+  display: none;
+}
+
+.lab2-feat-line {
+  margin: 0;
+  font-size: min(0.85rem, 16px);
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lab2-feats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 8px;
+}
+
+.lab2-feat {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.3;
+  color: #8f8578;
+}
+
+.lab2-feat.lab2-feat-earned {
+  color: #f2e2c4;
+}
+
+.lab2-feat-name {
+  flex: 1 1 auto;
+}
+
+.lab2-feat-glory {
+  flex: 0 0 auto;
+  color: #cf9550;
+}
+
+/* The tutorial's card (tutorial.ts): over the map, above End shift and Undo.
+   Taps go through it to the map; only its button takes them. */
+.lab2-tutorial {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  color: #f2e2c4;
+  background: rgba(24, 19, 15, 0.93);
+  border: 1px solid #c98c4c;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+.lab2-tutorial[hidden] {
+  display: none;
+}
+
+.lab2-tutorial-text {
+  margin: 0;
+  font-size: min(0.85rem, 16px);
+  line-height: 1.35;
+}
+
+.lab2-tutorial-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lab2-tutorial-count {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #cf9550;
+}
+
+.lab .lab2-tutorial-button {
+  pointer-events: auto;
+  min-width: 64px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  color: #f2e2c4;
+  background: #3b3129;
+  border: 1px solid #7a6650;
+}
+
+/* The button a tutorial step points at: a gold ring that pulses. */
+.lab .lab2-tutorial-target {
+  outline: 3px solid #f2c983;
+  outline-offset: 2px;
+  animation: lab2-tutorial-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes lab2-tutorial-pulse {
+  50% {
+    outline-color: rgba(242, 201, 131, 0.25);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lab .lab2-tutorial-target {
+    animation: none;
+  }
+}

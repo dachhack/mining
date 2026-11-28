@@ -30,8 +30,10 @@
 //   onto the camp's middle square, sets it on fire and the camp loses one
 //   upgrade at once (fire.ts, `stripCamp`), on top of what the fire does if
 //   it is left burning (owner, asked: "One and two");
-// - otherwise the nearest square, to the dragon, with a roaming animal, a
-//   tree of any kind or grass, not burning (owner, asked: "Nearest to it"),
+// - otherwise the nearest square, to the dragon, inside the camps' light
+//   (owner, after the 0.26.0 build: "The dragon showed up but I couldn't
+//   see it"; asked), with a roaming animal, a tree of any kind or grass, not
+//   burning (owner, asked: "Nearest to it"),
 //   ties drawn: it flies there and eats the animal (the lowest id), or else
 //   sets the square on fire. With nothing left to attack it stays put.
 // The rolls use the state's generator.
@@ -43,7 +45,7 @@
 import { FRONTIER_DRAGON, FRONTIER_SHIFT } from '../../data/frontier';
 import { nextFloat, nextInt } from '../rng';
 import type { RngState } from '../rng';
-import { campAt } from './camps';
+import { campAt, coverLevels } from './camps';
 import { isCombustible, stripCamp, withFires } from './fire';
 import { APPLE_TREE, GRASS, NO_FEATURE, isTree } from './state';
 import type { FrontierDragon, FrontierState } from './state';
@@ -160,12 +162,16 @@ function attack(
   }
   const animalAt = (x: number, y: number): boolean =>
     state.animals.some((a) => a.x === x && a.y === y);
+  // Only what the camps light, so every attack is seen (owner, after the
+  // 0.26.0 build: "The dragon showed up but I couldn't see it").
+  const lit = coverLevels(state.camps, width, state.cube.size.y);
   const target = nearestSquare(
     state,
     dragon.x,
     dragon.y,
     (x, y) => {
       if (state.hazards.fires[x + width * y] === true) return false;
+      if ((lit[x + width * y] ?? 0) <= 0) return false;
       if (animalAt(x, y)) return true;
       const f = state.features[x + width * y] ?? NO_FEATURE;
       return isTree(f) || f === GRASS;

@@ -10,6 +10,8 @@ export const CAMP_LOOK = {
    * show the rest (decision note 0046).
    */
   startCells: 14,
+  /** How far an off-screen dragon's pointer keeps from the map's top and bottom edges, in CSS pixels: the HUD and buttons sit there. */
+  pointerInsets: [56, 62] as [number, number],
   /** How far the soft edge of the lit ring reaches into a lit square, as a part of the square. */
   edgeWidth: 0.55,
   /** How dark the soft edge is, right at the border. */

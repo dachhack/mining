@@ -93,6 +93,29 @@ test('a dragon attacks after a tap, and the hint says so (owner, after the 0.25.
   await expect(page.getByTestId('lab-hint')).toContainText('🐉 A dragon');
 });
 
+test('a dragon off the screen is pointed at from the map edge (owner, after the 0.26.0 build)', async ({
+  page,
+}) => {
+  // "The dragon showed up but I couldn't see it."
+  const start = createFrontier(110);
+  const dragons = [{ id: 1, x: 0, y: 0, dx: 1, dy: 0, restTaps: 3 }];
+  const state: FrontierState = {
+    ...start,
+    hazards: { ...start.hazards, dragons, nextDragonId: 2 },
+  };
+  const canvas = await openGame(page, state);
+  await expect(canvas).toHaveAttribute('data-dragons', '0,0');
+  await expect(canvas).toHaveAttribute('data-dragon-pointers', '1');
+  // On the screen, it is drawn where it is, fog or not: no pointer.
+  const camp = start.camps[0] ?? { x: 0, y: 0 };
+  const near = [{ id: 1, x: camp.x + 5, y: camp.y + 5, dx: 1, dy: 0, restTaps: 3 }];
+  const shown = await openGame(page, {
+    ...start,
+    hazards: { ...start.hazards, dragons: near, nextDragonId: 2 },
+  });
+  await expect(shown).toHaveAttribute('data-dragon-pointers', '0');
+});
+
 test('a level-2 camp builds its defenses from its panel (hazards PR 5)', async ({ page }) => {
   const start = createFrontier(110);
   const state: FrontierState = {

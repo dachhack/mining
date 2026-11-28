@@ -1241,6 +1241,15 @@ export const FRONTIER_BOARD = {
    */
   reachBelowDeepest: 4,
   /**
+   * Through stage `alwaysOfferUntilStage`, every board has a contract asking
+   * for each of `alwaysOffer` that the board could offer (owner, after the
+   * 0.26.0 build: "There are no clay or stone contracts but I am at the phase
+   * of the game where I should be filling a lot of them"; asked, a clay and
+   * a stone contract on every board).
+   */
+  alwaysOffer: ['clay', 'stone'] as string[],
+  alwaysOfferUntilStage: 4,
+  /**
    * What a surface contract may ask for that the board counts as always to
    * be had (owner, after the 0.22.0 build): trees and grass grow back,
    * animals walk in, saplings and seeds are sold, and hay, syrup and lumber
@@ -1523,3 +1532,76 @@ export const FRONTIER_COAL = {
   fromDepth: 1,
   toDepth: 11,
 };
+
+/** An accomplishment: what the list calls it, how it is earned, and the family glory it is worth. */
+export interface FrontierFeat {
+  /** A short name for code, saves and tests: 'second-camp'. */
+  id: string;
+  name: string;
+  /** How it is earned, for the list. */
+  how: string;
+  glory: number;
+}
+
+/**
+ * The accomplishments of a run (owner, after the 0.26.0 build: "We also need
+ * a accomplishment system"; asked: per run, each worth family glory). Each is
+ * earned once a run; the engine's feats.ts says when. Every number is a
+ * [Default].
+ */
+export const FRONTIER_FEATS: FrontierFeat[] = [
+  { id: 'second-camp', name: 'A light in the dark', how: 'Place a second camp.', glory: 5 },
+  { id: 'level-2', name: 'Putting down roots', how: 'Upgrade a camp to level 2.', glory: 5 },
+  { id: 'level-3', name: 'A proper camp', how: 'Upgrade a camp to level 3.', glory: 10 },
+  { id: 'level-4', name: 'The hold stands again', how: 'Upgrade a camp to level 4.', glory: 20 },
+  { id: 'smelter', name: 'Fire in the forge', how: 'Build a smelter.', glory: 5 },
+  { id: 'first-contract', name: 'Open for trade', how: 'Deliver a contract.', glory: 5 },
+  { id: 'contracts-5', name: 'A name in the towns', how: 'Deliver 5 contracts.', glory: 10 },
+  { id: 'contracts-15', name: 'Trusted', how: 'Deliver 15 contracts.', glory: 20 },
+  { id: 'depth-10', name: 'Into the old workings', how: 'Dig a square 10 deep.', glory: 10 },
+  { id: 'depth-20', name: 'The deep hall', how: 'Dig a square 20 deep.', glory: 25 },
+  { id: 'deep-camp', name: 'A camp below', how: 'Place a deep camp.', glory: 15 },
+  { id: 'worker', name: 'Hands for hire', how: 'Hire a worker at a work camp.', glory: 10 },
+  { id: 'full-crew', name: 'A full crew', how: 'Have 4 miners.', glory: 15 },
+  {
+    id: 'dragon-slayer',
+    name: 'Dragon-driver',
+    how: 'Drive off a dragon with a sword.',
+    glory: 15,
+  },
+  { id: 'raid-repelled', name: 'Not this time', how: 'Turn marauders away.', glory: 10 },
+  { id: 'fortress', name: 'Never again', how: 'Build a camp a fortress.', glory: 20 },
+  { id: 'coins-500', name: 'A full purse', how: 'Hold 500 coins.', glory: 10 },
+  { id: 'coins-2000', name: 'The family fortune', how: 'Hold 2,000 coins.', glory: 30 },
+  {
+    id: 'first-relic',
+    name: 'What was ours',
+    how: 'Bring up one of the family’s relics.',
+    glory: 20,
+  },
+  { id: 'keystone', name: 'The keystone', how: 'Bring up a keystone of the old hall.', glory: 40 },
+  {
+    id: 'all-relics',
+    name: 'Everything we left',
+    how: `Hold all ${FRONTIER_TREASURE.relics} relics at once.`,
+    glory: 60,
+  },
+  {
+    id: 'finished',
+    name: 'Before the pass closed',
+    how: 'See the run through to its last shift.',
+    glory: 20,
+  },
+];
+
+/**
+ * The family's standing for a run's glory (the sum of its accomplishments'):
+ * the last entry whose `glory` the run has reached. [Default]
+ */
+export const FRONTIER_STANDINGS: { glory: number; name: string }[] = [
+  { glory: 0, name: 'Forgotten' },
+  { glory: 30, name: 'Remembered' },
+  { glory: 90, name: 'Respected' },
+  { glory: 170, name: 'Renowned' },
+  { glory: 260, name: 'Restored' },
+];

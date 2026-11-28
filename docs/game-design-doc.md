@@ -20,6 +20,32 @@ v0.2 is in the git history, as v0.1 is.
 
 ---
 
+## 0. The story: the Old Hold [Decided]
+
+The owner, after the 0.26.0 build: "Let's go with old hold. On your grandpa's death bed he relates the story of lost treasures and beseeches you to reclaim the lost glory of the family."
+
+- **The story** (the owner's own words, after the first draft): when the player's grandfather was young the family lived in the valley past the last town, and found many treasures and valuable ores in its fertile soil. Then floods washed the valley away and buried everything in soil and rock; the family ran with what they could carry, and left the family's relics and the keystones of the old hall in the deep. On his last night the grandfather asks the player to go back, light the camps again, dig until they find what is theirs, and bring back the family's name. The player has one camp, a rusty shovel, and the run's 100 shifts before winter closes the pass.
+- **What it explains:** everything is buried because the floods buried it (and rain and water are still hazards: sections 4.4, 4.5); relics and keystones are the family's own (section 8, stage 5); the run's length is the season. Dragons and marauders are the valley's dangers now, not what drove the family out.
+- **On screen** (`src/app/lab/story.ts`): a brand-new run opens with the story, four short pages over the whole screen: a tap turns the page, the last tap starts the run, Skip ends it. It is told on the first launch and after New run, not when a saved run is carried on. The relic's and the keystone's info lines name them as the family's. The story changes no rule.
+
+## 0a. Accomplishments and family glory [Decided; the list and numbers Default]
+
+The owner, after the 0.26.0 build: "We also need a accomplishment system." Asked, the owner chose **per run**, each worth **family glory**.
+
+- **The list** (`FRONTIER_FEATS`, 22 of them): a second camp (5 glory); a camp at level 2, 3, 4 (5, 10, 20); a smelter (5); 1, 5, 15 contracts delivered (5, 10, 20); a square dug 10 or 20 deep (10, 25); a deep camp (15); a worker hired (10); 4 miners (15); a dragon driven off (15); marauders turned away (10); a fortress (20); 500 or 2,000 coins held (10, 30); a relic brought up (20); a keystone brought up (40); all 8 relics held at once (60); the run seen through to its last shift (20). 380 glory in all.
+- **Earning:** each is earned once a run, by the action that does it; the run's state keeps them (`feats`; the engine's feats.ts), so they are saved with the run and a new run starts with none.
+- **Glory and standing:** a run's glory is the sum of its accomplishments'. The family's standing follows it (`FRONTIER_STANDINGS`): Forgotten (0), Remembered (30), Respected (90), Renowned (170), Restored (260).
+- **On screen:** a gold toast over the map when one is earned (a tap, or 4.5 s, sends it away); the contracts card lists them all, earned or not, with the run's glory and standing; the end-of-run banner gives the glory and standing with the coins. The best glory of any run is kept on the phone and shown in the card.
+
+## 0b. The tutorial [Decided; the words Default]
+
+The owner, after the 0.26.0 build: "we need a short tutorial mode." Asked, the owner chose a **guided first run** that teaches **the basics**, with a one-time tip when each later thing first shows up.
+
+- **The steps** (`TUTORIAL_STEPS`, src/app/lab/tutorial.ts), on the player's own first run, one at a time in a card over the map: gather; dig; press and hold to dig a 3 × 3; End shift (and upkeep); save up for a camp; place it; upgrade a camp; take a contract. A step is done when the run says so, and a step already done is passed over, so the tutorial never takes the game over. The button a step is about (End shift, ⊕, 🎯) has a pulsing gold ring.
+- **When:** it starts when the story ends on the first run ever. Skip ends it; "Replay the tutorial" in the contracts card starts it again. Its step is kept on the phone.
+- **Tips** (`TUTORIAL_TIPS`): one sentence, once ever, with "Got it", the first time there is a dragon, a fire in the light, a flood, a raid, or a level-2 camp with no smelter.
+- It is the game only (not Lab 2), and it changes no rule.
+
 ## 1. Pillars
 
 1. **Every tap counts.** A shift has only so many taps, and the crew must eat. Each tap is a choice between gathering, digging and building.
@@ -190,7 +216,7 @@ The owner (2026-11-24): "Wandering dragons can eat your sheep and apples and set
 
 - **When:** from [Default] shift 20, at End shift, a dragon flies in at the map's edge on [Default] 1 night in 12, while fewer than [Default] 1 are on the map (`FRONTIER_DRAGON`).
 - **Each night** each dragon flies [Default] 4 squares in a straight line, in one of 8 directions, over anything and bouncing off the map's edge (owner, on the hazards build: "Dragon doesn't seem to move"); eats one animal on or beside its square (or, on a camp's ground, one from its pen) and every apple on the apple trees on or beside it (they come back as if picked); and on [Default] 1 night in 3 sets fire to one thing that can burn on or beside it. "Beside" is the 8 squares round it.
-- **In the day** (owner, after the 0.25.0 build: "Let's make dragons more dangerous. They fly to trees, grass, or animals and set them on fire or eat them on every 1-3 taps. 1 of 20 attacks will be your camp."): every tap spent on anything counts each dragon's rest down; after [Default] 1 to 3 taps (drawn; `FRONTIER_DRAGON.restTaps`) it attacks, then rests again. [Default] 1 attack in 20 (`campChance`) goes for the nearest camp: the dragon lands on its middle square, sets it on fire, and the camp loses one upgrade at once, on top of what the fire does if it is left burning (owner, asked: "One and two"). Otherwise it flies to the square nearest it with a roaming animal, a tree of any kind or grass, not burning (owner, asked: "Nearest to it"; ties drawn), and eats the animal or else sets the square on fire. With nothing to attack it stays put. (Until engine 0.26.0 it only flew a square along its heading every 3 to 7 mining taps.) A new dragon comes in heading across the map; each night it takes a new heading.
+- **In the day** (owner, after the 0.25.0 build: "Let's make dragons more dangerous. They fly to trees, grass, or animals and set them on fire or eat them on every 1-3 taps. 1 of 20 attacks will be your camp."): every tap spent on anything counts each dragon's rest down; after [Default] 1 to 3 taps (drawn; `FRONTIER_DRAGON.restTaps`) it attacks, then rests again. [Default] 1 attack in 20 (`campChance`) goes for the nearest camp: the dragon lands on its middle square, sets it on fire, and the camp loses one upgrade at once, on top of what the fire does if it is left burning (owner, asked: "One and two"). Otherwise it flies to the square nearest it inside the camps' light (owner, after the 0.26.0 build: "The dragon showed up but I couldn't see it"; asked) with a roaming animal, a tree of any kind or grass, not burning (owner, asked: "Nearest to it"; ties drawn), and eats the animal or else sets the square on fire. With nothing in the light to attack it stays put. On the map a dragon is drawn wherever it is, over the fog too, and one off the screen gets a pointer at the map's edge, an arrow toward it. (Until engine 0.26.0 it only flew a square along its heading every 3 to 7 mining taps.) A new dragon comes in heading across the map; each night it takes a new heading.
 - **The sword** (question 187): made at a camp with a smelter from 3 iron ingots and 2 wood, or [Default] 60 coins at the market from a level-3 camp. A tap on a dragon with a sword drives it off the map (1 tap); the sword is kept. Without one, a tap on a dragon does nothing.
 
 ### 4.8 Marauders and defenses [Decided; numbers Default]
@@ -352,6 +378,8 @@ Owner, after the 0.19.0 build: "Let's add seeds to the market for a few grains a
   | 3 | crops, animals, syrup, mushrooms | a level-3 camp and 5 delivered |
   | 4 | ingots, and every tier-2 contract (the bigger ones) | a smelter and 9 delivered |
   | 5 | crystal, rare ore, relics, the keystone (tier 3) | a steel drill held or a deep camp, and 14 delivered |
+
+  Through stage 4, every board has a contract asking for clay and one asking for stone, whichever it could offer (stone from a level-2 camp; owner, after the 0.26.0 build: "There are no clay or stone contracts but I am at the phase of the game where I should be filling a lot of them"; asked, "A clay AND a stone every board"; `FRONTIER_BOARD.alwaysOffer`). At the day's most, one takes the place of the last contract that asks for neither.
 
 - **Surface contracts** (`surface: true`, for the goods the surface gives): 30 wood (22 coins), 20 hay (20), 3 animals (20), 20 apples (18), 5 syrup (60), 10 mushrooms (60), 20 wheat (25), 15 corn (30), 10 carrots and 10 potatoes (40), or 10 lumber (40); and bigger: 30 mushrooms (220), 40 lumber (220), 20 syrup (260), provisions (30 apples, 20 corn, 10 hay: 200) or 10 animals (80). What grows back, or is bought and made (wood, hay, animals, apples, syrup, lumber, crops: `FRONTIER_BOARD.renewable`), always counts as to be had; mushrooms are counted. (From engine 0.23.0 they and two small clay and stone ones were on the board from the start; since 0.26.0 the stages decide.)
 - **One of each a market day:** a contract taken or filled leaves that day's board (`boardUsed`, emptied every night), so the same one cannot be filled again and again. **No money pump:** where the market sells everything a contract asks for, it pays no more than buying it would cost (so the firewood, hay, apple and flock contracts pay less than the plan's tier ranges).
