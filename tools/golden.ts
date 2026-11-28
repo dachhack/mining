@@ -388,20 +388,20 @@ const FRONTIER_RUNS: {
       'The careful policy on seed 1 for 30 shifts: it builds defenses, and a camp turns marauders away (the full run no longer does)',
   },
   {
-    name: 'careful-seed-8-finished',
-    seed: 8,
+    name: 'careful-seed-9-finished',
+    seed: 9,
     policy: 'careful',
     maxShifts: 100,
     description:
-      "The careful policy for a whole run of 100 shifts (docs/plans/progression-phases.md): it opens and closes the market after each market day's night, buys an iron and a steel drill, saplings, wood and a camp kit, smelts and makes a pickaxe and lanterns, brings three camps to level 4, flattens a patch 3 deep and places a deep camp, plants saplings, keeps a pen and makes hay, holds several contracts at once, fills some at the market at once and delivers others, meets every hazard, builds defenses, sells its surplus, and the run ends finished, scored in coins (the seed is chosen so the run reaches every step the coverage check asks for; it has moved between seeds 4, 5 and 8 as the rules changed)",
+      "The careful policy for a whole run of 100 shifts (docs/plans/progression-phases.md): it opens and closes the market after each market day's night, buys an iron and a steel drill, saplings, wood and a camp kit, smelts and makes a pickaxe and lanterns, brings three camps to level 4, flattens a patch 3 deep and places a deep camp, plants saplings, keeps a pen and makes hay, holds several contracts at once, fills some at the market at once and delivers others, meets every hazard, builds defenses, sells its surplus, and the run ends finished, scored in coins (the seed is chosen so the run reaches every step the coverage check asks for; it has moved between seeds 4, 5, 8 and 9 as the rules changed; it also hires a worker at a work camp)",
   },
   {
-    name: 'gatherer-seed-39-syrup',
-    seed: 39,
+    name: 'gatherer-seed-1-syrup',
+    seed: 1,
     policy: 'gatherer',
     maxShifts: 100,
     description:
-      'The gatherer on seed 39 for a whole run: its maples grow, it builds a sugar shack and boils sap into syrup, and it builds a work camp and hires a worker (after the 0.18.0 build no other run boils syrup; it has moved seeds and policies as the worlds, the board and the dragons changed under it)',
+      'The gatherer on seed 1 for a whole run: its maples grow, it builds a sugar shack and boils sap into syrup (after the 0.18.0 build no other run boils syrup; it has moved seeds and policies as the worlds, the board and the dragons changed under it)',
   },
   {
     name: 'idle-seed-2-hungry',
