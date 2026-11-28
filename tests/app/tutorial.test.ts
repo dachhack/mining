@@ -2,7 +2,14 @@
 // mode"; asked: a guided first run teaching the basics, about 8 steps, with
 // one-time tips for later things).
 import { describe, expect, it } from 'vitest';
-import { TUTORIAL_STEPS, TUTORIAL_TIPS, tipsDue, tutorialStep } from '../../src/app/lab/tutorial';
+import {
+  ROTATING_TIPS,
+  TUTORIAL_STEPS,
+  TUTORIAL_TIPS,
+  nextTip,
+  tipsDue,
+  tutorialStep,
+} from '../../src/app/lab/tutorial';
 import type { TutorialFacts } from '../../src/app/lab/tutorial';
 
 const START: TutorialFacts = {
@@ -75,5 +82,23 @@ describe('the tutorial', () => {
     // The smelter tip: a level-2 camp and no smelter yet.
     expect(tipsDue({ ...START, bestLevel: 2 }, [])).toEqual(['smelter']);
     expect(tipsDue({ ...START, bestLevel: 2, smelter: true }, [])).toEqual([]);
+  });
+});
+
+describe('the tips after the tutorial', () => {
+  // Owner, after the 0.27.0 build: "Need to be able to minimize the tutorial
+  // card into a ? above the end shift button. It becomes just a tip rotation
+  // after the tutorial."
+  it('are a rotation of short tips: the next one after the last is the first', () => {
+    expect(ROTATING_TIPS.length).toBeGreaterThanOrEqual(8);
+    expect(new Set(ROTATING_TIPS).size).toBe(ROTATING_TIPS.length);
+    for (const tip of ROTATING_TIPS) {
+      expect(tip.length).toBeGreaterThan(20);
+      expect(tip.length).toBeLessThanOrEqual(150);
+    }
+    expect(nextTip(0)).toBe(1);
+    expect(nextTip(ROTATING_TIPS.length - 1)).toBe(0);
+    // A number kept from an older, longer list still lands on a tip.
+    expect(ROTATING_TIPS[nextTip(999)]).toBeDefined();
   });
 });

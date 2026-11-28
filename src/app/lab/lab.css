@@ -1602,3 +1602,53 @@ body[data-screen='lab2'] {
     animation: none;
   }
 }
+
+/* The tutorial card's buttons: minimize, and Skip / Got it / Next tip. */
+.lab2-tutorial-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lab .lab2-tutorial-min {
+  pointer-events: auto;
+  min-width: 36px;
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 10px;
+  font-size: 1rem;
+  line-height: 1;
+  color: #f2e2c4;
+  background: #3b3129;
+  border: 1px solid #7a6650;
+}
+
+.lab .lab2-tutorial-min[hidden] {
+  display: none;
+}
+
+/* The ? above End shift (owner, after the 0.27.0 build): the tutorial card
+   minimized, and after the tutorial the tips. */
+.lab .lab2-help {
+  position: absolute;
+  left: 8px;
+  bottom: 64px;
+  width: 38px;
+  height: 38px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-radius: 19px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  color: #f2e2c4;
+  background: rgba(24, 19, 15, 0.88);
+  border: 1px solid #c98c4c;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.lab .lab2-help[hidden] {
+  display: none;
+}

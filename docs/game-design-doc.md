@@ -44,6 +44,7 @@ The owner, after the 0.26.0 build: "we need a short tutorial mode." Asked, the o
 - **The steps** (`TUTORIAL_STEPS`, src/app/lab/tutorial.ts), on the player's own first run, one at a time in a card over the map: gather; dig; press and hold to dig a 3 × 3; End shift (and upkeep); save up for a camp; place it; upgrade a camp; take a contract. A step is done when the run says so, and a step already done is passed over, so the tutorial never takes the game over. The button a step is about (End shift, ⊕, 🎯) has a pulsing gold ring.
 - **When:** it starts when the story ends on the first run ever. Skip ends it; "Replay the tutorial" in the contracts card starts it again. Its step is kept on the phone.
 - **Tips** (`TUTORIAL_TIPS`): one sentence, once ever, with "Got it", the first time there is a dragon, a fire in the light, a flood, a raid, or a level-2 camp with no smelter.
+- **Minimize, and the ?** (owner, after the 0.27.0 build: "Need to be able to minimize the tutorial card into a ? above the end shift button. It becomes just a tip rotation after the tutorial"): the card's – button folds it into a round ? just above End shift; the ? brings it back, and it stays minimized over a reload. Once the tutorial is over (finished or skipped) the ? stays, and opens the tips (`ROTATING_TIPS`, 13 of them): one at a time, "Next tip" for the next, round and round, starting where it was left. A one-time tip still opens the card by itself.
 - It is the game only (not Lab 2), and it changes no rule.
 
 ## 1. Pillars
