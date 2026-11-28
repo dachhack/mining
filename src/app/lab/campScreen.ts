@@ -193,6 +193,7 @@ import {
 } from './buildingArt';
 import { drawCrop } from './cropArt';
 import { showNight } from './night';
+import { showStory } from './story';
 import type { Night } from './night';
 
 const HINT = 'Tap to gather and dig · tap a camp to upgrade it';
@@ -3888,7 +3889,17 @@ export function mountCampLab(
     preview = new Set();
     setHint(HINT, false);
     showWorld();
+    tellStory();
   });
+
+  /**
+   * The back story (story.ts), as the game only: told when a new run starts,
+   * on the first launch and after New run. Not when a saved run is carried
+   * on, nor when the address names a seed (a run opened for a look or a test).
+   */
+  function tellStory(): void {
+    if (asGame) showStory(root, { page, onDone: () => undefined });
+  }
 
   function centreOnFirstCamp(): void {
     const first = world.camps[0];
@@ -3938,4 +3949,6 @@ export function mountCampLab(
   showWorld();
   // A run saved while its market was open opens it again (a run is saved at End shift).
   openMarket();
+  // A brand-new run opens with the story.
+  if (saved === null && seed === null) tellStory();
 }

@@ -20,6 +20,14 @@ v0.2 is in the git history, as v0.1 is.
 
 ---
 
+## 0. The story: the Old Hold [Decided]
+
+The owner, after the 0.26.0 build: "Let's go with old hold. On your grandpa's death bed he relates the story of lost treasures and beseeches you to reclaim the lost glory of the family."
+
+- **The story:** the player's family once mined a hold under the hill, past the last town. Dragons, then marauders, drove them out; they left the family's relics and the keystones of the old hall in the deep. On his last night the player's grandfather tells of it and asks them to go back, light the camps again, and reclaim it. The player has one camp, a small crew, and the run's 100 shifts before winter closes the pass.
+- **What it explains:** the fog is the hold gone dark; relics and keystones are the family's own (section 8, stage 5); dragons and marauders are what drove the family out (sections 4.7, 4.8); the run's length is the season.
+- **On screen** (`src/app/lab/story.ts`): a brand-new run opens with the story, four short pages over the whole screen: a tap turns the page, the last tap starts the run, Skip ends it. It is told on the first launch and after New run, not when a saved run is carried on. The relic's and the keystone's info lines name them as the family's. The story changes no rule.
+
 ## 1. Pillars
 
 1. **Every tap counts.** A shift has only so many taps, and the crew must eat. Each tap is a choice between gathering, digging and building.

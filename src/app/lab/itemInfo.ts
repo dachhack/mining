@@ -53,9 +53,11 @@ export function itemInfo(item: string): string | null {
       return 'Makes tools, lanterns and swords at a smelter; ingot contracts ask for it.';
     case 'crystal':
     case 'rareOre':
-    case 'relic':
-    case 'keystone':
       return 'Treasure: worth most to a tier-3 contract.';
+    case 'relic':
+      return 'An heirloom of your family, left in the deep when the Old Hold fell. Worth most to a tier-3 contract.';
+    case 'keystone':
+      return 'A keystone of the old hall, from the deepest part of the Old Hold. Worth most to a tier-3 contract.';
     case 'sapling':
       return `Plant it with 🌱 on bare dirt: a tree in ${FRONTIER_SAPLINGS.saplingGrowShifts} shifts.`;
     case 'mapleSapling':

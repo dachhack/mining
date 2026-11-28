@@ -4,6 +4,7 @@
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { FRONTIER_SHIFT } from '../../src/data/frontier';
+import { STORY_PAGES } from '../../src/app/lab/story';
 import { campTap, newCampWorld, sightMap } from '../../src/app/lab/campWorld';
 import { createFrontier, saveFrontier } from '../../src/engine';
 
@@ -59,6 +60,8 @@ test('the app opens on the game; the old game and the labs are under Other versi
   await expect(page.getByTestId('lab2')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Mining Game' })).toBeVisible();
   await expect(page.getByTestId('lab2-hud')).toHaveAttribute('data-shift', '1');
+  // A brand-new run opens with the story (below): skip it.
+  await page.getByTestId('lab2-story-skip').click();
   await page.getByRole('button', { name: 'Other versions' }).click();
   await expect(page.getByTestId('launcher')).toBeVisible();
   await expect(page.getByTestId('launch-game')).toBeVisible();
@@ -121,4 +124,36 @@ test('a closed mine stays closed when the app opens again', async ({ page }) => 
   // New run needs one tap once the run is over.
   await page.getByTestId('new-run').click();
   await expect(page.getByTestId('lab2-hud')).toHaveAttribute('data-status', 'active');
+});
+
+test('a new run opens with the story of the Old Hold: taps turn its pages, Skip ends it', async ({
+  page,
+}) => {
+  // Owner, after the 0.26.0 build: "Let's go with old hold. On your grandpa's
+  // death bed he relates the story of lost treasures and beseeches you to
+  // reclaim the lost glory of the family."
+  await page.goto('/');
+  const story = page.getByTestId('lab2-story');
+  await expect(story).toBeVisible();
+  await expect(story).toHaveAttribute('data-page', '1');
+  await expect(page.getByTestId('lab2-story-text')).toContainText('grandfather');
+  // A tap turns the page; the last tap starts the run.
+  for (let k = 2; k <= STORY_PAGES.length; k += 1) {
+    await story.click({ position: { x: 20, y: 20 } });
+    await expect(story).toHaveAttribute('data-page', String(k));
+  }
+  await expect(page.getByTestId('lab2-story-text')).toContainText('Reclaim the Old Hold');
+  await story.click({ position: { x: 20, y: 20 } });
+  await expect(story).toHaveCount(0);
+  await expect(page.getByTestId('lab2-hud')).toHaveAttribute('data-shift', '1');
+  // Carrying a run on tells no story.
+  await page.reload();
+  await expect(page.getByTestId('lab2-hud')).toHaveAttribute('data-shift', '1');
+  await expect(story).toHaveCount(0);
+  // New run (two taps: it throws the run away) tells it again; Skip ends it.
+  await page.getByTestId('new-run').click();
+  await page.getByTestId('new-run').click();
+  await expect(story).toBeVisible();
+  await page.getByTestId('lab2-story-skip').click();
+  await expect(story).toHaveCount(0);
 });
