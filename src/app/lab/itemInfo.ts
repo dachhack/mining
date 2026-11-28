@@ -55,9 +55,9 @@ export function itemInfo(item: string): string | null {
     case 'rareOre':
       return 'Treasure: worth most to a tier-3 contract.';
     case 'relic':
-      return 'An heirloom of your family, left in the deep when the Old Hold fell. Worth most to a tier-3 contract.';
+      return 'An heirloom of your family, buried in the deep when the floods took the valley. Worth most to a tier-3 contract.';
     case 'keystone':
-      return 'A keystone of the old hall, from the deepest part of the Old Hold. Worth most to a tier-3 contract.';
+      return 'A keystone of the old hall, buried deepest of all. Worth most to a tier-3 contract.';
     case 'sapling':
       return `Plant it with 🌱 on bare dirt: a tree in ${FRONTIER_SAPLINGS.saplingGrowShifts} shifts.`;
     case 'mapleSapling':

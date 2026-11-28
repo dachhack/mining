@@ -3450,7 +3450,7 @@ export function mountCampLab(
       // Every step done: one last card, then it is over for good.
       tutorialCard.dataset['step'] = 'done';
       tutorialText.textContent =
-        'That’s the basics. The rest is yours to find: reclaim the Old Hold!';
+        'That’s the basics. The rest is yours to find: reclaim your family’s heritage!';
       tutorialCount.textContent = '';
       tutorialButton.textContent = 'Done';
     } else {

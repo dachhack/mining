@@ -1,13 +1,14 @@
 // The back story (owner, after the 0.26.0 build: "Let's go with old hold. On
 // your grandpa's death bed he relates the story of lost treasures and
-// beseeches you to reclaim the lost glory of the family.").
+// beseeches you to reclaim the lost glory of the family."). The words are
+// the owner's own (after the first draft): floods buried the valley.
 //
 // A few short pages over the whole screen when a new run starts: a tap turns
 // the page, the last tap starts the run, and Skip ends it at once. It is
 // words only: it changes nothing in the game, and the page behind takes no
 // input while it shows (as the night does, night.ts).
 
-import { FRONTIER_RUN, FRONTIER_TREASURE } from '../../data/frontier';
+import { FRONTIER_RUN } from '../../data/frontier';
 import { element } from './labDom';
 
 /** The story's name, for the screen. */
@@ -17,19 +18,18 @@ export const STORY_TITLE = 'The Old Hold';
 export const STORY_PAGES: string[][] = [
   [
     'Your grandfather sent for you on his last night.',
-    '“We had a hold once,” he said. “Under the hill, past the last town. My father dug it. I was born by its lanterns.”',
+    '“When I was young we lived in the valley past the last town. We found many treasures and valuable ores in that fertile soil.”',
   ],
   [
-    '“Then the dragons came down on the valley, and the marauders after them. We ran with what we could carry.”',
-    `“We left the rest in the deep: the family’s ${FRONTIER_TREASURE.relics} relics, and the keystones of the old hall.”`,
+    '“Then the floods came and washed away the valley, burying everything in soil and rock. We ran with what we could carry.”',
+    '“We left the rest in the deep: the family’s relics, and the keystones of the old hall.”',
   ],
   [
-    '“It is all still down there. Go back. Light the camps again. Dig until you find what is ours.”',
-    'He closed your hand around a worn tent peg. “Bring back our name.”',
+    '“It is all still down there. Go back. Light the camps again. Dig until you find what is ours. Bring back our name.”',
   ],
   [
-    `You have one camp, a small crew, and ${FRONTIER_RUN.shifts} shifts before winter closes the pass.`,
-    'Reclaim the Old Hold.',
+    `You have one camp, a rusty shovel, and ${FRONTIER_RUN.shifts} shifts before winter closes the pass.`,
+    'Reclaim your family’s heritage.',
   ],
 ];
 

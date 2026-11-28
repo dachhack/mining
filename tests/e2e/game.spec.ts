@@ -142,7 +142,7 @@ test('a new run opens with the story of the Old Hold: taps turn its pages, Skip 
     await story.click({ position: { x: 20, y: 20 } });
     await expect(story).toHaveAttribute('data-page', String(k));
   }
-  await expect(page.getByTestId('lab2-story-text')).toContainText('Reclaim the Old Hold');
+  await expect(page.getByTestId('lab2-story-text')).toContainText('Reclaim your family’s heritage');
   await story.click({ position: { x: 20, y: 20 } });
   await expect(story).toHaveCount(0);
   await expect(page.getByTestId('lab2-hud')).toHaveAttribute('data-shift', '1');
