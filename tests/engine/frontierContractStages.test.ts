@@ -6,7 +6,7 @@
 // milestone and a number of contracts delivered, both needed.
 import { describe, expect, it } from 'vitest';
 import { FRONTIER_BOARD, FRONTIER_CONTRACTS, FRONTIER_STAGES } from '../../src/data/frontier';
-import { contractBoard, contractStage, isMarketDay } from '../../src/engine';
+import { contractBoard, contractStage, createFrontier, isMarketDay } from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
 import { world } from './frontierHelpers';
 
@@ -115,5 +115,50 @@ describe('contract stages', () => {
       }
     }
     expect(FRONTIER_BOARD.perStage).toBe(4);
+  });
+});
+
+describe('clay and stone on every board', () => {
+  // Owner, after the 0.26.0 build: "There are no clay or stone contracts but I
+  // am at the phase of the game where I should be filling a lot of them."
+  // Asked: a clay and a stone contract on every board, through stage 4.
+  const asks = (c: { asks: { item: string }[] }, item: string): boolean =>
+    c.asks.some((a) => a.item === item);
+
+  it('through stage 4 every board has a clay and a stone contract (stone from a level-2 camp)', () => {
+    for (let seed = 1; seed <= 6; seed += 1) {
+      const start = createFrontier(seed);
+      for (const [level, delivered, smelter] of [
+        [2, 0, false],
+        [2, 2, false],
+        [3, 5, false],
+        [3, 9, true],
+      ] as const) {
+        for (let shift = 3; shift <= 60; shift += 3) {
+          const s = {
+            ...start,
+            shift,
+            marketOpen: true,
+            contractsDone: [delivered, 0, 0],
+            camps: start.camps.map((c) => ({ ...c, level, smelter })),
+          };
+          const board = contractBoard(s);
+          const at = `seed ${seed}, stage ${contractStage(s)}, shift ${shift}`;
+          expect(
+            board.some((c) => asks(c, 'clay')),
+            at,
+          ).toBe(true);
+          expect(
+            board.some((c) => asks(c, 'stone')),
+            at,
+          ).toBe(true);
+          expect(board.length, at).toBeLessThanOrEqual(FRONTIER_BOARD.offers[1]);
+        }
+      }
+      // A level-1 camp cannot mine stone: clay only.
+      const one = { ...start, shift: 10, marketOpen: true };
+      expect(contractBoard(one).some((c) => asks(c, 'clay'))).toBe(true);
+      expect(contractBoard(one).some((c) => asks(c, 'stone'))).toBe(false);
+    }
   });
 });

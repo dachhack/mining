@@ -111,6 +111,43 @@ export function drawFire(
 }
 
 /**
+ * Where an off-screen dragon is (owner, after the 0.26.0 build: "The dragon
+ * showed up but I couldn't see it"): a small dark disc with a red rim at
+ * (x, y), on the map's edge, with an arrow pointing out toward the dragon at
+ * `angle` (radians, 0 = right, as Math.atan2).
+ */
+export function drawDragonPointer(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  angle: number,
+  size: number,
+): void {
+  const r = size / 2;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = 'rgba(24, 19, 15, 0.9)';
+  ctx.strokeStyle = HAZARD_PAINT.dragonWing;
+  ctx.lineWidth = Math.max(2, size * 0.1);
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // The arrow.
+  ctx.rotate(angle);
+  ctx.fillStyle = HAZARD_PAINT.dragonWing;
+  ctx.beginPath();
+  ctx.moveTo(r * 1.6, 0);
+  ctx.lineTo(r * 0.9, -r * 0.45);
+  ctx.lineTo(r * 0.9, r * 0.45);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+  // A tiny dragon inside, upright.
+  drawDragon(ctx, x, y, size * 0.55);
+}
+
+/**
  * A dragon, centred on (cx, cy), `c` pixels a square: a body with two
  * spread wings, a tail and a glowing eye, a little bigger than a square so it
  * stands out on the map.

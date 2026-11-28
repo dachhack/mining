@@ -133,6 +133,38 @@ export function contractBoard(state: FrontierState): FrontierContractDef[] {
     }
     if (!any) break;
   }
+  // Clay and stone on every board through stage 4 (owner, after the 0.26.0
+  // build): a contract for each, drawn from those the board could offer, if
+  // none was taken above; at the day's most, it takes the place of the last
+  // one taken that asks for neither.
+  if (open <= FRONTIER_BOARD.alwaysOfferUntilStage) {
+    const asksFor = (c: FrontierContractDef, item: string): boolean =>
+      c.asks.some((a) => a.item === item);
+    for (const item of FRONTIER_BOARD.alwaysOffer) {
+      if (chosen.some((c) => asksFor(c, item))) continue;
+      const can = FRONTIER_CONTRACTS.filter(
+        (c) =>
+          c.stage <= open &&
+          (c.fromLevel ?? 1) <= level &&
+          asksFor(c, item) &&
+          !chosen.includes(c) &&
+          worldCanFill(stock, c.asks),
+      );
+      const pick = can[nextInt(rng, Math.max(1, can.length))];
+      if (pick === undefined) continue;
+      if (chosen.length >= high) {
+        let k = chosen.length - 1;
+        while (
+          k >= 0 &&
+          FRONTIER_BOARD.alwaysOffer.some((it) => asksFor(chosen[k] as FrontierContractDef, it))
+        )
+          k -= 1;
+        if (k < 0) continue;
+        chosen.splice(k, 1);
+      }
+      chosen.push(pick);
+    }
+  }
   // One taken or filled today has left the board (`boardUsed`).
   return FRONTIER_CONTRACTS.filter((c) => chosen.includes(c) && !state.boardUsed.includes(c.id));
 }

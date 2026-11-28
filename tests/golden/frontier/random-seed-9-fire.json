@@ -1,7 +1,7 @@
 {
   "description": "The random policy on seed 9 for 25 shifts: it leaves a fire burning overnight, which burns its square out (hazards PR 4: the other runs put every fire out; it has moved between seeds 1, 3, 2 and 9 as the rules changed; it saws lumber too)",
   "recordedWith": "random",
-  "engineVersion": "0.26.0",
+  "engineVersion": "0.27.0",
   "seed": 9,
   "stepCount": 1923,
   "expectedHash": "2223f81ed4d796e5",

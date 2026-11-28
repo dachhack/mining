@@ -181,6 +181,7 @@ import {
   drawFire,
   drawPump,
   drawWater,
+  drawDragonPointer,
 } from './hazardArt';
 import { itemInfo } from './itemInfo';
 import {
@@ -985,8 +986,11 @@ export function mountCampLab(
     drawAnimals(ctx, c);
     // Dragons (hazards PR 4), on lit squares only. In the morning one glides
     // from where it was to where it flew in the night, so it is seen to move.
+    // Dragons are drawn wherever they are, over the fog too, and one off the
+    // screen gets a pointer at the map's edge (owner, after the 0.26.0 build:
+    // "The dragon showed up but I couldn't see it").
+    let pointers = 0;
     for (const dragon of world.hazards.dragons) {
-      if (sightOf(dragon.x, dragon.y) !== 'shown') continue;
       const flight = lastFlight.get(dragon.id);
       let fx = dragon.x;
       let fy = dragon.y;
@@ -997,7 +1001,26 @@ export function mountCampLab(
         fy = flight.y + (dragon.y - flight.y) * eased;
       }
       const { px, py } = toPx(fx, fy);
-      drawDragon(ctx, px + c / 2, py + c / 2, c);
+      const mx = px + c / 2;
+      const my = py + c / 2;
+      const v = view();
+      if (mx < 0 || my < 0 || mx > v.width || my > v.height) {
+        const size = Math.max(26, Math.min(38, c * 1.2));
+        const edge = size * 0.9;
+        // Clear of the HUD and map buttons along the top, and of End shift
+        // and Undo along the bottom (CAMP_LOOK.pointerInsets).
+        const [top, bottom] = CAMP_LOOK.pointerInsets;
+        const x = Math.min(v.width - edge, Math.max(edge, mx));
+        const y = Math.min(v.height - bottom - edge, Math.max(top + edge, my));
+        drawDragonPointer(ctx, x, y, Math.atan2(my - y, mx - x), size);
+        pointers += 1;
+      } else {
+        drawDragon(ctx, mx, my, c);
+      }
+    }
+    // For the tests: how many dragons are pointed at from the edge.
+    if (canvas.dataset['dragonPointers'] !== String(pointers)) {
+      canvas.dataset['dragonPointers'] = String(pointers);
     }
     if (mode.kind === 'placing' && mode.target !== null) {
       drawPlacePreview(ctx, mode.target, c, now);

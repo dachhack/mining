@@ -1241,6 +1241,15 @@ export const FRONTIER_BOARD = {
    */
   reachBelowDeepest: 4,
   /**
+   * Through stage `alwaysOfferUntilStage`, every board has a contract asking
+   * for each of `alwaysOffer` that the board could offer (owner, after the
+   * 0.26.0 build: "There are no clay or stone contracts but I am at the phase
+   * of the game where I should be filling a lot of them"; asked, a clay and
+   * a stone contract on every board).
+   */
+  alwaysOffer: ['clay', 'stone'] as string[],
+  alwaysOfferUntilStage: 4,
+  /**
    * What a surface contract may ask for that the board counts as always to
    * be had (owner, after the 0.22.0 build): trees and grass grow back,
    * animals walk in, saplings and seeds are sold, and hay, syrup and lumber

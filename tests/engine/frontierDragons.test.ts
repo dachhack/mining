@@ -3,7 +3,7 @@
 // things. They don't go away until you get a sword and drive them away."
 import { describe, expect, it } from 'vitest';
 import { FRONTIER_DRAGON, FRONTIER_MARKET, FRONTIER_RECIPES } from '../../src/data/frontier';
-import { frontierAct, previewTap } from '../../src/engine';
+import { coverLevelAt, frontierAct, previewTap } from '../../src/engine';
 import type { FrontierState } from '../../src/engine';
 import { nightOfDragons } from '../../src/engine/frontier/dragons';
 import { APPLE_TREE, GRASS } from '../../src/engine/frontier/state';
@@ -224,11 +224,17 @@ describe('a dragon in the day (owner, after the 0.25.0 build: "Let\'s make drago
     expect(FRONTIER_DRAGON.campChance).toBe(1 / 20);
   });
 
-  it('flies to the nearest grass or tree and sets it on fire, after any tap', () => {
-    const grass = { x: 6, y: 3 };
+  it("flies to the nearest grass or tree in the camps' light and sets it on fire, after any tap", () => {
+    // Owner, after the 0.26.0 build: "The dragon showed up but I couldn't see
+    // it." Asked: it attacks only inside the camps' light. The grass at 6,3
+    // is nearer but out of the light: it is left alone.
+    const grass = { x: 9, y: 3 };
+    expect(coverLevelAt(world().camps, 6, 3)).toBe(0);
+    expect(coverLevelAt(world().camps, grass.x, grass.y)).toBeGreaterThan(0);
     const base = world({
       inventory: { grass: 9 },
       features: [
+        { x: 6, y: 3, feature: GRASS },
         { ...grass, feature: GRASS },
         { x: 3, y: 12, feature: GRASS },
       ],
@@ -260,16 +266,16 @@ describe('a dragon in the day (owner, after the 0.25.0 build: "Let\'s make drago
   });
 
   it('eats the nearest animal, if one is nearer than any grass or tree', () => {
-    const animal: FrontierAnimal = { id: 7, x: 4, y: 4 };
+    const animal: FrontierAnimal = { id: 7, x: 8, y: 10 };
     const base = {
       ...world({ inventory: { grass: 9 }, features: [{ x: 9, y: 3, feature: GRASS }] }),
       animals: [animal],
     };
     for (let seed = 1; seed <= 40; seed += 1) {
-      const out = frontierAct(ready(base, 3, 3, seed), { kind: 'make', recipe: 'hay' });
+      const out = frontierAct(ready(base, 8, 8, seed), { kind: 'make', recipe: 'hay' });
       const attack = out.attacks?.[0];
       if (attack?.kind === 'camp') continue;
-      expect(attack).toMatchObject({ kind: 'eat', x: 4, y: 4 });
+      expect(attack).toMatchObject({ kind: 'eat', x: 8, y: 10 });
       expect(out.state.animals).toEqual([]);
     }
   });
@@ -291,6 +297,17 @@ describe('a dragon in the day (owner, after the 0.25.0 build: "Let\'s make drago
       expect(out.state.hazards.dragons[0]).toMatchObject({ x: MID, y: MID });
     }
     expect(seen).toBe(true);
+  });
+
+  it('with nothing in the light to attack, stays put', () => {
+    const base = world({ inventory: { grass: 9 }, features: [{ x: 1, y: 1, feature: GRASS }] });
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const out = frontierAct(ready(base, 3, 3, seed), { kind: 'make', recipe: 'hay' });
+      const attack = out.attacks?.[0];
+      if (attack?.kind === 'camp') continue;
+      expect(attack).toBeUndefined();
+      expect(out.state.hazards.dragons[0]).toMatchObject({ x: 3, y: 3 });
+    }
   });
 
   it('counts down 1 a tap, and not on what costs no tap', () => {
