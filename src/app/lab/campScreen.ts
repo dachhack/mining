@@ -37,6 +37,7 @@ import {
   FRONTIER_PHASES,
   FRONTIER_PICKAXE,
   FRONTIER_PUMP,
+  FRONTIER_FEATS,
   FRONTIER_RAID,
   FRONTIER_STAGES,
   FRONTIER_RUN,
@@ -64,6 +65,8 @@ import {
   contractLimit,
   contractStage,
   contractsDelivered,
+  gloryOf,
+  standingOf,
   heldContracts,
   loadFrontier,
   mostLots,
@@ -334,6 +337,30 @@ const DEMOLISH_FIRST = 'Build another camp that covers this one first.';
 const NO_TAPS_HINT = 'No taps left this shift: tap End shift to carry on.';
 const OVER_HINT = 'This run is over. Tap New world to start another.';
 const CLOSE_CONFIRM_MS = 3000;
+/** How long an accomplishment's toast stays, in milliseconds. */
+const FEAT_TOAST_MS = 4500;
+/** Where the best glory of any run is kept (accomplishments). */
+const BEST_GLORY_KEY = 'mining-game.bestGlory';
+
+/** The best glory of any run on this phone, or 0. */
+function loadBestGlory(): number {
+  try {
+    const n = Number(window.localStorage.getItem(BEST_GLORY_KEY));
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Keep `glory` if it beats the best so far. */
+function saveBestGlory(glory: number): void {
+  try {
+    if (glory > loadBestGlory()) window.localStorage.setItem(BEST_GLORY_KEY, String(glory));
+  } catch {
+    // No storage (private mode): the best is just not kept.
+  }
+}
+
 /** Where the game keeps its run (plan B1). */
 export const RUN_KEY = 'mining-game.run';
 
@@ -690,7 +717,16 @@ export function mountCampLab(
   mapButtons.append(placeButton, bookButton, goalsButton);
   const overBanner = element('div', 'lab2-over');
   overBanner.dataset['testid'] = 'lab2-over';
-  frame.append(hud, shiftButtons, mapButtons, overBanner);
+  // An accomplishment just earned (the engine's feats.ts): a toast over the
+  // map, under the HUD, for a few seconds; a tap sends it away.
+  const featToast = element('div', 'lab2-feat-toast');
+  featToast.dataset['testid'] = 'lab2-feat-toast';
+  featToast.setAttribute('role', 'status');
+  featToast.hidden = true;
+  featToast.addEventListener('click', () => {
+    featToast.hidden = true;
+  });
+  frame.append(hud, shiftButtons, mapButtons, overBanner, featToast);
 
   const hint = element('p', 'lab-hint', HINT);
   hint.dataset['testid'] = 'lab-hint';
@@ -2447,6 +2483,36 @@ export function mountCampLab(
         ),
       );
     }
+    // Accomplishments: this run's, with its glory and the family's standing.
+    const glory = gloryOf(state);
+    const featsHead = element(
+      'span',
+      'lab2-market-section',
+      `Accomplishments · ${state.feats.length} of ${FRONTIER_FEATS.length} · ✨ ${glory} glory · ${standingOf(glory)}`,
+    );
+    featsHead.dataset['testid'] = 'lab2-feats-head';
+    list.append(featsHead);
+    const best = loadBestGlory();
+    if (best > 0) {
+      list.append(
+        element('p', 'lab2-market-when', `Your best run: ✨ ${best} glory (${standingOf(best)}).`),
+      );
+    }
+    const featList = element('div', 'lab2-feats');
+    featList.dataset['testid'] = 'lab2-feats';
+    for (const feat of FRONTIER_FEATS) {
+      const has = state.feats.includes(feat.id);
+      const row = element('p', has ? 'lab2-feat lab2-feat-earned' : 'lab2-feat');
+      row.dataset['testid'] = `lab2-feat-${feat.id}`;
+      row.dataset['earned'] = String(has);
+      row.append(
+        element('span', 'lab2-feat-mark', has ? '🏅' : '○'),
+        element('span', 'lab2-feat-name', `${feat.name} · ${feat.how}`),
+        element('span', 'lab2-feat-glory', `+${feat.glory}`),
+      );
+      featList.append(row);
+    }
+    list.append(featList);
     section('Market');
     const when = element(
       'p',
@@ -3179,11 +3245,32 @@ export function mountCampLab(
     }
   }
 
+  // ----- Accomplishments (owner, after the 0.26.0 build) -----
+
+  let featTimer = 0;
+  /** Say the accomplishments just earned, in the toast, and keep the best glory of any run. */
+  function showFeats(ids: string[]): void {
+    const feats = FRONTIER_FEATS.filter((f) => ids.includes(f.id));
+    if (feats.length === 0) return;
+    featToast.replaceChildren(
+      ...feats.map((f) => element('p', 'lab2-feat-line', `🏅 ${f.name} · +${f.glory} glory`)),
+    );
+    featToast.dataset['feats'] = feats.map((f) => f.id).join(' ');
+    featToast.hidden = false;
+    window.clearTimeout(featTimer);
+    featTimer = window.setTimeout(() => {
+      featToast.hidden = true;
+    }, FEAT_TOAST_MS);
+    if (asGame) saveBestGlory(gloryOf(toFrontier(world)));
+  }
+
   // ----- Changing the world -----
 
   /** Take a new world: work out what is shown again, and refresh the counter and tray. */
   function setWorld(next: CampWorld): void {
+    const earned = next.turn.feats.filter((id) => !world.turn.feats.includes(id));
     world = next;
+    if (earned.length > 0) showFeats(earned);
     // Say a dragon's attack even if the action says nothing more.
     const news = takeDragonNews();
     if (news.length > 0) {
@@ -3387,10 +3474,13 @@ export function mountCampLab(
     endShiftButton.classList.toggle('lab2-end-shift-now', active && turn.tapsLeft === 0);
     overBanner.hidden = active;
     const score = world.lab.counts.get(FRONTIER_MARKET.coin) ?? 0;
+    // The run's glory and the family's standing (accomplishments), with the coins.
+    const glory = gloryOf(toFrontier(world));
+    const standing = `✨ ${glory} glory: the family is ${standingOf(glory).toLowerCase()}.`;
     overBanner.textContent =
       turn.status === 'finished'
-        ? `The run is over after ${FRONTIER_RUN.shifts} shifts: 🪙 ${score} coins. Tap New world to start again.`
-        : `Mine closed after ${turn.shift} shifts. Tap New world to start again.`;
+        ? `The pass is closing after ${FRONTIER_RUN.shifts} shifts: 🪙 ${score} coins. ${standing} Tap New world to start again.`
+        : `Mine closed after ${turn.shift} shifts. ${standing} Tap New world to start again.`;
   }
 
   /**
