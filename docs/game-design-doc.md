@@ -28,6 +28,24 @@ The owner, after the 0.26.0 build: "Let's go with old hold. On your grandpa's de
 - **What it explains:** the fog is the hold gone dark; relics and keystones are the family's own (section 8, stage 5); dragons and marauders are what drove the family out (sections 4.7, 4.8); the run's length is the season.
 - **On screen** (`src/app/lab/story.ts`): a brand-new run opens with the story, four short pages over the whole screen: a tap turns the page, the last tap starts the run, Skip ends it. It is told on the first launch and after New run, not when a saved run is carried on. The relic's and the keystone's info lines name them as the family's. The story changes no rule.
 
+## 0a. Accomplishments and family glory [Decided; the list and numbers Default]
+
+The owner, after the 0.26.0 build: "We also need a accomplishment system." Asked, the owner chose **per run**, each worth **family glory**.
+
+- **The list** (`FRONTIER_FEATS`, 22 of them): a second camp (5 glory); a camp at level 2, 3, 4 (5, 10, 20); a smelter (5); 1, 5, 15 contracts delivered (5, 10, 20); a square dug 10 or 20 deep (10, 25); a deep camp (15); a worker hired (10); 4 miners (15); a dragon driven off (15); marauders turned away (10); a fortress (20); 500 or 2,000 coins held (10, 30); a relic brought up (20); a keystone brought up (40); all 8 relics held at once (60); the run seen through to its last shift (20). 380 glory in all.
+- **Earning:** each is earned once a run, by the action that does it; the run's state keeps them (`feats`; the engine's feats.ts), so they are saved with the run and a new run starts with none.
+- **Glory and standing:** a run's glory is the sum of its accomplishments'. The family's standing follows it (`FRONTIER_STANDINGS`): Forgotten (0), Remembered (30), Respected (90), Renowned (170), Restored (260).
+- **On screen:** a gold toast over the map when one is earned (a tap, or 4.5 s, sends it away); the contracts card lists them all, earned or not, with the run's glory and standing; the end-of-run banner gives the glory and standing with the coins. The best glory of any run is kept on the phone and shown in the card.
+
+## 0b. The tutorial [Decided; the words Default]
+
+The owner, after the 0.26.0 build: "we need a short tutorial mode." Asked, the owner chose a **guided first run** that teaches **the basics**, with a one-time tip when each later thing first shows up.
+
+- **The steps** (`TUTORIAL_STEPS`, src/app/lab/tutorial.ts), on the player's own first run, one at a time in a card over the map: gather; dig; press and hold to dig a 3 × 3; End shift (and upkeep); save up for a camp; place it; upgrade a camp; take a contract. A step is done when the run says so, and a step already done is passed over, so the tutorial never takes the game over. The button a step is about (End shift, ⊕, 🎯) has a pulsing gold ring.
+- **When:** it starts when the story ends on the first run ever. Skip ends it; "Replay the tutorial" in the contracts card starts it again. Its step is kept on the phone.
+- **Tips** (`TUTORIAL_TIPS`): one sentence, once ever, with "Got it", the first time there is a dragon, a fire in the light, a flood, a raid, or a level-2 camp with no smelter.
+- It is the game only (not Lab 2), and it changes no rule.
+
 ## 1. Pillars
 
 1. **Every tap counts.** A shift has only so many taps, and the crew must eat. Each tap is a choice between gathering, digging and building.

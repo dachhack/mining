@@ -157,3 +157,77 @@ test('a new run opens with the story of the Old Hold: taps turn its pages, Skip 
   await page.getByTestId('lab2-story-skip').click();
   await expect(story).toHaveCount(0);
 });
+
+test('the first run is guided: the tutorial card moves on as each step is done, and Skip ends it', async ({
+  page,
+}) => {
+  // Owner, after the 0.26.0 build: "we need a short tutorial mode"; asked:
+  // a guided first run.
+  await page.goto('/');
+  const card = page.getByTestId('lab2-tutorial');
+  // It starts when the story ends.
+  await expect(card).toBeHidden();
+  await page.getByTestId('lab2-story-skip').click();
+  await expect(card).toBeVisible();
+  await expect(card).toHaveAttribute('data-step', 'gather');
+  await expect(page.getByTestId('lab2-tutorial-text')).toContainText('Tap grass or a tree');
+  // Gather something: the card moves on to digging.
+  const seed = Number((await page.getByTestId('lab-seed').innerText()).replace(/\D+/g, ''));
+  const world = newCampWorld(seed);
+  const camp = world.camps[0] ?? { x: 0, y: 0 };
+  const sights = sightMap(world);
+  const width = world.lab.state.size.x;
+  // The nearest lit square (not under the HUD or the buttons: within 3 of the
+  // camp) whose tap gathers wood or grass.
+  let plant: { x: number; y: number } | null = null;
+  for (let d = 2; d <= 3 && plant === null; d += 1) {
+    for (let dy = -d; dy <= d && plant === null; dy += 1) {
+      for (let dx = -d; dx <= d && plant === null; dx += 1) {
+        const x = camp.x + dx;
+        const y = camp.y + dy;
+        if (sights[x + width * y] !== 'shown') continue;
+        const tapped = campTap(world, x, y);
+        const got = (item: string): number => tapped.world.lab.counts.get(item) ?? 0;
+        if (tapped.kind === 'harvested' && got('wood') + got('grass') > 0) plant = { x, y };
+      }
+    }
+  }
+  if (plant === null) throw new Error('a plant near the camp');
+  const canvas = page.getByTestId('lab-map');
+  await tapSquare(page, canvas, plant.x, plant.y);
+  await expect(card).toHaveAttribute('data-step', 'dig');
+  // The step is kept: a reload carries on from it.
+  await page.reload();
+  await expect(card).toHaveAttribute('data-step', 'dig');
+  // Skip ends it; Replay (in the contracts card) starts it again.
+  await page.getByTestId('lab2-tutorial-button').click();
+  await expect(card).toBeHidden();
+  await page.getByTestId('lab2-goals').click();
+  await page.getByTestId('lab2-tutorial-replay').click();
+  await expect(card).toBeVisible();
+  // From the first step: the reload went back to the start of the shift (a
+  // run is saved at End shift), so nothing is gathered yet.
+  await expect(card).toHaveAttribute('data-step', 'gather');
+});
+
+test('a later thing gets a one-time tip: a dragon', async ({ page }) => {
+  const start = createFrontier(110);
+  const camp = start.camps[0] ?? { x: 0, y: 0 };
+  const dragons = [{ id: 1, x: camp.x + 3, y: camp.y, dx: 1, dy: 0, restTaps: 3 }];
+  await page.goto('/');
+  await page.evaluate(([key, text]) => window.localStorage.setItem(key, text), [
+    'mining-game.run',
+    saveFrontier({ ...start, hazards: { ...start.hazards, dragons, nextDragonId: 2 } }),
+  ] as const);
+  await page.reload();
+  const card = page.getByTestId('lab2-tutorial');
+  await expect(card).toBeVisible();
+  await expect(card).toHaveAttribute('data-kind', 'tip');
+  await expect(page.getByTestId('lab2-tutorial-text')).toContainText('A dragon!');
+  await page.getByTestId('lab2-tutorial-button').click();
+  await expect(card).toBeHidden();
+  // Once ever.
+  await page.reload();
+  await expect(page.getByTestId('lab-map')).toHaveAttribute('data-camps', '1');
+  await expect(card).toBeHidden();
+});

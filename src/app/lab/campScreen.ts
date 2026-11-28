@@ -197,6 +197,8 @@ import {
 import { drawCrop } from './cropArt';
 import { showNight } from './night';
 import { showStory } from './story';
+import { TUTORIAL_STEPS, TUTORIAL_TIPS, tipsDue, tutorialStep } from './tutorial';
+import type { TutorialFacts, TutorialTarget } from './tutorial';
 import type { Night } from './night';
 
 const HINT = 'Tap to gather and dig · tap a camp to upgrade it';
@@ -337,6 +339,50 @@ const DEMOLISH_FIRST = 'Build another camp that covers this one first.';
 const NO_TAPS_HINT = 'No taps left this shift: tap End shift to carry on.';
 const OVER_HINT = 'This run is over. Tap New world to start another.';
 const CLOSE_CONFIRM_MS = 3000;
+/** Where the tutorial's step is kept (tutorial.ts): {"step": 2, "dugArea": false}, or nothing before it starts. */
+const TUTORIAL_KEY = 'mining-game.tutorial';
+/** Where the ids of the tips already shown are kept (tutorial.ts). */
+const TIPS_KEY = 'mining-game.tips';
+
+/** Where the tutorial stands: its step (TUTORIAL_STEPS.length or more: over), and whether a hold dig has been done. */
+interface TutorialState {
+  step: number;
+  dugArea: boolean;
+}
+
+/** `key`'s JSON from the phone's storage, or `null` (nothing kept, bad JSON, or no storage). */
+function loadJson(key: string): unknown {
+  try {
+    const text = window.localStorage.getItem(key);
+    return text === null ? null : (JSON.parse(text) as unknown);
+  } catch {
+    return null;
+  }
+}
+
+/** Keep `value` as JSON under `key`; nothing happens without storage. */
+function saveJson(key: string, value: unknown): void {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // No storage (private mode): it is just not kept.
+  }
+}
+
+/** The tutorial as kept, or `null` if it has never started. */
+function loadTutorial(): TutorialState | null {
+  const kept = loadJson(TUTORIAL_KEY);
+  if (typeof kept !== 'object' || kept === null) return null;
+  const { step, dugArea } = kept as { step?: unknown; dugArea?: unknown };
+  return typeof step === 'number' ? { step, dugArea: dugArea === true } : null;
+}
+
+/** The ids of the tips already shown. */
+function loadTips(): string[] {
+  const kept = loadJson(TIPS_KEY);
+  return Array.isArray(kept) ? kept.filter((id): id is string => typeof id === 'string') : [];
+}
+
 /** How long an accomplishment's toast stays, in milliseconds. */
 const FEAT_TOAST_MS = 4500;
 /** Where the best glory of any run is kept (accomplishments). */
@@ -726,7 +772,21 @@ export function mountCampLab(
   featToast.addEventListener('click', () => {
     featToast.hidden = true;
   });
-  frame.append(hud, shiftButtons, mapButtons, overBanner, featToast);
+  // The tutorial's card (tutorial.ts): over the map, above End shift and
+  // Undo. Taps go through it to the map; only its button takes them.
+  const tutorialCard = element('div', 'lab2-tutorial');
+  tutorialCard.dataset['testid'] = 'lab2-tutorial';
+  tutorialCard.setAttribute('role', 'status');
+  tutorialCard.hidden = true;
+  const tutorialText = element('p', 'lab2-tutorial-text');
+  tutorialText.dataset['testid'] = 'lab2-tutorial-text';
+  const tutorialCount = element('span', 'lab2-tutorial-count');
+  const tutorialButton = button('lab2-tutorial-button', 'Skip');
+  tutorialButton.dataset['testid'] = 'lab2-tutorial-button';
+  const tutorialFoot = element('div', 'lab2-tutorial-foot');
+  tutorialFoot.append(tutorialCount, tutorialButton);
+  tutorialCard.append(tutorialText, tutorialFoot);
+  frame.append(hud, shiftButtons, mapButtons, overBanner, featToast, tutorialCard);
 
   const hint = element('p', 'lab-hint', HINT);
   hint.dataset['testid'] = 'lab-hint';
@@ -2493,6 +2553,15 @@ export function mountCampLab(
     featsHead.dataset['testid'] = 'lab2-feats-head';
     list.append(featsHead);
     const best = loadBestGlory();
+    if (asGame) {
+      const replay = button('lab2-pack', 'Replay the tutorial');
+      replay.dataset['testid'] = 'lab2-tutorial-replay';
+      replay.addEventListener('click', () => {
+        startTutorial();
+        closeBook();
+      });
+      list.prepend(replay);
+    }
     if (best > 0) {
       list.append(
         element('p', 'lab2-market-when', `Your best run: ✨ ${best} glory (${standingOf(best)}).`),
@@ -3288,6 +3357,114 @@ export function mountCampLab(
     showCampCounter();
     showTray();
     draw();
+    showTutorial();
+  }
+
+  // ----- The tutorial and its tips (tutorial.ts; owner, after the 0.26.0 build) -----
+
+  /** Where the tutorial stands, or `null` if it has not started (it starts with a brand-new run). */
+  let tutorial: TutorialState | null = asGame ? loadTutorial() : null;
+  /** True after a night marauders came in: for the raid tip. */
+  let raidedLastNight = false;
+  /** What the card's button does now. */
+  let tutorialPress: () => void = () => undefined;
+  tutorialButton.addEventListener('click', (event) => {
+    event.stopPropagation();
+    tutorialPress();
+  });
+
+  function setTutorial(next: TutorialState): void {
+    tutorial = next;
+    saveJson(TUTORIAL_KEY, next);
+  }
+
+  /** Start the tutorial from its first step (a brand-new run, or Replay). */
+  function startTutorial(): void {
+    if (!asGame) return;
+    setTutorial({ step: 0, dugArea: false });
+    showTutorial();
+  }
+
+  /** What the tutorial needs to know of the run now. */
+  function tutorialFacts(): TutorialFacts {
+    const counts = world.lab.counts;
+    const has = (item: string): boolean => (counts.get(item) ?? 0) > 0;
+    const width = world.lab.state.size.x;
+    return {
+      gathered: has('wood') || has('grass') || has('apple'),
+      mined: world.lab.mined,
+      dugArea: tutorial?.dugArea ?? false,
+      shift: world.turn.shift,
+      canPayCamp: canAfford(counts, LAB_NEW_CAMP_COST),
+      camps: world.camps.length,
+      bestLevel: Math.max(0, ...world.camps.map((c) => c.level)),
+      contracts:
+        world.turn.contracts.length + world.turn.contractsDone.reduce((sum, n) => sum + n, 0),
+      dragon: world.hazards.dragons.length > 0,
+      fire: world.hazards.fires.some(
+        (burning, i) => burning && sightOf(i % width, Math.floor(i / width)) === 'shown',
+      ),
+      flood: world.hazards.flooded.some((f) => f),
+      raided: raidedLastNight,
+      smelter: world.camps.some((c) => c.smelter),
+    };
+  }
+
+  /** The card: a tip due, else the tutorial's step; and the pulse on the button a step points at. */
+  function showTutorial(): void {
+    if (!asGame) return;
+    const facts = tutorialFacts();
+    const targets: Record<TutorialTarget, HTMLElement> = {
+      endShift: endShiftButton,
+      place: placeButton,
+      goals: goalsButton,
+    };
+    for (const el of Object.values(targets)) el.classList.remove('lab2-tutorial-target');
+    // A tip first: one sentence, once ever, until "Got it".
+    const tipId = world.turn.status === 'active' ? tipsDue(facts, loadTips())[0] : undefined;
+    const tip = TUTORIAL_TIPS.find((t) => t.id === tipId);
+    if (tip !== undefined) {
+      tutorialCard.hidden = false;
+      tutorialCard.dataset['kind'] = 'tip';
+      tutorialCard.dataset['step'] = tip.id;
+      tutorialText.textContent = tip.text;
+      tutorialCount.textContent = 'Tip';
+      tutorialButton.textContent = 'Got it';
+      tutorialPress = () => {
+        saveJson(TIPS_KEY, [...loadTips(), tip.id]);
+        if (tip.id === 'raid') raidedLastNight = false;
+        showTutorial();
+      };
+      return;
+    }
+    if (tutorial === null || tutorial.step > TUTORIAL_STEPS.length) {
+      tutorialCard.hidden = true;
+      return;
+    }
+    const at = tutorialStep(tutorial.step, facts);
+    if (at !== tutorial.step) setTutorial({ ...tutorial, step: at });
+    const step = TUTORIAL_STEPS[at];
+    tutorialCard.hidden = false;
+    tutorialCard.dataset['kind'] = 'step';
+    if (step === undefined) {
+      // Every step done: one last card, then it is over for good.
+      tutorialCard.dataset['step'] = 'done';
+      tutorialText.textContent =
+        'That’s the basics. The rest is yours to find: reclaim the Old Hold!';
+      tutorialCount.textContent = '';
+      tutorialButton.textContent = 'Done';
+    } else {
+      tutorialCard.dataset['step'] = step.id;
+      tutorialText.textContent = step.text;
+      tutorialCount.textContent = `Tutorial ${at + 1} / ${TUTORIAL_STEPS.length}`;
+      tutorialButton.textContent = 'Skip';
+      if (step.target !== undefined) targets[step.target].classList.add('lab2-tutorial-target');
+    }
+    tutorialPress = () => {
+      // Skip, or Done: the tutorial is over (Replay in the contracts card brings it back).
+      setTutorial({ step: TUTORIAL_STEPS.length + 1, dugArea: true });
+      showTutorial();
+    };
   }
 
   function setMode(next: Mode): void {
@@ -3506,6 +3683,10 @@ export function mountCampLab(
     }
     const text = shiftText(result.report, result.world.turn);
     setHint(text, result.report.unpaid.length > 0);
+    if (result.report.raid !== null) {
+      raidedLastNight = true;
+      showTutorial();
+    }
     // Night (owner, after the playtest of PR #146): the state has moved on
     // already; the night only shows it. The animals slide to where they
     // stepped once it is morning.
@@ -3938,6 +4119,7 @@ export function mountCampLab(
     const before = world.lab.mined;
     const taps = world.turn.tapsLeft;
     remember({ kind: 'digArea', x, y });
+    if (tutorial !== null && !tutorial.dugArea) setTutorial({ ...tutorial, dugArea: true });
     setWorld(digCampArea(world, x, y));
     const dug = world.lab.mined - before;
     const spent = taps - world.turn.tapsLeft;
@@ -3988,7 +4170,14 @@ export function mountCampLab(
    * on, nor when the address names a seed (a run opened for a look or a test).
    */
   function tellStory(): void {
-    if (asGame) showStory(root, { page, onDone: () => undefined });
+    if (!asGame) return;
+    showStory(root, {
+      page,
+      // The tutorial starts with the first run ever (not again on later runs).
+      onDone: () => {
+        if (tutorial === null) startTutorial();
+      },
+    });
   }
 
   function centreOnFirstCamp(): void {
@@ -4018,6 +4207,7 @@ export function mountCampLab(
     showCampCounter();
     showTray();
     draw();
+    showTutorial();
   }
 
   attachLabGestures(canvas, {
