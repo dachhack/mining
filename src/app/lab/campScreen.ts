@@ -1927,6 +1927,8 @@ export function mountCampLab(
   const cues = cueLoop((now) => {
     effects = effects.filter((e) => now - e.start < effectMs(e.kind));
     draw(now);
+    // For the tests: how many cues are still playing (0 once the map is still).
+    canvas.dataset['effects'] = String(effects.length);
     // While the camp tool has a target, keep drawing: its square pulses. So
     // too while an animal is still sliding to where End shift moved it.
     const sliding =
