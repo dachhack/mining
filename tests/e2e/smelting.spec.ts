@@ -137,9 +137,11 @@ test('an iron pickaxe doubles a mining tap; a copper lantern hung at a camp wide
     `${FRONTIER_PICKAXE.yieldTimes}×`,
   );
   await page.getByTestId('lab2-recipe-make-iron-pickaxe').click();
-  await expect(page.getByTestId('lab2-book-note')).toHaveText('Made 1 iron pickaxe.');
+  await expect(page.getByTestId('lab2-book-note')).toHaveText('✓ Made 1 iron pickaxe. You have 1.');
   await page.getByTestId('lab2-recipe-make-copper-lantern').click();
-  await expect(page.getByTestId('lab2-book-note')).toHaveText('Made 1 copper lantern.');
+  await expect(page.getByTestId('lab2-book-note')).toHaveText(
+    '✓ Made 1 copper lantern. You have 1.',
+  );
   await page.getByTestId('lab2-book-close').click();
   await expect.poll(() => count(page, FRONTIER_PICKAXE.item)).toBe(1);
   await expect.poll(() => count(page, FRONTIER_LANTERN.item)).toBe(1);
