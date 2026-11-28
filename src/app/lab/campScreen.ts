@@ -201,6 +201,7 @@ import {
 } from './buildingArt';
 import { drawCrop } from './cropArt';
 import { showNight } from './night';
+import { raidText } from './raidText';
 import { showStory } from './story';
 import {
   ROTATING_TIPS,
@@ -470,12 +471,8 @@ function shiftText(report: ShiftReport, turn: CampTurn): string {
     report.dragonFires > 0 ? ' A dragon set a fire 🔥.' : '',
   ].join('');
   const raid = report.raid;
-  const raided =
-    raid === null
-      ? ''
-      : raid.turnedAway
-        ? ` Marauders 🏴 came for camp ${raid.campId}, but its defenses turned them away.`
-        : ` Marauders 🏴 raided camp ${raid.campId}${raid.stolen.length > 0 ? `, stole ${raid.stolen.map((st) => `${st.count} ${itemName(st.item).toLowerCase()}`).join(', ')}` : ''}${raid.upgradesLost > 0 ? `, and tore down ${raid.upgradesLost === 1 ? 'an upgrade' : `${raid.upgradesLost} upgrades`}` : ''}. Build defenses 🛡 at your camps.`;
+  // Strength against the camp's defense (raidText.ts).
+  const raided = raid === null ? '' : raidText(raid);
   // Mushrooms (owner, after the 0.17.0 build) come up some nights after rain.
   const mushrooms =
     report.mushroomsCame > 0
