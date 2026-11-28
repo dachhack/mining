@@ -1296,6 +1296,62 @@ body[data-screen='lab2'] {
   color: #f0c58a;
 }
 
+/* A thing was just made: the note flashes (owner: "it is not obvious when it is made"). */
+.lab2-book-note-flash {
+  animation: lab2-note-flash 0.9s ease-out;
+}
+
+@keyframes lab2-note-flash {
+  0% {
+    color: #1d1610;
+    background: #9be07a;
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+/* How many of a recipe's product you hold, by its name. */
+.lab2-recipe-have {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #d9d0c2;
+  background: #2f2822;
+  border: 1px solid #4a4038;
+}
+
+/* The row made last: a green edge that stays, and a glow that fades. */
+.lab2-recipe-have-up {
+  color: #10240a;
+  background: #9be07a;
+  border-color: #c5f3ae;
+}
+
+.lab2-recipe-made {
+  box-shadow: inset 3px 0 0 #9be07a;
+  animation: lab2-made-glow 0.9s ease-out;
+}
+
+@keyframes lab2-made-glow {
+  0% {
+    background: rgba(155, 224, 122, 0.35);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lab2-book-note-flash,
+  .lab2-recipe-made {
+    animation: none;
+  }
+}
+
 /* On a rainy night the moon is behind cloud: dimmer and soft. */
 .lab2-night[data-rain='true'] .lab2-night-moon {
   opacity: 0.5;

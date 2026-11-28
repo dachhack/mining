@@ -2518,6 +2518,7 @@ export function mountCampLab(
   function openBook(): void {
     if (mode.kind === 'book') return;
     bookNote.textContent = '';
+    madeLast = null;
     window.history.pushState({ lab2Book: true }, '');
     setMode({ kind: 'book' });
   }
@@ -2616,10 +2617,26 @@ export function mountCampLab(
         makes === null || makes.count === 1
           ? recipe.name
           : `${recipe.name} → ${makes.count} ${itemName(makes.item).toLowerCase()}s`;
-      text.append(
-        element('span', 'lab2-recipe-name', name),
-        costRow(recipe.cost, `lab2-recipe-${recipe.id}`),
-      );
+      const nameLine = element('span', 'lab2-recipe-name', name);
+      if (makes !== null) {
+        // How many of it you hold, by its name; and, on the row made last,
+        // how many that added (owner, after the 0.28.0 build: "it is not
+        // obvious when it is made and it would be good to see how many you
+        // have in the item make chip").
+        const held = world.lab.counts.get(makes.item) ?? 0;
+        const justMade = madeLast !== null && madeLast.recipe === recipe.id;
+        const have = element(
+          'span',
+          justMade ? 'lab2-recipe-have lab2-recipe-have-up' : 'lab2-recipe-have',
+          justMade ? `Have ${held} (+${madeLast?.count ?? 0})` : `Have ${held}`,
+        );
+        have.dataset['testid'] = `lab2-recipe-have-${recipe.id}`;
+        have.dataset['count'] = String(held);
+        nameLine.append(have);
+        row.dataset['made'] = String(justMade);
+        if (justMade) row.classList.add('lab2-recipe-made');
+      }
+      text.append(nameLine, costRow(recipe.cost, `lab2-recipe-${recipe.id}`));
       const does = recipe.deep
         ? `A camp of its own at depth ${FRONTIER_DEEP_CAMP.minDepth}+: ring ${FRONTIER_DEEP_CAMP.radius}, mines as level ${FRONTIER_DEEP_CAMP.level}, never upgraded. The kit comes from the market after a tier-1 contract.`
         : whatItDoes(makes);
@@ -3040,6 +3057,9 @@ export function mountCampLab(
     return null;
   }
 
+  /** The recipe made last while the book has been open, and how many it made: its row is marked. */
+  let madeLast: { recipe: string; count: number } | null = null;
+
   /** Make `recipe` once, from the book: its inputs and 1 tap. */
   function makeInBook(recipe: Recipe): void {
     const next = makeCampRecipe(world, recipe.id);
@@ -3050,7 +3070,13 @@ export function mountCampLab(
     const list = bookCard.querySelector('.lab2-book-list');
     const scroll = list === null ? 0 : list.scrollTop;
     const made = itemName(recipe.makes.item).toLowerCase();
-    bookNote.textContent = `Made ${recipe.makes.count} ${made}${recipe.makes.count > 1 ? 's' : ''}.`;
+    const now = next.lab.counts.get(recipe.makes.item) ?? 0;
+    bookNote.textContent = `✓ Made ${recipe.makes.count} ${made}${recipe.makes.count > 1 ? 's' : ''}. You have ${now}.`;
+    // The note flashes each time, also when the same thing is made twice.
+    bookNote.classList.remove('lab2-book-note-flash');
+    void bookNote.offsetWidth; // reading the layout restarts the CSS animation
+    bookNote.classList.add('lab2-book-note-flash');
+    madeLast = { recipe: recipe.id, count: recipe.makes.count };
     setWorld(next);
     const fresh = bookCard.querySelector('.lab2-book-list');
     if (fresh !== null) fresh.scrollTop = scroll;

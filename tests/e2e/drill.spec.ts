@@ -60,7 +60,7 @@ test('make an iron drill in the book, then upgrade a level-3 camp to level 4', a
     'Mines iron and copper ore',
   );
   await page.getByTestId('lab2-recipe-make-iron-drill').click();
-  await expect(page.getByTestId('lab2-book-note')).toHaveText('Made 1 drill.');
+  await expect(page.getByTestId('lab2-book-note')).toHaveText('✓ Made 1 drill. You have 1.');
   await page.getByTestId('lab2-book-close').click();
   await expect.poll(() => count(page, FRONTIER_DRILL.item)).toBe(1);
 

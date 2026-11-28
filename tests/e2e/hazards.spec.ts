@@ -93,6 +93,40 @@ test('a dragon attacks after a tap, and the hint says so (owner, after the 0.25.
   await expect(page.getByTestId('lab-hint')).toContainText('🐉 A dragon');
 });
 
+test('making in the recipe book: the row says how many you have, and shows what was just made', async ({
+  page,
+}) => {
+  // Owner, after the 0.28.0 build: "it is not obvious when it is made and it
+  // would be good to see how many you have in the item make chip".
+  const start = createFrontier(110);
+  const state: FrontierState = {
+    ...start,
+    inventory: new Map([
+      ['grass', 9],
+      ['hay', 4],
+    ]),
+  };
+  await openGame(page, state);
+  await page.getByTestId('lab2-book').click();
+  const have = page.getByTestId('lab2-recipe-have-hay');
+  await expect(have).toHaveText('Have 4');
+  await expect(have).toHaveAttribute('data-count', '4');
+  await page.getByTestId('lab2-recipe-make-hay').click();
+  // The row's count goes up, says by how much, and the row is marked as just made.
+  await expect(have).toHaveText('Have 5 (+1)');
+  await expect(have).toHaveAttribute('data-count', '5');
+  await expect(page.getByTestId('lab2-recipe-hay')).toHaveAttribute('data-made', 'true');
+  await expect(page.getByTestId('lab2-book-note')).toHaveText('✓ Made 1 hay. You have 5.');
+  // Again: the mark is on the row made last, the count is right.
+  await page.getByTestId('lab2-recipe-make-hay').click();
+  await expect(have).toHaveText('Have 6 (+1)');
+  // A row not just made says only what is held.
+  await page.getByTestId('lab2-book-close').click();
+  await page.getByTestId('lab2-book').click();
+  await expect(page.getByTestId('lab2-recipe-have-hay')).toHaveText('Have 6');
+  await expect(page.getByTestId('lab2-recipe-hay')).toHaveAttribute('data-made', 'false');
+});
+
 test('a dragon off the screen is pointed at from the map edge (owner, after the 0.26.0 build)', async ({
   page,
 }) => {
