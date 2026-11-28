@@ -159,7 +159,7 @@ import {
 } from './labDraw';
 import type { SquareBox } from './labDraw';
 import { attachLabGestures } from './labGestures';
-import { LAB_LOOK } from './labLook';
+import { LAB_LOOK, LAB_MARKS } from './labLook';
 import { topBlocksOf } from './labWorld';
 import { APPLE_TREE, GRASS, MAPLE_TREE, NO_FEATURE, TREE, isTree } from './surface';
 import type { Animal } from './surface';
@@ -906,6 +906,15 @@ export function mountCampLab(
   const ground = document.createElement('canvas');
   /** How far, in css pixels, the ground reaches past each side of the view. */
   const GROUND_MARGIN = 160;
+  /**
+   * When a square changes, the ground is drawn again only within GROUND_REACH
+   * squares of it (clipped to that), and to fill that clip rightly every
+   * square within GROUND_SPILL more is drawn, since each may paint into it.
+   * (Until the 0.28.0 build both were 3: a tap drew 13 x 13 squares again;
+   * now 7 x 7. Owner: "just redrawing things that change between taps".)
+   */
+  const GROUND_REACH = 2;
+  const GROUND_SPILL = 1;
   /** How long after the camera last moved the ground is drawn again for where it stopped, in ms. */
   const GROUND_SETTLE_MS = 150;
   /** The camera the ground was drawn for. */
@@ -1057,7 +1066,11 @@ export function mountCampLab(
     }
     groundDraws += 1;
     groundDrawn = 'part';
-    const reach = 3;
+    // A changed square changes how its neighbours look (a shadow along the
+    // edge they share, a forest's edge), and a square paints less than one
+    // square past its own (the lit edge's glow, a canopy): so the pixels that
+    // can change lie within GROUND_REACH squares of it.
+    const reach = GROUND_REACH;
     const part = {
       x0: area.x0 - reach,
       y0: area.y0 - reach,
@@ -1083,10 +1096,10 @@ export function mountCampLab(
       ctx.clip();
       ctx.setTransform(ratio, 0, 0, ratio, GROUND_MARGIN * ratio, GROUND_MARGIN * ratio);
       drawGroundOn(ctx, {
-        x0: part.x0 - 3,
-        y0: part.y0 - 3,
-        x1: part.x1 + 3,
-        y1: part.y1 + 3,
+        x0: part.x0 - GROUND_SPILL,
+        y0: part.y0 - GROUND_SPILL,
+        x1: part.x1 + GROUND_SPILL,
+        y1: part.y1 + GROUND_SPILL,
       });
       ctx.restore();
     });
@@ -1116,6 +1129,105 @@ export function mountCampLab(
     const c = cellPixels();
     const ratio = window.devicePixelRatio || 1;
     drawGround(ready.width, ready.height, ratio, settle);
+    if (groundCamera.x !== camera.x || groundCamera.y !== camera.y) {
+      // Panning: once the camera stops, draw the ground for where it stopped.
+      window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(() => draw(performance.now(), true), GROUND_SETTLE_MS);
+    }
+    // What stands still (the ground, the animals, the dragons, the camps) is
+    // kept as one picture, `still`, and a frame of a cue's animation copies
+    // it and draws only what moves on top (owner, after the 0.28.0 build:
+    // "just redrawing things that change between taps"). It is not used
+    // while something in it moves (an animal sliding, a dragon flying, the
+    // camera), nor while a preview is drawn under the camps (placing, a held
+    // dig): those frames are drawn in full, as before.
+    const moving =
+      [...lastStep.values()].some((step) => now - step.at < CAMP_LOOK.animalSlideMs) ||
+      [...lastFlight.values()].some((f) => now - f.at < f.ms);
+    const preview = (mode.kind === 'placing' && mode.target !== null) || held !== null;
+    const stillKey: unknown[] = [
+      world,
+      sights,
+      camera.x,
+      camera.y,
+      camera.cells,
+      ready.width,
+      ready.height,
+      ratio,
+      groundDraws,
+      mode.kind === 'camp' ? mode.id : -1,
+    ];
+    const canKeep = !moving && !preview && !settle;
+    if (canKeep && stillKey.every((k, i) => k === stillFor[i])) {
+      // The same picture as last frame: copy it.
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(still, 0, 0);
+      ctx.restore();
+      stillCopies += 1;
+    } else if (canKeep && stillKey.every((k, i) => k === stillSeen[i])) {
+      // The camera and the canvas are as they were last frame, so this
+      // picture will be wanted again: draw it into `still`, then copy it.
+      if (still.width !== canvas.width || still.height !== canvas.height) {
+        still.width = canvas.width;
+        still.height = canvas.height;
+      }
+      const sctx = still.getContext('2d');
+      if (sctx === null) {
+        drawStill(ctx, c, ratio, now);
+      } else {
+        sctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        sctx.imageSmoothingEnabled = true;
+        sctx.fillStyle = LAB_MARKS.gap;
+        sctx.fillRect(0, 0, ready.width, ready.height);
+        drawStill(sctx, c, ratio, now);
+        stillFor = stillKey;
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.drawImage(still, 0, 0);
+        ctx.restore();
+      }
+    } else {
+      // Something moves, or the camera has just moved: draw it all, keep nothing.
+      stillFor = [];
+      drawStill(ctx, c, ratio, now, preview);
+    }
+    stillSeen = stillKey;
+    if (canvas.dataset['stillCopies'] !== String(stillCopies)) {
+      canvas.dataset['stillCopies'] = String(stillCopies);
+    }
+    // Fires on a camp's ground go over its marker, so a burning camp shows (hazards PR 3).
+    const across = world.lab.state.size.x;
+    world.hazards.fires.forEach((burning, i) => {
+      const fx = i % across;
+      const fy = Math.floor(i / across);
+      if (!burning || campAt(world, fx, fy) === null || sightOf(fx, fy) !== 'shown') return;
+      const { px, py } = toPx(fx, fy);
+      drawFire(ctx, squareBox(px, py, c), fx, fy, now);
+    });
+    drawEffects(ctx, now, c);
+    writeCanvasData(c);
+  }
+
+  /** The picture of what stands still, as last drawn; what it was drawn for; and what the last frame was drawn for. */
+  const still = document.createElement('canvas');
+  let stillFor: unknown[] = [];
+  let stillSeen: unknown[] = [];
+  /** How many frames copied `still` instead of drawing it: for the e2e tests. */
+  let stillCopies = 0;
+
+  /**
+   * The ground, the animals, the dragons, the previews (if `withPreviews`)
+   * and the camps, onto `ctx`: everything of a frame but the fires on camps
+   * and the cues, in the order a frame draws them.
+   */
+  function drawStill(
+    ctx: CanvasRenderingContext2D,
+    c: number,
+    ratio: number,
+    now: number,
+    withPreviews = false,
+  ): void {
     // The ground, shifted by however far the camera has moved since it was
     // drawn (in whole device pixels, so it is copied, not resampled).
     const shiftX = Math.round(((groundCamera.x - camera.x) * c - GROUND_MARGIN) * ratio);
@@ -1124,11 +1236,6 @@ export function mountCampLab(
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(ground, shiftX, shiftY);
     ctx.restore();
-    if (groundCamera.x !== camera.x || groundCamera.y !== camera.y) {
-      // Panning: once the camera stops, draw the ground for where it stopped.
-      window.clearTimeout(settleTimer);
-      settleTimer = window.setTimeout(() => draw(performance.now(), true), GROUND_SETTLE_MS);
-    }
 
     drawAnimals(ctx, c);
     // Dragons (hazards PR 4), on lit squares only. In the morning one glides
@@ -1169,10 +1276,12 @@ export function mountCampLab(
     if (canvas.dataset['dragonPointers'] !== String(pointers)) {
       canvas.dataset['dragonPointers'] = String(pointers);
     }
-    if (mode.kind === 'placing' && mode.target !== null) {
-      drawPlacePreview(ctx, mode.target, c, now);
+    if (withPreviews) {
+      if (mode.kind === 'placing' && mode.target !== null) {
+        drawPlacePreview(ctx, mode.target, c, now);
+      }
+      if (held !== null) drawDigPreview(ctx, held, c);
     }
-    if (held !== null) drawDigPreview(ctx, held, c);
     for (const camp of world.camps) {
       if (sightOf(camp.x, camp.y) === 'shown') {
         const selected = mode.kind === 'camp' && mode.id === camp.id;
@@ -1182,17 +1291,6 @@ export function mountCampLab(
         drawCampMarker(ctx, camp, c, selected);
       }
     }
-    // Fires on a camp's ground go over its marker, so a burning camp shows (hazards PR 3).
-    const across = world.lab.state.size.x;
-    world.hazards.fires.forEach((burning, i) => {
-      const fx = i % across;
-      const fy = Math.floor(i / across);
-      if (!burning || campAt(world, fx, fy) === null || sightOf(fx, fy) !== 'shown') return;
-      const { px, py } = toPx(fx, fy);
-      drawFire(ctx, squareBox(px, py, c), fx, fy, now);
-    });
-    drawEffects(ctx, now, c);
-    writeCanvasData(c);
   }
 
   /** True if square (x, y), or one within 2 squares of it, is fog. */
@@ -2238,9 +2336,22 @@ export function mountCampLab(
     // The row's height never changes.
     const head = element('div', 'lab2-tray-head');
     head.append(pinStrip());
-    const key = labKey();
     // The key lists the kinds you can see: lit and greyed squares, never what is under the fog.
     const seenTops = tops.filter((_, i) => (sights[i] ?? 'fog') !== 'fog');
+    // The legend changes only when a kind comes into sight or leaves it:
+    // until then the one built last is kept, icons and all (most taps).
+    const kinds = [...new Set(seenTops)].sort((x, y) => x - y).join(',');
+    const featuresSeen = [
+      ...new Set(world.surface.features.filter((_, i) => (sights[i] ?? 'fog') !== 'fog')),
+    ]
+      .sort((x, y) => x - y)
+      .join(',');
+    const keyShape = kinds + '|' + featuresSeen;
+    if (keyKept !== null && keyShape === keyKeptFor) {
+      tray.replaceChildren(head, keyKept);
+      return;
+    }
+    const key = labKey();
     // Clay is listed below with its texture as the swatch, not with the blocks' plain icon.
     showKey(
       key,
@@ -2283,8 +2394,13 @@ export function mountCampLab(
         key.append(entry);
       }
     }
+    keyKept = key;
+    keyKeptFor = keyShape;
     tray.replaceChildren(head, key);
   }
+  /** The legend as last built, and the kinds in sight it was built for: see `showIdleTray`. */
+  let keyKept: HTMLElement | null = null;
+  let keyKeptFor = '';
 
   /** A recipe's icon: a tent, with the camp level it makes for an upgrade. */
   function recipeIcon(recipe: Recipe): HTMLElement {
