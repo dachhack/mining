@@ -1107,6 +1107,12 @@ export function mountCampLab(
 
   function draw(now: number = performance.now(), settle = false): void {
     viewInDraw = null;
+    if (mapHeld) {
+      // Night: the map keeps the evening's picture (see `mapHeld`). The data
+      // attributes still follow the world, which has moved on.
+      writeCanvasData(cellPixels());
+      return;
+    }
     const ready = prepareCanvas(canvas);
     if (ready === null) {
       return;
@@ -1117,6 +1123,18 @@ export function mountCampLab(
     } finally {
       viewInDraw = null;
     }
+  }
+
+  /**
+   * True from End shift until the night is over: the map is not drawn, so it
+   * shows the evening as it was, and what the night changed is seen in the
+   * morning (owner, after the 0.28.0 build: "the map redraws between shifts
+   * before the night scene ... It should redraw after the night scene").
+   */
+  let mapHeld = false;
+  function holdMap(on: boolean): void {
+    mapHeld = on;
+    canvas.dataset['held'] = String(on);
   }
 
   /** One frame of the map, into the canvas `prepareCanvas` made ready. */
@@ -4026,6 +4044,8 @@ export function mountCampLab(
     effects = [];
     mode = { kind: 'idle' };
     preview = new Set();
+    // The map keeps the evening's picture until the night is over.
+    holdMap(true);
     setWorld(result.world);
     if (asGame) {
       saveRun(result.world); // saved every shift (question 152)
@@ -4048,8 +4068,10 @@ export function mountCampLab(
       reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
       onDone: () => {
         night = null;
+        holdMap(false);
         noteSteps(before);
         noteFlights(dragonsBefore);
+        draw(); // the morning: the map as the night left it
         cues.start();
         // A market day: the market opens now, after the night, before the day.
         openMarket();
